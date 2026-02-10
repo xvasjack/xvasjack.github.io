@@ -456,6 +456,22 @@ async function synthesizeWithFallback(prompt, options = {}) {
   const strictSuffix =
     '\n\nCRITICAL: Return ONLY valid JSON. No markdown. No explanation. No trailing text. Just the raw JSON object. Use null for missing fields.';
 
+  // Helper: convert array responses to object with _wasArray flag
+  function ensureObject(val) {
+    if (Array.isArray(val)) {
+      console.warn(
+        '  [Synthesis] WARNING: AI returned array instead of object, tagging with _wasArray'
+      );
+      const obj = {};
+      val.forEach((item, i) => {
+        obj[`section_${i}`] = item;
+      });
+      obj._wasArray = true;
+      return obj;
+    }
+    return val;
+  }
+
   // Tier 1: callGemini jsonMode (fast path)
   try {
     const result = await callGemini(prompt, { maxTokens, jsonMode, temperature: 0.2 });
@@ -464,7 +480,7 @@ async function synthesizeWithFallback(prompt, options = {}) {
       const parsed = parseJsonResponse(text);
       if (parsed) {
         console.log('  [Synthesis] Tier 1 (Gemini jsonMode) succeeded');
-        return parsed;
+        return ensureObject(parsed);
       }
     } catch (parseErr) {
       // Tier 2: Truncation repair on raw text
@@ -476,7 +492,7 @@ async function synthesizeWithFallback(prompt, options = {}) {
           const extractResult = extractJsonFromContent(repaired);
           if (extractResult.status === 'success' && extractResult.data) {
             console.log('  [Synthesis] Tier 2 (truncation repair) succeeded');
-            return extractResult.data;
+            return ensureObject(extractResult.data);
           }
         } catch (repairErr) {
           console.warn(`  [Synthesis] Tier 2 repair failed: ${repairErr?.message}`);
@@ -486,7 +502,7 @@ async function synthesizeWithFallback(prompt, options = {}) {
       const extractResult = extractJsonFromContent(text);
       if (extractResult.status === 'success' && extractResult.data) {
         console.log('  [Synthesis] Tier 2 (extract from raw) succeeded');
-        return extractResult.data;
+        return ensureObject(extractResult.data);
       }
     }
   } catch (geminiErr) {
@@ -505,14 +521,14 @@ async function synthesizeWithFallback(prompt, options = {}) {
     const extractResult = extractJsonFromContent(text);
     if (extractResult.status === 'success' && extractResult.data) {
       console.log('  [Synthesis] Tier 3 (Gemini no-jsonMode, boosted tokens) succeeded');
-      return extractResult.data;
+      return ensureObject(extractResult.data);
     }
     if (text && isJsonTruncated(text)) {
       const repaired = repairTruncatedJson(text);
       const repairResult = extractJsonFromContent(repaired);
       if (repairResult.status === 'success' && repairResult.data) {
         console.log('  [Synthesis] Tier 3 (repaired) succeeded');
-        return repairResult.data;
+        return ensureObject(repairResult.data);
       }
     }
   } catch (err3) {
@@ -527,14 +543,14 @@ async function synthesizeWithFallback(prompt, options = {}) {
       const parsed = parseJsonResponse(text);
       if (parsed) {
         console.log('  [Synthesis] Tier 4 (GeminiPro jsonMode) succeeded');
-        return parsed;
+        return ensureObject(parsed);
       }
     } catch (parseErr4) {
       console.warn(`  [Synthesis] Tier 4 parse failed: ${parseErr4?.message}`);
       const extractResult = extractJsonFromContent(text);
       if (extractResult.status === 'success' && extractResult.data) {
         console.log('  [Synthesis] Tier 4 (extract) succeeded');
-        return extractResult.data;
+        return ensureObject(extractResult.data);
       }
     }
   } catch (err4) {
@@ -553,14 +569,14 @@ async function synthesizeWithFallback(prompt, options = {}) {
     const extractResult = extractJsonFromContent(text);
     if (extractResult.status === 'success' && extractResult.data) {
       console.log('  [Synthesis] Tier 5 (GeminiPro no-jsonMode) succeeded');
-      return extractResult.data;
+      return ensureObject(extractResult.data);
     }
     if (text && isJsonTruncated(text)) {
       const repaired = repairTruncatedJson(text);
       const repairResult = extractJsonFromContent(repaired);
       if (repairResult.status === 'success' && repairResult.data) {
         console.log('  [Synthesis] Tier 5 (GeminiPro repaired) succeeded');
-        return repairResult.data;
+        return ensureObject(repairResult.data);
       }
     }
   } catch (err5) {
@@ -764,12 +780,106 @@ ${sectionSchemas.join(',\n')}
 
 Return ONLY valid JSON.`;
 
-  const result = await synthesizeWithFallback(prompt, { maxTokens: 16384 });
-  if (!result) {
-    console.error('  [synthesizeMarket] Synthesis completely failed — no data returned');
+  const antiArraySuffix =
+    '\n\nCRITICAL: Your response MUST be a JSON OBJECT with curly braces {}, NOT a JSON array []. The top-level structure must be { "section_0": {...}, "section_1": {...}, ... }. Arrays will be rejected.';
+
+  let marketResult = null;
+  const MAX_MARKET_RETRIES = 3;
+
+  for (let attempt = 0; attempt <= MAX_MARKET_RETRIES; attempt++) {
+    let currentResult;
+
+    if (attempt === 0) {
+      // Normal synthesis (Flash)
+      currentResult = await synthesizeWithFallback(prompt, { maxTokens: 16384 });
+    } else if (attempt === 1) {
+      // Flash with anti-array prompt
+      console.log(`  [synthesizeMarket] Retry ${attempt}: Flash with anti-array prompt`);
+      currentResult = await synthesizeWithFallback(prompt + antiArraySuffix, { maxTokens: 16384 });
+    } else if (attempt === 2) {
+      // Pro with anti-array prompt
+      console.log(`  [synthesizeMarket] Retry ${attempt}: Pro model with anti-array prompt`);
+      const proResult = await callGeminiPro(prompt + antiArraySuffix, {
+        maxTokens: 16384,
+        jsonMode: true,
+        temperature: 0.1,
+      });
+      const proText = typeof proResult === 'string' ? proResult : proResult?.content || '';
+      try {
+        currentResult = parseJsonResponse(proText);
+      } catch {
+        const extracted = extractJsonFromContent(proText);
+        currentResult = extracted.status === 'success' ? extracted.data : null;
+      }
+    } else {
+      // Pro jsonMode, minimal prompt, near-zero temp
+      console.log(`  [synthesizeMarket] Retry ${attempt}: Pro model minimal prompt, temp 0.05`);
+      const minimalPrompt = `Return a JSON object (NOT array) with keys section_0, section_1, etc. Each section has: slideTitle, subtitle, overview, keyMetrics, chartData, keyInsight, dataType.\n\nData:\n${JSON.stringify(labeledData, null, 2)}\n\n${antiArraySuffix}`;
+      const proResult = await callGeminiPro(minimalPrompt, {
+        maxTokens: 16384,
+        jsonMode: true,
+        temperature: 0.05,
+      });
+      const proText = typeof proResult === 'string' ? proResult : proResult?.content || '';
+      try {
+        currentResult = parseJsonResponse(proText);
+      } catch {
+        const extracted = extractJsonFromContent(proText);
+        currentResult = extracted.status === 'success' ? extracted.data : null;
+      }
+    }
+
+    if (!currentResult) {
+      console.warn(`  [synthesizeMarket] Attempt ${attempt} returned null`);
+      continue;
+    }
+
+    // Check if it was tagged as array by ensureObject
+    if (currentResult._wasArray) {
+      console.warn(
+        `  [synthesizeMarket] Attempt ${attempt} returned array (tagged _wasArray), retrying...`
+      );
+      if (attempt === MAX_MARKET_RETRIES) {
+        // Last attempt — accept the array conversion
+        console.warn('  [synthesizeMarket] All retries exhausted, accepting array conversion');
+        delete currentResult._wasArray;
+        marketResult = currentResult;
+        break;
+      }
+      continue;
+    }
+
+    // Check sub-section count >= 2
+    const sectionKeys = Object.keys(currentResult).filter(
+      (k) => !k.startsWith('_') && typeof currentResult[k] === 'object' && currentResult[k] !== null
+    );
+    if (sectionKeys.length < 2) {
+      console.warn(
+        `  [synthesizeMarket] Attempt ${attempt}: only ${sectionKeys.length} sub-sections (need >= 2), retrying...`
+      );
+      if (attempt === MAX_MARKET_RETRIES) {
+        console.warn('  [synthesizeMarket] All retries exhausted, accepting thin result');
+        marketResult = currentResult;
+        break;
+      }
+      continue;
+    }
+
+    // Good result
+    marketResult = currentResult;
+    if (attempt > 0) {
+      console.log(`  [synthesizeMarket] Succeeded on retry ${attempt}`);
+    }
+    break;
+  }
+
+  if (!marketResult) {
+    console.error(
+      '  [synthesizeMarket] Synthesis completely failed — no data returned after retries'
+    );
     return { _synthesisError: true, section: 'market', message: 'All synthesis attempts failed' };
   }
-  const validated = validateMarketSynthesis(result);
+  const validated = validateMarketSynthesis(marketResult);
   return validated;
 }
 
@@ -1391,7 +1501,10 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 
     // Validate structure preservation - check for key fields
     const hasPolicy = newSynthesis.policy && typeof newSynthesis.policy === 'object';
-    const hasMarket = newSynthesis.market && typeof newSynthesis.market === 'object';
+    const hasMarket =
+      newSynthesis.market &&
+      typeof newSynthesis.market === 'object' &&
+      !Array.isArray(newSynthesis.market);
     const hasCompetitors = newSynthesis.competitors && typeof newSynthesis.competitors === 'object';
 
     if (!hasPolicy || !hasMarket || !hasCompetitors) {
@@ -1403,7 +1516,7 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       );
       // Merge available improved sections into original instead of discarding all
       if (hasPolicy) originalSynthesis.policy = newSynthesis.policy;
-      if (hasMarket) originalSynthesis.market = newSynthesis.market;
+      if (hasMarket) originalSynthesis.market = validateMarketSynthesis(newSynthesis.market);
       if (hasCompetitors) originalSynthesis.competitors = newSynthesis.competitors;
       if (newSynthesis.depth && typeof newSynthesis.depth === 'object')
         originalSynthesis.depth = newSynthesis.depth;
@@ -1457,6 +1570,10 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       metadata: originalSynthesis.metadata,
     };
     Object.assign(newSynthesis, preserved);
+    // Validate market data before returning (defense against array responses in re-synthesis)
+    if (newSynthesis.market) {
+      newSynthesis.market = validateMarketSynthesis(newSynthesis.market);
+    }
     return newSynthesis;
   } catch (error) {
     console.error('  Re-synthesis failed:', error?.message);
@@ -1820,6 +1937,14 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         codeGateFailures
       );
       countryAnalysis.country = country; // Ensure country is set
+      // Validate market data after reSynthesize (defense against array sneaking through)
+      if (
+        countryAnalysis.market &&
+        (Array.isArray(countryAnalysis.market) || countryAnalysis.market._wasArray)
+      ) {
+        console.warn('  [Refinement] Market data is array after reSynthesize, re-validating...');
+        countryAnalysis.market = validateMarketSynthesis(countryAnalysis.market);
+      }
       countryAnalysis.iterationsCompleted = iteration;
     } else {
       console.log(`    → No additional data collected, stopping refinement`);

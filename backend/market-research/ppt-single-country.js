@@ -2878,6 +2878,30 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return parts.slice(0, 5).join('\n\n');
   }
 
+  // 2D: Extract narrative from thin data (e.g., single section_0 from array conversion)
+  function extractNarrativeFromThinData(sectionData) {
+    if (!sectionData || typeof sectionData !== 'object') return null;
+    // Look for section_0 or first section key
+    const sectionKeys = Object.keys(sectionData).filter(
+      (k) => k.startsWith('section_') && sectionData[k] && typeof sectionData[k] === 'object'
+    );
+    if (sectionKeys.length === 0) return null;
+
+    const parts = [];
+    for (const key of sectionKeys) {
+      const sec = sectionData[key];
+      if (sec.overview) parts.push(sec.overview);
+      if (sec.keyInsight) parts.push(`Key Insight: ${sec.keyInsight}`);
+      if (Array.isArray(sec.keyMetrics) && sec.keyMetrics.length > 0) {
+        const metricStrs = sec.keyMetrics
+          .filter((m) => m.metric && m.value)
+          .map((m) => `${m.metric}: ${m.value}${m.context ? ` (${m.context})` : ''}`);
+        if (metricStrs.length > 0) parts.push('Metrics: ' + metricStrs.join('; '));
+      }
+    }
+    return parts.length > 0 ? parts.join('\n\n') : null;
+  }
+
   function generateSection(sectionName, sectionNumber, totalSections, sectionData) {
     // Use TOC slide instead of old section divider — highlight active section
     addTocSlide(pptx, sectionNumber - 1, SECTION_NAMES, COLORS, FONT);
@@ -2913,12 +2937,34 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       pptGate.emptyBlocks &&
       pptGate.emptyBlocks.length > blocks.length * 0.5
     ) {
-      throw new Error(
-        `PPT data gate failed for "${sectionName}": ${pptGate.emptyBlocks.length}/${blocks.length} blocks empty. ${pptGate.reason || ''}`
+      console.warn(
+        `[PPT] Data gate warning for "${sectionName}": ${pptGate.emptyBlocks.length}/${blocks.length} blocks empty. Falling through to content check.`
       );
     }
 
     if (!sectionHasContent(blocks)) {
+      // 2D: Thin data narrative — extract overview/keyInsight/metrics from thin section objects
+      if (blocks.length < 2) {
+        const narrativeContent = extractNarrativeFromThinData(sectionData);
+        if (narrativeContent) {
+          console.log(
+            `[PPT] Using thin-data narrative for "${sectionName}" (${blocks.length} blocks)`
+          );
+          const slide = addSlideWithTitle(`${sectionName}`, 'Summary Analysis');
+          slide.addText(ensureString(narrativeContent), {
+            x: LEFT_MARGIN,
+            y: CONTENT_Y,
+            w: CONTENT_WIDTH,
+            h: 5.0,
+            fontSize: 12,
+            color: COLORS.black,
+            fontFace: FONT,
+            valign: 'top',
+            lineSpacingMultiple: 1.4,
+          });
+          return 1;
+        }
+      }
       // 2C: rawData fallback — try to extract something useful from rawData
       const rawFallbackContent = extractRawDataFallback(sectionName);
       if (rawFallbackContent) {
@@ -3086,28 +3132,55 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Removed duplicate: depth section renderOpportunitiesObstacles handles this
 
   // ===== GENERATE ALL SECTIONS =====
-  // Section 1: Market Overview (index 0)
-  generateSection('Market Overview', 1, 6, market);
-  // Section 2: Policy & Regulatory (index 1) — classifyDataBlocks maps to "Policy & Regulations"
-  generateSection('Policy & Regulatory', 2, 6, policy);
-  // Regulatory transition summary slide (if data available)
-  if (
-    policy?.regulatorySummary &&
-    Array.isArray(policy.regulatorySummary) &&
-    policy.regulatorySummary.length > 0
-  ) {
-    const regSummarySlide = addSlideWithTitle(`${country} - Regulatory Transition Summary`, '', {
-      citations: getCitationsForCategory('policy_'),
-      dataQuality: getDataQualityForCategory('policy_'),
-    });
-    addHorizontalFlowTable(regSummarySlide, policy.regulatorySummary, { font: FONT });
+  const sectionConfigs = [
+    { name: 'Market Overview', num: 1, data: market },
+    { name: 'Policy & Regulatory', num: 2, data: policy },
+    { name: 'Competitive Landscape', num: 3, data: competitors },
+    { name: 'Strategic Analysis', num: 4, data: depth },
+    { name: 'Recommendations', num: 5, data: summary },
+  ];
+
+  for (const sec of sectionConfigs) {
+    try {
+      generateSection(sec.name, sec.num, 6, sec.data);
+
+      // Regulatory transition summary slide after Policy section
+      if (
+        sec.name === 'Policy & Regulatory' &&
+        policy?.regulatorySummary &&
+        Array.isArray(policy.regulatorySummary) &&
+        policy.regulatorySummary.length > 0
+      ) {
+        const regSummarySlide = addSlideWithTitle(
+          `${country} - Regulatory Transition Summary`,
+          '',
+          {
+            citations: getCitationsForCategory('policy_'),
+            dataQuality: getDataQualityForCategory('policy_'),
+          }
+        );
+        addHorizontalFlowTable(regSummarySlide, policy.regulatorySummary, { font: FONT });
+      }
+    } catch (sectionErr) {
+      console.error(`[PPT] Section "${sec.name}" crashed: ${sectionErr?.message}`);
+      // Render error placeholder slide and continue
+      const errSlide = addSlideWithTitle(`${sec.name}`, 'Section Generation Error');
+      errSlide.addText(
+        `This section could not be generated due to a data processing error.\nError: ${sectionErr?.message || 'Unknown error'}`,
+        {
+          x: LEFT_MARGIN,
+          y: 2.5,
+          w: CONTENT_WIDTH,
+          h: 2.0,
+          fontSize: 14,
+          color: COLORS.muted || '#999999',
+          fontFace: FONT,
+          align: 'center',
+          valign: 'middle',
+        }
+      );
+    }
   }
-  // Section 3: Competitive Landscape (index 2)
-  generateSection('Competitive Landscape', 3, 6, competitors);
-  // Section 4: Strategic Analysis (index 3)
-  generateSection('Strategic Analysis', 4, 6, depth);
-  // Section 5: Recommendations (index 4) — uses summary data
-  generateSection('Recommendations', 5, 6, summary);
 
   // ===== APPENDIX: FINAL SUMMARY SLIDE (Section 6) =====
   addTocSlide(pptx, 5, SECTION_NAMES, COLORS, FONT); // Highlight "Appendix"

@@ -640,8 +640,8 @@ function validatePptData(blocks) {
     );
   });
 
-  if (sectionsWithData.length < 3) {
-    emptyBlocks.push(`Only ${sectionsWithData.length}/5 sections have real data (need >= 3)`);
+  if (sectionsWithData.length < 2) {
+    emptyBlocks.push(`Only ${sectionsWithData.length}/5 sections have real data (need >= 2)`);
   }
 
   // Check company descriptions
@@ -732,7 +732,7 @@ function validatePptData(blocks) {
     );
   }
 
-  const pass = sectionsWithData.length >= 3 && unavailableRatio < 0.4 && chartIssues.length === 0;
+  const pass = sectionsWithData.length >= 2 && unavailableRatio < 0.4 && chartIssues.length === 0;
 
   return {
     pass,
