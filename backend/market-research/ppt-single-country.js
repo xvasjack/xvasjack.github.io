@@ -656,6 +656,181 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // ============ DATA BLOCK CLASSIFICATION ============
+
+  // Set of all known hardcoded keys across all sections — used by dynamic key discovery
+  // to avoid creating duplicate blocks for keys already handled by hardcoded logic
+  const KNOWN_HARDCODED_KEYS = new Set([
+    // Policy
+    'foundationalActs',
+    'nationalPolicy',
+    'investmentRestrictions',
+    'keyIncentives',
+    'regulatorySummary',
+    'sources',
+    // Market (energy-specific fallback keys)
+    'tpes',
+    'finalDemand',
+    'electricity',
+    'gasLng',
+    'pricing',
+    'escoMarket',
+    // Competitors
+    'japanesePlayers',
+    'localMajor',
+    'foreignPlayers',
+    'caseStudy',
+    'maActivity',
+    // Depth
+    'escoEconomics',
+    'partnerAssessment',
+    'entryStrategy',
+    'implementation',
+    'targetSegments',
+    // Summary/Recommendations
+    'goNoGo',
+    'opportunitiesObstacles',
+    'keyInsights',
+    'timingIntelligence',
+    'lessonsLearned',
+    'opportunities',
+    'obstacles',
+    'ratings',
+    'recommendation',
+    // Meta keys to skip
+    '_synthesisError',
+    '_wasArray',
+    'message',
+    'slideTitle',
+    'subtitle',
+    'keyMessage',
+    'section',
+    'dataType',
+    'sources',
+    'confidenceScore',
+  ]);
+
+  // Keys that should never be treated as data blocks (metadata, flags, primitives)
+  const SKIP_KEYS = new Set([
+    '_synthesisError',
+    '_wasArray',
+    'message',
+    'slideTitle',
+    'subtitle',
+    'keyMessage',
+    'section',
+    'dataType',
+    'sources',
+    'confidenceScore',
+  ]);
+
+  /**
+   * Detect the best dataType for an unknown/dynamic data block based on its data shape.
+   * This is purely structural — no industry-specific keywords.
+   */
+  function detectDynamicDataType(data) {
+    if (!data || typeof data !== 'object') return 'section_summary';
+
+    // Has players/partners array → company comparison
+    if (Array.isArray(data.players) && data.players.length > 0) return 'company_comparison';
+    if (Array.isArray(data.partners) && data.partners.length > 0) return 'company_comparison';
+
+    // Has chartData with series → market chart
+    if (data.chartData?.series && data.chartData.series.length > 0)
+      return 'time_series_multi_insight';
+    if (data.chartData?.values && data.chartData.values.length > 0) return 'composition_breakdown';
+
+    // Has acts/regulations array → regulation list
+    if (Array.isArray(data.acts) && data.acts.length > 0) return 'regulation_list';
+    if (Array.isArray(data.regulations) && data.regulations.length > 0) return 'regulation_list';
+
+    // Has options array (entry strategy, etc.) → comparison table
+    if (Array.isArray(data.options) && data.options.length > 0) return 'comparison_table';
+
+    // Has phases array → timeline/roadmap
+    if (Array.isArray(data.phases) && data.phases.length > 0) return 'timeline';
+
+    // Has segments/targets arrays → structured list
+    if (Array.isArray(data.segments) && data.segments.length > 0) return 'structured_list';
+    if (Array.isArray(data.targets) && data.targets.length > 0) return 'structured_list';
+
+    // Has criteria array (go/no-go style) → assessment
+    if (Array.isArray(data.criteria) && data.criteria.length > 0) return 'assessment';
+
+    // Has key findings / data points arrays → data summary
+    if (Array.isArray(data.keyFindings) && data.keyFindings.length > 0) return 'data_summary';
+    if (Array.isArray(data.dataPoints) && data.dataPoints.length > 0) return 'data_summary';
+
+    // Has failures/case studies → case study
+    if (Array.isArray(data.failures) && data.failures.length > 0) return 'case_study';
+    if (Array.isArray(data.caseStudies) && data.caseStudies.length > 0) return 'case_study';
+
+    // Has deadlines/triggers → timing
+    if (Array.isArray(data.deadlines) && data.deadlines.length > 0) return 'timing';
+    if (Array.isArray(data.triggers) && data.triggers.length > 0) return 'timing';
+
+    // Has opportunities/obstacles structure → opportunities_vs_barriers
+    if (Array.isArray(data.opportunities) && Array.isArray(data.obstacles))
+      return 'opportunities_vs_barriers';
+
+    // Fallback: generic section summary
+    return 'section_summary';
+  }
+
+  /**
+   * Generate a human-readable label from a data key.
+   * Handles: camelCase, snake_case, section_N, and prefixed keys.
+   */
+  function keyToLabel(key) {
+    // section_0, section_1, etc.
+    if (/^section_\d+$/.test(key)) {
+      return `Analysis ${parseInt(key.split('_')[1], 10) + 1}`;
+    }
+    // Remove common prefixes like policy_, market_, depth_, etc.
+    let label = key.replace(/^(policy|market|competitors|depth|insight|context)_\d*_?/i, '');
+    // camelCase → words
+    label = label.replace(/([A-Z])/g, ' $1');
+    // snake_case → words
+    label = label.replace(/_/g, ' ');
+    // Capitalize first letter of each word
+    label = label.replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+    return label || key;
+  }
+
+  /**
+   * Discover dynamic keys in sectionData that aren't handled by hardcoded block logic.
+   * Returns an array of blocks for unknown keys with auto-detected data types.
+   */
+  function discoverDynamicBlocks(sectionData, sectionCategory, citations, dataQuality) {
+    const dynamicBlocks = [];
+    if (!sectionData || typeof sectionData !== 'object') return dynamicBlocks;
+
+    for (const [key, value] of Object.entries(sectionData)) {
+      // Skip known keys, metadata, primitives, and arrays at top level
+      if (KNOWN_HARDCODED_KEYS.has(key)) continue;
+      if (SKIP_KEYS.has(key)) continue;
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+
+      const dataType = detectDynamicDataType(value);
+      const label = value.slideTitle
+        ? value.slideTitle.replace(new RegExp(`^${country}\\s*-?\\s*`, 'i'), '').trim()
+        : keyToLabel(key);
+
+      dynamicBlocks.push({
+        key: key,
+        _isDynamic: true,
+        _sectionCategory: sectionCategory,
+        dataType: value.dataType || dataType,
+        data: value,
+        title: value.slideTitle || `${country} - ${label}`,
+        subtitle: value.subtitle || value.keyInsight || value.keyMessage || '',
+        citations: value.sources && Array.isArray(value.sources) ? value.sources : citations,
+        dataQuality: value.dataQuality || dataQuality,
+      });
+    }
+
+    return dynamicBlocks;
+  }
+
   // Classify data blocks in a section for pattern selection
   function classifyDataBlocks(sectionName, sectionData) {
     const blocks = [];
@@ -687,7 +862,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           key: 'nationalPolicy',
           dataType: 'policy_analysis',
           data: natPolicy,
-          title: natPolicy.slideTitle || `${country} - National Energy Policy`,
+          title:
+            natPolicy.slideTitle || `${country} - National ${scope.industry || 'Industry'} Policy`,
           subtitle: natPolicy.policyDirection || '',
           citations: policySynthSources,
           dataQuality: getDataQualityForCategory('policy_'),
@@ -715,6 +891,20 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             citations: policySynthSources,
             dataQuality: getDataQualityForCategory('policy_'),
           });
+        }
+
+        // Dynamic key discovery: pick up any synthesis keys not handled above
+        const policyDynamic = discoverDynamicBlocks(
+          sectionData,
+          'policy',
+          policySynthSources,
+          getDataQualityForCategory('policy_')
+        );
+        if (policyDynamic.length > 0) {
+          console.log(
+            `  [PPT] Policy: discovered ${policyDynamic.length} dynamic block(s): ${policyDynamic.map((b) => b.key).join(', ')}`
+          );
+          blocks.push(...policyDynamic);
         }
         break;
       }
@@ -868,6 +1058,20 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           citations: compCitations,
           dataQuality: compDQ,
         });
+
+        // Dynamic key discovery: pick up any competitor keys not handled above
+        const compDynamic = discoverDynamicBlocks(
+          sectionData,
+          'competitors',
+          compCitations,
+          compDQ
+        );
+        if (compDynamic.length > 0) {
+          console.log(
+            `  [PPT] Competitors: discovered ${compDynamic.length} dynamic block(s): ${compDynamic.map((b) => b.key).join(', ')}`
+          );
+          blocks.push(...compDynamic);
+        }
         break;
       }
 
@@ -879,7 +1083,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           key: 'escoEconomics',
           dataType: 'financial_performance',
           data: sectionData.escoEconomics || {},
-          title: (sectionData.escoEconomics || {}).slideTitle || `${country} - ESCO Deal Economics`,
+          title:
+            (sectionData.escoEconomics || {}).slideTitle ||
+            `${country} - ${scope.industry || 'Industry'} Deal Economics`,
           subtitle:
             (sectionData.escoEconomics || {}).keyInsight ||
             (sectionData.escoEconomics || {}).subtitle ||
@@ -941,6 +1147,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           citations: depthCitations,
           dataQuality: depthDQ,
         });
+
+        // Dynamic key discovery: pick up any depth/strategic keys not handled above
+        const depthDynamic = discoverDynamicBlocks(sectionData, 'depth', depthCitations, depthDQ);
+        if (depthDynamic.length > 0) {
+          console.log(
+            `  [PPT] Strategic Analysis: discovered ${depthDynamic.length} dynamic block(s): ${depthDynamic.map((b) => b.key).join(', ')}`
+          );
+          blocks.push(...depthDynamic);
+        }
         break;
       }
 
@@ -1002,6 +1217,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           citations: [],
           dataQuality: 'unknown',
         });
+
+        // Dynamic key discovery: pick up any recommendation/summary keys not handled above
+        const recoDynamic = discoverDynamicBlocks(sectionData, 'summary', [], 'unknown');
+        if (recoDynamic.length > 0) {
+          console.log(
+            `  [PPT] Recommendations: discovered ${recoDynamic.length} dynamic block(s): ${recoDynamic.map((b) => b.key).join(', ')}`
+          );
+          blocks.push(...recoDynamic);
+        }
         break;
       }
     }
@@ -1732,7 +1956,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             generateMarketChartSlide(slide, block);
             addMarketSubTable(slide, block);
           } else {
-            addDataUnavailableMessage(slide, `Content for ${block.key} not available`);
+            // Smart generic renderer: detect data shape and render appropriately
+            renderGenericContentSlide(slide, block);
           }
       }
     } catch (err) {
@@ -1744,6 +1969,206 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
 
     return slide;
+  }
+
+  // ============ GENERIC CONTENT SLIDE RENDERER ============
+  // Renders any dynamic/unknown block by detecting the data shape and choosing
+  // the best layout: table, chart+insights, bullet list, or text content.
+  // This ensures dynamic framework topics always produce visible slides.
+
+  function renderGenericContentSlide(slide, block) {
+    const data = block.data;
+    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+      addDataUnavailableMessage(slide, `${block.key} data not available`);
+      return;
+    }
+
+    const detectedType = block.dataType || detectDynamicDataType(data);
+    console.log(`  [PPT] Generic render for "${block.key}" (type: ${detectedType})`);
+
+    // Route to existing specialized renderers where data shape matches
+    switch (detectedType) {
+      case 'company_comparison': {
+        // Delegate to the company slide renderer
+        generateCompanySlide(slide, block);
+        return;
+      }
+
+      case 'time_series_multi_insight':
+      case 'time_series_simple':
+      case 'composition_breakdown': {
+        // Delegate to market chart renderer
+        generateMarketChartSlide(slide, block);
+        return;
+      }
+
+      case 'opportunities_vs_barriers': {
+        renderOpportunitiesObstacles(slide, data);
+        return;
+      }
+
+      case 'case_study': {
+        renderCaseStudy(slide, data);
+        return;
+      }
+
+      default:
+        break;
+    }
+
+    // Generic rendering: extract structured content from the data
+    let currentY = CONTENT_Y;
+
+    // 1. Overview / narrative text block
+    const overview = data.overview || data.narrative || data.summary || data.description || '';
+    if (overview && typeof overview === 'string' && overview.length > 15) {
+      addCalloutBox(slide, 'Overview', ensureString(overview), {
+        x: LEFT_MARGIN,
+        y: currentY,
+        w: CONTENT_WIDTH,
+        h: 1.4,
+        type: 'insight',
+      });
+      currentY += 1.55;
+    }
+
+    // 2. Table from array data (find first significant array of objects)
+    const arrayFields = Object.entries(data).filter(
+      ([k, v]) =>
+        Array.isArray(v) &&
+        v.length > 0 &&
+        typeof v[0] === 'object' &&
+        v[0] !== null &&
+        !['sources', 'citations'].includes(k)
+    );
+
+    if (arrayFields.length > 0 && currentY < CONTENT_BOTTOM - 1.0) {
+      const [arrayKey, arrayData] = arrayFields[0];
+      const items = arrayData.slice(0, 8); // Max 8 rows
+
+      // Auto-detect columns from first item's keys (skip long text fields for columns)
+      const sampleItem = items[0];
+      const allKeys = Object.keys(sampleItem).filter(
+        (k) => typeof sampleItem[k] !== 'object' || sampleItem[k] === null
+      );
+
+      if (allKeys.length > 0) {
+        // Use up to 5 columns
+        const colKeys = allKeys.slice(0, 5);
+        const headerLabels = colKeys.map((k) =>
+          k
+            .replace(/([A-Z])/g, ' $1')
+            .replace(/^./, (s) => s.toUpperCase())
+            .trim()
+        );
+
+        const rows = [tableHeader(headerLabels)];
+        items.forEach((item) => {
+          rows.push(
+            colKeys.map((k) => ({
+              text: safeCell(item[k] != null ? String(item[k]) : ''),
+            }))
+          );
+        });
+
+        const tableH = safeTableHeight(rows.length, {
+          fontSize: 14,
+          maxH: Math.max(1.0, CONTENT_BOTTOM - currentY - 1.0),
+        });
+        const colW = calculateColumnWidths(rows, CONTENT_WIDTH);
+        applyAlternateRowFill(rows);
+        slide.addTable(rows, {
+          x: LEFT_MARGIN,
+          y: currentY,
+          w: CONTENT_WIDTH,
+          h: tableH,
+          fontSize: 14,
+          fontFace: FONT,
+          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+          margin: TABLE_CELL_MARGIN,
+          colW: colW.length > 0 ? colW : undefined,
+          valign: 'top',
+          autoPage: false,
+        });
+        currentY += tableH + 0.15;
+      }
+    }
+
+    // 3. Key metrics as formatted text
+    const keyMetrics = data.keyMetrics || data.dataPoints || data.keyFindings || [];
+    if (Array.isArray(keyMetrics) && keyMetrics.length > 0 && currentY < CONTENT_BOTTOM - 0.5) {
+      const metricTexts = keyMetrics.slice(0, 5).map((m) => {
+        if (typeof m === 'string') return m;
+        if (m.metric && m.value)
+          return `${m.metric}: ${m.value}${m.context ? ` (${m.context})` : ''}`;
+        if (m.finding) return `${m.finding}${m.data ? ` — ${m.data}` : ''}`;
+        return ensureString(m);
+      });
+      const bulletText = metricTexts.map((t) => `\u2022 ${ensureString(t)}`).join('\n');
+      const bulletsH = Math.min(2.0, metricTexts.length * 0.4 + 0.2, CONTENT_BOTTOM - currentY);
+      slide.addText(bulletText, {
+        x: LEFT_MARGIN,
+        y: currentY,
+        w: CONTENT_WIDTH,
+        h: bulletsH,
+        fontSize: 12,
+        fontFace: FONT,
+        color: COLORS.darkGray,
+        valign: 'top',
+        wrap: true,
+        lineSpacingMultiple: 1.2,
+      });
+      currentY += bulletsH + 0.15;
+    }
+
+    // 4. Key insight callout
+    const keyInsight = data.keyInsight || data.keyMessage || data.recommendation || '';
+    if (
+      keyInsight &&
+      typeof keyInsight === 'string' &&
+      keyInsight.length > 10 &&
+      currentY < CONTENT_BOTTOM - 0.5
+    ) {
+      addCalloutOverlay(slide, ensureString(keyInsight), {
+        x: LEFT_MARGIN + 0.5,
+        y: currentY,
+        w: CONTENT_WIDTH - 1.0,
+        h: 0.55,
+      });
+      currentY += 0.7;
+    }
+
+    // 5. Last resort: scan ALL remaining string fields for renderable content
+    if (currentY <= CONTENT_Y + 0.1) {
+      // Nothing was rendered yet — extract any text from data
+      const fallbackTexts = [];
+      for (const [fk, fv] of Object.entries(data)) {
+        if (typeof fv === 'string' && fv.length > 20 && fv.length < 3000) {
+          fallbackTexts.push(ensureString(fv));
+        } else if (Array.isArray(fv) && fv.length > 0 && typeof fv[0] === 'string') {
+          fv.slice(0, 4).forEach((s) => {
+            if (typeof s === 'string' && s.length > 10) fallbackTexts.push(ensureString(s));
+          });
+        }
+      }
+      if (fallbackTexts.length > 0) {
+        const combinedText = fallbackTexts.slice(0, 6).join('\n\n');
+        slide.addText(combinedText, {
+          x: LEFT_MARGIN,
+          y: CONTENT_Y,
+          w: CONTENT_WIDTH,
+          h: Math.min(4.5, CONTENT_BOTTOM - CONTENT_Y),
+          fontSize: 11,
+          fontFace: FONT,
+          color: COLORS.darkGray,
+          valign: 'top',
+          wrap: true,
+          lineSpacingMultiple: 1.3,
+        });
+      } else {
+        addDataUnavailableMessage(slide, `${block.key} data not available`);
+      }
+    }
   }
 
   // ============ SECTION RENDERERS ============
@@ -2550,13 +2975,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
     if (segmentsList.length > 0) {
       const segmentRows = [
-        tableHeader(['Segment', 'Size', 'Energy Intensity', 'Decision Maker', 'Priority']),
+        tableHeader(['Segment', 'Size', 'Market Intensity', 'Decision Maker', 'Priority']),
       ];
       segmentsList.forEach((s) => {
         segmentRows.push([
           { text: safeCell(s.name, 25) },
           { text: safeCell(s.size, 20) },
-          { text: safeCell(s.energyIntensity, 15) },
+          { text: safeCell(s.marketIntensity || s.energyIntensity, 15) },
           { text: safeCell(s.decisionMaker, 18) },
           { text: s.priority ? `${safeCell(s.priority)}/5` : '' },
         ]);
@@ -2611,7 +3036,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         color: COLORS.dk2,
         fontFace: FONT,
       });
-      const targetCompRows = [tableHeader(['Company', 'Industry', 'Energy Spend', 'Location'])];
+      const targetCompRows = [tableHeader(['Company', 'Industry', 'Annual Spend', 'Location'])];
       topTargets.forEach((t) => {
         const nameCell = t.website
           ? {
@@ -2622,7 +3047,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         targetCompRows.push([
           nameCell,
           { text: safeCell(t.industry, 30) },
-          { text: safeCell(t.energySpend, 25) },
+          { text: safeCell(t.annualSpend || t.energySpend, 25) },
           { text: safeCell(t.location, 30) },
         ]);
       });

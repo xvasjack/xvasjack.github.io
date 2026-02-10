@@ -957,8 +957,22 @@ async function synthesizeMarket(researchData, country, industry, clientContext, 
   console.log(`    [Market] Dynamic topics: ${uniqueTopics.join(', ')}`);
 
   // Build dynamic schema from research topic names
+  // Generate camelCase keys from topic names for better downstream mapping
+  // e.g. "Market Size & Growth" → "marketSizeGrowth"
+  function topicToKey(topic) {
+    return topic
+      .replace(/&/g, 'And')
+      .replace(/[^a-zA-Z0-9\s]/g, '')
+      .trim()
+      .split(/\s+/)
+      .map((word, idx) =>
+        idx === 0 ? word.toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      )
+      .join('');
+  }
+
   const sectionSchemas = uniqueTopics.map((topic, i) => {
-    const key = `section_${i}`;
+    const key = topicToKey(topic) || `section_${i}`;
     return `  "${key}": {
     "slideTitle": "${country} - ${topic}",
     "subtitle": "THESIS STATEMENT (100-180 chars): the key strategic takeaway for the client. NOT a description — a conclusion. Example: 'Rapid industrialization is driving 12% annual demand growth, creating a $2.1B addressable market for efficiency services'",
@@ -1389,11 +1403,13 @@ RULES:
 - Company descriptions should be 45-60 words
 - Insights must have structured fields: data (with specific numbers), pattern (causal mechanism), implication (action verb + timing)
 
+IMPORTANT: Use EXACTLY the JSON keys specified below (escoEconomics, partnerAssessment, entryStrategy, implementation, targetSegments). Even if the industry is not energy/ESCO, use these exact keys — the rendering pipeline depends on them. Adapt the CONTENT to ${industry} but keep the KEY NAMES exactly as shown.
+
 Return JSON:
 {
   "depth": {
     "escoEconomics": {
-      "slideTitle": "${country} - Deal Economics",
+      "slideTitle": "${country} - ${industry} Deal Economics",
       "subtitle": "Key insight",
       "typicalDealSize": {"min": "$XM", "max": "$YM", "average": "$ZM"},
       "contractTerms": {"duration": "X years", "savingsSplit": "Client X% / Provider Y%", "guaranteeStructure": "Type"},
@@ -1434,8 +1450,8 @@ Return JSON:
     "targetSegments": {
       "slideTitle": "${country} - Target Customer Segments",
       "subtitle": "Key insight",
-      "segments": [{"name": "Segment", "size": "X units", "energyIntensity": "High/Med/Low", "decisionMaker": "Title", "priority": 5}],
-      "topTargets": [{"company": "Name", "website": "https://...", "industry": "Sector", "energySpend": "$XM/yr", "location": "Region"}],
+      "segments": [{"name": "Segment", "size": "X units", "marketIntensity": "High/Med/Low", "decisionMaker": "Title", "priority": 5}],
+      "topTargets": [{"company": "Name", "website": "https://...", "industry": "Sector", "annualSpend": "$XM/yr", "location": "Region"}],
       "goToMarketApproach": "Specific approach"
     }
   },
