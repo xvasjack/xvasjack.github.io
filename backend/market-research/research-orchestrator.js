@@ -39,6 +39,55 @@ function countWords(text) {
 
 const CURRENT_YEAR = new Date().getFullYear();
 
+function normalizeNumericScore(value, fallback = 0) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.min(100, value));
+  }
+  const asNumber = Number(value);
+  if (Number.isFinite(asNumber)) {
+    return Math.max(0, Math.min(100, asNumber));
+  }
+  const extracted = String(value || '').match(/-?\d+(\.\d+)?/);
+  if (extracted) {
+    const parsed = Number(extracted[0]);
+    if (Number.isFinite(parsed)) return Math.max(0, Math.min(100, parsed));
+  }
+  return Math.max(0, Math.min(100, Number(fallback) || 0));
+}
+
+function humanizeSectionKey(key) {
+  return ensureString(key)
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeLegalToken(text) {
+  return ensureString(text).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function extractLegalTokens(text) {
+  const source = ensureString(text).toLowerCase();
+  if (!source) return [];
+
+  const tokens = new Set();
+  const patterns = [
+    /\b(?:decree|decision|resolution|circular)\s*(?:no\.?\s*)?[a-z0-9./-]{2,}\b/g,
+    /\blaw\s*(?:no\.?\s*)?[a-z0-9./-]{2,}\b/g,
+    /\bpetroleum law(?:\s*no\.?\s*[a-z0-9./-]{2,})?\b/g,
+  ];
+
+  for (const re of patterns) {
+    for (const match of source.matchAll(re)) {
+      const token = normalizeLegalToken(match[0]);
+      if (token) tokens.add(token);
+    }
+  }
+  return [...tokens];
+}
+
 function normalizeSectionArea(area) {
   const value = ensureString(area).toLowerCase();
   if (value.includes('policy') || value.includes('regulation') || value.includes('law'))
@@ -753,6 +802,9 @@ function validateCompetitorsSynthesis(result) {
   const warnings = [];
 
   for (const section of sections) {
+    if (result[section] && !result[section].slideTitle) {
+      result[section].slideTitle = `Competitors - ${humanizeSectionKey(section)}`;
+    }
     const players = result[section]?.players || [];
     if (players.length === 0) {
       warnings.push(`${section}: no players found`);
@@ -809,8 +861,46 @@ function normalizeMarketSynthesisResult(result) {
 
   // Unwrap section_n containers that hold named section objects.
   for (const [key, value] of Object.entries({ ...normalized })) {
-    if (!/^section_\d+$/.test(key) || !value || typeof value !== 'object' || Array.isArray(value))
+    if (!/^section_\d+$/.test(key) || !value || typeof value !== 'object') continue;
+
+    if (Array.isArray(value)) {
+      const firstObj = value.find((item) => item && typeof item === 'object');
+      const metricLike =
+        firstObj && ('metric' in firstObj || 'value' in firstObj || 'context' in firstObj);
+      const seriesLike = firstObj && Array.isArray(firstObj.values);
+      if (metricLike) {
+        normalized[key] = {
+          slideTitle: null,
+          subtitle: null,
+          overview: null,
+          keyMetrics: value,
+          chartData: null,
+          keyInsight: null,
+          dataType: 'time_series_multi_insight',
+        };
+      } else if (seriesLike) {
+        normalized[key] = {
+          slideTitle: null,
+          subtitle: null,
+          overview: null,
+          keyMetrics: [],
+          chartData: { series: value, categories: [] },
+          keyInsight: null,
+          dataType: 'time_series_multi_insight',
+        };
+      } else {
+        normalized[key] = {
+          slideTitle: null,
+          subtitle: null,
+          overview: null,
+          keyMetrics: [],
+          chartData: null,
+          keyInsight: null,
+          dataType: 'time_series_multi_insight',
+        };
+      }
       continue;
+    }
 
     const nestedEntries = Object.entries(value).filter(
       ([, child]) => child && typeof child === 'object' && !Array.isArray(child)
@@ -832,6 +922,22 @@ function normalizeMarketSynthesisResult(result) {
     for (const key of numericKeys) {
       const value = normalized[key];
       if (value && typeof value === 'object') {
+        if (Array.isArray(value)) {
+          const firstObj = value.find((item) => item && typeof item === 'object');
+          if (firstObj && ('metric' in firstObj || 'value' in firstObj || 'context' in firstObj)) {
+            normalized[`section_${key}`] = {
+              slideTitle: null,
+              subtitle: null,
+              overview: null,
+              keyMetrics: value,
+              chartData: null,
+              keyInsight: null,
+              dataType: 'time_series_multi_insight',
+            };
+          }
+          delete normalized[key];
+          continue;
+        }
         if (isMarketSectionLike(value)) {
           normalized[`section_${key}`] = value;
         } else {
@@ -871,6 +977,14 @@ function validateMarketSynthesis(result) {
   let chartCount = 0;
 
   for (const section of sections) {
+    if (!result[section]?.slideTitle) {
+      result[section] = result[section] || {};
+      result[section].slideTitle = `Market - ${humanizeSectionKey(section)}`;
+    }
+    if (containsPlaceholderText(result[section]?.slideTitle)) {
+      result[section].slideTitle = `Market - ${humanizeSectionKey(section)}`;
+    }
+
     const chartData = result[section]?.chartData;
     if (chartData) {
       // Enforce series/categories format; convert historical/projected if needed
@@ -933,6 +1047,24 @@ function validatePolicySynthesis(result) {
   if (!result) return result;
 
   if (result._wasArray) delete result._wasArray;
+  if (!result.foundationalActs || typeof result.foundationalActs !== 'object') {
+    result.foundationalActs = {};
+  }
+  if (!result.nationalPolicy || typeof result.nationalPolicy !== 'object') {
+    result.nationalPolicy = {};
+  }
+  if (!result.investmentRestrictions || typeof result.investmentRestrictions !== 'object') {
+    result.investmentRestrictions = {};
+  }
+  if (!result.foundationalActs.slideTitle) {
+    result.foundationalActs.slideTitle = 'Policy - Foundational Acts';
+  }
+  if (!result.nationalPolicy.slideTitle) {
+    result.nationalPolicy.slideTitle = 'Policy - National Policy';
+  }
+  if (!result.investmentRestrictions.slideTitle) {
+    result.investmentRestrictions.slideTitle = 'Policy - Foreign Investment Rules';
+  }
 
   const acts = result.foundationalActs?.acts || [];
   if (acts.length < 2) {
@@ -963,12 +1095,49 @@ function normalizePolicySynthesisResult(result) {
 
   const normalized = { ...result };
   const sectionEntries = Object.entries(normalized).filter(
-    ([key, value]) =>
-      /^section_\d+$/.test(key) && value && typeof value === 'object' && !Array.isArray(value)
+    ([key, value]) => /^section_\d+$/.test(key) && value && typeof value === 'object'
   );
 
   for (const [, section] of sectionEntries) {
     if (!section || typeof section !== 'object') continue;
+
+    if (Array.isArray(section)) {
+      const firstObj = section.find((item) => item && typeof item === 'object');
+      if (!firstObj) continue;
+
+      if (
+        !normalized.foundationalActs &&
+        (('name' in firstObj && ('year' in firstObj || 'requirements' in firstObj)) ||
+          ('act' in firstObj && 'year' in firstObj))
+      ) {
+        normalized.foundationalActs = { acts: section };
+      }
+      if (
+        !normalized.nationalPolicy &&
+        ('metric' in firstObj || 'target' in firstObj || 'deadline' in firstObj)
+      ) {
+        normalized.nationalPolicy = { targets: section };
+      }
+      if (
+        !normalized.regulatorySummary &&
+        ('domain' in firstObj || 'currentState' in firstObj || 'futureState' in firstObj)
+      ) {
+        normalized.regulatorySummary = section;
+      }
+      if (
+        !normalized.keyIncentives &&
+        ('initiative' in firstObj ||
+          'benefit' in firstObj ||
+          'highlights' in firstObj ||
+          'eligibility' in firstObj)
+      ) {
+        normalized.keyIncentives = section;
+      }
+      if (!normalized.sources && ('url' in firstObj || 'title' in firstObj)) {
+        normalized.sources = section;
+      }
+      continue;
+    }
 
     // Case 1: section contains nested expected keys
     if (!normalized.foundationalActs && section.foundationalActs) {
@@ -1051,11 +1220,23 @@ function normalizePolicySynthesisResult(result) {
       .slice()
       .sort(([a], [b]) => Number(a.replace('section_', '')) - Number(b.replace('section_', '')))
       .map(([, value]) => value)
-      .filter((value) => value && typeof value === 'object' && !Array.isArray(value));
+      .filter((value) => value && typeof value === 'object');
 
-    if (orderedSections[0]) normalized.foundationalActs = orderedSections[0];
-    if (orderedSections[1]) normalized.nationalPolicy = orderedSections[1];
-    if (orderedSections[2]) normalized.investmentRestrictions = orderedSections[2];
+    if (orderedSections[0]) {
+      normalized.foundationalActs = Array.isArray(orderedSections[0])
+        ? { acts: orderedSections[0] }
+        : orderedSections[0];
+    }
+    if (orderedSections[1]) {
+      normalized.nationalPolicy = Array.isArray(orderedSections[1])
+        ? { targets: orderedSections[1] }
+        : orderedSections[1];
+    }
+    if (orderedSections[2]) {
+      normalized.investmentRestrictions = Array.isArray(orderedSections[2])
+        ? { incentives: orderedSections[2] }
+        : orderedSections[2];
+    }
     if (!normalized.regulatorySummary && Array.isArray(orderedSections[3])) {
       normalized.regulatorySummary = orderedSections[3];
     }
@@ -3275,6 +3456,9 @@ async function finalReviewSynthesis(countryAnalysis, country, industry) {
   const competitorsPreview = summarizeForSummary(countryAnalysis.competitors, 'competitors', 6000);
   const summaryPreview = summarizeForSummary(countryAnalysis.summary, 'summary', 4000);
   const depthPreview = summarizeForSummary(countryAnalysis.depth, 'depth', 4000);
+  const synthesisText = normalizeLegalToken(
+    [policyPreview, marketPreview, competitorsPreview, summaryPreview, depthPreview].join('\n')
+  );
 
   const reviewPrompt = `You are a senior partner at McKinsey doing a FINAL quality review of a market entry report for ${industry} in ${country} before it goes to the client CEO.
 Current year: ${CURRENT_YEAR}. Do NOT endorse or require future-dated facts beyond ${CURRENT_YEAR}.
@@ -3380,6 +3564,7 @@ RULES:
     }
 
     const review = extracted.data;
+    review.coherenceScore = normalizeNumericScore(review.coherenceScore, 0);
     const speculativeIssuePattern =
       /\bhallucinat|made up|fabricat|suspicious|placeholder|insufficient data|unsupported claim|not credible\b/i;
 
@@ -3391,6 +3576,7 @@ RULES:
       const text = `${ensureString(issue?.description)} ${ensureString(issue?.fix)}`;
       if (speculativeIssuePattern.test(text)) {
         issue.escalation = 'synthesis';
+        if (issue.severity === 'critical') issue.severity = 'major';
         const sectionKey = ensureString(issue?.section || '').toLowerCase();
         if (
           ['policy', 'market', 'competitors', 'summary', 'depth'].includes(sectionKey) &&
@@ -3400,17 +3586,37 @@ RULES:
             'Remove unsupported/suspicious claims, replace with source-backed facts, and set unknowns to null/empty arrays.';
         }
       }
+      if (
+        ensureString(issue?.type).toLowerCase() === 'missing_data' &&
+        ['summary', 'depth', 'cross-section'].includes(ensureString(issue?.section).toLowerCase())
+      ) {
+        issue.severity = 'minor';
+        if (!issue.escalation || issue.escalation === 'research') issue.escalation = 'synthesis';
+      }
     }
 
     const rawGaps = Array.isArray(review.researchGaps) ? review.researchGaps : [];
     review.researchGaps = rawGaps
       .filter((gap) => {
-        const text = `${ensureString(gap?.description)} ${ensureString(gap?.searchQuery)}`;
-        return !speculativeIssuePattern.test(text);
+        const text =
+          `${ensureString(gap?.description)} ${ensureString(gap?.searchQuery)}`.toLowerCase();
+        if (speculativeIssuePattern.test(text)) return false;
+
+        const targetSection = normalizeSectionArea(gap?.targetSection || 'market');
+        if (!['policy', 'market', 'competitors'].includes(targetSection)) return false;
+
+        const legalTokens = extractLegalTokens(text);
+        if (
+          legalTokens.length > 0 &&
+          !legalTokens.some((token) => synthesisText.includes(normalizeLegalToken(token)))
+        ) {
+          return false;
+        }
+        return true;
       })
       .slice(0, 6)
       .map((gap) => {
-        const targetSection = ensureString(gap?.targetSection || 'market');
+        const targetSection = normalizeSectionArea(gap?.targetSection || 'market');
         return {
           ...gap,
           targetSection,
@@ -3741,7 +3947,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         scope || { industry, projectType: 'market_entry', clientContext }
       );
 
-      lastCoverageScore = gapReport?.coverageScore || 0;
+      lastCoverageScore = normalizeNumericScore(gapReport?.coverageScore, 0);
       const currentGapSignature = (gapReport?.gaps || [])
         .slice(0, 10)
         .map((g) =>
@@ -4214,7 +4420,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         countryAnalysis = sanitizeCountryAnalysis(countryAnalysis, { country, researchData });
         const finalReview = await finalReviewSynthesis(countryAnalysis, country, industry);
         countryAnalysis.finalReview = finalReview;
-        lastCoherenceScore = finalReview?.coherenceScore || 0;
+        lastCoherenceScore = normalizeNumericScore(finalReview?.coherenceScore, 0);
 
         if (!finalReview) {
           console.log('  [FINAL REVIEW] Review returned null, proceeding.');
@@ -4401,7 +4607,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
 
   // Final readiness is the intersection of depth confidence and final-review coherence.
   const finalReview = countryAnalysis.finalReview;
-  const finalCoherence = Number(finalReview?.coherenceScore) || 0;
+  const finalCoherence = normalizeNumericScore(finalReview?.coherenceScore, 0);
   const finalCritical = (finalReview?.issues || []).filter(
     (i) => i?.severity === 'critical'
   ).length;

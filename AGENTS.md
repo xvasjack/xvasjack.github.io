@@ -26,3 +26,5 @@ These rules are mandatory for work in this repository.
 - Do local/static checks before paid backend runs.
 - Avoid repeated expensive retries when payload is already salvageable.
 - Prefer deterministic code fixes over repeated blind reruns.
+- Normalize reviewer scores before loop/gate comparisons (avoid string-score loop bugs).
+- Reject speculative legal/decree research gaps unless grounded in synthesized evidence.

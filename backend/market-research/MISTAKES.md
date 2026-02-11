@@ -24,6 +24,10 @@ Purpose: record concrete mistakes, why they hurt, and how to prevent repeats.
 | 16 | Universal agent merged failed first-pass content with retry-success content. | Contradictory claims from failed output leaked into synthesis, damaging coherence and trust. | On successful retry, replace content/citations with retry payload; never concatenate failed + fixed outputs. |
 | 17 | Market synthesis lacked robust unwrapping of nested `section_0`/numeric containers. | Valid data looked "thin" to validators, triggering unnecessary retries and extra model spend. | Normalize nested/array-shaped market payloads before validation and quantify from normalized sections. |
 | 18 | Final review escalated credibility/placeholder issues to new research queries. | Wasted budget hunting data instead of removing unsupported claims from synthesis. | Force suspicious/hallucination cleanup to `synthesis` escalation and sanitize/drop speculative gap queries. |
+| 19 | Treated reviewer scores as raw values without numeric normalization. | String-like scores (e.g., `"75/100"`) bypassed stagnation guards, causing redundant 5-pass loops. | Normalize all scores with robust parsing before comparisons and gate checks. |
+| 20 | Allowed legal/research gaps that were not grounded in synthesized evidence. | Triggered speculative searches (hallucinated decrees/resolutions), adding cost and coherence noise. | Drop legal-token gaps unless the same token already appears in synthesized content. |
+| 21 | Ignored array payload variants in policy normalization (arrays inside `section_n`). | Policy retries repeated despite salvageable payload structure. | Normalize both object and array section payloads; map arrays to acts/targets/incentives where structurally valid. |
+| 22 | Did not enforce default slide-title hygiene in section validators. | Final review flagged "sloppy slide titles," lowering coherence despite adequate data. | Apply deterministic fallback titles for policy/market/competitor sections during validation. |
 
 ## Mandatory Pre-Run QA Checklist (Before Any Paid Run)
 
