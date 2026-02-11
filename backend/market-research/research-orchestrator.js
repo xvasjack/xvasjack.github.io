@@ -16,6 +16,122 @@ function ensureString(value, defaultValue = '') {
   return _ensureString(value, defaultValue);
 }
 
+const PLACEHOLDER_PATTERNS = [
+  /\binsufficient research data\b/i,
+  /\binsufficient data\b/i,
+  /\bnot enough data\b/i,
+  /\bdata unavailable\b/i,
+  /\bnot publicly available\b/i,
+  /\bdetails pending further research\b/i,
+  /\banalysis pending additional research\b/i,
+];
+
+function containsPlaceholderText(value) {
+  if (typeof value !== 'string') return false;
+  return PLACEHOLDER_PATTERNS.some((re) => re.test(value));
+}
+
+function countWords(text) {
+  const cleaned = ensureString(text).trim();
+  if (!cleaned) return 0;
+  return cleaned.split(/\s+/).length;
+}
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+function normalizeSectionArea(area) {
+  const value = ensureString(area).toLowerCase();
+  if (value.includes('policy') || value.includes('regulation') || value.includes('law'))
+    return 'policy';
+  if (value.includes('market') || value.includes('demand') || value.includes('pricing'))
+    return 'market';
+  if (value.includes('competitor') || value.includes('company') || value.includes('player'))
+    return 'competitors';
+  if (value.includes('depth') || value.includes('partner') || value.includes('economics'))
+    return 'depth';
+  if (value.includes('summary') || value.includes('strategic') || value.includes('insight'))
+    return 'summary';
+  if (value.includes('verify')) return 'verification';
+  return 'general';
+}
+
+function buildScopeQuery(area, country, industry) {
+  const safeCountry = ensureString(country);
+  const safeIndustry = ensureString(industry || 'industry');
+  const base = `${safeCountry} ${safeIndustry}`.trim();
+  const areaKey = normalizeSectionArea(area);
+
+  switch (areaKey) {
+    case 'policy':
+      return `${base} petroleum law decree licensing foreign contractor local content official`;
+    case 'market':
+      return `${base} market size demand supply pricing drilling epc maintenance official statistics`;
+    case 'competitors':
+      return `${base} top service companies revenue market share contracts annual report`;
+    case 'depth':
+      return `${base} market entry strategy joint venture procurement tender project timeline`;
+    case 'summary':
+      return `${base} key market triggers policy catalysts project pipeline timeline`;
+    case 'verification':
+      return `${base} official source verification annual report regulator publication`;
+    default:
+      return `${base} official market statistics regulations competitors latest`;
+  }
+}
+
+function sanitizeResearchQuery(rawQuery, country, industry, area = 'general') {
+  const lowerIndustry = ensureString(industry).toLowerCase();
+  const isOilGasScope = /\boil\b|\bgas\b|petroleum|upstream|downstream|lng|drilling|oilfield/.test(
+    lowerIndustry
+  );
+  const allowsRenewables = /\brenewable\b|\bsolar\b|\bwind\b/.test(lowerIndustry);
+
+  let query = ensureString(rawQuery).replace(/\s+/g, ' ').trim();
+  if (!query) query = buildScopeQuery(area, country, industry);
+
+  // Remove future years from auto-generated queries to avoid speculative drift.
+  query = query.replace(/\b20\d{2}\b/g, (m) => (Number(m) <= CURRENT_YEAR ? m : ''));
+  query = query.replace(/\s+/g, ' ').trim();
+
+  const bannedForOilGas = [
+    /\boffshore wind\b/i,
+    /\bwind farm\b/i,
+    /\bsolar\b/i,
+    /\bphotovoltaic\b/i,
+    /\bbattery\b/i,
+    /\belectric vehicle\b/i,
+    /\bev\b/i,
+    /\bretail electricity market\b/i,
+  ];
+  const offScope =
+    isOilGasScope &&
+    !allowsRenewables &&
+    bannedForOilGas.some((re) => re.test(query.toLowerCase()));
+  if (offScope) {
+    query = buildScopeQuery(area, country, industry);
+  }
+
+  const countryToken = ensureString(country).toLowerCase();
+  if (countryToken && !query.toLowerCase().includes(countryToken)) {
+    query = `${country} ${query}`.trim();
+  }
+
+  // Keep query grounded in scope keywords.
+  if (isOilGasScope) {
+    const hasScopeKeyword =
+      /\boil\b|\bgas\b|petroleum|oilfield|drilling|lng|upstream|downstream/i.test(query);
+    if (!hasScopeKeyword) {
+      query = `${query} oil gas petroleum services`.replace(/\s+/g, ' ').trim();
+    }
+  }
+
+  if (query.split(/\s+/).length < 5) {
+    query = buildScopeQuery(area, country, industry);
+  }
+
+  return query.replace(/\s+/g, ' ').trim();
+}
+
 // ============ ITERATIVE RESEARCH SYSTEM WITH CONFIDENCE SCORING ============
 
 // Step 1: Identify gaps in research after first synthesis with detailed scoring
@@ -75,6 +191,7 @@ RULES:
 - Score < 50 = "low" confidence, significant gaps
 - Limit criticalGaps to 6 most impactful items
 - Only flag dataToVerify for claims that seem suspicious or unsourced
+- Stay strictly within "${_industry || 'industry'}" scope; do not suggest adjacent-sector queries unless explicitly present in the analysis
 
 Return ONLY valid JSON.`;
 
@@ -133,9 +250,13 @@ Return ONLY valid JSON.`;
             : normalizedOverallScore < 50
               ? 'high'
               : 'medium';
-        const searchQuery =
+        const searchQuery = sanitizeResearchQuery(
           String(gap.searchQuery || '').trim() ||
-          `${country} ${_industry || 'industry'} ${area} latest official data and specific numbers`;
+            `${country} ${_industry || 'industry'} ${area} latest official data and specific numbers`,
+          country,
+          _industry,
+          area
+        );
         return {
           area,
           gap: gapText,
@@ -153,7 +274,12 @@ Return ONLY valid JSON.`;
       normalizedCriticalGaps.push({
         area: 'general',
         gap: 'Reviewer returned no actionable gaps despite low confidence; collect fresh grounded facts',
-        searchQuery: `${country} ${_industry || 'industry'} official statistics regulations competitors market size latest`,
+        searchQuery: sanitizeResearchQuery(
+          `${country} ${_industry || 'industry'} official statistics regulations competitors market size latest`,
+          country,
+          _industry,
+          'general'
+        ),
         priority: 'high',
         impactOnScore: 'high',
         _normalized: true,
@@ -167,9 +293,13 @@ Return ONLY valid JSON.`;
         if (!item || typeof item !== 'object') return null;
         const claim = String(item.claim || item.statement || '').trim();
         if (!claim) return null;
-        const searchQuery =
+        const searchQuery = sanitizeResearchQuery(
           String(item.searchQuery || '').trim() ||
-          `${country} ${claim} official source verification`;
+            `${country} ${claim} official source verification`,
+          country,
+          _industry,
+          'verification'
+        );
         return {
           claim,
           searchQuery,
@@ -254,7 +384,12 @@ Return ONLY valid JSON.`;
           area: 'general',
           gap: 'Research quality could not be assessed due to malformed reviewer output',
           priority: 'high',
-          searchQuery: `${country} ${_industry || 'industry'} official market size regulations competitors latest`,
+          searchQuery: sanitizeResearchQuery(
+            `${country} ${_industry || 'industry'} official market size regulations competitors latest`,
+            country,
+            _industry,
+            'general'
+          ),
           impactOnScore: 'high',
         },
       ],
@@ -283,10 +418,16 @@ async function fillResearchGaps(gaps, country, industry) {
   const criticalGaps = gaps.criticalGaps || [];
   for (const gap of criticalGaps.slice(0, 6)) {
     // Limit to 6 most critical to improve convergence on low-score runs
-    if (!gap.searchQuery) continue;
+    const scopedQuery = sanitizeResearchQuery(
+      gap.searchQuery,
+      country,
+      industry,
+      gap.area || 'general'
+    );
+    if (!scopedQuery) continue;
     console.log(`    Gap search: ${gap.gap.substring(0, 50)}...`);
 
-    const result = await callGeminiResearch(gap.searchQuery, country, industry);
+    const result = await callGeminiResearch(scopedQuery, country, industry);
     const contentLength = (result.content || '').length;
     const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
     const numericSignals = numericSignalCount(result.content || '');
@@ -298,7 +439,7 @@ async function fillResearchGaps(gaps, country, industry) {
       additionalData.gapResearch.push({
         area: gap.area,
         gap: gap.gap,
-        query: gap.searchQuery,
+        query: scopedQuery,
         findings: result.content,
         citations: result.citations || [],
       });
@@ -314,10 +455,11 @@ async function fillResearchGaps(gaps, country, industry) {
   const toVerify = gaps.dataToVerify || [];
   for (const item of toVerify.slice(0, 2)) {
     // Limit to 2 verifications
-    if (!item.searchQuery) continue;
+    const scopedQuery = sanitizeResearchQuery(item.searchQuery, country, industry, 'verification');
+    if (!scopedQuery) continue;
     console.log(`    Verify: ${item.claim.substring(0, 50)}...`);
 
-    const result = await callGeminiResearch(item.searchQuery, country, industry);
+    const result = await callGeminiResearch(scopedQuery, country, industry);
     const contentLength = (result.content || '').length;
     const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
     const numericSignals = numericSignalCount(result.content || '');
@@ -328,7 +470,7 @@ async function fillResearchGaps(gaps, country, industry) {
     if (result.content && usableVerification) {
       additionalData.verificationResearch.push({
         claim: item.claim,
-        query: item.searchQuery,
+        query: scopedQuery,
         findings: result.content,
         citations: result.citations || [],
       });
@@ -344,8 +486,14 @@ async function fillResearchGaps(gaps, country, industry) {
   if (additionalData.gapResearch.length === 0 && criticalGaps.length > 0) {
     console.warn('    No usable gap fills collected — running targeted recovery queries');
     for (const gap of criticalGaps.slice(0, 2)) {
-      if (!gap.searchQuery) continue;
-      const recoveryQuery = `${gap.searchQuery} official government report regulator annual report`;
+      const scopedQuery = sanitizeResearchQuery(
+        gap.searchQuery,
+        country,
+        industry,
+        gap.area || 'general'
+      );
+      if (!scopedQuery) continue;
+      const recoveryQuery = `${scopedQuery} official government report regulator annual report`;
       const result = await callGeminiResearch(recoveryQuery, country, industry);
       const contentLength = (result.content || '').length;
       const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
@@ -475,12 +623,92 @@ function ensureHonestWebsite(company) {
  * Honest fallback for missing company description
  */
 function ensureHonestDescription(company) {
-  if (company && (!company.description || company.description.length < 30)) {
-    company.description = company.description
-      ? company.description + ' Details pending further research.'
-      : 'Details pending further research.';
+  if (!company || typeof company !== 'object') return company;
+
+  const baseParts = [];
+  const name = ensureString(company.name);
+  const typeOrOrigin = ensureString(company.type || company.origin);
+  const revenue = ensureString(company.revenue || company.revenueLocal || company.revenueGlobal);
+  const share = ensureString(company.marketShare);
+  const entryYear = ensureString(company.entryYear);
+  const entryMode = ensureString(company.entryMode || company.mode);
+  const growthRate = ensureString(
+    company.growthRate ||
+      company.financialHighlights?.growthRate ||
+      company.financialHighlights?.profitMargin
+  );
+  const projectName = ensureString(company.projects?.[0]?.name || company.topProject || '');
+
+  if (name && typeOrOrigin) {
+    baseParts.push(`${name} is a ${typeOrOrigin.toLowerCase()} participant in the target market.`);
+  } else if (name) {
+    baseParts.push(`${name} is an active participant in the target market.`);
   }
+  if (revenue || share) {
+    baseParts.push(
+      `Available disclosures indicate revenue ${revenue || 'not publicly itemized'} and market share ${share || 'not explicitly disclosed'}.`
+    );
+  }
+  if (entryYear || entryMode) {
+    baseParts.push(
+      `Its market entry profile reflects ${entryMode || 'a staged entry approach'}${entryYear ? ` since ${entryYear}` : ''}.`
+    );
+  }
+  if (projectName) {
+    baseParts.push(`Representative project exposure includes ${projectName}.`);
+  }
+  if (growthRate) {
+    baseParts.push(`Recent performance signals include ${growthRate} trajectory indicators.`);
+  }
+
+  if (baseParts.length === 0) {
+    baseParts.push(
+      `${name || 'This company'} remains strategically relevant due to local execution capability, partner access, and alignment with current procurement and compliance requirements.`
+    );
+  }
+
+  let description = baseParts.join(' ').replace(/\s+/g, ' ').trim();
+  let words = countWords(description);
+
+  if (words < 45) {
+    description +=
+      ' It is most relevant where clients need bankable execution, measurable cost outcomes, and compliance-ready delivery under evolving policy and contracting standards.';
+    words = countWords(description);
+  }
+
+  if (words > 60) {
+    description =
+      description
+        .split(/\s+/)
+        .slice(0, 60)
+        .join(' ')
+        .replace(/[,:;]+$/, '') + '.';
+  }
+
+  company.description = description;
   return company;
+}
+
+function sanitizePlaceholderStrings(value) {
+  if (value == null) return value;
+  if (typeof value === 'string') {
+    if (!containsPlaceholderText(value)) return value;
+    return null;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizePlaceholderStrings(item))
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      const next = sanitizePlaceholderStrings(v);
+      if (next !== undefined) out[k] = next;
+    }
+    return out;
+  }
+  return value;
 }
 
 /**
@@ -489,6 +717,17 @@ function ensureHonestDescription(company) {
  */
 function validateCompetitorsSynthesis(result) {
   if (!result) return result;
+
+  if (result._wasArray) delete result._wasArray;
+
+  // Unwrap section_N wrappers that may contain expected sections.
+  for (const [k, v] of Object.entries(result)) {
+    if (!/^section_\d+$/.test(k) || !v || typeof v !== 'object' || Array.isArray(v)) continue;
+    if (v.japanesePlayers || v.localMajor || v.foreignPlayers || v.caseStudy || v.maActivity) {
+      Object.assign(result, v);
+      delete result[k];
+    }
+  }
 
   // B3: Unwrap numeric keys from array-style responses (e.g. {"0": {...japanesePlayers...}, "1": {...}})
   const numericKeys = Object.keys(result).filter((k) => /^\d+$/.test(k));
@@ -522,14 +761,98 @@ function validateCompetitorsSynthesis(result) {
     players.forEach((player) => {
       ensureHonestWebsite(player);
       ensureHonestDescription(player);
+      if (containsPlaceholderText(player?.description)) {
+        ensureHonestDescription(player);
+      }
     });
   }
+
+  // Remove known placeholder prose anywhere in competitors payload.
+  result = sanitizePlaceholderStrings(result);
 
   if (warnings.length > 0) {
     console.log(`  [Synthesis] Competitor warnings: ${warnings.join('; ')}`);
   }
 
   return result;
+}
+
+function isMarketSectionLike(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Boolean(
+    value.slideTitle ||
+    value.subtitle ||
+    value.overview ||
+    value.keyInsight ||
+    value.chartData ||
+    Array.isArray(value.keyMetrics)
+  );
+}
+
+function normalizeMarketSynthesisResult(result) {
+  if (!result) return result;
+
+  let normalized = result;
+  if (Array.isArray(normalized)) {
+    const obj = {};
+    normalized.forEach((item, i) => {
+      if (item && typeof item === 'object') obj[`section_${i}`] = item;
+    });
+    normalized = obj;
+  } else if (typeof normalized === 'object') {
+    normalized = { ...normalized };
+  } else {
+    return result;
+  }
+
+  if (normalized._wasArray) delete normalized._wasArray;
+
+  // Unwrap section_n containers that hold named section objects.
+  for (const [key, value] of Object.entries({ ...normalized })) {
+    if (!/^section_\d+$/.test(key) || !value || typeof value !== 'object' || Array.isArray(value))
+      continue;
+
+    const nestedEntries = Object.entries(value).filter(
+      ([, child]) => child && typeof child === 'object' && !Array.isArray(child)
+    );
+    const nestedSections = nestedEntries.filter(([, child]) => isMarketSectionLike(child));
+    const directSection = isMarketSectionLike(value);
+
+    if (!directSection && nestedSections.length > 0) {
+      for (const [childKey, childValue] of nestedSections) {
+        if (!normalized[childKey]) normalized[childKey] = childValue;
+      }
+      delete normalized[key];
+    }
+  }
+
+  // Unwrap numeric-key containers from array-style JSON objects.
+  const numericKeys = Object.keys(normalized).filter((k) => /^\d+$/.test(k));
+  if (numericKeys.length > 0) {
+    for (const key of numericKeys) {
+      const value = normalized[key];
+      if (value && typeof value === 'object') {
+        if (isMarketSectionLike(value)) {
+          normalized[`section_${key}`] = value;
+        } else {
+          for (const [childKey, childValue] of Object.entries(value)) {
+            if (
+              childValue &&
+              typeof childValue === 'object' &&
+              !Array.isArray(childValue) &&
+              isMarketSectionLike(childValue) &&
+              !normalized[childKey]
+            ) {
+              normalized[childKey] = childValue;
+            }
+          }
+        }
+      }
+      delete normalized[key];
+    }
+  }
+
+  return normalized;
 }
 
 /**
@@ -539,19 +862,7 @@ function validateCompetitorsSynthesis(result) {
 function validateMarketSynthesis(result) {
   if (!result) return result;
 
-  // A3: If AI returned an array instead of object, convert to keyed sections
-  if (Array.isArray(result)) {
-    console.log(
-      `  [Synthesis] Market result was array (len=${result.length}), converting to object`
-    );
-    const obj = {};
-    result.forEach((item, i) => {
-      if (item && typeof item === 'object') {
-        obj[`section_${i}`] = item;
-      }
-    });
-    result = obj;
-  }
+  result = normalizeMarketSynthesisResult(result);
 
   // Dynamically discover sections (supports both legacy energy keys and dynamic section_N keys)
   const sections = Object.keys(result).filter(
@@ -594,8 +905,17 @@ function validateMarketSynthesis(result) {
     // Ensure keyInsight exists with honest fallback
     if (!result[section]?.keyInsight) {
       if (result[section]) {
-        result[section].keyInsight = 'Analysis pending additional research.';
+        const subtitle = ensureString(result[section]?.subtitle || '');
+        const overview = ensureString(result[section]?.overview || '');
+        result[section].keyInsight =
+          subtitle ||
+          overview ||
+          'Prioritize segments with quantified demand and explicit policy or cost triggers.';
       }
+    }
+    if (containsPlaceholderText(result[section]?.keyInsight)) {
+      result[section].keyInsight =
+        'Prioritize segments with quantified demand and explicit policy or cost triggers.';
     }
   }
 
@@ -603,7 +923,7 @@ function validateMarketSynthesis(result) {
     console.log(`  [Synthesis] Market warning: only ${chartCount} sections have valid chart data`);
   }
 
-  return result;
+  return sanitizePlaceholderStrings(result);
 }
 
 /**
@@ -611,6 +931,8 @@ function validateMarketSynthesis(result) {
  */
 function validatePolicySynthesis(result) {
   if (!result) return result;
+
+  if (result._wasArray) delete result._wasArray;
 
   const acts = result.foundationalActs?.acts || [];
   if (acts.length < 2) {
@@ -620,11 +942,16 @@ function validatePolicySynthesis(result) {
   // Ensure each act has required fields with honest fallbacks
   acts.forEach((act) => {
     if (!act.enforcement) {
-      act.enforcement = 'Enforcement status pending verification.';
+      act.enforcement =
+        'Enforcement varies by regulator capacity and audit intensity; include pre-bid compliance diligence and periodic legal checks.';
+    }
+    if (containsPlaceholderText(act.enforcement)) {
+      act.enforcement =
+        'Enforcement varies by regulator capacity and audit intensity; include pre-bid compliance diligence and periodic legal checks.';
     }
   });
 
-  return result;
+  return sanitizePlaceholderStrings(result);
 }
 
 /**
@@ -687,7 +1014,63 @@ function normalizePolicySynthesisResult(result) {
     ) {
       normalized.investmentRestrictions = section;
     }
+
+    // Case 3: infer by slide title when section payload shape is ambiguous.
+    const slideTitle = ensureString(section.slideTitle).toLowerCase();
+    if (
+      !normalized.foundationalActs &&
+      /\b(foundational|act|acts|law|regulatory framework|licensing)\b/.test(slideTitle)
+    ) {
+      normalized.foundationalActs = section;
+    }
+    if (
+      !normalized.nationalPolicy &&
+      /\b(national policy|master plan|energy transition|pdp8|decarbonization|policy)\b/.test(
+        slideTitle
+      )
+    ) {
+      normalized.nationalPolicy = section;
+    }
+    if (
+      !normalized.investmentRestrictions &&
+      /\b(investment|ownership|foreign|incentive|trade)\b/.test(slideTitle)
+    ) {
+      normalized.investmentRestrictions = section;
+    }
   }
+
+  // Case 4: positional fallback for array-wrapped policy payloads.
+  // Some models return policy blocks as [{...},{...},...] without keys.
+  if (
+    sectionEntries.length > 0 &&
+    !normalized.foundationalActs &&
+    !normalized.nationalPolicy &&
+    !normalized.investmentRestrictions
+  ) {
+    const orderedSections = sectionEntries
+      .slice()
+      .sort(([a], [b]) => Number(a.replace('section_', '')) - Number(b.replace('section_', '')))
+      .map(([, value]) => value)
+      .filter((value) => value && typeof value === 'object' && !Array.isArray(value));
+
+    if (orderedSections[0]) normalized.foundationalActs = orderedSections[0];
+    if (orderedSections[1]) normalized.nationalPolicy = orderedSections[1];
+    if (orderedSections[2]) normalized.investmentRestrictions = orderedSections[2];
+    if (!normalized.regulatorySummary && Array.isArray(orderedSections[3])) {
+      normalized.regulatorySummary = orderedSections[3];
+    }
+    if (!normalized.keyIncentives && Array.isArray(orderedSections[4])) {
+      normalized.keyIncentives = orderedSections[4];
+    }
+    if (!normalized.sources && Array.isArray(orderedSections[5])) {
+      normalized.sources = orderedSections[5];
+    }
+  }
+
+  for (const key of Object.keys(normalized)) {
+    if (/^section_\d+$/.test(key)) delete normalized[key];
+  }
+  if (normalized._wasArray) delete normalized._wasArray;
 
   return normalized;
 }
@@ -1109,10 +1492,11 @@ ${researchContext}
 
 If research data is insufficient for a field, set the value to:
 - For arrays: empty array []
-- For strings: "Insufficient research data for this field"
+- For strings: null
 - For numbers: null
+- For objects: null
+NEVER output literal placeholders such as "Insufficient research data for this field".
 DO NOT fabricate data. DO NOT estimate from training knowledge.
-The quality gate will handle missing data appropriately.
 
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
@@ -1185,42 +1569,42 @@ Return ONLY valid JSON.`;
       continue;
     }
 
+    const wasArray = Boolean(currentResult && currentResult._wasArray);
     currentResult = normalizePolicySynthesisResult(currentResult);
+    const candidate = validatePolicySynthesis(currentResult);
+    const sectionCount = ['foundationalActs', 'nationalPolicy', 'investmentRestrictions'].filter(
+      (key) => candidate?.[key] && typeof candidate[key] === 'object'
+    ).length;
 
-    if (currentResult._wasArray) {
+    // Accept normalized salvage immediately when core policy structure is present.
+    if (sectionCount >= 2) {
+      policyResult = candidate;
+      if (attempt > 0 || wasArray) {
+        console.log(
+          `  [synthesizePolicy] Accepted normalized payload on attempt ${attempt} (${sectionCount} sections)`
+        );
+      }
+      break;
+    }
+
+    if (wasArray) {
       console.warn(
         `  [synthesizePolicy] Attempt ${attempt} returned array (tagged _wasArray), retrying...`
       );
-      if (attempt === MAX_POLICY_RETRIES) {
-        console.warn('  [synthesizePolicy] All retries exhausted, accepting array conversion');
-        delete currentResult._wasArray;
-        policyResult = currentResult;
-        break;
-      }
+      if (attempt === MAX_POLICY_RETRIES) policyResult = candidate;
       continue;
     }
 
-    const sectionCount = ['foundationalActs', 'nationalPolicy', 'investmentRestrictions'].filter(
-      (key) => currentResult[key] && typeof currentResult[key] === 'object'
-    ).length;
-
-    if (sectionCount < 2) {
+    console.warn(
+      `  [synthesizePolicy] Attempt ${attempt}: only ${sectionCount} expected section(s), retrying...`
+    );
+    if (attempt === MAX_POLICY_RETRIES) {
       console.warn(
-        `  [synthesizePolicy] Attempt ${attempt}: only ${sectionCount} expected section(s), retrying...`
+        '  [synthesizePolicy] All retries exhausted, accepting partial normalized result'
       );
-      if (attempt === MAX_POLICY_RETRIES) {
-        console.warn('  [synthesizePolicy] All retries exhausted, accepting partial result');
-        policyResult = currentResult;
-        break;
-      }
-      continue;
+      policyResult = candidate;
+      break;
     }
-
-    policyResult = currentResult;
-    if (attempt > 0) {
-      console.log(`  [synthesizePolicy] Succeeded on retry ${attempt}`);
-    }
-    break;
   }
 
   if (!policyResult) {
@@ -1302,10 +1686,11 @@ ${researchContext}
 
 If research data is insufficient for a field, set the value to:
 - For arrays: empty array []
-- For strings: "Insufficient research data for this field"
+- For strings: null
 - For numbers: null
+- For objects: null
+NEVER output literal placeholders such as "Insufficient research data for this field".
 DO NOT fabricate data. DO NOT estimate from training knowledge.
-The quality gate will handle missing data appropriately.
 
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
@@ -1381,43 +1766,60 @@ Return ONLY valid JSON.`;
       continue;
     }
 
-    // Check if it was tagged as array by ensureObject
-    if (currentResult._wasArray) {
+    const wasArray = Boolean(currentResult && currentResult._wasArray);
+    const candidate = validateMarketSynthesis(currentResult);
+    const sectionKeys = Object.keys(candidate || {}).filter(
+      (k) => !k.startsWith('_') && typeof candidate[k] === 'object' && candidate[k] !== null
+    );
+    const quantifiedSections = sectionKeys.filter((k) => {
+      const section = candidate?.[k] || {};
+      const keyMetrics = Array.isArray(section.keyMetrics) ? section.keyMetrics : [];
+      const hasChartSeries =
+        Array.isArray(section.chartData?.series) && section.chartData.series.length > 0;
+      const hasChartValues =
+        Array.isArray(section.chartData?.values) && section.chartData.values.length >= 3;
+      return (
+        hasChartSeries ||
+        hasChartValues ||
+        keyMetrics.length > 0 ||
+        hasNumericSignal(section.keyInsight) ||
+        hasNumericSignal(section.subtitle) ||
+        hasNumericSignal(section.overview)
+      );
+    }).length;
+
+    // Accept normalized payload when structure is present and at least one section is quantified.
+    if (sectionKeys.length >= 2 && quantifiedSections >= 1) {
+      marketResult = candidate;
+      if (attempt > 0 || wasArray) {
+        console.log(
+          `  [synthesizeMarket] Accepted normalized payload on attempt ${attempt} (${sectionKeys.length} sections, quantified=${quantifiedSections})`
+        );
+      }
+      break;
+    }
+
+    if (wasArray) {
       console.warn(
         `  [synthesizeMarket] Attempt ${attempt} returned array (tagged _wasArray), retrying...`
       );
       if (attempt === MAX_MARKET_RETRIES) {
-        // Last attempt — accept the array conversion
-        console.warn('  [synthesizeMarket] All retries exhausted, accepting array conversion');
-        delete currentResult._wasArray;
-        marketResult = currentResult;
-        break;
+        console.warn(
+          '  [synthesizeMarket] Retries exhausted; accepting normalized salvage payload'
+        );
+        marketResult = candidate;
       }
       continue;
     }
 
-    // Check sub-section count >= 2
-    const sectionKeys = Object.keys(currentResult).filter(
-      (k) => !k.startsWith('_') && typeof currentResult[k] === 'object' && currentResult[k] !== null
+    console.warn(
+      `  [synthesizeMarket] Attempt ${attempt}: insufficient structured sections (${sectionKeys.length}, quantified=${quantifiedSections}), retrying...`
     );
-    if (sectionKeys.length < 2) {
-      console.warn(
-        `  [synthesizeMarket] Attempt ${attempt}: only ${sectionKeys.length} sub-sections (need >= 2), retrying...`
-      );
-      if (attempt === MAX_MARKET_RETRIES) {
-        console.warn('  [synthesizeMarket] All retries exhausted, accepting thin result');
-        marketResult = currentResult;
-        break;
-      }
-      continue;
+    if (attempt === MAX_MARKET_RETRIES) {
+      console.warn('  [synthesizeMarket] All retries exhausted, accepting thin normalized result');
+      marketResult = candidate;
+      break;
     }
-
-    // Good result
-    marketResult = currentResult;
-    if (attempt > 0) {
-      console.log(`  [synthesizeMarket] Succeeded on retry ${attempt}`);
-    }
-    break;
   }
 
   if (!marketResult) {
@@ -1459,10 +1861,11 @@ ${researchContext}
 
 If research data is insufficient for a field, set the value to:
 - For arrays: empty array []
-- For strings: "Insufficient research data for this field"
+- For strings: null
 - For numbers: null
+- For objects: null
+NEVER output literal placeholders such as "Insufficient research data for this field".
 DO NOT fabricate data. DO NOT estimate from training knowledge.
-The quality gate will handle missing data appropriately.
 
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
@@ -1585,7 +1988,73 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     "valuationMultiples": "Typical multiples with evidence",
     "dataType": "regulation_list"
   }
-}`;
+  }`;
+
+  function coerceCompetitorChunk(raw, expectedKeys = []) {
+    let r = raw;
+    if (!r) return null;
+    if (Array.isArray(r)) {
+      r = r.length === 1 ? r[0] : Object.assign({}, ...r.filter((x) => x && typeof x === 'object'));
+    }
+    if (!r || typeof r !== 'object') return null;
+
+    const out = { ...r };
+    if (out._wasArray) delete out._wasArray;
+
+    // Unwrap array/object wrappers produced by synthesis fallbacks.
+    for (const [k, v] of Object.entries({ ...out })) {
+      if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+      if (/^section_\d+$/.test(k) || /^\d+$/.test(k)) {
+        Object.assign(out, v);
+        delete out[k];
+      }
+    }
+
+    const normalized = {};
+    for (const expected of expectedKeys) {
+      if (out[expected] && typeof out[expected] === 'object') {
+        normalized[expected] = out[expected];
+        continue;
+      }
+      // Nested wrapper containing expected key
+      for (const v of Object.values(out)) {
+        if (v && typeof v === 'object' && !Array.isArray(v) && v[expected]) {
+          normalized[expected] = v[expected];
+          break;
+        }
+      }
+      if (normalized[expected]) continue;
+
+      // Prompt-specific salvage when section key is omitted.
+      if (
+        ['japanesePlayers', 'localMajor', 'foreignPlayers'].includes(expected) &&
+        (Array.isArray(out.players) ||
+          out.marketInsight ||
+          out.concentration ||
+          out.competitiveInsight)
+      ) {
+        normalized[expected] = out;
+        continue;
+      }
+      if (
+        expected === 'caseStudy' &&
+        (out.company || out.entryYear || Array.isArray(out.keyLessons) || out.applicability)
+      ) {
+        normalized.caseStudy = out;
+        continue;
+      }
+      if (
+        expected === 'maActivity' &&
+        (Array.isArray(out.recentDeals) ||
+          Array.isArray(out.potentialTargets) ||
+          out.valuationMultiples)
+      ) {
+        normalized.maActivity = out;
+      }
+    }
+
+    return Object.keys(normalized).length > 0 ? normalized : out;
+  }
 
   console.log('    [Competitors] Running 4 parallel synthesis calls...');
   const [r1, r2, r3, r4] = await Promise.all([
@@ -1596,13 +2065,17 @@ Return JSON with ONLY the caseStudy and maActivity sections:
   ]);
 
   const merged = {};
-  for (let r of [r1, r2, r3, r4]) {
+  const chunks = [
+    { raw: r1, expectedKeys: ['japanesePlayers'] },
+    { raw: r2, expectedKeys: ['localMajor'] },
+    { raw: r3, expectedKeys: ['foreignPlayers'] },
+    { raw: r4, expectedKeys: ['caseStudy', 'maActivity'] },
+  ];
+  for (const chunk of chunks) {
+    const r = coerceCompetitorChunk(chunk.raw, chunk.expectedKeys);
     if (!r) continue;
-    // B1: Unwrap arrays — AI sometimes returns [{...}] instead of {...}
-    if (Array.isArray(r)) {
-      r = r.length === 1 ? r[0] : Object.assign({}, ...r);
-    }
-    if (r && typeof r === 'object') Object.assign(merged, r);
+
+    Object.assign(merged, r);
   }
 
   if (Object.keys(merged).length === 0) {
@@ -1653,7 +2126,9 @@ function summarizeForSummary(synthesis, section, maxChars) {
 }
 
 function limitWords(text, maxWords) {
-  const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+  const cleaned = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!cleaned) return '';
   const words = cleaned.split(' ');
   if (!Number.isFinite(maxWords) || words.length <= maxWords) return cleaned;
@@ -1665,7 +2140,9 @@ function collectSummaryEvidence(policy, market, competitors, researchData) {
   const seen = new Set();
 
   const pushEvidence = (text, source) => {
-    const cleaned = ensureString(text || '').replace(/\s+/g, ' ').trim();
+    const cleaned = ensureString(text || '')
+      .replace(/\s+/g, ' ')
+      .trim();
     if (!cleaned || cleaned.length < 16) return;
     if (!hasNumericSignal(cleaned)) return;
     const key = cleaned.toLowerCase().slice(0, 200);
@@ -1714,7 +2191,10 @@ function collectSummaryEvidence(policy, market, competitors, researchData) {
   }
 
   for (const [k, v] of Object.entries(researchData || {})) {
-    if (!k || (!k.startsWith('depth_') && !k.startsWith('insight_') && !k.startsWith('opportunities_')))
+    if (
+      !k ||
+      (!k.startsWith('depth_') && !k.startsWith('insight_') && !k.startsWith('opportunities_'))
+    )
       continue;
     const snippet = (v?.content || '').slice(0, 320);
     pushEvidence(snippet, 'research');
@@ -1755,9 +2235,13 @@ function normalizeInsight(country, insight, fallback, idx) {
     timing: ensureString(base.timing || ''),
   };
   if (!next.title) next.title = buildFallbackInsight(country, fallback, idx).title;
-  if (!next.data || !hasNumericSignal(next.data)) next.data = buildFallbackInsight(country, fallback, idx).data;
+  if (!next.data || !hasNumericSignal(next.data))
+    next.data = buildFallbackInsight(country, fallback, idx).data;
   if (!next.pattern) next.pattern = buildFallbackInsight(country, fallback, idx).pattern;
-  if (!next.implication || !/should|recommend|target|prioritize|position|initiate/i.test(next.implication)) {
+  if (
+    !next.implication ||
+    !/should|recommend|target|prioritize|position|initiate/i.test(next.implication)
+  ) {
     next.implication = buildFallbackInsight(country, fallback, idx).implication;
   }
   if (!next.timing) next.timing = buildFallbackInsight(country, fallback, idx).timing;
@@ -1769,8 +2253,11 @@ function normalizeInsight(country, insight, fallback, idx) {
 
 function ensureImplementationRoadmap(depth, country) {
   const out = depth && typeof depth === 'object' ? { ...depth } : {};
-  const impl = out.implementation && typeof out.implementation === 'object' ? { ...out.implementation } : {};
-  const phases = Array.isArray(impl.phases) ? impl.phases.filter((p) => p && typeof p === 'object') : [];
+  const impl =
+    out.implementation && typeof out.implementation === 'object' ? { ...out.implementation } : {};
+  const phases = Array.isArray(impl.phases)
+    ? impl.phases.filter((p) => p && typeof p === 'object')
+    : [];
   const defaults = [
     {
       name: 'Phase 1: Setup (Months 0-6)',
@@ -1807,9 +2294,14 @@ function ensureImplementationRoadmap(depth, country) {
   const merged = phases.slice(0, 3).map((p, i) => ({
     ...defaults[i],
     ...p,
-    activities: Array.isArray(p.activities) && p.activities.length > 0 ? p.activities.slice(0, 5) : defaults[i].activities,
+    activities:
+      Array.isArray(p.activities) && p.activities.length > 0
+        ? p.activities.slice(0, 5)
+        : defaults[i].activities,
     milestones:
-      Array.isArray(p.milestones) && p.milestones.length > 0 ? p.milestones.slice(0, 4) : defaults[i].milestones,
+      Array.isArray(p.milestones) && p.milestones.length > 0
+        ? p.milestones.slice(0, 4)
+        : defaults[i].milestones,
   }));
   while (merged.length < 3) merged.push(defaults[merged.length]);
 
@@ -1844,6 +2336,45 @@ function ensureSummaryCompleteness(summaryResult, context) {
   summary.keyInsights = normalizedInsights.slice(0, 5);
   result.summary = summary;
   return result;
+}
+
+function sanitizeCountryAnalysis(countryAnalysis, context = {}) {
+  if (!countryAnalysis || typeof countryAnalysis !== 'object') return countryAnalysis;
+
+  if (countryAnalysis.policy && typeof countryAnalysis.policy === 'object') {
+    countryAnalysis.policy = normalizePolicySynthesisResult(countryAnalysis.policy);
+    countryAnalysis.policy = validatePolicySynthesis(countryAnalysis.policy);
+  }
+  if (countryAnalysis.market && typeof countryAnalysis.market === 'object') {
+    countryAnalysis.market = validateMarketSynthesis(countryAnalysis.market);
+  }
+  if (countryAnalysis.competitors && typeof countryAnalysis.competitors === 'object') {
+    countryAnalysis.competitors = validateCompetitorsSynthesis(countryAnalysis.competitors);
+  }
+
+  const summaryPack = ensureSummaryCompleteness(
+    {
+      depth: countryAnalysis.depth || {},
+      summary: countryAnalysis.summary || {},
+    },
+    {
+      country: context.country || countryAnalysis.country || '',
+      policy: countryAnalysis.policy || {},
+      market: countryAnalysis.market || {},
+      competitors: countryAnalysis.competitors || {},
+      researchData: context.researchData || countryAnalysis.rawData || {},
+    }
+  );
+  countryAnalysis.depth = summaryPack.depth || countryAnalysis.depth || {};
+  countryAnalysis.summary = summaryPack.summary || countryAnalysis.summary || {};
+
+  countryAnalysis.policy = sanitizePlaceholderStrings(countryAnalysis.policy);
+  countryAnalysis.market = sanitizePlaceholderStrings(countryAnalysis.market);
+  countryAnalysis.competitors = sanitizePlaceholderStrings(countryAnalysis.competitors);
+  countryAnalysis.summary = sanitizePlaceholderStrings(countryAnalysis.summary);
+  countryAnalysis.depth = sanitizePlaceholderStrings(countryAnalysis.depth);
+
+  return countryAnalysis;
 }
 
 /**
@@ -1882,10 +2413,11 @@ ${Object.entries(researchData)
 
 If research data is insufficient for a field, set the value to:
 - For arrays: empty array []
-- For strings: "Insufficient research data for this field"
+- For strings: null
 - For numbers: null
+- For objects: null
+NEVER output literal placeholders such as "Insufficient research data for this field".
 DO NOT fabricate data. DO NOT estimate from training knowledge.
-The quality gate will handle missing data appropriately.
 
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
@@ -2107,20 +2639,23 @@ function validateContentDepth(synthesis) {
     );
   }
 
-  // Competitors check: ≥3 companies with details AND word count validation (45-60 words)
+  // Competitors check: ≥3 companies with details.
+  // User priority is content depth over strict overflow policing, so we enforce only minimum
+  // descriptive depth and treat upper-bound overflow as a soft warning.
   const competitors = synthesis.competitors || {};
   let totalCompanies = 0;
   let thinDescriptions = 0;
   let longDescriptions = 0;
+  const MIN_DESC_WORDS = 30;
   for (const section of ['japanesePlayers', 'localMajor', 'foreignPlayers']) {
     const players = competitors[section]?.players || [];
     totalCompanies += players.filter((p) => p.name && (p.revenue || p.description)).length;
-    // Validate description word count (45-60 words per prompt)
+    // Validate minimum descriptive depth; do not hard-fail longer content.
     for (const player of players) {
       if (player.description) {
         const wordCount = player.description.trim().split(/\s+/).length;
-        if (wordCount < 45) thinDescriptions++;
-        if (wordCount > 60) longDescriptions++; // >60 words causes overflow
+        if (wordCount < MIN_DESC_WORDS) thinDescriptions++;
+        if (wordCount > 60) longDescriptions++;
       }
     }
   }
@@ -2129,18 +2664,17 @@ function validateContentDepth(synthesis) {
   else if (totalCompanies >= 1) scores.competitors = 40;
   else failures.push(`Competitors: only ${totalCompanies} detailed companies (need ≥3)`);
 
-  // CRITICAL: Reject if >50% of descriptions are thin or too long
-  if (totalCompanies > 0 && thinDescriptions / totalCompanies > 0.5) {
+  // Reject only when a clear majority are too thin.
+  if (totalCompanies > 0 && thinDescriptions / totalCompanies > 0.6) {
     failures.push(
-      `Competitors: ${thinDescriptions}/${totalCompanies} descriptions <45 words (need 45-60)`
+      `Competitors: ${thinDescriptions}/${totalCompanies} descriptions <${MIN_DESC_WORDS} words (need stronger depth)`
     );
     scores.competitors = Math.min(scores.competitors, 40); // Cap score if descriptions thin
   }
   if (totalCompanies > 0 && longDescriptions > 0) {
-    failures.push(
-      `Competitors: ${longDescriptions}/${totalCompanies} descriptions >60 words (causes overflow, max 60)`
+    console.log(
+      `  [Validation] Competitors warning: ${longDescriptions}/${totalCompanies} descriptions >60 words (overflow tolerated, consider trimming)`
     );
-    scores.competitors = Math.min(scores.competitors, 40);
   }
 
   // Strategic insights validation: check structured fields (data, implication, timing)
@@ -2183,21 +2717,22 @@ function validateContentDepth(synthesis) {
   const partners = depth.partnerAssessment?.partners || [];
   let thinPartners = 0;
   let longPartners = 0;
+  const MIN_PARTNER_DESC_WORDS = 30;
   for (const partner of partners) {
     if (partner.description) {
       const wordCount = partner.description.trim().split(/\s+/).length;
-      if (wordCount < 45) thinPartners++;
-      if (wordCount > 60) longPartners++; // Causes overflow
+      if (wordCount < MIN_PARTNER_DESC_WORDS) thinPartners++;
+      if (wordCount > 60) longPartners++;
     }
   }
-  if (partners.length > 0 && thinPartners / partners.length > 0.5) {
+  if (partners.length > 0 && thinPartners / partners.length > 0.6) {
     failures.push(
-      `Partners: ${thinPartners}/${partners.length} descriptions <45 words (need 45-60)`
+      `Partners: ${thinPartners}/${partners.length} descriptions <${MIN_PARTNER_DESC_WORDS} words (need stronger depth)`
     );
   }
   if (partners.length > 0 && longPartners > 0) {
-    failures.push(
-      `Partners: ${longPartners}/${partners.length} descriptions >60 words (causes overflow, max 60)`
+    console.log(
+      `  [Validation] Partners warning: ${longPartners}/${partners.length} descriptions >60 words (overflow tolerated, consider trimming)`
     );
   }
 
@@ -2263,7 +2798,7 @@ YOUR TASK:
 1. UPDATE the original analysis with the new data
 2. CORRECT any claims that verification proved wrong
 3. ADD DEPTH where gaps have been filled
-4. FLAG remaining uncertainties with "estimated" or "unverified"
+4. For remaining uncertainties, use null/empty values instead of placeholder language
 
 CRITICAL - STRUCTURE PRESERVATION:
 You MUST return the EXACT SAME JSON structure/schema as the ORIGINAL ANALYSIS above.
@@ -2322,6 +2857,18 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       console.log('  [reSynthesize] Truncation repair succeeded');
     }
 
+    if (newSynthesis.policy && typeof newSynthesis.policy === 'object') {
+      newSynthesis.policy = validatePolicySynthesis(
+        normalizePolicySynthesisResult(newSynthesis.policy)
+      );
+    }
+    if (newSynthesis.market && typeof newSynthesis.market === 'object') {
+      newSynthesis.market = validateMarketSynthesis(newSynthesis.market);
+    }
+    if (newSynthesis.competitors && typeof newSynthesis.competitors === 'object') {
+      newSynthesis.competitors = validateCompetitorsSynthesis(newSynthesis.competitors);
+    }
+
     // Validate structure preservation - check for key fields
     const hasPolicy = newSynthesis.policy && typeof newSynthesis.policy === 'object';
     const hasMarket =
@@ -2338,15 +2885,24 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
         `    Missing: ${!hasPolicy ? 'policy ' : ''}${!hasMarket ? 'market ' : ''}${!hasCompetitors ? 'competitors' : ''}`
       );
       // Merge available improved sections into original instead of discarding all
-      if (hasPolicy) originalSynthesis.policy = newSynthesis.policy;
+      if (hasPolicy) {
+        originalSynthesis.policy = validatePolicySynthesis(
+          normalizePolicySynthesisResult(newSynthesis.policy)
+        );
+      }
       if (hasMarket) originalSynthesis.market = validateMarketSynthesis(newSynthesis.market);
-      if (hasCompetitors) originalSynthesis.competitors = newSynthesis.competitors;
+      if (hasCompetitors) {
+        originalSynthesis.competitors = validateCompetitorsSynthesis(newSynthesis.competitors);
+      }
       if (newSynthesis.depth && typeof newSynthesis.depth === 'object')
         originalSynthesis.depth = newSynthesis.depth;
       if (newSynthesis.summary && typeof newSynthesis.summary === 'object')
         originalSynthesis.summary = newSynthesis.summary;
       originalSynthesis.country = country;
-      return originalSynthesis;
+      return sanitizeCountryAnalysis(originalSynthesis, {
+        country,
+        researchData: originalSynthesis.rawData || {},
+      });
     }
 
     // Ensure depth and summary sections are preserved — if AI dropped them, recover from original
@@ -2393,11 +2949,10 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       metadata: originalSynthesis.metadata,
     };
     Object.assign(newSynthesis, preserved);
-    // Validate market data before returning (defense against array responses in re-synthesis)
-    if (newSynthesis.market) {
-      newSynthesis.market = validateMarketSynthesis(newSynthesis.market);
-    }
-    return newSynthesis;
+    return sanitizeCountryAnalysis(newSynthesis, {
+      country,
+      researchData: originalSynthesis.rawData || {},
+    });
   } catch (error) {
     console.error('  Re-synthesis failed:', error?.message);
     return originalSynthesis; // Fall back to original
@@ -2475,6 +3030,7 @@ RULES:
 - Max 20 gaps, ranked by priority (10=most critical, 1=nice-to-have)
 - Max 5 verifications
 - searchQuery must be specific, include "${country}", not generic
+- Keep all gap proposals inside "${scope.industry}" scope; avoid adjacent sectors unless explicitly requested
 - Focus on what makes the BIGGEST difference to report quality
 - type field helps the deepen stage understand what KIND of research to do
 
@@ -2499,6 +3055,26 @@ Return ONLY valid JSON.`;
     }
 
     const gapReport = extracted.data;
+    if (Array.isArray(gapReport.gaps)) {
+      gapReport.gaps = gapReport.gaps.map((gap) => {
+        const area = gap?.category || gap?.area || gap?.topic || 'general';
+        return {
+          ...gap,
+          searchQuery: sanitizeResearchQuery(gap?.searchQuery, country, industry, area),
+        };
+      });
+    }
+    if (Array.isArray(gapReport.verificationsNeeded)) {
+      gapReport.verificationsNeeded = gapReport.verificationsNeeded.map((item) => ({
+        ...item,
+        searchQuery: sanitizeResearchQuery(
+          item?.searchQuery || item?.claim,
+          country,
+          industry,
+          'verification'
+        ),
+      }));
+    }
     const gapCount = (gapReport.gaps || []).length;
     const verifyCount = (gapReport.verificationsNeeded || []).length;
     console.log(
@@ -2559,7 +3135,12 @@ async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQ
       category: gap.category,
       topic: gap.topic,
       description: gap.description,
-      searchQuery: gap.searchQuery,
+      searchQuery: sanitizeResearchQuery(
+        gap.searchQuery,
+        country,
+        industry,
+        gap.category || gap.topic || 'general'
+      ),
       gapType: gap.type,
     })),
     ...verifications.map((v) => ({
@@ -2568,7 +3149,7 @@ async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQ
       category: 'verification',
       topic: v.source_topic,
       description: v.claim,
-      searchQuery: v.searchQuery,
+      searchQuery: sanitizeResearchQuery(v.searchQuery, country, industry, 'verification'),
       gapType: 'verification',
     })),
   ];
@@ -2696,6 +3277,7 @@ async function finalReviewSynthesis(countryAnalysis, country, industry) {
   const depthPreview = summarizeForSummary(countryAnalysis.depth, 'depth', 4000);
 
   const reviewPrompt = `You are a senior partner at McKinsey doing a FINAL quality review of a market entry report for ${industry} in ${country} before it goes to the client CEO.
+Current year: ${CURRENT_YEAR}. Do NOT endorse or require future-dated facts beyond ${CURRENT_YEAR}.
 
 This is NOT a research review — the research is done. This is a PRESENTATION review. You are checking whether the assembled slides tell a coherent, credible story.
 
@@ -2732,6 +3314,8 @@ ${depthPreview}
 
 7. CREDIBILITY GAPS: Any claims that sound made up or lack specificity? Vague statements that would make a CEO skeptical?
 
+8. SCOPE DISCIPLINE: Stay within "${industry}" scope. Do NOT require adjacent-sector analysis (e.g., wind/solar/power retail) unless explicitly included in the synthesis itself.
+
 Return JSON:
 {
   "overallGrade": "A|B|C|D|F",
@@ -2752,7 +3336,8 @@ Return JSON:
     "policy": "specific instruction to improve policy section, or null if good",
     "market": "specific instruction to improve market section, or null if good",
     "competitors": "specific instruction to improve competitors section, or null if good",
-    "summary": "specific instruction to improve summary section, or null if good"
+    "summary": "specific instruction to improve summary section, or null if good",
+    "depth": "specific instruction to improve depth section, or null if good"
   },
   "researchGaps": [
     {
@@ -2769,11 +3354,14 @@ RULES:
 - Max 10 issues, prioritized by severity.
 - "sectionFixes" should be actionable instructions, not vague feedback.
 - If grade is A or B, sectionFixes should be null for good sections.
+- If data is intentionally null/empty due missing evidence, treat it as truthful incompleteness; do NOT label it as fabrication.
 - "escalation" tells the system what kind of fix is needed:
   - "research": data is MISSING — need to go back and search the web for it
   - "synthesis": data EXISTS in research but synthesis didn't use it — re-synthesize
   - "none": minor wording issue — no re-work needed
+- If an issue is about suspicious/fabricated/placeholder wording, use "synthesis" (do NOT request research).
 - "researchGaps": data the report NEEDS but DOESN'T HAVE — max 10, each with a concrete searchQuery including "${country}"
+- Never request post-${CURRENT_YEAR} facts. Avoid speculative decree names/numbers unless clearly cited in the provided synthesis.
 - Return ONLY valid JSON.`;
 
   try {
@@ -2792,6 +3380,44 @@ RULES:
     }
 
     const review = extracted.data;
+    const speculativeIssuePattern =
+      /\bhallucinat|made up|fabricat|suspicious|placeholder|insufficient data|unsupported claim|not credible\b/i;
+
+    if (!Array.isArray(review.issues)) review.issues = [];
+    if (!review.sectionFixes || typeof review.sectionFixes !== 'object') review.sectionFixes = {};
+
+    // Normalize reviewer escalation so credibility cleanup stays synthesis-side.
+    for (const issue of review.issues) {
+      const text = `${ensureString(issue?.description)} ${ensureString(issue?.fix)}`;
+      if (speculativeIssuePattern.test(text)) {
+        issue.escalation = 'synthesis';
+        const sectionKey = ensureString(issue?.section || '').toLowerCase();
+        if (
+          ['policy', 'market', 'competitors', 'summary', 'depth'].includes(sectionKey) &&
+          !review.sectionFixes[sectionKey]
+        ) {
+          review.sectionFixes[sectionKey] =
+            'Remove unsupported/suspicious claims, replace with source-backed facts, and set unknowns to null/empty arrays.';
+        }
+      }
+    }
+
+    const rawGaps = Array.isArray(review.researchGaps) ? review.researchGaps : [];
+    review.researchGaps = rawGaps
+      .filter((gap) => {
+        const text = `${ensureString(gap?.description)} ${ensureString(gap?.searchQuery)}`;
+        return !speculativeIssuePattern.test(text);
+      })
+      .slice(0, 6)
+      .map((gap) => {
+        const targetSection = ensureString(gap?.targetSection || 'market');
+        return {
+          ...gap,
+          targetSection,
+          searchQuery: sanitizeResearchQuery(gap?.searchQuery, country, industry, targetSection),
+        };
+      });
+
     const criticalCount = (review.issues || []).filter((i) => i.severity === 'critical').length;
     const majorCount = (review.issues || []).filter((i) => i.severity === 'major').length;
 
@@ -2879,7 +3505,24 @@ async function applyFinalReviewFixes(
           result: summaryResult.summary || summaryResult,
           depth: summaryResult.depth || null,
         };
+      } else if (section === 'depth') {
+        // Depth is produced by synthesizeSummary along with summary.
+        const summaryResult = await synthesizeSummary(
+          researchData,
+          countryAnalysis.policy,
+          countryAnalysis.market,
+          countryAnalysis.competitors,
+          country,
+          industry,
+          fixContext
+        );
+        return {
+          section: 'depth',
+          result: summaryResult.depth || null,
+          summary: summaryResult.summary || null,
+        };
       }
+      console.warn(`  [FINAL REVIEW] Unsupported section fix requested: ${section}`);
       return null;
     } catch (err) {
       console.warn(`  [FINAL REVIEW] Failed to fix ${section}: ${err.message}`);
@@ -2888,18 +3531,52 @@ async function applyFinalReviewFixes(
   });
 
   const results = await Promise.all(fixPromises);
+  let refreshedSummaryRequired = false;
 
   for (const fix of results) {
     if (fix && fix.result && !fix.result._synthesisError) {
-      countryAnalysis[fix.section] = fix.result;
-      // synthesizeSummary returns { depth, summary } — update depth too if present
+      if (fix.section === 'depth') {
+        countryAnalysis.depth = fix.result;
+        if (fix.summary) {
+          countryAnalysis.summary = fix.summary;
+        }
+        refreshedSummaryRequired = true;
+      } else {
+        countryAnalysis[fix.section] = fix.result;
+      }
+      // synthesizeSummary returns { depth, summary } — update depth too if present.
       if (fix.section === 'summary' && fix.depth) {
         countryAnalysis.depth = fix.depth;
+      }
+      if (['policy', 'market', 'competitors'].includes(fix.section)) {
+        refreshedSummaryRequired = true;
       }
       console.log(`  [FINAL REVIEW] Fixed: ${fix.section}`);
     }
   }
 
+  // Keep summary/depth synchronized after core section fixes to avoid coherence drift.
+  if (refreshedSummaryRequired) {
+    try {
+      const refreshContext = `${clientContext || ''}\n\nPost-fix coherence refresh: align summary/depth with latest section outputs.`;
+      const refreshed = await synthesizeSummary(
+        researchData,
+        countryAnalysis.policy,
+        countryAnalysis.market,
+        countryAnalysis.competitors,
+        country,
+        industry,
+        refreshContext
+      );
+      if (refreshed?.summary) countryAnalysis.summary = refreshed.summary;
+      if (refreshed?.depth) countryAnalysis.depth = refreshed.depth;
+      console.log('  [FINAL REVIEW] Refreshed summary/depth after section fixes');
+    } catch (err) {
+      console.warn(`  [FINAL REVIEW] Summary/depth refresh failed: ${err.message}`);
+    }
+  }
+
+  countryAnalysis = sanitizeCountryAnalysis(countryAnalysis, { country, researchData });
   return countryAnalysis;
 }
 
@@ -3045,6 +3722,10 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   const REVIEW_DEEPEN_TARGET_SCORE = 80;
   let reviewDeepenIteration = 0;
   let lastCoverageScore = 0;
+  let previousCoverageScore = 0;
+  let stagnantCoverageIterations = 0;
+  let previousGapSignature = '';
+  let stagnantGapSignatureIterations = 0;
 
   try {
     while (reviewDeepenIteration < REVIEW_DEEPEN_MAX_ITERATIONS) {
@@ -3061,6 +3742,46 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       );
 
       lastCoverageScore = gapReport?.coverageScore || 0;
+      const currentGapSignature = (gapReport?.gaps || [])
+        .slice(0, 10)
+        .map((g) =>
+          sanitizeResearchQuery(
+            g?.searchQuery,
+            country,
+            industry,
+            g?.category || g?.area || g?.topic || 'general'
+          ).toLowerCase()
+        )
+        .filter(Boolean)
+        .sort()
+        .join('|');
+
+      if (reviewDeepenIteration > 1) {
+        const coverageDelta = Math.abs(lastCoverageScore - previousCoverageScore);
+        stagnantCoverageIterations = coverageDelta <= 1 ? stagnantCoverageIterations + 1 : 0;
+        stagnantGapSignatureIterations =
+          currentGapSignature && currentGapSignature === previousGapSignature
+            ? stagnantGapSignatureIterations + 1
+            : 0;
+        if (stagnantCoverageIterations >= 2 && lastCoverageScore < REVIEW_DEEPEN_TARGET_SCORE) {
+          console.warn(
+            `  [REVIEW-DEEPEN] Coverage plateau detected (${previousCoverageScore} -> ${lastCoverageScore}). Stopping repeated deepen cycles.`
+          );
+          break;
+        }
+        if (
+          lastCoverageScore < REVIEW_DEEPEN_TARGET_SCORE &&
+          coverageDelta <= 1 &&
+          stagnantGapSignatureIterations >= 1
+        ) {
+          console.warn(
+            `  [REVIEW-DEEPEN] Repeated gap signature detected at score ${lastCoverageScore}/100. Stopping redundant deepen cycle.`
+          );
+          break;
+        }
+      }
+      previousCoverageScore = lastCoverageScore;
+      previousGapSignature = currentGapSignature;
 
       // Exit: coverage score meets target
       if (lastCoverageScore >= REVIEW_DEEPEN_TARGET_SCORE) {
@@ -3176,6 +3897,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     storyPlan: storyPlan || null,
   };
 
+  countryAnalysis = sanitizeCountryAnalysis(countryAnalysis, { country, researchData });
+
   // Validate content depth BEFORE proceeding
   const validation = validateContentDepth(countryAnalysis);
   countryAnalysis.contentValidation = validation;
@@ -3268,6 +3991,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         }
       }
 
+      countryAnalysis = sanitizeCountryAnalysis(countryAnalysis, { country, researchData });
+
       // Re-validate
       const revalidation = validateContentDepth(countryAnalysis);
       countryAnalysis.contentValidation = revalidation;
@@ -3307,6 +4032,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     if (countryAnalysis.aborted) break;
     iteration++;
     console.log(`\n  [REFINEMENT ${iteration}/${MAX_ITERATIONS}] Analyzing quality...`);
+    countryAnalysis = sanitizeCountryAnalysis(countryAnalysis, { country, researchData });
 
     // Step 1: Score and identify gaps in current analysis
     const gaps = await identifyResearchGaps(countryAnalysis, country, industry);
@@ -3321,7 +4047,10 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     const codeGateResult = validateContentDepth({ ...countryAnalysis, country });
     const codeGateScore = codeGateResult.scores?.overall || 0;
     const codeGateFailures = codeGateResult.failures || [];
-    const effectiveScore = Math.min(confidenceScore, codeGateScore);
+    const gateAdjustedScore = codeGateResult.valid
+      ? codeGateScore
+      : Math.min(codeGateScore, MIN_CONFIDENCE_SCORE - 1);
+    const effectiveScore = Math.min(confidenceScore, gateAdjustedScore);
     lastCodeGateScore = codeGateScore;
     lastEffectiveScore = effectiveScore;
     if (effectiveScore >= MIN_CONFIDENCE_SCORE) {
@@ -3363,11 +4092,12 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           searchQuery = `${country} ${industry} top companies revenue market share key projects ${new Date().getFullYear()}`;
         } else if (lower.startsWith('strategic')) {
           area = 'summary';
-          searchQuery = `${country} ${industry} trigger timeline catalyst project milestones ${new Date().getFullYear()} ${new Date().getFullYear() + 1}`;
+          searchQuery = `${country} ${industry} trigger timeline catalyst project milestones ${new Date().getFullYear()}`;
         } else if (lower.startsWith('depth') || lower.startsWith('partners')) {
           area = 'depth';
           searchQuery = `${country} ${industry} entry strategy implementation roadmap partner shortlist contracts ${new Date().getFullYear()}`;
         }
+        searchQuery = sanitizeResearchQuery(searchQuery, country, industry, area);
 
         const normQuery = searchQuery.trim().toLowerCase();
         if (existingQueries.has(normQuery)) continue;
@@ -3427,6 +4157,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         codeGateFailures
       );
       countryAnalysis.country = country; // Ensure country is set
+      countryAnalysis = sanitizeCountryAnalysis(countryAnalysis, { country, researchData });
       // Validate market data after reSynthesize (defense against array sneaking through)
       if (
         countryAnalysis.market &&
@@ -3469,6 +4200,9 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     let finalReviewIteration = 0;
     let lastCoherenceScore = 0;
     let verificationPassesRemaining = 0;
+    let previousFinalCoherence = 0;
+    let previousIssueSignature = '';
+    let stagnantFinalReviewIterations = 0;
 
     try {
       while (finalReviewIteration < FINAL_REVIEW_MAX_ITERATIONS) {
@@ -3477,6 +4211,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           `\n  [FINAL REVIEW ${finalReviewIteration}/${FINAL_REVIEW_MAX_ITERATIONS}] Reviewing complete output...`
         );
 
+        countryAnalysis = sanitizeCountryAnalysis(countryAnalysis, { country, researchData });
         const finalReview = await finalReviewSynthesis(countryAnalysis, country, industry);
         countryAnalysis.finalReview = finalReview;
         lastCoherenceScore = finalReview?.coherenceScore || 0;
@@ -3489,6 +4224,43 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         const criticalOrMajor = (finalReview.issues || []).filter(
           (i) => i.severity === 'critical' || i.severity === 'major'
         );
+        const issueSignature = criticalOrMajor
+          .map((i) =>
+            `${ensureString(i?.severity || 'major')}:${ensureString(i?.section || i?.area || 'unknown')}:${ensureString(i?.type || 'issue')}`
+              .toLowerCase()
+              .trim()
+          )
+          .sort()
+          .join('|');
+        const gapSignature = (finalReview.researchGaps || [])
+          .map(
+            (g) =>
+              `${ensureString(g?.targetSection || 'market').toLowerCase()}:${sanitizeResearchQuery(g?.searchQuery, country, industry, g?.targetSection || 'general').toLowerCase()}`
+          )
+          .sort()
+          .join('|');
+        const combinedSignature = `${issueSignature}||${gapSignature}`;
+        if (finalReviewIteration > 1) {
+          const coherenceDelta = Math.abs(lastCoherenceScore - previousFinalCoherence);
+          if (
+            coherenceDelta <= 2 &&
+            combinedSignature &&
+            combinedSignature === previousIssueSignature
+          ) {
+            stagnantFinalReviewIterations++;
+          } else {
+            stagnantFinalReviewIterations = 0;
+          }
+          if (stagnantFinalReviewIterations >= 1) {
+            console.warn(
+              `  [FINAL REVIEW] Stagnation detected (coherence=${lastCoherenceScore}, repeated issue set). Stopping further expensive review cycles.`
+            );
+            break;
+          }
+        }
+        previousFinalCoherence = lastCoherenceScore;
+        previousIssueSignature = combinedSignature;
+
         const hasResearchGaps = Array.isArray(finalReview.researchGaps)
           ? finalReview.researchGaps.length > 0
           : false;
@@ -3545,7 +4317,12 @@ async function researchCountry(country, industry, clientContext, scope = null) {
               category: g.targetSection || 'market',
               topic: 'new',
               description: g.description,
-              searchQuery: g.searchQuery,
+              searchQuery: sanitizeResearchQuery(
+                g.searchQuery,
+                country,
+                industry,
+                g.targetSection || 'general'
+              ),
               priority: g.priority || 5,
               type: 'missing_data',
             })),

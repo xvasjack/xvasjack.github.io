@@ -476,6 +476,166 @@ Return ONLY valid JSON, no markdown or explanation.`;
 // ============ DYNAMIC RESEARCH FRAMEWORK GENERATOR ============
 // Generates industry-specific research queries based on user's request
 
+const CURRENT_YEAR = new Date().getFullYear();
+const REQUIRED_FRAMEWORK_CATEGORIES = [
+  'policy',
+  'market',
+  'competitors',
+  'context',
+  'depth',
+  'insights',
+];
+
+function isOilGasScope(scope) {
+  const industry = String(scope?.industry || '').toLowerCase();
+  return /\boil\b|\bgas\b|petroleum|lng|oilfield|upstream|downstream/.test(industry);
+}
+
+function allowsRenewables(scope) {
+  const industry = String(scope?.industry || '').toLowerCase();
+  return /\brenewable\b|\bsolar\b|\bwind\b|\bclean energy\b/.test(industry);
+}
+
+function hasOffScopeAdjacentTerms(text) {
+  const value = String(text || '').toLowerCase();
+  return [
+    /\boffshore wind\b/,
+    /\bwind farm\b/,
+    /\bsolar\b/,
+    /\bphotovoltaic\b/,
+    /\bbattery\b/,
+    /\belectric vehicle\b/,
+    /\bev\b/,
+    /\bretail electricity market\b/,
+    /\bhydrogen\b/,
+  ].some((re) => re.test(value));
+}
+
+function stripFutureYears(query) {
+  return String(query || '')
+    .replace(/\b20\d{2}\b/g, (yearText) => {
+      const year = Number(yearText);
+      return Number.isFinite(year) && year <= CURRENT_YEAR ? yearText : '';
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function ensureCountryPlaceholder(query) {
+  const text = String(query || '');
+  return text.includes('{country}') ? text : `{country} ${text}`.trim();
+}
+
+function buildFallbackQuery(scope, category, topicName, variant = 0) {
+  const industry = String(scope?.industry || 'industry').trim();
+  const topic = String(topicName || category || 'market topic').trim();
+  const suffixes = [
+    'official statistics report',
+    'government regulation licensing',
+    'top companies market share',
+    'pricing cost benchmark',
+    'project pipeline investment',
+  ];
+  const suffix = suffixes[variant % suffixes.length];
+  return `{country} ${industry} ${topic} ${suffix}`.replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeQuery(scope, category, topicName, query, variant = 0) {
+  const oilGas = isOilGasScope(scope);
+  const renewableAllowed = allowsRenewables(scope);
+
+  let cleaned = ensureCountryPlaceholder(query || '');
+  cleaned = stripFutureYears(cleaned);
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  if (!cleaned) cleaned = buildFallbackQuery(scope, category, topicName, variant);
+
+  if (oilGas && !renewableAllowed && hasOffScopeAdjacentTerms(cleaned)) {
+    cleaned = buildFallbackQuery(scope, category, topicName, variant);
+  }
+
+  // Keep query anchored to the declared industry.
+  const industry = String(scope?.industry || '').trim();
+  if (industry && !cleaned.toLowerCase().includes(industry.toLowerCase())) {
+    cleaned = `${cleaned} ${industry}`.replace(/\s+/g, ' ').trim();
+  }
+
+  return cleaned;
+}
+
+function normalizeTopicName(scope, category, topicName) {
+  const base = String(topicName || '').trim() || 'Research Topic';
+  const oilGas = isOilGasScope(scope);
+  const renewableAllowed = allowsRenewables(scope);
+  if (oilGas && !renewableAllowed && hasOffScopeAdjacentTerms(base)) {
+    if (category === 'market') return 'Core Oil & Gas Services Dynamics';
+    if (category === 'depth') return 'Oil & Gas Entry Economics';
+    return 'Oil & Gas Market Entry Priorities';
+  }
+  return base;
+}
+
+function sanitizeFrameworkOutput(scope, framework) {
+  const out = {};
+
+  for (const category of REQUIRED_FRAMEWORK_CATEGORIES) {
+    const rawTopics = Array.isArray(framework?.[category]?.topics)
+      ? framework[category].topics
+      : [];
+    const sanitizedTopics = rawTopics
+      .map((topic, topicIdx) => {
+        const topicName = normalizeTopicName(
+          scope,
+          category,
+          topic?.name || `${category} topic ${topicIdx + 1}`
+        );
+        const rawQueries = Array.isArray(topic?.queries) ? topic.queries : [];
+        const uniqueQueries = [];
+        const seen = new Set();
+
+        for (let i = 0; i < rawQueries.length; i++) {
+          const q = sanitizeQuery(scope, category, topicName, rawQueries[i], i);
+          const norm = q.toLowerCase();
+          if (!q || seen.has(norm)) continue;
+          seen.add(norm);
+          uniqueQueries.push(q);
+          if (uniqueQueries.length >= 5) break;
+        }
+
+        let variant = rawQueries.length;
+        while (uniqueQueries.length < 5) {
+          const q = sanitizeQuery(scope, category, topicName, '', variant++);
+          const norm = q.toLowerCase();
+          if (!seen.has(norm)) {
+            seen.add(norm);
+            uniqueQueries.push(q);
+          }
+          if (variant > 12) break;
+        }
+
+        if (uniqueQueries.length === 0) return null;
+        return {
+          name: topicName,
+          queries: uniqueQueries.slice(0, 5),
+        };
+      })
+      .filter(Boolean);
+
+    if (sanitizedTopics.length === 0) {
+      const fallbackTopic = normalizeTopicName(scope, category, `${category} core analysis`);
+      sanitizedTopics.push({
+        name: fallbackTopic,
+        queries: Array.from({ length: 5 }, (_, i) =>
+          sanitizeQuery(scope, category, fallbackTopic, '', i)
+        ),
+      });
+    }
+
+    out[category] = { topics: sanitizedTopics };
+  }
+
+  return out;
+}
+
 async function generateResearchFramework(scope) {
   console.log('\n=== GENERATING DYNAMIC RESEARCH FRAMEWORK ===');
   console.log(`Industry: ${scope.industry}, Project: ${scope.projectType}`);
@@ -619,6 +779,8 @@ Return ONLY valid JSON.`;
       console.log('Truncation repair succeeded');
     }
 
+    framework = sanitizeFrameworkOutput(scope, framework);
+
     // Count topics and queries
     let topicCount = 0;
     let queryCount = 0;
@@ -652,7 +814,7 @@ Return ONLY valid JSON.`;
 // Fallback generic framework if dynamic generation fails
 function generateFallbackFramework(scope) {
   const industry = scope.industry || 'the industry';
-  return {
+  const fallback = {
     policy: {
       topics: [
         {
@@ -888,6 +1050,7 @@ function generateFallbackFramework(scope) {
       ],
     },
   };
+  return sanitizeFrameworkOutput(scope, fallback);
 }
 
 /**

@@ -59,7 +59,8 @@ These are non-negotiable delivery rules for the market-research pipeline.
 - **Right margin**: 0.35 inches from slide edge
 - **Top content start**: Below title area (~1.2 inches from top)
 - **Bottom limit**: 0.5 inches from slide bottom
-- **CRITICAL**: No text may exceed these boundaries. Truncate or split slides if needed.
+- **CRITICAL**: Keep text within boundaries where possible, but do not drop important content solely to enforce strict visual fit.
+- Prefer this order: preserve insight -> compress wording -> split slide when materially needed.
 
 ### 2.3 Slide Title Area Structure
 ```
@@ -97,7 +98,8 @@ These are non-negotiable delivery rules for the market-research pipeline.
 If content exceeds slide boundaries:
 1. First: Reduce text (summarize)
 2. Second: Split into multiple slides
-3. Never: Let text run off the slide
+3. If still dense: allow controlled minor overflow rather than deleting critical analysis
+4. Never: break slide XML or corrupt layout objects
 
 ---
 
@@ -254,7 +256,7 @@ Before generating final output, verify:
 - [ ] Body content is 14pt
 - [ ] Title is 24pt, Message is 16pt
 - [ ] Navy divider line under section headers
-- [ ] No text overflows slide boundaries
+- [ ] No severe/unreadable overflow; minor overflow is acceptable if insight integrity is preserved
 - [ ] Max 4 bullets per section
 - [ ] Each bullet under 80 characters
 - [ ] Charts used where numbers benefit from visualization
@@ -338,3 +340,6 @@ When numbers exist, consider if a chart would communicate better than text.
 
 *Last updated: 2025-12-30*
 *Reference: YCP profile slide template v3.pptx*
+## Failure Log
+
+Before triggering paid backend runs, review `backend/market-research/MISTAKES.md` and complete its pre-run QA checklist.

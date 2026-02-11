@@ -1207,11 +1207,14 @@ async function universalResearchAgent(
   console.log(`    [${category.toUpperCase()} AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const results = {};
+  const currentYear = new Date().getFullYear();
+  const recentStartYear = Math.max(2019, currentYear - 3);
 
   // Run all topics in parallel with per-topic timeout
   const topicResults = await Promise.all(
     topics.map(async (topic, idx) => {
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
+Never use future-dated facts beyond ${currentYear}. If a source discusses a future target, present it as a target and include the official source and publication date.
 
 For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
 
@@ -1247,7 +1250,7 @@ REQUIREMENTS:
 - Provide SPECIFIC data: numbers, company names, dates, deal sizes
 - If data is unavailable for a field, use empty array [] — do NOT guess
 - Focus on actionable intelligence, not general observations
-- Include recent developments (2023-2025)
+- Include recent developments (${recentStartYear}-${currentYear}) only
 - Mark dataQuality as "low" if information is estimated or uncertain`;
 
       try {
@@ -1264,6 +1267,9 @@ REQUIREMENTS:
         console.log(
           `    [${category}] Topic "${topic.name}": ${result.content?.length || 0} chars`
         );
+
+        let finalContent = result.content || '';
+        let finalCitations = result.citations || [];
 
         // Extract structured JSON from response (same approach as specialized agents)
         let structuredData = null;
@@ -1291,8 +1297,9 @@ REQUIREMENTS:
                 if (retryExtracted.status === 'success') {
                   structuredData = retryExtracted.data;
                   extractionStatus = 'success';
-                  // Merge content from both attempts
-                  result.content = result.content + '\n\n' + retryResult.content;
+                  // Use the successful retry payload only to avoid mixing contradictory content.
+                  finalContent = retryResult.content;
+                  finalCitations = retryResult.citations || finalCitations;
                   console.log(`      [${category}] ${topic.name}: Retry JSON extraction succeeded`);
                 }
               }
@@ -1307,10 +1314,10 @@ REQUIREMENTS:
         return {
           key: `${category}_${idx}_${topic.name.replace(/\s+/g, '_').toLowerCase()}`,
           name: topic.name,
-          content: result.content,
+          content: finalContent,
           structuredData: structuredData,
           extractionStatus: extractionStatus,
-          citations: result.citations || [],
+          citations: finalCitations,
           slideTitle: slideTitle,
           dataQuality:
             structuredData?.dataQuality || (extractionStatus === 'success' ? 'medium' : 'unknown'),
