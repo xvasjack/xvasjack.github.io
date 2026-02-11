@@ -17,6 +17,7 @@ const {
   validateSynthesisQuality,
   validatePptData,
 } = require('./quality-gates');
+const { validatePPTX } = require('./pptx-validator');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers({ logMemory: false });
@@ -416,6 +417,46 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         }
       }
 
+      // Quality Gate 4: Hard PPT structural validation before delivery.
+      // This blocks malformed or clearly truncated decks from being emailed/downloaded.
+      let pptStructureValidation = null;
+      try {
+        pptStructureValidation = await validatePPTX(pptBuffer, {
+          minFileSize: 120 * 1024,
+          minSlides: 12,
+          minCharts: 1,
+          minTables: 3,
+          requireInsights: true,
+          noEmptySlides: true,
+        });
+      } catch (validationErr) {
+        throw new Error(`PPT structural validation crashed: ${validationErr.message}`);
+      }
+
+      const emptySlidesWarning = (pptStructureValidation.warnings || []).find(
+        (w) => w.check === 'Empty slides'
+      );
+      const emptySlideMatches = emptySlidesWarning?.message?.match(/\d+/g) || [];
+      const emptySlideCount = emptySlideMatches.length;
+      const excessiveEmptySlides = emptySlideCount > 6;
+      const structureFailures = (pptStructureValidation.failed || []).map(
+        (f) => `${f.check}: expected ${f.expected}, got ${f.actual}`
+      );
+
+      if (!pptStructureValidation.valid || excessiveEmptySlides) {
+        const reasons = [...structureFailures];
+        if (excessiveEmptySlides) {
+          reasons.push(`Empty slide threshold exceeded (${emptySlideCount} > 6)`);
+        }
+        throw new Error(`PPT structural validation failed: ${reasons.join(' | ')}`);
+      }
+
+      if (emptySlideCount > 0) {
+        console.warn(
+          `[Quality Gate] PPT structure warning: ${emptySlideCount} low-content slide(s) detected (<50 chars)`
+        );
+      }
+
       if (lastRunDiagnostics) {
         lastRunDiagnostics.ppt = pptMetrics || {
           templateCoverage: null,
@@ -429,6 +470,16 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           geometryMaxDelta: null,
           geometryIssueCount: null,
         };
+        if (pptStructureValidation) {
+          lastRunDiagnostics.pptStructure = {
+            valid: pptStructureValidation.valid,
+            passed: pptStructureValidation.summary?.passed || 0,
+            failed: pptStructureValidation.summary?.failed || 0,
+            warnings: pptStructureValidation.summary?.warnings || 0,
+            failedChecks: (pptStructureValidation.failed || []).slice(0, 10),
+            warningChecks: (pptStructureValidation.warnings || []).slice(0, 10),
+          };
+        }
       }
 
       // Clean up rawData AFTER PPT generation to free memory (citations already used by PPT renderer)

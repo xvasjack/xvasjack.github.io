@@ -104,6 +104,39 @@ function normalizeSectionArea(area) {
   return 'general';
 }
 
+const TRANSIENT_RESEARCH_KEY_PATTERNS = [
+  /^_/,
+  /^section_\d+$/,
+  /_wasarray/,
+  /_synthesiserror/,
+  /(?:^|_)deepen(?:_|$)/,
+  /final[_-]?review[_-]?gap/,
+  /(?:^|_)gap_\d+$/,
+];
+
+function isTransientResearchKey(key) {
+  const normalized = ensureString(key).toLowerCase().trim();
+  if (!normalized) return true;
+  return TRANSIENT_RESEARCH_KEY_PATTERNS.some((re) => re.test(normalized));
+}
+
+function selectResearchTopicsByPrefix(researchData, prefix) {
+  const normalizedPrefix = ensureString(prefix).toLowerCase().trim();
+  if (!normalizedPrefix) return {};
+  const prefixToken = `${normalizedPrefix}_`;
+  const entries = Object.entries(researchData || {}).filter(([rawKey]) => {
+    const key = ensureString(rawKey).toLowerCase();
+    return key.startsWith(prefixToken) && !isTransientResearchKey(key);
+  });
+  if (entries.length === 0) return {};
+
+  const canonicalRegex = new RegExp(`^${normalizedPrefix}_\\d+_`);
+  const canonicalEntries = entries.filter(([rawKey]) =>
+    canonicalRegex.test(ensureString(rawKey).toLowerCase())
+  );
+  return Object.fromEntries(canonicalEntries.length > 0 ? canonicalEntries : entries);
+}
+
 function buildScopeQuery(area, country, industry) {
   const safeCountry = ensureString(country);
   const safeIndustry = ensureString(industry || 'industry');
@@ -841,6 +874,86 @@ function isMarketSectionLike(value) {
   );
 }
 
+const CANONICAL_MARKET_SECTION_KEYS = [
+  'marketSizeAndGrowth',
+  'supplyAndDemandDynamics',
+  'pricingAndTariffStructures',
+];
+
+function getCanonicalMarketSlideTitle(sectionKey) {
+  switch (sectionKey) {
+    case 'marketSizeAndGrowth':
+      return 'Market - Market Size & Growth';
+    case 'supplyAndDemandDynamics':
+      return 'Market - Supply & Demand Dynamics';
+    case 'pricingAndTariffStructures':
+      return 'Market - Pricing & Tariff Structures';
+    default:
+      return `Market - ${humanizeSectionKey(sectionKey)}`;
+  }
+}
+
+function canonicalizeMarketSectionKey(rawKey, sectionValue) {
+  const keyToken = ensureString(rawKey).toLowerCase();
+  const titleToken = ensureString(sectionValue?.slideTitle).toLowerCase();
+  const subtitleToken = ensureString(sectionValue?.subtitle).toLowerCase();
+  const overviewToken = ensureString(sectionValue?.overview).toLowerCase();
+  const hint = `${keyToken} ${titleToken} ${subtitleToken} ${overviewToken}`.replace(
+    /[^a-z0-9\s]/g,
+    ' '
+  );
+
+  if (
+    /\bmarket\s*size\b|\bgrowth\b|\bcagr\b|\btam\b|\bmarket\s*value\b|\baddressable\b/.test(hint)
+  ) {
+    return 'marketSizeAndGrowth';
+  }
+
+  if (
+    /\bsupply\b|\bdemand\b|\bconsumption\b|\bproduction\b|\bimport\b|\bexport\b|\bbalance\b/.test(
+      hint
+    )
+  ) {
+    return 'supplyAndDemandDynamics';
+  }
+
+  if (
+    /\bpricing\b|\bprice\b|\btariff\b|\bcost\b|\bbenchmark\b|\beconomics\b|\bmmbtu\b/.test(hint)
+  ) {
+    return 'pricingAndTariffStructures';
+  }
+
+  return null;
+}
+
+function scoreMarketSectionRichness(section) {
+  if (!section || typeof section !== 'object') return 0;
+  let score = 0;
+  const keyMetrics = Array.isArray(section.keyMetrics) ? section.keyMetrics : [];
+  score += Math.min(keyMetrics.length, 8);
+
+  if (Array.isArray(section.chartData?.series) && section.chartData.series.length > 0) {
+    score += 8;
+  } else if (Array.isArray(section.chartData?.values) && section.chartData.values.length >= 3) {
+    score += 6;
+  }
+
+  if (hasNumericSignal(section.subtitle)) score += 3;
+  if (hasNumericSignal(section.overview)) score += 3;
+  if (hasNumericSignal(section.keyInsight)) score += 3;
+  if (ensureString(section.slideTitle)) score += 1;
+
+  return score;
+}
+
+function pickRicherMarketSection(current, candidate) {
+  if (!current) return candidate;
+  if (!candidate) return current;
+  return scoreMarketSectionRichness(candidate) >= scoreMarketSectionRichness(current)
+    ? candidate
+    : current;
+}
+
 function normalizeMarketSynthesisResult(result) {
   if (!result) return result;
 
@@ -970,19 +1083,30 @@ function validateMarketSynthesis(result) {
 
   result = normalizeMarketSynthesisResult(result);
 
-  // Dynamically discover sections (supports both legacy energy keys and dynamic section_N keys)
-  const sections = Object.keys(result).filter(
-    (k) => !k.startsWith('_') && typeof result[k] === 'object' && result[k] !== null
+  // Canonicalize to stable market section keys and drop transient/extra sections.
+  const discoveredSections = Object.entries(result).filter(
+    ([k, v]) => !k.startsWith('_') && v && typeof v === 'object' && !Array.isArray(v)
+  );
+  const canonicalized = {};
+  for (const [rawKey, rawSection] of discoveredSections) {
+    const canonicalKey = canonicalizeMarketSectionKey(rawKey, rawSection);
+    if (!canonicalKey) continue;
+    canonicalized[canonicalKey] = pickRicherMarketSection(canonicalized[canonicalKey], rawSection);
+  }
+
+  result = canonicalized;
+  const sections = CANONICAL_MARKET_SECTION_KEYS.filter(
+    (k) => result[k] && typeof result[k] === 'object'
   );
   let chartCount = 0;
 
   for (const section of sections) {
     if (!result[section]?.slideTitle) {
       result[section] = result[section] || {};
-      result[section].slideTitle = `Market - ${humanizeSectionKey(section)}`;
+      result[section].slideTitle = getCanonicalMarketSlideTitle(section);
     }
     if (containsPlaceholderText(result[section]?.slideTitle)) {
-      result[section].slideTitle = `Market - ${humanizeSectionKey(section)}`;
+      result[section].slideTitle = getCanonicalMarketSlideTitle(section);
     }
 
     const chartData = result[section]?.chartData;
@@ -1032,6 +1156,11 @@ function validateMarketSynthesis(result) {
         'Prioritize segments with quantified demand and explicit policy or cost triggers.';
     }
   }
+
+  // Ensure stable output order and prevent transient keys from leaking downstream.
+  result = Object.fromEntries(
+    CANONICAL_MARKET_SECTION_KEYS.filter((k) => result[k]).map((k) => [k, result[k]])
+  );
 
   if (chartCount < 2) {
     console.log(`  [Synthesis] Market warning: only ${chartCount} sections have valid chart data`);
@@ -1644,15 +1773,7 @@ function getStoryInstructions(storyPlan, section) {
 async function synthesizePolicy(researchData, country, industry, clientContext, storyPlan) {
   console.log(`  [Synthesis] Policy section for ${country}...`);
 
-  const filteredData = Object.fromEntries(
-    Object.entries(researchData).filter(
-      ([k]) =>
-        k.startsWith('policy_') ||
-        k.includes('regulation') ||
-        k.includes('law') ||
-        k.includes('investment')
-    )
-  );
+  const filteredData = selectResearchTopicsByPrefix(researchData, 'policy');
 
   const dataAvailable = Object.keys(filteredData).length > 0;
   console.log(
@@ -1769,10 +1890,22 @@ Return ONLY valid JSON.`;
       Boolean
     ).length;
 
+    if (wasArray) {
+      console.warn(
+        `  [synthesizePolicy] Attempt ${attempt} returned array (tagged _wasArray), retrying...`
+      );
+      if (attempt === MAX_POLICY_RETRIES) {
+        console.error(
+          '  [synthesizePolicy] Exhausted retries with array-shaped payload; rejecting synthesis result'
+        );
+      }
+      continue;
+    }
+
     // Accept only when policy content has evidence-backed structure, not just object shells.
     if (evidenceSections >= 3 || (evidenceSections >= 2 && actsCount >= 2)) {
       policyResult = candidate;
-      if (attempt > 0 || wasArray) {
+      if (attempt > 0) {
         console.log(
           `  [synthesizePolicy] Accepted normalized payload on attempt ${attempt} (acts=${actsCount}, targets=${targetsCount}, incentives=${incentivesCount})`
         );
@@ -1780,24 +1913,13 @@ Return ONLY valid JSON.`;
       break;
     }
 
-    if (wasArray) {
-      console.warn(
-        `  [synthesizePolicy] Attempt ${attempt} returned array (tagged _wasArray), retrying...`
-      );
-      if (attempt === MAX_POLICY_RETRIES) policyResult = candidate;
-      continue;
-    }
-
     console.warn(
       `  [synthesizePolicy] Attempt ${attempt}: insufficient policy evidence (acts=${actsCount}, targets=${targetsCount}, incentives=${incentivesCount}), retrying...`
     );
     if (attempt === MAX_POLICY_RETRIES) {
-      console.warn(
-        '  [synthesizePolicy] All retries exhausted; accepting weak policy payload for explicit gate failure visibility'
+      console.error(
+        '  [synthesizePolicy] All retries exhausted with insufficient policy evidence; rejecting synthesis result'
       );
-      candidate._weakPolicy = true;
-      policyResult = candidate;
-      break;
     }
   }
 
@@ -1816,9 +1938,7 @@ Return ONLY valid JSON.`;
 async function synthesizeMarket(researchData, country, industry, clientContext, storyPlan) {
   console.log(`  [Synthesis] Market section for ${country}...`);
 
-  const filteredData = Object.fromEntries(
-    Object.entries(researchData).filter(([k]) => k.startsWith('market_'))
-  );
+  const filteredData = selectResearchTopicsByPrefix(researchData, 'market');
 
   const dataAvailable = Object.keys(filteredData).length > 0;
   console.log(
@@ -1982,10 +2102,22 @@ Return ONLY valid JSON.`;
       );
     }).length;
 
+    if (wasArray) {
+      console.warn(
+        `  [synthesizeMarket] Attempt ${attempt} returned array (tagged _wasArray), retrying...`
+      );
+      if (attempt === MAX_MARKET_RETRIES) {
+        console.error(
+          '  [synthesizeMarket] Exhausted retries with array-shaped payload; rejecting synthesis result'
+        );
+      }
+      continue;
+    }
+
     // Accept only when market structure is substantial and multi-section quantification is present.
     if (sectionKeys.length >= 3 && quantifiedSections >= 2) {
       marketResult = candidate;
-      if (attempt > 0 || wasArray) {
+      if (attempt > 0) {
         console.log(
           `  [synthesizeMarket] Accepted normalized payload on attempt ${attempt} (${sectionKeys.length} sections, quantified=${quantifiedSections})`
         );
@@ -1993,30 +2125,13 @@ Return ONLY valid JSON.`;
       break;
     }
 
-    if (wasArray) {
-      console.warn(
-        `  [synthesizeMarket] Attempt ${attempt} returned array (tagged _wasArray), retrying...`
-      );
-      if (attempt === MAX_MARKET_RETRIES) {
-        console.warn(
-          '  [synthesizeMarket] Retries exhausted; accepting weak normalized salvage payload for explicit gate failure visibility'
-        );
-        candidate._weakMarket = true;
-        marketResult = candidate;
-      }
-      continue;
-    }
-
     console.warn(
       `  [synthesizeMarket] Attempt ${attempt}: insufficient structured sections (${sectionKeys.length}, quantified=${quantifiedSections}), retrying...`
     );
     if (attempt === MAX_MARKET_RETRIES) {
-      console.warn(
-        '  [synthesizeMarket] All retries exhausted; accepting weak market payload for explicit gate failure visibility'
+      console.error(
+        '  [synthesizeMarket] All retries exhausted with insufficient structured market sections; rejecting synthesis result'
       );
-      candidate._weakMarket = true;
-      marketResult = candidate;
-      break;
     }
   }
 
@@ -2036,9 +2151,7 @@ Return ONLY valid JSON.`;
 async function synthesizeCompetitors(researchData, country, industry, clientContext, storyPlan) {
   console.log(`  [Synthesis] Competitors section for ${country}...`);
 
-  const filteredData = Object.fromEntries(
-    Object.entries(researchData).filter(([k]) => k.startsWith('competitors_'))
-  );
+  const filteredData = selectResearchTopicsByPrefix(researchData, 'competitors');
 
   const dataAvailable = Object.keys(filteredData).length > 0;
   console.log(
@@ -2276,7 +2389,21 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     Object.assign(merged, r);
   }
 
-  if (Object.keys(merged).length === 0) {
+  const allowedCompetitorKeys = new Set([
+    'japanesePlayers',
+    'localMajor',
+    'foreignPlayers',
+    'caseStudy',
+    'maActivity',
+  ]);
+  const canonicalMerged = {};
+  for (const [key, value] of Object.entries(merged)) {
+    if (!allowedCompetitorKeys.has(key)) continue;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    canonicalMerged[key] = value;
+  }
+
+  if (Object.keys(canonicalMerged).length === 0) {
     console.error('  [synthesizeCompetitors] All parallel synthesis calls failed');
     return {
       _synthesisError: true,
@@ -2286,9 +2413,9 @@ Return JSON with ONLY the caseStudy and maActivity sections:
   }
 
   console.log(
-    `    [Competitors] Merged ${Object.keys(merged).length} sections: ${Object.keys(merged).join(', ')}`
+    `    [Competitors] Merged ${Object.keys(canonicalMerged).length} sections: ${Object.keys(canonicalMerged).join(', ')}`
   );
-  const validated = validateCompetitorsSynthesis(merged);
+  const validated = validateCompetitorsSynthesis(canonicalMerged);
   return validated;
 }
 

@@ -10,6 +10,57 @@ async function readPPTX(input) {
   return { zip: await JSZip.loadAsync(buffer), fileSize: buffer.length };
 }
 
+function findInvalidXmlCharIndex(text) {
+  if (typeof text !== 'string' || text.length === 0) return -1;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+
+    // Invalid XML 1.0 control chars (allow tab/newline/carriage return).
+    if (
+      (code >= 0x00 && code <= 0x08) ||
+      code === 0x0b ||
+      code === 0x0c ||
+      (code >= 0x0e && code <= 0x1f) ||
+      code === 0xfffe ||
+      code === 0xffff
+    ) {
+      return i;
+    }
+
+    // Unpaired high surrogate.
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = text.charCodeAt(i + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return i;
+      i++; // Skip valid surrogate pair.
+      continue;
+    }
+
+    // Unpaired low surrogate.
+    if (code >= 0xdc00 && code <= 0xdfff) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+async function scanXmlIntegrity(zip) {
+  const xmlFiles = Object.keys(zip.files).filter((f) => /\.xml$/i.test(f));
+  const issues = [];
+
+  for (const filePath of xmlFiles) {
+    const file = zip.file(filePath);
+    if (!file) continue;
+    const xml = await file.async('string');
+    const badIdx = findInvalidXmlCharIndex(xml);
+    if (badIdx >= 0) {
+      issues.push({ file: filePath, index: badIdx });
+      if (issues.length >= 25) break;
+    }
+  }
+
+  return { issueCount: issues.length, issues };
+}
+
 function countSlides(zip) {
   return Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f)).length;
 }
@@ -91,6 +142,20 @@ async function validatePPTX(input, exp = {}) {
   try {
     const { zip, fileSize } = await readPPTX(input);
     pass('File integrity', 'PPTX parsed successfully');
+
+    const xmlIntegrity = await scanXmlIntegrity(zip);
+    if (xmlIntegrity.issueCount > 0) {
+      fail(
+        'XML character integrity',
+        'No invalid XML chars or unpaired surrogates',
+        `${xmlIntegrity.issueCount} issue(s), e.g. ${xmlIntegrity.issues
+          .slice(0, 3)
+          .map((x) => `${x.file}@${x.index}`)
+          .join(', ')}`
+      );
+    } else {
+      pass('XML character integrity', 'No invalid characters found');
+    }
 
     const minSize = exp.minFileSize || 50 * 1024,
       maxSize = exp.maxFileSize || 3 * 1024 * 1024;
@@ -281,6 +346,7 @@ if (require.main === module) {
 
 module.exports = {
   readPPTX,
+  scanXmlIntegrity,
   countSlides,
   extractSlideText,
   extractAllText,

@@ -74,8 +74,25 @@ const { validatePptData } = require('./quality-gates');
 // XML 1.0 and cause "PowerPoint can't read this file" errors.
 // eslint-disable-next-line no-control-regex
 const XML_INVALID_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+function stripInvalidSurrogates(value) {
+  let out = '';
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += value[i] + value[i + 1];
+        i++;
+      }
+      continue;
+    }
+    if (code >= 0xdc00 && code <= 0xdfff) continue;
+    out += value[i];
+  }
+  return out;
+}
 function ensureString(value, defaultValue) {
-  return _ensureString(value, defaultValue).replace(XML_INVALID_CHARS, '');
+  return stripInvalidSurrogates(_ensureString(value, defaultValue).replace(XML_INVALID_CHARS, ''));
 }
 
 // Safety wrapper: ensure any value going into a table cell is a plain, XML-safe string.
@@ -177,14 +194,18 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
         message: 'ppt/slideLayouts/slideLayout3.xml not found; skipping line-geometry audit',
       });
     } else {
-      const expectedTopY = Math.round(Number(templatePatterns.style?.headerLines?.top?.y || 1.0208) * 914400);
+      const expectedTopY = Math.round(
+        Number(templatePatterns.style?.headerLines?.top?.y || 1.0208) * 914400
+      );
       const expectedBottomY = Math.round(
         Number(templatePatterns.style?.headerLines?.bottom?.y || 1.0972) * 914400
       );
       const expectedFooterY = Math.round(
         Number(templatePatterns.pptxPositions?.footerLine?.y || 7.2361) * 914400
       );
-      const yMatches = [...mainLayoutXml.matchAll(/<a:off x="0" y="(\d+)"/g)].map((m) => Number(m[1]));
+      const yMatches = [...mainLayoutXml.matchAll(/<a:off x="0" y="(\d+)"/g)].map((m) =>
+        Number(m[1])
+      );
       const nearest = (target) => {
         if (!yMatches.length) return null;
         let best = yMatches[0];
@@ -205,7 +226,11 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
       checks.headerFooterY = {
         expected: { top: expectedTopY, bottom: expectedBottomY, footer: expectedFooterY },
         actual: { top: top?.y || null, bottom: bottom?.y || null, footer: footer?.y || null },
-        delta: { top: top?.delta || null, bottom: bottom?.delta || null, footer: footer?.delta || null },
+        delta: {
+          top: top?.delta || null,
+          bottom: bottom?.delta || null,
+          footer: footer?.delta || null,
+        },
       };
 
       if ((top?.delta || 0) > 2500 || (bottom?.delta || 0) > 2500 || (footer?.delta || 0) > 2500) {
@@ -222,7 +247,8 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
         issues.push({
           severity: 'warning',
           code: 'line_width_signature_mismatch',
-          message: 'Expected header/footer line thickness signature (57150, 28575) not fully present',
+          message:
+            'Expected header/footer line thickness signature (57150, 28575) not fully present',
         });
       }
     }
@@ -231,7 +257,9 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
       Number(templatePatterns.style?.table?.cellMarginLR || 0.04) * 914400
     );
     const runawayMarginThresholdEmu = Math.max(expectedMarginEmu * 20, 1200000);
-    const slideXmlEntries = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+    const slideXmlEntries = Object.keys(zip.files).filter((name) =>
+      /^ppt\/slides\/slide\d+\.xml$/.test(name)
+    );
     const marginValues = [];
     const marginOutliers = [];
     const anchorCounts = { ctr: 0, t: 0, b: 0, other: 0 };
@@ -282,7 +310,9 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
 
     if (marginValues.length > 0) {
       const maxMargin = Math.max(...marginValues);
-      const nearExpected = marginValues.filter((v) => Math.abs(v - expectedMarginEmu) <= 1000).length;
+      const nearExpected = marginValues.filter(
+        (v) => Math.abs(v - expectedMarginEmu) <= 1000
+      ).length;
       const nearExpectedRatio = nearExpected / marginValues.length;
       checks.tableMargins = {
         expectedMarginEmu,
@@ -578,7 +608,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (key === 'bg1' || key === 'lt1') return C_WHITE;
     if (key === 'tx1' || key === 'dk1') return C_BLACK;
     if (key.startsWith('accent')) {
-      return String(templatePatterns.style?.colors?.[key] || C_BORDER).replace('#', '').toUpperCase();
+      return String(templatePatterns.style?.colors?.[key] || C_BORDER)
+        .replace('#', '')
+        .toUpperCase();
     }
     return C_BORDER;
   }
@@ -593,7 +625,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   function parseTemplateBorder(borderNode, fallback) {
-    const def = fallback || { pt: TABLE_BORDER_WIDTH || 1, type: C_BORDER_STYLE || 'dash', color: C_BORDER };
+    const def = fallback || {
+      pt: TABLE_BORDER_WIDTH || 1,
+      type: C_BORDER_STYLE || 'dash',
+      color: C_BORDER,
+    };
     if (!borderNode || typeof borderNode !== 'object') return { ...def };
     const width = Number(borderNode.width);
     const fill = borderNode.fill || {};
@@ -615,7 +651,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (!Number.isFinite(numeric)) return null;
     if (templateTableStyleCache.has(numeric)) return templateTableStyleCache.get(numeric);
 
-    const slide = (templatePatterns.slideDetails || []).find((s) => Number(s?.slideNumber) === numeric);
+    const slide = (templatePatterns.slideDetails || []).find(
+      (s) => Number(s?.slideNumber) === numeric
+    );
     const table = (slide?.elements || []).find((el) => el?.type === 'table')?.table;
     const rows = Array.isArray(table?.rows) ? table.rows : [];
     if (!rows.length) {
@@ -649,8 +687,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
 
     const margin = [
-      Number.isFinite(Number(marginSource.marginTop)) ? Number(marginSource.marginTop) : TABLE_CELL_MARGIN[0],
-      Number.isFinite(Number(marginSource.marginLeft)) ? Number(marginSource.marginLeft) : TABLE_CELL_MARGIN[1],
+      Number.isFinite(Number(marginSource.marginTop))
+        ? Number(marginSource.marginTop)
+        : TABLE_CELL_MARGIN[0],
+      Number.isFinite(Number(marginSource.marginLeft))
+        ? Number(marginSource.marginLeft)
+        : TABLE_CELL_MARGIN[1],
       Number.isFinite(Number(marginSource.marginBottom))
         ? Number(marginSource.marginBottom)
         : TABLE_CELL_MARGIN[2],
@@ -680,7 +722,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const expectedColor = String(C_BORDER || '')
       .replace('#', '')
       .toUpperCase();
-    return Math.abs(pt - Number(TABLE_BORDER_WIDTH || 1)) < 0.01 && type === expectedType && color === expectedColor;
+    return (
+      Math.abs(pt - Number(TABLE_BORDER_WIDTH || 1)) < 0.01 &&
+      type === expectedType &&
+      color === expectedColor
+    );
   }
 
   function withPatchedCellOptions(cell, patch) {
@@ -688,7 +734,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const patchBorder = patchOptions.border || null;
     const baseCell =
       cell && typeof cell === 'object' && !Array.isArray(cell)
-        ? { ...cell, text: safeCell(Object.prototype.hasOwnProperty.call(cell, 'text') ? cell.text : '') }
+        ? {
+            ...cell,
+            text: safeCell(Object.prototype.hasOwnProperty.call(cell, 'text') ? cell.text : ''),
+          }
         : { text: safeCell(cell) };
     const baseOptions = { ...(baseCell.options || {}) };
     const nextOptions = { ...baseOptions, ...patchOptions };
@@ -1293,7 +1342,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       if (normalizedMargin) addOptions.margin = normalizedMargin;
     }
     const templateStyleProfile =
-      TABLE_TEMPLATE_CONTEXTS.has(context) && Number.isFinite(Number(activeTemplateContext.slideNumber))
+      TABLE_TEMPLATE_CONTEXTS.has(context) &&
+      Number.isFinite(Number(activeTemplateContext.slideNumber))
         ? getTemplateTableStyleProfile(activeTemplateContext.slideNumber)
         : null;
     if (templateStyleProfile && addOptions && typeof addOptions === 'object') {
@@ -1448,6 +1498,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // ============ DATA BLOCK CLASSIFICATION ============
 
+  // Hardening switches: template-first rendering for production decks.
+  // Dynamic discovery and raw/thin fallback slides are useful for debugging,
+  // but they introduce layout drift and unpredictable slide structures.
+  const ENABLE_DYNAMIC_BLOCK_DISCOVERY = false;
+  const ALLOW_NON_TEMPLATE_FALLBACK_SLIDES = false;
+
   // Set of all known hardcoded keys across all sections — used by dynamic key discovery
   // to avoid creating duplicate blocks for keys already handled by hardcoded logic
   const KNOWN_HARDCODED_KEYS = new Set([
@@ -1499,6 +1555,26 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     'sources',
     'confidenceScore',
   ]);
+
+  const TRANSIENT_SYNTHESIS_KEY_PATTERNS = [
+    /^_/,
+    /^section_\d+$/i,
+    /^gap_\d+$/i,
+    /^verify_\d+$/i,
+    /^final_review_gap_\d+$/i,
+    /^deepen_/i,
+    /^market_deepen_/i,
+    /^competitors_deepen_/i,
+    /^policy_deepen_/i,
+    /^context_deepen_/i,
+    /^depth_deepen_/i,
+    /^insights_deepen_/i,
+    /_wasarray$/i,
+    /_synthesiserror$/i,
+  ];
+  function isTransientSynthesisKey(key) {
+    return TRANSIENT_SYNTHESIS_KEY_PATTERNS.some((re) => re.test(ensureString(key).trim()));
+  }
 
   // Keys that should never be treated as data blocks (metadata, flags, primitives)
   const SKIP_KEYS = new Set([
@@ -1593,12 +1669,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
    */
   function discoverDynamicBlocks(sectionData, sectionCategory, citations, dataQuality) {
     const dynamicBlocks = [];
+    if (!ENABLE_DYNAMIC_BLOCK_DISCOVERY) return dynamicBlocks;
     if (!sectionData || typeof sectionData !== 'object') return dynamicBlocks;
 
     for (const [key, value] of Object.entries(sectionData)) {
       // Skip known keys, metadata, primitives, and arrays at top level
       if (KNOWN_HARDCODED_KEYS.has(key)) continue;
       if (SKIP_KEYS.has(key)) continue;
+      if (isTransientSynthesisKey(key)) continue;
       if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
 
       const dataType = detectDynamicDataType(value);
@@ -1712,17 +1790,19 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
 
         // Dynamic key discovery: pick up any synthesis keys not handled above
-        const policyDynamic = discoverDynamicBlocks(
-          sectionData,
-          'policy',
-          policySynthSources,
-          getDataQualityForCategory('policy_')
-        );
-        if (policyDynamic.length > 0) {
-          console.log(
-            `  [PPT] Policy: discovered ${policyDynamic.length} dynamic block(s): ${policyDynamic.map((b) => b.key).join(', ')}`
+        if (ENABLE_DYNAMIC_BLOCK_DISCOVERY) {
+          const policyDynamic = discoverDynamicBlocks(
+            sectionData,
+            'policy',
+            policySynthSources,
+            getDataQualityForCategory('policy_')
           );
-          blocks.push(...policyDynamic);
+          if (policyDynamic.length > 0) {
+            console.log(
+              `  [PPT] Policy: discovered ${policyDynamic.length} dynamic block(s): ${policyDynamic.map((b) => b.key).join(', ')}`
+            );
+            blocks.push(...policyDynamic);
+          }
         }
         break;
       }
@@ -1747,24 +1827,63 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           pricing: 'Energy Pricing',
           escoMarket: 'ESCO Market',
         };
-        // Dynamic key discovery: use actual keys from sectionData
-        const skipKeys = new Set([
-          '_synthesisError',
-          'message',
-          'slideTitle',
-          'subtitle',
-          'keyMessage',
-        ]);
-        const dynamicKeys = Object.keys(sectionData).filter(
-          (k) =>
-            !skipKeys.has(k) &&
-            sectionData[k] &&
-            typeof sectionData[k] === 'object' &&
-            !Array.isArray(sectionData[k])
-        );
-        // Use dynamic keys if found, otherwise fall back to hardcoded energy keys
-        const marketKeys = dynamicKeys.length > 0 ? dynamicKeys : hardcodedMarketKeys;
-        for (const key of marketKeys) {
+
+        // Canonical market sections from synthesis contract (stable template mapping).
+        const canonicalMarketCandidates = [
+          {
+            keys: ['marketSizeAndGrowth'],
+            defaultTitle: `${country} - Market Size & Growth`,
+          },
+          {
+            keys: ['supplyAndDemandDynamics', 'supplyAndDemandData'],
+            defaultTitle: `${country} - Supply & Demand Dynamics`,
+          },
+          {
+            keys: ['pricingAndTariffStructures', 'pricingAndEconomics', 'pricingAndCostBenchmarks'],
+            defaultTitle: `${country} - Pricing & Tariff Structures`,
+          },
+        ];
+
+        const marketKeys = [];
+        for (const candidate of canonicalMarketCandidates) {
+          const matchedKey = candidate.keys.find(
+            (k) =>
+              sectionData[k] &&
+              typeof sectionData[k] === 'object' &&
+              !Array.isArray(sectionData[k]) &&
+              !isTransientSynthesisKey(k)
+          );
+          if (matchedKey) {
+            marketKeys.push({ key: matchedKey, defaultTitle: candidate.defaultTitle });
+          }
+        }
+
+        // Legacy energy schema fallback when canonical keys are absent.
+        if (marketKeys.length === 0) {
+          for (const key of hardcodedMarketKeys) {
+            const value = sectionData[key];
+            if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+            if (isTransientSynthesisKey(key)) continue;
+            marketKeys.push({ key, defaultTitle: `${country} - ${hardcodedLabels[key] || key}` });
+          }
+        }
+
+        // Optional debugging fallback (disabled in production).
+        if (marketKeys.length === 0 && ENABLE_DYNAMIC_BLOCK_DISCOVERY) {
+          for (const key of Object.keys(sectionData || {})) {
+            if (KNOWN_HARDCODED_KEYS.has(key) || SKIP_KEYS.has(key)) continue;
+            if (isTransientSynthesisKey(key)) continue;
+            const value = sectionData[key];
+            if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+            marketKeys.push({
+              key,
+              defaultTitle: `${country} - ${keyToLabel(key)}`,
+            });
+          }
+        }
+
+        for (const marketKey of marketKeys) {
+          const key = marketKey.key;
           const subData = sectionData[key] || {};
           const label =
             hardcodedLabels[key] ||
@@ -1785,7 +1904,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             _isMarket: true,
             dataType: subData.dataType || detectMarketDataType(key, subData),
             data: subData,
-            title: subData.slideTitle || `${country} - ${label}`,
+            title: subData.slideTitle || marketKey.defaultTitle || `${country} - ${label}`,
             subtitle: subData.subtitle || subData.keyMessage || '',
             citations: subSources,
             dataQuality: marketDQ,
@@ -1878,17 +1997,19 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         });
 
         // Dynamic key discovery: pick up any competitor keys not handled above
-        const compDynamic = discoverDynamicBlocks(
-          sectionData,
-          'competitors',
-          compCitations,
-          compDQ
-        );
-        if (compDynamic.length > 0) {
-          console.log(
-            `  [PPT] Competitors: discovered ${compDynamic.length} dynamic block(s): ${compDynamic.map((b) => b.key).join(', ')}`
+        if (ENABLE_DYNAMIC_BLOCK_DISCOVERY) {
+          const compDynamic = discoverDynamicBlocks(
+            sectionData,
+            'competitors',
+            compCitations,
+            compDQ
           );
-          blocks.push(...compDynamic);
+          if (compDynamic.length > 0) {
+            console.log(
+              `  [PPT] Competitors: discovered ${compDynamic.length} dynamic block(s): ${compDynamic.map((b) => b.key).join(', ')}`
+            );
+            blocks.push(...compDynamic);
+          }
         }
         break;
       }
@@ -1966,12 +2087,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         });
 
         // Dynamic key discovery: pick up any depth/strategic keys not handled above
-        const depthDynamic = discoverDynamicBlocks(sectionData, 'depth', depthCitations, depthDQ);
-        if (depthDynamic.length > 0) {
-          console.log(
-            `  [PPT] Strategic Analysis: discovered ${depthDynamic.length} dynamic block(s): ${depthDynamic.map((b) => b.key).join(', ')}`
-          );
-          blocks.push(...depthDynamic);
+        if (ENABLE_DYNAMIC_BLOCK_DISCOVERY) {
+          const depthDynamic = discoverDynamicBlocks(sectionData, 'depth', depthCitations, depthDQ);
+          if (depthDynamic.length > 0) {
+            console.log(
+              `  [PPT] Strategic Analysis: discovered ${depthDynamic.length} dynamic block(s): ${depthDynamic.map((b) => b.key).join(', ')}`
+            );
+            blocks.push(...depthDynamic);
+          }
         }
         break;
       }
@@ -2036,12 +2159,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         });
 
         // Dynamic key discovery: pick up any recommendation/summary keys not handled above
-        const recoDynamic = discoverDynamicBlocks(sectionData, 'summary', [], 'unknown');
-        if (recoDynamic.length > 0) {
-          console.log(
-            `  [PPT] Recommendations: discovered ${recoDynamic.length} dynamic block(s): ${recoDynamic.map((b) => b.key).join(', ')}`
-          );
-          blocks.push(...recoDynamic);
+        if (ENABLE_DYNAMIC_BLOCK_DISCOVERY) {
+          const recoDynamic = discoverDynamicBlocks(sectionData, 'summary', [], 'unknown');
+          if (recoDynamic.length > 0) {
+            console.log(
+              `  [PPT] Recommendations: discovered ${recoDynamic.length} dynamic block(s): ${recoDynamic.map((b) => b.key).join(', ')}`
+            );
+            blocks.push(...recoDynamic);
+          }
         }
         break;
       }
@@ -4532,7 +4657,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     if (!sectionHasContent(blocks)) {
       // 2D: Thin data narrative — extract overview/keyInsight/metrics from thin section objects
-      if (blocks.length < 2) {
+      if (ALLOW_NON_TEMPLATE_FALLBACK_SLIDES && blocks.length < 2) {
         const narrativeContent = extractNarrativeFromThinData(sectionData);
         if (narrativeContent) {
           console.log(
@@ -4554,20 +4679,22 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
       }
       // 2C: rawData fallback — try to extract something useful from rawData
-      const rawFallbackContent = extractRawDataFallback(sectionName);
-      if (rawFallbackContent) {
-        const slide = addSlideWithTitle(`${sectionName}`, 'Data from Raw Research (Unprocessed)');
-        slide.addText(ensureString(rawFallbackContent), {
-          x: LEFT_MARGIN,
-          y: CONTENT_Y,
-          w: CONTENT_WIDTH,
-          h: 5.0,
-          fontSize: 11,
-          color: COLORS.black,
-          fontFace: FONT,
-          valign: 'top',
-        });
-        return 1;
+      if (ALLOW_NON_TEMPLATE_FALLBACK_SLIDES) {
+        const rawFallbackContent = extractRawDataFallback(sectionName);
+        if (rawFallbackContent) {
+          const slide = addSlideWithTitle(`${sectionName}`, 'Data from Raw Research (Unprocessed)');
+          slide.addText(ensureString(rawFallbackContent), {
+            x: LEFT_MARGIN,
+            y: CONTENT_Y,
+            w: CONTENT_WIDTH,
+            h: 5.0,
+            fontSize: 11,
+            color: COLORS.black,
+            fontFace: FONT,
+            valign: 'top',
+          });
+          return 1;
+        }
       }
       // Section has no real content - render one summary slide instead of hollow slides
       const slide = addSlideWithTitle(`${sectionName}`, 'Limited Data Available');
@@ -4972,7 +5099,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       .filter((i) => i.severity === 'critical')
       .map((i) => `${i.code}: ${i.message}`);
     if (criticalIssues.length > 0) {
-      console.error(`[PPT TEMPLATE] Formatting audit critical issues: ${criticalIssues.join(' | ')}`);
+      console.error(
+        `[PPT TEMPLATE] Formatting audit critical issues: ${criticalIssues.join(' | ')}`
+      );
       if (Array.isArray(formattingAudit.checks?.tableMarginOutliers)) {
         const outlierPreview = formattingAudit.checks.tableMarginOutliers
           .slice(0, 8)

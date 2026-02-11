@@ -34,6 +34,9 @@ Purpose: record concrete mistakes, why they hurt, and how to prevent repeats.
 | 26 | Quality-gate error text claimed only `>=80` threshold while real gate also required zero critical/major/open gaps. | Misled operators: logs showed `effective=80+` but run still failed with no clear reason. | Always include full gate criteria and per-country readiness reasons in thrown errors/diagnostics. |
 | 27 | Final-review readiness required `major=0` and `openGaps=0`, making the gate too brittle for noisy reviewer outputs. | Good analyses (80+ coherent, no critical issues) were repeatedly blocked and re-run, burning cost/time. | Keep strict `critical=0` + coherence threshold, but allow bounded major/open-gap residuals with explicit limits. |
 | 28 | Background timeout was 25 minutes while API advertised 30-60 minutes. | Runs near completion were aborted inconsistently, causing needless failures and retrigger cycles. | Align timeout with expected runtime (>=45 minutes) or make it configurable by mode. |
+| 29 | `validateMarketSynthesis` accepted arbitrary non-underscore object keys as market sections. | Transient keys (`marketDeepen*`, `section_*`) leaked into deck generation, causing layout drift and truncation across market slides. | Canonicalize market output to stable keys only (`marketSizeAndGrowth`, `supplyAndDemandDynamics`, `pricingAndTariffStructures`) and drop transient extras. |
+| 30 | Policy/market synthesis acceptance evaluated success before rejecting `_wasArray` origin payloads. | Array-origin structures were silently accepted as “good enough,” increasing schema instability and downstream formatting chaos. | In policy/market synthesis loops, reject `_wasArray` payloads first; only accept object-origin payloads with evidence-bearing structure. |
+| 31 | No hard post-generation PPT structural gate before email/download. | Corrupted or heavily truncated decks could still be delivered, leading to PowerPoint repair prompts and unusable outputs. | Run a mandatory structural validator on final PPT (ZIP/XML integrity + minimum structure checks) and block delivery on failure. |
 
 ## Mandatory Pre-Run QA Checklist (Before Any Paid Run)
 
@@ -44,4 +47,6 @@ Purpose: record concrete mistakes, why they hurt, and how to prevent repeats.
 5. Summary guard guarantees >=3 structured key insights after any re-synthesis.
 6. Quality gate logic inspected for dead loops/stagnation behavior.
 7. Formatting pipeline validated locally (slide size, font family, table margins/borders, header/footer geometry).
-8. Only then trigger backend run.
+8. Market synthesis output is canonicalized (no transient/deepen/final-review section keys in final market payload).
+9. Final PPT structural validator passes (ZIP parse, XML character integrity, minimum slides/charts/tables).
+10. Only then trigger backend run.
