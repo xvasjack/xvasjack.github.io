@@ -43,6 +43,8 @@ const { sendEmail } = require('./shared/email.js');
 
 // Pipeline diagnostics — stored after each run, exposed via /api/diagnostics
 let lastRunDiagnostics = null;
+// Latest generated PPT artifact for operational QA download.
+let lastGeneratedPpt = null;
 
 // ============ MAIN ORCHESTRATOR ============
 
@@ -439,6 +441,13 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       // Stage 5: Send email
       const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
       const finalFilename = draftPptMode ? filename.replace(/\.pptx$/i, '_DRAFT.pptx') : filename;
+      lastGeneratedPpt = {
+        filename: finalFilename,
+        generatedAt: new Date().toISOString(),
+        draftPptMode: Boolean(draftPptMode),
+        contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        buffer: Buffer.from(pptBuffer),
+      };
 
       const emailHtml = `
       <p>Your market research report is attached.</p>
@@ -633,6 +642,26 @@ app.get('/api/diagnostics', (req, res) => {
     return res.json({ available: false, message: 'No completed run yet' });
   }
   res.json({ available: true, ...lastRunDiagnostics });
+});
+
+// Latest generated PPT artifact download endpoint (for QA and local review).
+app.get('/api/latest-ppt', (req, res) => {
+  if (!lastGeneratedPpt || !Buffer.isBuffer(lastGeneratedPpt.buffer)) {
+    return res.status(404).json({ available: false, message: 'No generated PPT available yet' });
+  }
+  const safeName = String(lastGeneratedPpt.filename || 'market_research.pptx').replace(
+    /[\r\n"]/g,
+    '_'
+  );
+  res.setHeader(
+    'Content-Type',
+    lastGeneratedPpt.contentType ||
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  );
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+  res.setHeader('X-PPT-Generated-At', String(lastGeneratedPpt.generatedAt || ''));
+  res.setHeader('X-PPT-Draft-Mode', String(Boolean(lastGeneratedPpt.draftPptMode)));
+  return res.send(lastGeneratedPpt.buffer);
 });
 
 // ============ START SERVER ============
