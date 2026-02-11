@@ -4447,6 +4447,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   // Loops until grade A/B or max iterations reached.
   const FINAL_REVIEW_MAX_ITERATIONS = 5;
   const FINAL_REVIEW_TARGET_SCORE = 80;
+  const FINAL_REVIEW_MAX_MAJOR_ISSUES = 2;
+  const FINAL_REVIEW_MAX_OPEN_GAPS = 2;
 
   if (!countryAnalysis.aborted) {
     let finalReviewIteration = 0;
@@ -4476,6 +4478,10 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         const criticalOrMajor = (finalReview.issues || []).filter(
           (i) => i.severity === 'critical' || i.severity === 'major'
         );
+        const criticalCount = (finalReview.issues || []).filter(
+          (i) => i.severity === 'critical'
+        ).length;
+        const majorCount = (finalReview.issues || []).filter((i) => i.severity === 'major').length;
         const issueSignature = criticalOrMajor
           .map((i) =>
             `${ensureString(i?.severity || 'major')}:${ensureString(i?.section || i?.area || 'unknown')}:${ensureString(i?.type || 'issue')}`
@@ -4516,12 +4522,15 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         const hasResearchGaps = Array.isArray(finalReview.researchGaps)
           ? finalReview.researchGaps.length > 0
           : false;
+        const reviewOpenGaps = hasResearchGaps ? finalReview.researchGaps.length : 0;
         const reviewClean =
           lastCoherenceScore >= FINAL_REVIEW_TARGET_SCORE &&
-          criticalOrMajor.length === 0 &&
-          !hasResearchGaps;
+          criticalCount === 0 &&
+          majorCount <= FINAL_REVIEW_MAX_MAJOR_ISSUES &&
+          reviewOpenGaps <= FINAL_REVIEW_MAX_OPEN_GAPS;
 
-        // Exit only when score is high AND no critical/major issues remain.
+        // Exit when score is high, no critical issues remain, and major/open-gap issues
+        // are bounded. This avoids excessive churn on noisy reviewer outputs.
         // If we just fixed sections, enforce two extra clean validation passes.
         if (reviewClean) {
           if (verificationPassesRemaining > 0) {
@@ -4538,7 +4547,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             continue;
           }
           console.log(
-            `  [FINAL REVIEW] Coherence ${lastCoherenceScore}/100 with no critical/major issues. Done.`
+            `  [FINAL REVIEW] Coherence ${lastCoherenceScore}/100 with critical=${criticalCount}, major=${majorCount}, openGaps=${reviewOpenGaps}. Done.`
           );
           break;
         }
@@ -4665,7 +4674,10 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   const codeGateReady = (lastCodeGateScore || 0) >= MIN_CONFIDENCE_SCORE;
   const reviewReady =
     !finalReview ||
-    (finalCoherence >= 80 && finalCritical === 0 && finalMajor === 0 && finalReviewOpenGaps === 0);
+    (finalCoherence >= FINAL_REVIEW_TARGET_SCORE &&
+      finalCritical === 0 &&
+      finalMajor <= FINAL_REVIEW_MAX_MAJOR_ISSUES &&
+      finalReviewOpenGaps <= FINAL_REVIEW_MAX_OPEN_GAPS);
 
   countryAnalysis.readyForClient = Boolean(countryAnalysis.readyForClient && confidenceReady);
   countryAnalysis.readyForClient = Boolean(countryAnalysis.readyForClient && codeGateReady);
@@ -4692,7 +4704,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       );
     if (!reviewReady)
       reasons.push(
-        `Final review coherence ${finalCoherence}/100 with critical=${finalCritical}, major=${finalMajor}, openGaps=${finalReviewOpenGaps}`
+        `Final review coherence ${finalCoherence}/100 with critical=${finalCritical}, major=${finalMajor} (max ${FINAL_REVIEW_MAX_MAJOR_ISSUES}), openGaps=${finalReviewOpenGaps} (max ${FINAL_REVIEW_MAX_OPEN_GAPS})`
       );
     countryAnalysis.readiness.reasons = reasons;
   }

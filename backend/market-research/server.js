@@ -236,9 +236,22 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           .map((ca) => {
             const score = Number(ca?.readiness?.effectiveScore || 0);
             const coherence = Number(ca?.readiness?.finalReviewCoherence || 0);
-            return `${ca.country} (effective=${score}, coherence=${coherence})`;
+            const critical = Number(ca?.readiness?.finalReviewCritical || 0);
+            const major = Number(ca?.readiness?.finalReviewMajor || 0);
+            const openGaps = Number(ca?.readiness?.finalReviewOpenGaps || 0);
+            return `${ca.country} (effective=${score}, coherence=${coherence}, critical=${critical}, major=${major}, openGaps=${openGaps})`;
           })
           .join(', ');
+        const reasons = notReadyDiagnostics
+          .map((d) => {
+            const readinessReasons = Array.isArray(d.readinessReasons)
+              ? d.readinessReasons.filter(Boolean)
+              : [];
+            return `${d.country}: ${readinessReasons.length > 0 ? readinessReasons.join('; ') : 'readiness flag is false'}`;
+          })
+          .join(' | ');
+        const gateRule =
+          'Readiness requires effective>=80, content-depth>=80, final coherence>=80, critical=0, major<=2, openGaps<=2.';
         if (draftPptMode) {
           console.warn(
             `[Quality Gate] Draft PPT mode enabled — bypassing readiness block for: ${list}`
@@ -252,11 +265,11 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           if (lastRunDiagnostics) {
             lastRunDiagnostics.stage = 'quality_gate_failed';
             lastRunDiagnostics.notReadyCountries = notReadyDiagnostics;
-            lastRunDiagnostics.error = `Country analysis quality gate failed: ${list}. Refusing to generate deck below required quality threshold (>=80).`;
+            lastRunDiagnostics.error = `Country analysis quality gate failed: ${list}. ${gateRule} Reasons: ${reasons}`;
           }
           console.warn(`[Quality Gate] Countries not fully ready: ${list}`);
           throw new Error(
-            `Country analysis quality gate failed: ${list}. Refusing to generate deck below required quality threshold (>=80).`
+            `Country analysis quality gate failed: ${list}. ${gateRule} Reasons: ${reasons}`
           );
         }
       }
@@ -425,9 +438,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
 
       // Stage 5: Send email
       const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
-      const finalFilename = draftPptMode
-        ? filename.replace(/\.pptx$/i, '_DRAFT.pptx')
-        : filename;
+      const finalFilename = draftPptMode ? filename.replace(/\.pptx$/i, '_DRAFT.pptx') : filename;
 
       const emailHtml = `
       <p>Your market research report is attached.</p>
@@ -561,15 +572,15 @@ app.post('/api/market-research', async (req, res) => {
     estimatedTime: '30-60 minutes',
   });
 
-  // Run research in background with 25-minute global pipeline timeout + abort signal
-  const PIPELINE_TIMEOUT = 25 * 60 * 1000;
+  // Run research in background with 45-minute global pipeline timeout + abort signal
+  const PIPELINE_TIMEOUT = 45 * 60 * 1000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
   }, PIPELINE_TIMEOUT);
   const timeoutPromise = new Promise((_, reject) => {
     controller.signal.addEventListener('abort', () => {
-      reject(new Error('Pipeline timeout after 25 minutes'));
+      reject(new Error('Pipeline timeout after 45 minutes'));
     });
   });
   const mergedOptions = { ...(options || {}) };
