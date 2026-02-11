@@ -21,6 +21,96 @@ function hasNumericData(arr) {
   return arr.some((v) => typeof v === 'number' && !isNaN(v));
 }
 
+const SEMANTIC_EMPTY_TEXT_PATTERNS = [
+  /\binsufficient research data\b/i,
+  /\binsufficient data\b/i,
+  /\bdata unavailable\b/i,
+  /\bno data available\b/i,
+  /\bnot available\b/i,
+  /\bcould not be verified\b/i,
+  /\bdetails pending further research\b/i,
+  /\banalysis pending additional research\b/i,
+  /\btbd\b/i,
+  /\bn\/a\b/i,
+];
+
+const TRUNCATION_ARTIFACT_TEXT_PATTERNS = [
+  /\bunterminated string\b/i,
+  /\bunexpected end of json\b/i,
+  /\bexpected double-quoted property name\b/i,
+  /\bexpected ',' or '}' after property value\b/i,
+  /\bparse error\b/i,
+  /\bline \d+ column \d+\b/i,
+  /\bstrategy 3\.5\b/i,
+  /\bstrategy 4\b/i,
+];
+
+function normalizeGateText(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function hasSemanticEmptyText(value) {
+  const text = normalizeGateText(value);
+  if (!text) return true;
+  return SEMANTIC_EMPTY_TEXT_PATTERNS.some((re) => re.test(text));
+}
+
+function hasTruncationArtifactText(value) {
+  const text = normalizeGateText(value);
+  if (!text) return false;
+  return TRUNCATION_ARTIFACT_TEXT_PATTERNS.some((re) => re.test(text));
+}
+
+function isMeaningfulText(value, minWords = 5) {
+  const text = normalizeGateText(value);
+  if (!text) return false;
+  if (hasSemanticEmptyText(text) || hasTruncationArtifactText(text)) return false;
+  if ((text.startsWith('{') || text.startsWith('[')) && text.includes(':'))
+    return text.length >= 20;
+  const words = countWords(text);
+  if (words >= minWords) return true;
+  if (words >= 3 && /\d/.test(text)) return true;
+  return false;
+}
+
+function hasSemanticContent(value, depth = 0) {
+  if (depth > 7) return false;
+  if (value == null) return false;
+  if (typeof value === 'string') return isMeaningfulText(value);
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'boolean') return true;
+  if (Array.isArray(value)) return value.some((item) => hasSemanticContent(item, depth + 1));
+  if (typeof value !== 'object') return false;
+
+  for (const [k, v] of Object.entries(value)) {
+    if (k.startsWith('_')) continue;
+    if (['key', 'title', 'name', 'section', 'type', 'dataType'].includes(k)) continue;
+    if (hasSemanticContent(v, depth + 1)) return true;
+  }
+  return false;
+}
+
+function blockHasRenderableData(block) {
+  if (!block || typeof block !== 'object') return false;
+  if (String(block.type || '').toLowerCase() === 'unavailable') return false;
+  if (hasSemanticEmptyText(block.content) || hasTruncationArtifactText(block.content)) return false;
+
+  const candidateFields = [
+    block.data,
+    block.content,
+    block.description,
+    block.subtitle,
+    block.summary,
+    block.keyMessage,
+    block.chartData,
+    block.players,
+    block.rows,
+  ];
+  return candidateFields.some((field) => hasSemanticContent(field));
+}
+
 // ============ GATE 1: RESEARCH QUALITY ============
 
 function validateResearchQuality(researchData) {
@@ -206,36 +296,54 @@ function validateSynthesisQuality(synthesis, industry) {
   let marketScore = 0;
   const market = synthesis.market;
   if (market) {
-    // Check sub-sections with chartData.series containing numeric values
-    const marketSubSections = [
-      'tpes',
-      'finalDemand',
-      'electricity',
-      'gasLng',
-      'pricing',
-      'escoMarket',
+    const canonicalMarketSections = [
+      'marketSizeAndGrowth',
+      'supplyAndDemandDynamics',
+      'pricingAndTariffStructures',
     ];
-    let sectionsWithCharts = 0;
-    for (const sub of marketSubSections) {
-      const section = market[sub];
-      if (section?.chartData?.series && hasNumericData(flattenSeries(section.chartData.series))) {
-        sectionsWithCharts++;
-      }
-    }
-    if (sectionsWithCharts >= 3) {
+    const presentSections = canonicalMarketSections.filter(
+      (key) => market[key] && typeof market[key] === 'object' && !Array.isArray(market[key])
+    );
+
+    if (presentSections.length >= canonicalMarketSections.length) {
       marketScore += 50;
     } else {
       failures.push(
-        `Market: only ${sectionsWithCharts}/6 sub-sections have numeric chart data (need >= 3)`
+        `Market: only ${presentSections.length}/${canonicalMarketSections.length} canonical sections present`
       );
+      const missing = canonicalMarketSections.filter((k) => !presentSections.includes(k));
+      for (const key of missing) {
+        emptyFields.push(`market.${key}`);
+      }
     }
 
-    // escoMarket.marketSize check
-    if (market.escoMarket?.marketSize) {
+    let quantifiedSections = 0;
+    for (const key of presentSections) {
+      const section = market[key] || {};
+      const chartSeries = flattenSeries(section?.chartData?.series);
+      const chartValues = Array.isArray(section?.chartData?.values) ? section.chartData.values : [];
+      const keyMetrics = Array.isArray(section?.keyMetrics) ? section.keyMetrics : [];
+      const keyMetricsText = keyMetrics
+        .map((metric) => JSON.stringify(metric || {}))
+        .join(' ')
+        .slice(0, 2000);
+      const narrativeText = `${section?.subtitle || ''} ${section?.overview || ''} ${section?.keyInsight || ''}`;
+
+      const hasQuantifiedSignal =
+        hasNumericData(chartSeries) ||
+        hasNumericData(chartValues) ||
+        /\d/.test(keyMetricsText) ||
+        /\d/.test(narrativeText);
+
+      if (hasQuantifiedSignal) quantifiedSections++;
+    }
+
+    if (quantifiedSections >= 2) {
       marketScore += 50;
     } else {
-      failures.push('Market: escoMarket.marketSize is empty');
-      emptyFields.push('market.escoMarket.marketSize');
+      failures.push(
+        `Market: only ${quantifiedSections}/${presentSections.length} canonical sections have quantified evidence`
+      );
     }
   } else {
     failures.push('Market section missing');
@@ -635,9 +743,7 @@ function validatePptData(blocks) {
   const sectionNames = [...new Set(blocks.map((b) => b?.key).filter(Boolean))];
   const sectionsWithData = sectionNames.filter((section) => {
     const sectionBlocks = blocks.filter((b) => b?.key === section);
-    return sectionBlocks.some(
-      (b) => b?.type !== 'unavailable' && b?.content !== 'Data unavailable'
-    );
+    return sectionBlocks.some((b) => blockHasRenderableData(b));
   });
 
   if (sectionsWithData.length < 2) {
@@ -648,6 +754,12 @@ function validatePptData(blocks) {
   for (const block of blocks) {
     if (block?.type === 'company' || block?.type === 'competitor') {
       const desc = block.description || block.content || '';
+      if (hasSemanticEmptyText(desc) || hasTruncationArtifactText(desc)) {
+        emptyBlocks.push(
+          `Company "${block.name || block.title || 'unknown'}": placeholder/truncated description`
+        );
+        continue;
+      }
       const wc = countWords(desc);
       if (wc < 30) {
         emptyBlocks.push(
@@ -722,23 +834,23 @@ function validatePptData(blocks) {
   }
 
   // Check "Data unavailable" ratio
-  const unavailableCount = blocks.filter(
-    (b) => b?.type === 'unavailable' || b?.content === 'Data unavailable'
-  ).length;
-  const unavailableRatio = unavailableCount / blocks.length;
-  if (unavailableRatio >= 0.4) {
+  const semanticallyEmptyCount = blocks.filter((b) => !blockHasRenderableData(b)).length;
+  const semanticallyEmptyRatio = semanticallyEmptyCount / blocks.length;
+  if (semanticallyEmptyRatio >= 0.4) {
     emptyBlocks.push(
-      `${Math.round(unavailableRatio * 100)}% of blocks are "Data unavailable" (threshold < 40%)`
+      `${Math.round(semanticallyEmptyRatio * 100)}% of blocks are semantically empty/thin (threshold < 40%)`
     );
   }
 
-  const pass = sectionsWithData.length >= 2 && unavailableRatio < 0.4 && chartIssues.length === 0;
+  const pass =
+    sectionsWithData.length >= 2 && semanticallyEmptyRatio < 0.4 && chartIssues.length === 0;
 
   return {
     pass,
     overflowRisks,
     emptyBlocks,
     chartIssues,
+    semanticallyEmptyRatio,
   };
 }
 

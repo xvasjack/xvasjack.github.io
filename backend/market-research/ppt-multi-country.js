@@ -1,5 +1,6 @@
 const pptxgen = require('pptxgenjs');
 const JSZip = require('jszip');
+const path = require('path');
 const {
   truncate,
   truncateSubtitle,
@@ -13,6 +14,11 @@ const {
 } = require('./ppt-utils');
 const { generateSingleCountryPPT } = require('./ppt-single-country');
 const { ensureString: _ensureStringRaw } = require('./shared/utils');
+const {
+  scanRelationshipTargets,
+  scanPackageConsistency,
+  reconcileContentTypesAndPackage,
+} = require('./pptx-validator');
 
 // PPTX-safe string: strips XML-invalid control characters that corrupt PPTX files.
 // eslint-disable-next-line no-control-regex
@@ -24,25 +30,41 @@ function safeText(value) {
 async function normalizeChartRelationshipTargets(pptxBuffer) {
   if (!Buffer.isBuffer(pptxBuffer) || pptxBuffer.length === 0) return pptxBuffer;
   const zip = await JSZip.loadAsync(pptxBuffer);
-  const relFiles = Object.keys(zip.files).filter((name) =>
-    /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(name)
-  );
-  let mutated = 0;
+  const relFiles = Object.keys(zip.files).filter((name) => /\.rels$/i.test(name));
+  let mutatedTargets = 0;
+
+  const ownerPartFromRel = (relFile) => {
+    const normalized = safeText(relFile);
+    if (normalized === '_rels/.rels') return '';
+    const m = normalized.match(/^(.*)\/_rels\/([^/]+)\.rels$/);
+    if (!m) return '';
+    const baseDir = m[1];
+    const ownerPart = m[2];
+    return baseDir ? `${baseDir}/${ownerPart}` : ownerPart;
+  };
+
   for (const relFile of relFiles) {
     const relEntry = zip.file(relFile);
     if (!relEntry) continue;
     const xml = await relEntry.async('string');
-    const nextXml = xml.replace(
-      /Target="\/ppt\/charts\/(chart\d+\.xml)"/g,
-      'Target="../charts/$1"'
-    );
+    const ownerPart = ownerPartFromRel(relFile);
+    const ownerDir = ownerPart ? path.posix.dirname(ownerPart) : '';
+    const nextXml = xml.replace(/Target=(["'])\/ppt\/([^"']+)\1/g, (full, quote, absolutePath) => {
+      const packageTarget = `ppt/${absolutePath}`;
+      const relative = ownerDir ? path.posix.relative(ownerDir, packageTarget) : packageTarget;
+      const normalized = safeText(relative).replace(/\\/g, '/');
+      if (!normalized) return full;
+      mutatedTargets++;
+      return `Target=${quote}${normalized}${quote}`;
+    });
     if (nextXml !== xml) {
       zip.file(relFile, nextXml);
-      mutated++;
     }
   }
-  if (mutated === 0) return pptxBuffer;
-  console.log(`[PPT] Normalized ${mutated} chart relationship target(s) to relative paths`);
+  if (mutatedTargets === 0) return pptxBuffer;
+  console.log(
+    `[PPT] Normalized ${mutatedTargets} absolute relationship target(s) to relative paths`
+  );
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
@@ -865,6 +887,69 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
+  const contentTypeReconcile = await reconcileContentTypesAndPackage(pptxBuffer);
+  pptxBuffer = contentTypeReconcile.buffer;
+  if (contentTypeReconcile.changed) {
+    const touched = [
+      ...(contentTypeReconcile.stats.addedOverrides || []),
+      ...(contentTypeReconcile.stats.correctedOverrides || []),
+      ...(contentTypeReconcile.stats.removedDangling || []),
+    ].length;
+    console.log(`[PPT] Reconciled content types (${touched} override adjustment(s))`);
+  }
+  const relZip = await JSZip.loadAsync(pptxBuffer);
+  const relIntegrity = await scanRelationshipTargets(relZip);
+  if (relIntegrity.missingInternalTargets.length > 0) {
+    const examples = relIntegrity.missingInternalTargets
+      .slice(0, 5)
+      .map((m) => `${m.relFile} -> ${m.target} (${m.reason})`)
+      .join(' | ');
+    throw new Error(
+      `PPT relationship integrity failed: ${relIntegrity.missingInternalTargets.length} broken internal target(s); ${examples}`
+    );
+  }
+  const packageConsistency = await scanPackageConsistency(relZip);
+  const packageIssues = [];
+  if (packageConsistency.missingCriticalParts.length > 0) {
+    packageIssues.push(
+      `missing critical parts: ${packageConsistency.missingCriticalParts.join(', ')}`
+    );
+  }
+  if (packageConsistency.duplicateRelationshipIds.length > 0) {
+    const dup = packageConsistency.duplicateRelationshipIds
+      .slice(0, 5)
+      .map((x) => `${x.relFile}:${x.relId}`)
+      .join(', ');
+    packageIssues.push(`duplicate relationship ids: ${dup}`);
+  }
+  if (packageConsistency.duplicateSlideIds.length > 0) {
+    packageIssues.push(
+      `duplicate slide ids: ${packageConsistency.duplicateSlideIds.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.duplicateSlideRelIds.length > 0) {
+    packageIssues.push(
+      `duplicate slide rel ids: ${packageConsistency.duplicateSlideRelIds.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.danglingOverrides.length > 0) {
+    packageIssues.push(
+      `dangling overrides: ${packageConsistency.danglingOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.missingSlideOverrides.length > 0) {
+    packageIssues.push(
+      `missing slide overrides: ${packageConsistency.missingSlideOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.missingChartOverrides.length > 0) {
+    packageIssues.push(
+      `missing chart overrides: ${packageConsistency.missingChartOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageIssues.length > 0) {
+    throw new Error(`PPT package consistency failed: ${packageIssues.join(' | ')}`);
+  }
   console.log(`PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB`);
 
   return pptxBuffer;

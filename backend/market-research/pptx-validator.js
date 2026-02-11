@@ -4,6 +4,10 @@
  */
 const JSZip = require('jszip');
 const fs = require('fs');
+const path = require('path');
+
+const CONTENT_TYPE_SLIDE = 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml';
+const CONTENT_TYPE_CHART = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
 
 async function readPPTX(input) {
   const buffer = typeof input === 'string' ? fs.readFileSync(input) : input;
@@ -59,6 +63,348 @@ async function scanXmlIntegrity(zip) {
   }
 
   return { issueCount: issues.length, issues };
+}
+
+function decodeXmlAttr(value) {
+  return String(value || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function ownerPartFromRelPath(relFile) {
+  const normalized = String(relFile || '');
+  if (normalized === '_rels/.rels') return '';
+  const match = normalized.match(/^(.*)\/_rels\/([^/]+)\.rels$/);
+  if (!match) return '';
+  const baseDir = match[1];
+  const ownerPart = match[2];
+  return baseDir ? `${baseDir}/${ownerPart}` : ownerPart;
+}
+
+function resolveRelationshipTarget(ownerDir, target) {
+  if (!target) return '';
+  if (target.startsWith('/')) return path.posix.normalize(target.replace(/^\/+/, ''));
+  return path.posix.normalize(ownerDir ? path.posix.join(ownerDir, target) : target);
+}
+
+async function scanRelationshipTargets(zip) {
+  const relFiles = Object.keys(zip.files).filter((f) => /\.rels$/i.test(f));
+  const missingInternalTargets = [];
+  let checkedInternal = 0;
+
+  for (const relFile of relFiles) {
+    const relEntry = zip.file(relFile);
+    if (!relEntry) continue;
+    const xml = await relEntry.async('string');
+    const ownerPart = ownerPartFromRelPath(relFile);
+    const ownerDir = ownerPart ? path.posix.dirname(ownerPart) : '';
+
+    const relationshipMatches = xml.matchAll(/<Relationship\b[^>]*>/g);
+    for (const match of relationshipMatches) {
+      const tag = match[0];
+      const targetMatch = tag.match(/\bTarget=(["'])(.*?)\1/);
+      if (!targetMatch) continue;
+      const targetModeMatch = tag.match(/\bTargetMode=(["'])(.*?)\1/i);
+      const targetMode = String(targetModeMatch?.[2] || '').toLowerCase();
+      if (targetMode === 'external') continue;
+
+      const rawTarget = decodeXmlAttr(targetMatch[2]).trim();
+      if (!rawTarget || rawTarget.startsWith('#')) continue;
+      if (/^[a-z][a-z0-9+.-]*:/i.test(rawTarget)) continue;
+
+      const targetPathOnly = rawTarget.split('#')[0].split('?')[0];
+      const resolvedTarget = resolveRelationshipTarget(ownerDir, targetPathOnly);
+      checkedInternal++;
+
+      if (!resolvedTarget || resolvedTarget.startsWith('../')) {
+        missingInternalTargets.push({
+          relFile,
+          target: rawTarget,
+          resolvedTarget,
+          reason: 'outside_package',
+        });
+        continue;
+      }
+
+      if (!zip.file(resolvedTarget)) {
+        missingInternalTargets.push({
+          relFile,
+          target: rawTarget,
+          resolvedTarget,
+          reason: 'missing_part',
+        });
+      }
+    }
+  }
+
+  return { checkedInternal, missingInternalTargets };
+}
+
+function extractXmlAttr(tag, attrName) {
+  const re = new RegExp(`\\b${attrName}=(["'])(.*?)\\1`, 'i');
+  const m = tag.match(re);
+  return m ? decodeXmlAttr(m[2]).trim() : '';
+}
+
+function escapeXmlAttr(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&#39;');
+}
+
+function parseContentTypesXml(xml) {
+  const contentXml = String(xml || '');
+  const xmlDecl = (contentXml.match(/^\s*<\?xml[^>]*\?>/i) || [])[0] || '';
+  const typesOpen =
+    (contentXml.match(/<Types\b[^>]*>/i) || [])[0] ||
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">';
+  const defaults = Array.from(contentXml.matchAll(/<Default\b[^>]*\/>/gi)).map((m) => m[0].trim());
+  const overrides = [];
+  for (const match of contentXml.matchAll(
+    /<Override\b[^>]*\/>|<Override\b[^>]*>[\s\S]*?<\/Override>/gi
+  )) {
+    const tag = (match && match[0]) || '';
+    const partName = extractXmlAttr(tag, 'PartName').replace(/^\/+/, '');
+    const contentType = extractXmlAttr(tag, 'ContentType');
+    if (!partName) continue;
+    overrides.push({ partName, contentType });
+  }
+  return {
+    xmlDecl,
+    typesOpen,
+    defaults,
+    overrides,
+    newline: contentXml.includes('\r\n') ? '\r\n' : '\n',
+  };
+}
+
+function buildContentTypesXml(parsed, overrideMap) {
+  const out = [];
+  const newline = parsed.newline || '\n';
+  if (parsed.xmlDecl) out.push(parsed.xmlDecl.trim());
+  out.push(parsed.typesOpen.trim());
+
+  for (const tag of parsed.defaults || []) {
+    out.push(`  ${tag.trim()}`);
+  }
+
+  const sortedOverrides = Array.from(overrideMap.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0])
+  );
+  for (const [partName, contentType] of sortedOverrides) {
+    out.push(
+      `  <Override PartName="/${escapeXmlAttr(partName)}" ContentType="${escapeXmlAttr(contentType)}"/>`
+    );
+  }
+
+  out.push('</Types>');
+  return `${out.join(newline)}${newline}`;
+}
+
+async function reconcileContentTypesAndPackage(pptxBuffer) {
+  if (!Buffer.isBuffer(pptxBuffer) || pptxBuffer.length === 0) {
+    return { buffer: pptxBuffer, changed: false, stats: { skipped: true } };
+  }
+  const zip = await JSZip.loadAsync(pptxBuffer);
+  const contentTypesEntry = zip.file('[Content_Types].xml');
+  if (!contentTypesEntry) {
+    return {
+      buffer: pptxBuffer,
+      changed: false,
+      stats: { skipped: true, reason: 'missing_[Content_Types].xml' },
+    };
+  }
+
+  const rawXml = await contentTypesEntry.async('string');
+  const parsed = parseContentTypesXml(rawXml);
+  const stats = {
+    removedDangling: [],
+    addedOverrides: [],
+    correctedOverrides: [],
+    dedupedOverrides: [],
+  };
+  let changed = false;
+
+  const overrideMap = new Map();
+  for (const { partName, contentType } of parsed.overrides) {
+    if (!partName) continue;
+    if (overrideMap.has(partName)) stats.dedupedOverrides.push(partName);
+    overrideMap.set(partName, contentType || '');
+  }
+
+  const packageParts = new Set(Object.keys(zip.files).filter((name) => !zip.files[name].dir));
+
+  for (const partName of Array.from(overrideMap.keys())) {
+    if (!packageParts.has(partName)) {
+      overrideMap.delete(partName);
+      stats.removedDangling.push(partName);
+      changed = true;
+    }
+  }
+
+  const slideParts = Array.from(packageParts).filter((f) =>
+    /^ppt\/slides\/slide\d+\.xml$/i.test(f)
+  );
+  const chartParts = Array.from(packageParts).filter((f) =>
+    /^ppt\/charts\/chart\d+\.xml$/i.test(f)
+  );
+
+  for (const slidePart of slideParts) {
+    const existing = overrideMap.get(slidePart);
+    if (!existing) {
+      overrideMap.set(slidePart, CONTENT_TYPE_SLIDE);
+      stats.addedOverrides.push(slidePart);
+      changed = true;
+      continue;
+    }
+    if (!/slide\+xml$/i.test(existing)) {
+      overrideMap.set(slidePart, CONTENT_TYPE_SLIDE);
+      stats.correctedOverrides.push(slidePart);
+      changed = true;
+    }
+  }
+
+  for (const chartPart of chartParts) {
+    const existing = overrideMap.get(chartPart);
+    if (!existing) {
+      overrideMap.set(chartPart, CONTENT_TYPE_CHART);
+      stats.addedOverrides.push(chartPart);
+      changed = true;
+      continue;
+    }
+    if (!/drawingml\.chart\+xml$/i.test(existing)) {
+      overrideMap.set(chartPart, CONTENT_TYPE_CHART);
+      stats.correctedOverrides.push(chartPart);
+      changed = true;
+    }
+  }
+
+  const rebuiltXml = buildContentTypesXml(parsed, overrideMap);
+  if (rebuiltXml !== rawXml) {
+    zip.file('[Content_Types].xml', rebuiltXml);
+    changed = true;
+  }
+
+  if (!changed) return { buffer: pptxBuffer, changed: false, stats };
+  return {
+    buffer: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }),
+    changed: true,
+    stats,
+  };
+}
+
+async function scanPackageConsistency(zip) {
+  const criticalParts = [
+    '[Content_Types].xml',
+    '_rels/.rels',
+    'ppt/presentation.xml',
+    'ppt/_rels/presentation.xml.rels',
+  ];
+  const missingCriticalParts = criticalParts.filter((part) => !zip.file(part));
+
+  const duplicateRelationshipIds = [];
+  const relFiles = Object.keys(zip.files).filter((f) => /\.rels$/i.test(f));
+  for (const relFile of relFiles) {
+    const relEntry = zip.file(relFile);
+    if (!relEntry) continue;
+    const xml = await relEntry.async('string');
+    const seen = new Set();
+    for (const match of xml.matchAll(/<Relationship\b[^>]*>/g)) {
+      const tag = match[0];
+      const relId = extractXmlAttr(tag, 'Id');
+      if (!relId) continue;
+      if (seen.has(relId)) {
+        duplicateRelationshipIds.push({ relFile, relId });
+        continue;
+      }
+      seen.add(relId);
+    }
+  }
+
+  const duplicateSlideIds = [];
+  const duplicateSlideRelIds = [];
+  const presentationEntry = zip.file('ppt/presentation.xml');
+  if (presentationEntry) {
+    const xml = await presentationEntry.async('string');
+    const seenSlideIds = new Set();
+    const seenRelIds = new Set();
+    for (const match of xml.matchAll(/<p:sldId\b[^>]*>/g)) {
+      const tag = match[0];
+      const slideId = extractXmlAttr(tag, 'id');
+      const relId = extractXmlAttr(tag, 'r:id');
+
+      if (slideId) {
+        if (seenSlideIds.has(slideId)) duplicateSlideIds.push(slideId);
+        else seenSlideIds.add(slideId);
+      }
+      if (relId) {
+        if (seenRelIds.has(relId)) duplicateSlideRelIds.push(relId);
+        else seenRelIds.add(relId);
+      }
+    }
+  }
+
+  const danglingOverrides = [];
+  const missingSlideOverrides = [];
+  const missingChartOverrides = [];
+  const contentTypeMismatches = [];
+  const contentTypesEntry = zip.file('[Content_Types].xml');
+  if (contentTypesEntry) {
+    const xml = await contentTypesEntry.async('string');
+    const overrides = new Map();
+    for (const match of xml.matchAll(/<Override\b[^>]*>/g)) {
+      const tag = match[0];
+      const partName = extractXmlAttr(tag, 'PartName').replace(/^\/+/, '');
+      const contentType = extractXmlAttr(tag, 'ContentType');
+      if (partName) overrides.set(partName, contentType);
+    }
+
+    for (const [partName] of overrides.entries()) {
+      if (!zip.file(partName)) {
+        danglingOverrides.push(partName);
+      }
+    }
+
+    const slideParts = Object.keys(zip.files).filter((f) =>
+      /^ppt\/slides\/slide\d+\.xml$/i.test(f)
+    );
+    const chartParts = Object.keys(zip.files).filter((f) =>
+      /^ppt\/charts\/chart\d+\.xml$/i.test(f)
+    );
+
+    for (const slidePart of slideParts) {
+      if (!overrides.has(slidePart)) {
+        missingSlideOverrides.push(slidePart);
+        continue;
+      }
+      const ct = overrides.get(slidePart) || '';
+      if (!/slide\+xml$/i.test(ct)) {
+        contentTypeMismatches.push({ part: slidePart, contentType: ct });
+      }
+    }
+    for (const chartPart of chartParts) {
+      if (!overrides.has(chartPart)) {
+        missingChartOverrides.push(chartPart);
+      }
+    }
+  }
+
+  return {
+    missingCriticalParts,
+    duplicateRelationshipIds,
+    duplicateSlideIds,
+    duplicateSlideRelIds,
+    danglingOverrides,
+    missingSlideOverrides,
+    missingChartOverrides,
+    contentTypeMismatches,
+  };
 }
 
 function countSlides(zip) {
@@ -155,6 +501,113 @@ async function validatePPTX(input, exp = {}) {
       );
     } else {
       pass('XML character integrity', 'No invalid characters found');
+    }
+
+    const relIntegrity = await scanRelationshipTargets(zip);
+    if (relIntegrity.missingInternalTargets.length > 0) {
+      const examples = relIntegrity.missingInternalTargets
+        .slice(0, 3)
+        .map((x) => `${x.relFile}: ${x.target} -> ${x.resolvedTarget || '(empty)'}`)
+        .join('; ');
+      fail(
+        'Relationship target integrity',
+        'All internal .rels targets resolve to existing package parts',
+        `${relIntegrity.missingInternalTargets.length} broken internal target(s), e.g. ${examples}`
+      );
+    } else {
+      pass(
+        'Relationship target integrity',
+        `${relIntegrity.checkedInternal} internal targets resolved`
+      );
+    }
+
+    const packageConsistency = await scanPackageConsistency(zip);
+    if (packageConsistency.missingCriticalParts.length > 0) {
+      fail(
+        'Package critical parts',
+        'All required core parts are present',
+        packageConsistency.missingCriticalParts.join(', ')
+      );
+    } else {
+      pass('Package critical parts', 'Core package parts present');
+    }
+
+    if (packageConsistency.duplicateRelationshipIds.length > 0) {
+      const examples = packageConsistency.duplicateRelationshipIds
+        .slice(0, 3)
+        .map((x) => `${x.relFile}:${x.relId}`)
+        .join(', ');
+      fail(
+        'Relationship Id uniqueness',
+        'No duplicate relationship Ids within a .rels file',
+        examples
+      );
+    } else {
+      pass('Relationship Id uniqueness', 'No duplicate relationship Ids detected');
+    }
+
+    if (
+      packageConsistency.duplicateSlideIds.length > 0 ||
+      packageConsistency.duplicateSlideRelIds.length > 0
+    ) {
+      const parts = [];
+      if (packageConsistency.duplicateSlideIds.length > 0) {
+        parts.push(
+          `duplicate slide id(s): ${packageConsistency.duplicateSlideIds.slice(0, 5).join(', ')}`
+        );
+      }
+      if (packageConsistency.duplicateSlideRelIds.length > 0) {
+        parts.push(
+          `duplicate slide rel id(s): ${packageConsistency.duplicateSlideRelIds.slice(0, 5).join(', ')}`
+        );
+      }
+      fail(
+        'Presentation slide ID integrity',
+        'Unique p:sldId id and r:id entries',
+        parts.join(' | ')
+      );
+    } else {
+      pass('Presentation slide ID integrity', 'Slide IDs and relationship IDs are unique');
+    }
+
+    if (
+      packageConsistency.danglingOverrides.length > 0 ||
+      packageConsistency.missingSlideOverrides.length > 0 ||
+      packageConsistency.missingChartOverrides.length > 0
+    ) {
+      const details = [];
+      if (packageConsistency.danglingOverrides.length > 0) {
+        details.push(
+          `dangling overrides: ${packageConsistency.danglingOverrides.slice(0, 5).join(', ')}`
+        );
+      }
+      if (packageConsistency.missingSlideOverrides.length > 0) {
+        details.push(
+          `missing slide overrides: ${packageConsistency.missingSlideOverrides.slice(0, 5).join(', ')}`
+        );
+      }
+      if (packageConsistency.missingChartOverrides.length > 0) {
+        details.push(
+          `missing chart overrides: ${packageConsistency.missingChartOverrides.slice(0, 5).join(', ')}`
+        );
+      }
+      fail(
+        'Content types consistency',
+        'No dangling overrides and all slide/chart parts are declared',
+        details.join(' | ')
+      );
+    } else {
+      pass('Content types consistency', 'Overrides align with slide/chart parts');
+    }
+
+    if (packageConsistency.contentTypeMismatches.length > 0) {
+      warn(
+        'Content type mismatch',
+        packageConsistency.contentTypeMismatches
+          .slice(0, 3)
+          .map((x) => `${x.part}:${x.contentType || '(empty)'}`)
+          .join(', ')
+      );
     }
 
     const minSize = exp.minFileSize || 50 * 1024,
@@ -347,6 +800,9 @@ if (require.main === module) {
 module.exports = {
   readPPTX,
   scanXmlIntegrity,
+  scanRelationshipTargets,
+  scanPackageConsistency,
+  reconcileContentTypesAndPackage,
   countSlides,
   extractSlideText,
   extractAllText,

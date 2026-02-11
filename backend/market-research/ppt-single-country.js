@@ -68,6 +68,11 @@ const {
 } = require('./ppt-utils');
 const { ensureString: _ensureString } = require('./shared/utils');
 const { validatePptData } = require('./quality-gates');
+const {
+  scanRelationshipTargets,
+  scanPackageConsistency,
+  reconcileContentTypesAndPackage,
+} = require('./pptx-validator');
 
 // PPTX-safe ensureString: strips XML-invalid control characters after conversion.
 // PPTX = ZIP of XML files. Characters \x00-\x08, \x0B, \x0C, \x0E-\x1F are invalid in
@@ -99,47 +104,302 @@ function ensureString(value, defaultValue) {
 // AI sometimes returns nested objects/arrays — this prevents pptxgenjs crashes.
 // XML sanitization happens in ensureString() above.
 function safeCell(value, maxLen) {
-  const str = ensureString(value);
-  const hardCap = Number.isFinite(maxLen) ? maxLen : 360;
-  if (hardCap > 0 && str.length > hardCap) {
-    // Soft compression to avoid table/text overflow while preserving key content.
-    // Prefer word boundary clipping over raw char clipping.
-    const clipped = str.substring(0, hardCap - 3);
-    const lastSpace = clipped.lastIndexOf(' ');
-    if (lastSpace > hardCap * 0.6) {
-      return clipped.substring(0, lastSpace).trim() + '...';
-    }
-    return clipped.trim() + '...';
-  }
-  return str;
+  const str = ensureString(value).replace(/\s+/g, ' ').trim();
+  if (!str) return '';
+
+  // Content-first clipping: keep substantially more text than the legacy cell hint.
+  // The small maxLen hints were causing aggressive truncation and poor deck readability.
+  const requested = Number.isFinite(maxLen) && maxLen > 0 ? Math.floor(maxLen) : 360;
+  const hardCap = Math.min(1400, Math.max(240, requested * 8));
+  if (str.length <= hardCap) return str;
+
+  const clipped = str.substring(0, hardCap - 3).trimEnd();
+  return `${clipped}...`;
 }
 
-// PptxGenJS 4.x can emit absolute chart relationship targets (/ppt/charts/chartN.xml).
-// Rewrite them to relative paths to maximize PowerPoint compatibility.
+// Render-time payload normalization.
+// Goal: keep a stable slide grammar even when synthesis returns transient/array-shaped structures.
+const RENDER_TRANSIENT_KEY_PATTERNS = [
+  /^_/,
+  /^section[_-]?\d+$/i,
+  /^gap[_-]?\d+$/i,
+  /^verify[_-]?\d+$/i,
+  /^final[_-]?review[_-]?gap[_-]?\d+$/i,
+  /^deepen[_-]?/i,
+  /^market[_-]?deepen[_-]?/i,
+  /^competitors?[_-]?deepen[_-]?/i,
+  /^policy[_-]?deepen[_-]?/i,
+  /^context[_-]?deepen[_-]?/i,
+  /^depth[_-]?deepen[_-]?/i,
+  /^insights?[_-]?deepen[_-]?/i,
+  /^marketdeepen/i,
+  /^competitorsdeepen/i,
+  /^policydeepen/i,
+  /^contextdeepen/i,
+  /^depthdeepen/i,
+  /^insightsdeepen/i,
+  /_wasarray$/i,
+  /_synthesiserror$/i,
+];
+
+const MARKET_CANONICAL_ALIAS_MAP = {
+  marketSizeAndGrowth: ['marketSizeAndGrowth', 'market_size_and_growth'],
+  supplyAndDemandDynamics: [
+    'supplyAndDemandDynamics',
+    'supplyAndDemandData',
+    'supply_and_demand_dynamics',
+    'supply_and_demand_data',
+  ],
+  pricingAndTariffStructures: [
+    'pricingAndTariffStructures',
+    'pricingAndEconomics',
+    'pricingAndCostBenchmarks',
+    'pricing_and_tariff_structures',
+    'pricing_and_economics',
+    'pricing_and_cost_benchmarks',
+  ],
+};
+
+const MARKET_LEGACY_KEYS = [
+  'tpes',
+  'finalDemand',
+  'electricity',
+  'gasLng',
+  'pricing',
+  'escoMarket',
+];
+
+const POLICY_ALIAS_MAP = {
+  foundationalActs: [
+    'foundationalActs',
+    'regulatoryFramework',
+    'regulatoryFrameworkAndLicensing',
+    'regulatory_framework_and_licensing',
+  ],
+  nationalPolicy: [
+    'nationalPolicy',
+    'energyMasterPlan',
+    'energyTransitionPolicy',
+    'energy_master_plan_and_decarbonization',
+  ],
+  investmentRestrictions: [
+    'investmentRestrictions',
+    'foreignOwnership',
+    'foreignOwnershipAndInvestmentLaws',
+    'foreign_ownership_and_investment_laws',
+    'localContentRequirements',
+    'local_content_requirements',
+  ],
+  keyIncentives: ['keyIncentives', 'investmentIncentives', 'incentives'],
+  regulatorySummary: ['regulatorySummary', 'regulationSummary'],
+  sources: ['sources'],
+};
+
+const COMPETITOR_ALIAS_MAP = {
+  japanesePlayers: ['japanesePlayers', 'japanesePlayer', 'japanPlayers'],
+  localMajor: ['localMajor', 'majorPlayers', 'localPlayers'],
+  foreignPlayers: ['foreignPlayers', 'internationalPlayers'],
+  caseStudy: ['caseStudy', 'entryCaseStudy'],
+  maActivity: ['maActivity', 'mnaActivity', 'maAndJv'],
+};
+
+const DEPTH_ALIAS_MAP = {
+  dealEconomics: ['dealEconomics', 'businessModelAndEconomics', 'business_model_and_economics'],
+  partnerAssessment: ['partnerAssessment', 'partners'],
+  entryStrategy: ['entryStrategy'],
+  implementation: ['implementation', 'implementationRoadmap'],
+  targetSegments: ['targetSegments'],
+};
+
+function isTransientRenderKey(key) {
+  const normalized = ensureString(key).trim().toLowerCase();
+  return RENDER_TRANSIENT_KEY_PATTERNS.some((re) => re.test(normalized));
+}
+
+function sanitizeRenderPayload(value, depth = 0) {
+  if (depth > 8) return value;
+  if (value == null) return value;
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map((item) => sanitizeRenderPayload(item, depth + 1));
+  if (typeof value !== 'object') return value;
+
+  const cleaned = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (isTransientRenderKey(key)) continue;
+    cleaned[key] = sanitizeRenderPayload(child, depth + 1);
+  }
+  return cleaned;
+}
+
+function selectFirstAliasValue(input, aliases) {
+  if (!input || typeof input !== 'object') return null;
+  for (const alias of aliases) {
+    if (!Object.prototype.hasOwnProperty.call(input, alias)) continue;
+    const value = input[alias];
+    if (value == null) continue;
+    if (typeof value === 'string' && !value.trim()) continue;
+    return { alias, value };
+  }
+  return null;
+}
+
+function normalizeByAliasMap(rawSection, aliasMap, options = {}) {
+  const cleaned = sanitizeRenderPayload(rawSection);
+  if (!cleaned || typeof cleaned !== 'object' || Array.isArray(cleaned)) {
+    return { data: {}, droppedKeys: [] };
+  }
+
+  const output = {};
+  const consumed = new Set();
+  for (const [canonicalKey, aliases] of Object.entries(aliasMap || {})) {
+    const match = selectFirstAliasValue(cleaned, aliases);
+    if (!match) continue;
+    output[canonicalKey] = match.value;
+    consumed.add(match.alias);
+    if (match.alias !== canonicalKey) consumed.add(canonicalKey);
+  }
+
+  for (const key of options.passThroughKeys || []) {
+    if (Object.prototype.hasOwnProperty.call(cleaned, key)) {
+      output[key] = cleaned[key];
+      consumed.add(key);
+    }
+  }
+
+  const droppedKeys = Object.keys(cleaned).filter((key) => !consumed.has(key));
+  return { data: output, droppedKeys };
+}
+
+function normalizeMarketForRender(rawSection) {
+  const cleaned = sanitizeRenderPayload(rawSection);
+  if (!cleaned || typeof cleaned !== 'object' || Array.isArray(cleaned)) {
+    return { data: {}, droppedKeys: [] };
+  }
+
+  const output = {};
+  const consumed = new Set();
+
+  for (const [canonicalKey, aliases] of Object.entries(MARKET_CANONICAL_ALIAS_MAP)) {
+    const match = selectFirstAliasValue(cleaned, aliases);
+    if (!match) continue;
+    output[canonicalKey] = match.value;
+    consumed.add(match.alias);
+    if (match.alias !== canonicalKey) consumed.add(canonicalKey);
+  }
+
+  if (Object.keys(output).length === 0) {
+    for (const key of MARKET_LEGACY_KEYS) {
+      const value = cleaned[key];
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+      output[key] = value;
+      consumed.add(key);
+    }
+  }
+
+  if (Array.isArray(cleaned.sources) && cleaned.sources.length > 0) {
+    output.sources = cleaned.sources;
+    consumed.add('sources');
+  }
+
+  const droppedKeys = Object.keys(cleaned).filter((key) => !consumed.has(key));
+  return { data: output, droppedKeys };
+}
+
+function humanizeKeyLabel(key) {
+  return ensureString(key)
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeRegulatorySummaryRows(raw) {
+  const rows = [];
+  const pushRow = (entry, fallbackLabel = '') => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const label = ensureString(entry.label || entry.domain || fallbackLabel);
+    const currentState = ensureString(entry.currentState || entry.current || entry.asIs || '');
+    const transition = ensureString(entry.transition || entry.change || entry.shift || '');
+    const futureState = ensureString(entry.futureState || entry.targetState || entry.toBe || '');
+    if (!label && !currentState && !transition && !futureState) return;
+    rows.push({ label, currentState, transition, futureState });
+  };
+
+  if (Array.isArray(raw)) {
+    raw.forEach((entry) => pushRow(entry));
+    return rows;
+  }
+  if (!raw || typeof raw !== 'object') return rows;
+
+  if (Array.isArray(raw.items)) {
+    raw.items.forEach((entry) => pushRow(entry));
+  }
+
+  pushRow(raw);
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (String(key).startsWith('_')) continue;
+    if (key === 'items') continue;
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      pushRow(value, humanizeKeyLabel(key));
+      continue;
+    }
+    if (typeof value === 'string' && value.trim()) {
+      pushRow(
+        {
+          label: humanizeKeyLabel(key),
+          currentState: value,
+        },
+        humanizeKeyLabel(key)
+      );
+    }
+  }
+
+  return rows;
+}
+
+// PptxGenJS can emit absolute relationship targets (/ppt/...).
+// Rewrite them to owner-relative paths to maximize PowerPoint compatibility.
 async function normalizeChartRelationshipTargets(pptxBuffer) {
   if (!Buffer.isBuffer(pptxBuffer) || pptxBuffer.length === 0) return pptxBuffer;
   const zip = await JSZip.loadAsync(pptxBuffer);
-  const relFiles = Object.keys(zip.files).filter((name) =>
-    /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(name)
-  );
-  let mutated = 0;
+  const relFiles = Object.keys(zip.files).filter((name) => /\.rels$/i.test(name));
+  let mutatedTargets = 0;
+
+  const ownerPartFromRel = (relFile) => {
+    const normalized = ensureString(relFile);
+    if (normalized === '_rels/.rels') return '';
+    const m = normalized.match(/^(.*)\/_rels\/([^/]+)\.rels$/);
+    if (!m) return '';
+    const baseDir = m[1];
+    const ownerPart = m[2];
+    return baseDir ? `${baseDir}/${ownerPart}` : ownerPart;
+  };
 
   for (const relFile of relFiles) {
     const relEntry = zip.file(relFile);
     if (!relEntry) continue;
     const xml = await relEntry.async('string');
-    const nextXml = xml.replace(
-      /Target="\/ppt\/charts\/(chart\d+\.xml)"/g,
-      'Target="../charts/$1"'
-    );
+    const ownerPart = ownerPartFromRel(relFile);
+    const ownerDir = ownerPart ? path.posix.dirname(ownerPart) : '';
+    const nextXml = xml.replace(/Target=(["'])\/ppt\/([^"']+)\1/g, (full, quote, absolutePath) => {
+      const packageTarget = `ppt/${absolutePath}`;
+      const relative = ownerDir ? path.posix.relative(ownerDir, packageTarget) : packageTarget;
+      const normalized = ensureString(relative).replace(/\\/g, '/');
+      if (!normalized) return full;
+      mutatedTargets++;
+      return `Target=${quote}${normalized}${quote}`;
+    });
     if (nextXml !== xml) {
       zip.file(relFile, nextXml);
-      mutated++;
     }
   }
 
-  if (mutated === 0) return pptxBuffer;
-  console.log(`[PPT] Normalized ${mutated} chart relationship target(s) to relative paths`);
+  if (mutatedTargets === 0) return pptxBuffer;
+  console.log(
+    `[PPT] Normalized ${mutatedTargets} absolute relationship target(s) to relative paths`
+  );
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
@@ -541,10 +801,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Use countryAnalysis for detailed data (policy, market, competitors, etc.)
   // synthesis contains metadata like isSingleCountry, confidenceScore, etc.
-  const policy = countryAnalysis.policy || {};
-  const market = countryAnalysis.market || {};
-  const competitors = countryAnalysis.competitors || {};
-  const depth = countryAnalysis.depth || {};
+  let policy = countryAnalysis.policy || {};
+  let market = countryAnalysis.market || {};
+  let competitors = countryAnalysis.competitors || {};
+  let depth = countryAnalysis.depth || {};
   // Provide safe defaults for summary to prevent empty slides
   const rawSummary = countryAnalysis.summary || countryAnalysis.summaryAssessment || {};
   const summary = {
@@ -557,6 +817,40 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     goNoGo: rawSummary.goNoGo || {},
     recommendation: rawSummary.recommendation || '',
   };
+  const renderNormalizationWarnings = [];
+  {
+    const policyNormalized = normalizeByAliasMap(policy, POLICY_ALIAS_MAP);
+    policy = policyNormalized.data;
+    if (policyNormalized.droppedKeys.length > 0) {
+      renderNormalizationWarnings.push(
+        `[policy] dropped non-template keys: ${policyNormalized.droppedKeys.join(', ')}`
+      );
+    }
+
+    const marketNormalized = normalizeMarketForRender(market);
+    market = marketNormalized.data;
+    if (marketNormalized.droppedKeys.length > 0) {
+      renderNormalizationWarnings.push(
+        `[market] dropped transient/non-template keys: ${marketNormalized.droppedKeys.join(', ')}`
+      );
+    }
+
+    const competitorsNormalized = normalizeByAliasMap(competitors, COMPETITOR_ALIAS_MAP);
+    competitors = competitorsNormalized.data;
+    if (competitorsNormalized.droppedKeys.length > 0) {
+      renderNormalizationWarnings.push(
+        `[competitors] dropped non-template keys: ${competitorsNormalized.droppedKeys.join(', ')}`
+      );
+    }
+
+    const depthNormalized = normalizeByAliasMap(depth, DEPTH_ALIAS_MAP);
+    depth = depthNormalized.data;
+    if (depthNormalized.droppedKeys.length > 0) {
+      renderNormalizationWarnings.push(
+        `[depth] dropped non-template keys: ${depthNormalized.droppedKeys.join(', ')}`
+      );
+    }
+  }
   const country = countryAnalysis.country || (synthesis || {}).country;
   const templateSlideSelections =
     (scope && (scope.templateSlideSelections || scope.templateSelections)) || {};
@@ -894,15 +1188,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   console.log(`  [PPT] market keys: ${Object.keys(market).join(', ') || 'EMPTY'}`);
   console.log(`  [PPT] depth keys: ${Object.keys(depth).join(', ') || 'EMPTY'}`);
   console.log(`  [PPT] summary.goNoGo: ${summary.goNoGo ? 'present' : 'EMPTY'}`);
+  if (renderNormalizationWarnings.length > 0) {
+    console.warn(`[PPT NORMALIZE] ${renderNormalizationWarnings.join(' | ')}`);
+  }
 
-  // Truncate title to max 70 chars
+  // Keep titles readable but avoid over-aggressive truncation.
   function truncateTitle(text) {
     if (!text) return '';
     const str = String(text).trim();
-    if (str.length <= 70) return str;
-    const cut = str.substring(0, 70);
+    if (str.length <= 110) return str;
+    const cut = str.substring(0, 110);
     const lastSpace = cut.lastIndexOf(' ');
-    return lastSpace > 40 ? cut.substring(0, lastSpace) : cut;
+    return lastSpace > 70 ? cut.substring(0, lastSpace) : cut;
   }
 
   // Standard slide layout — positions from Escort template extraction
@@ -1558,22 +1855,112 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   const TRANSIENT_SYNTHESIS_KEY_PATTERNS = [
     /^_/,
-    /^section_\d+$/i,
-    /^gap_\d+$/i,
-    /^verify_\d+$/i,
-    /^final_review_gap_\d+$/i,
-    /^deepen_/i,
-    /^market_deepen_/i,
-    /^competitors_deepen_/i,
-    /^policy_deepen_/i,
-    /^context_deepen_/i,
-    /^depth_deepen_/i,
-    /^insights_deepen_/i,
+    /^section[_-]?\d+$/i,
+    /^gap[_-]?\d+$/i,
+    /^verify[_-]?\d+$/i,
+    /^final[_-]?review[_-]?gap[_-]?\d+$/i,
+    /^deepen[_-]?/i,
+    /^market[_-]?deepen[_-]?/i,
+    /^competitors?[_-]?deepen[_-]?/i,
+    /^policy[_-]?deepen[_-]?/i,
+    /^context[_-]?deepen[_-]?/i,
+    /^depth[_-]?deepen[_-]?/i,
+    /^insights?[_-]?deepen[_-]?/i,
+    /^marketdeepen/i,
+    /^competitorsdeepen/i,
+    /^policydeepen/i,
+    /^contextdeepen/i,
+    /^depthdeepen/i,
+    /^insightsdeepen/i,
     /_wasarray$/i,
     /_synthesiserror$/i,
   ];
   function isTransientSynthesisKey(key) {
-    return TRANSIENT_SYNTHESIS_KEY_PATTERNS.some((re) => re.test(ensureString(key).trim()));
+    const normalized = ensureString(key).trim().toLowerCase();
+    return TRANSIENT_SYNTHESIS_KEY_PATTERNS.some((re) => re.test(normalized));
+  }
+
+  const SEMANTIC_EMPTY_TEXT_PATTERNS = [
+    /\binsufficient research data\b/i,
+    /\binsufficient data\b/i,
+    /\bdata unavailable\b/i,
+    /\bno data available\b/i,
+    /\bnot available\b/i,
+    /\bcould not be verified\b/i,
+    /\bdetails pending further research\b/i,
+    /\banalysis pending additional research\b/i,
+    /\btbd\b/i,
+    /\bn\/a\b/i,
+  ];
+
+  const TRUNCATION_ARTIFACT_TEXT_PATTERNS = [
+    /\bunterminated string\b/i,
+    /\bunexpected end of json\b/i,
+    /\bexpected double-quoted property name\b/i,
+    /\bexpected ',' or '}' after property value\b/i,
+    /\bparse error\b/i,
+    /\bstrategy 3\.5\b/i,
+    /\bstrategy 4\b/i,
+    /\bline \d+ column \d+\b/i,
+  ];
+
+  function hasSemanticEmptyText(value) {
+    const text = ensureString(value).replace(/\s+/g, ' ').trim();
+    if (!text) return true;
+    return SEMANTIC_EMPTY_TEXT_PATTERNS.some((re) => re.test(text));
+  }
+
+  function hasTruncationArtifactText(value) {
+    const text = ensureString(value).replace(/\s+/g, ' ').trim();
+    if (!text) return false;
+    return TRUNCATION_ARTIFACT_TEXT_PATTERNS.some((re) => re.test(text));
+  }
+
+  function hasMeaningfulNarrative(value, minWords = 6) {
+    const text = ensureString(value).replace(/\s+/g, ' ').trim();
+    if (!text) return false;
+    if (hasSemanticEmptyText(text) || hasTruncationArtifactText(text)) return false;
+    if ((text.startsWith('{') || text.startsWith('[')) && text.includes(':'))
+      return text.length >= 20;
+    const words = text.split(/\s+/).filter(Boolean).length;
+    if (words >= minWords) return true;
+    if (words >= 3 && /\d/.test(text)) return true;
+    return false;
+  }
+
+  function hasMeaningfulContent(value, depth = 0) {
+    if (depth > 7) return false;
+    if (value == null) return false;
+    if (typeof value === 'string') return hasMeaningfulNarrative(value);
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value === 'boolean') return true;
+    if (Array.isArray(value)) return value.some((item) => hasMeaningfulContent(item, depth + 1));
+    if (typeof value !== 'object') return false;
+
+    for (const [k, v] of Object.entries(value)) {
+      if (isTransientSynthesisKey(k)) continue;
+      if (SKIP_KEYS.has(k) && !['subtitle', 'keyMessage', 'slideTitle'].includes(k)) continue;
+      if (hasMeaningfulContent(v, depth + 1)) return true;
+    }
+    return false;
+  }
+
+  function sanitizeSectionPayload(value, depth = 0) {
+    if (depth > 8) return value;
+    if (value == null) return value;
+    if (typeof value === 'string') {
+      if (hasTruncationArtifactText(value) || hasSemanticEmptyText(value)) return '';
+      return value;
+    }
+    if (Array.isArray(value)) return value.map((item) => sanitizeSectionPayload(item, depth + 1));
+    if (typeof value !== 'object') return value;
+
+    const cleaned = {};
+    for (const [key, child] of Object.entries(value)) {
+      if (isTransientSynthesisKey(key)) continue;
+      cleaned[key] = sanitizeSectionPayload(child, depth + 1);
+    }
+    return cleaned;
   }
 
   // Keys that should never be treated as data blocks (metadata, flags, primitives)
@@ -1645,13 +2032,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   /**
    * Generate a human-readable label from a data key.
-   * Handles: camelCase, snake_case, section_N, and prefixed keys.
+   * Handles: camelCase, snake_case, and prefixed keys.
    */
   function keyToLabel(key) {
-    // section_0, section_1, etc.
-    if (/^section_\d+$/.test(key)) {
-      return `Analysis ${parseInt(key.split('_')[1], 10) + 1}`;
-    }
     // Remove common prefixes like policy_, market_, depth_, etc.
     let label = key.replace(/^(policy|market|competitors|depth|insight|context)_\d*_?/i, '');
     // camelCase → words
@@ -2486,7 +2869,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         break;
 
       default:
-        // Generic insight extraction for dynamic market keys (section_0, section_1, etc.)
+        // Generic insight extraction for dynamic market keys.
         if (data.overview) insights.push(ensureString(data.overview));
         if (data.keyInsight) insights.push(ensureString(data.keyInsight));
         if (Array.isArray(data.keyMetrics)) {
@@ -2872,8 +3255,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
   }
 
-  // Generate a pattern-based slide for a single data block
-  // Wrapped in try-catch so one failed slide doesn't kill the entire deck
+  // Generate a pattern-based slide for a single data block.
+  // Hard-fail on render errors so malformed slides never reach output.
   function generatePatternSlide(block) {
     const templateLayout =
       Number.isFinite(Number(block._templateSlide)) && block._templateSlide > 0
@@ -2984,28 +3367,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           }
       }
     } catch (err) {
-      console.error(`[PPT] Slide "${block.key}" failed, showing fallback: ${err.message}`);
+      console.error(`[PPT] Slide "${block.key}" failed: ${err.message}`);
       templateUsageStats.slideRenderFailures.push({
         key: block.key,
         pattern: block._templatePattern || null,
         error: err.message,
       });
-      // Clear partially-rendered objects to avoid carrying malformed XML fragments.
-      if (Array.isArray(slide.data)) slide.data = [];
-      slide.addText(truncateTitle(block.title || block.key), {
-        x: TITLE_X,
-        y: tpTitle.y,
-        w: TITLE_W,
-        h: tpTitle.h,
-        fontSize: tpTitleFontSize,
-        bold: tpTitleBold,
-        color: COLORS.dk2,
-        fontFace: FONT,
-      });
-      addDataUnavailableMessage(
-        slide,
-        `Data unavailable for ${block.title || block.key} — rendering error`
-      );
+      throw new Error(`Slide "${block.key}" render failed: ${err.message}`);
     }
 
     return slide;
@@ -4546,12 +4914,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Generate an entire section: TOC divider + content slides
   // Check if a section has any real content (not just empty objects or "Data unavailable" placeholders)
   function sectionHasContent(blocks) {
-    return blocks.some(
-      (b) =>
-        b.data &&
-        Object.keys(b.data).length > 0 &&
-        !JSON.stringify(b.data).includes('Data unavailable')
-    );
+    return blocks.some((b) => hasMeaningfulContent(b?.data));
   }
 
   // Section names for TOC slides (Policy first, then Market — matches Escort template)
@@ -4588,18 +4951,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return parts.slice(0, 5).join('\n\n');
   }
 
-  // 2D: Extract narrative from thin data (e.g., single section_0 from array conversion)
+  // 2D: Extract narrative from thin object data when canonical blocks are sparse
   function extractNarrativeFromThinData(sectionData) {
     if (!sectionData || typeof sectionData !== 'object') return null;
-    // Look for section_0 or first section key
-    const sectionKeys = Object.keys(sectionData).filter(
-      (k) => k.startsWith('section_') && sectionData[k] && typeof sectionData[k] === 'object'
-    );
-    if (sectionKeys.length === 0) return null;
+    const sectionEntries = Object.entries(sectionData).filter(([key, value]) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+      if (ensureString(key).startsWith('_')) return false;
+      return Boolean(value.overview || value.keyInsight || Array.isArray(value.keyMetrics));
+    });
+    if (sectionEntries.length === 0) return null;
 
     const parts = [];
-    for (const key of sectionKeys) {
-      const sec = sectionData[key];
+    for (const [, sec] of sectionEntries) {
       if (sec.overview) parts.push(sec.overview);
       if (sec.keyInsight) parts.push(`Key Insight: ${sec.keyInsight}`);
       if (Array.isArray(sec.keyMetrics) && sec.keyMetrics.length > 0) {
@@ -4610,6 +4973,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       }
     }
     return parts.length > 0 ? parts.join('\n\n') : null;
+  }
+
+  function normalizeSectionForRender(sectionName, rawSection) {
+    const cleaned = sanitizeSectionPayload(rawSection);
+    switch (sectionName) {
+      case 'Policy & Regulations':
+        return normalizeByAliasMap(cleaned, POLICY_ALIAS_MAP).data;
+      case 'Market Overview':
+        return normalizeMarketForRender(cleaned).data;
+      case 'Competitive Landscape':
+        return normalizeByAliasMap(cleaned, COMPETITOR_ALIAS_MAP).data;
+      case 'Strategic Analysis':
+        return normalizeByAliasMap(cleaned, DEPTH_ALIAS_MAP).data;
+      case 'Recommendations':
+      default:
+        return cleaned;
+    }
   }
 
   function generateSection(sectionName, sectionNumber, totalSections, sectionData) {
@@ -4639,7 +5019,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Map display name to internal classifyDataBlocks name
     const classifyName =
       sectionName === 'Policy & Regulatory' ? 'Policy & Regulations' : sectionName;
-    const blocks = classifyDataBlocks(classifyName, sectionData);
+    const normalizedSection = normalizeSectionForRender(classifyName, sectionData);
+    const blocks = classifyDataBlocks(classifyName, normalizedSection);
     for (const block of blocks) {
       resolveBlockTemplate(block);
     }
@@ -4658,7 +5039,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (!sectionHasContent(blocks)) {
       // 2D: Thin data narrative — extract overview/keyInsight/metrics from thin section objects
       if (ALLOW_NON_TEMPLATE_FALLBACK_SLIDES && blocks.length < 2) {
-        const narrativeContent = extractNarrativeFromThinData(sectionData);
+        const narrativeContent = extractNarrativeFromThinData(normalizedSection);
         if (narrativeContent) {
           console.log(
             `[PPT] Using thin-data narrative for "${sectionName}" (${blocks.length} blocks)`
@@ -4716,13 +5097,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     for (const block of blocks) {
       const blockDataStr = JSON.stringify(block.data || {});
       const isLikelyEmpty =
-        !block.data ||
-        Object.keys(block.data).length === 0 ||
-        blockDataStr.includes('Data unavailable') ||
-        blockDataStr.includes('Insufficient research data') ||
-        blockDataStr.includes('No data available') ||
-        blockDataStr.includes('Not available') ||
-        blockDataStr.includes('data could not be verified');
+        !hasMeaningfulContent(block.data) ||
+        hasSemanticEmptyText(blockDataStr) ||
+        hasTruncationArtifactText(blockDataStr);
       if (isLikelyEmpty) {
         unavailableCount++;
         if (unavailableCount > 1) continue; // Skip extra unavailable slides
@@ -4746,7 +5123,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // classifyDataBlocks still uses "Policy & Regulations" internally — map the name
   function classifyBlocksForSection(sec) {
     const classifyName = sec.name === 'Policy & Regulatory' ? 'Policy & Regulations' : sec.name;
-    return classifyDataBlocks(classifyName, sec.name === 'Recommendations' ? summary : sec.data);
+    const rawSection = sec.name === 'Recommendations' ? summary : sec.data;
+    const normalizedSection = normalizeSectionForRender(classifyName, rawSection);
+    return classifyDataBlocks(classifyName, normalizedSection);
   }
 
   // Pre-calculate block counts and content status
@@ -4885,11 +5264,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             dataQuality: getDataQualityForCategory('policy_'),
           }
         );
-        if (Array.isArray(regData) && regData.length > 0) {
-          // Array format: use horizontal flow table (current -> transition -> future)
-          addHorizontalFlowTable(regSummarySlide, regData, { font: FONT });
+        const regRows = normalizeRegulatorySummaryRows(regData);
+        if (regRows.length > 0) {
+          // Always render with the template's horizontal flow geometry for policy consistency.
+          addHorizontalFlowTable(regSummarySlide, regRows, { font: FONT });
         } else if (typeof regData === 'object' && Object.keys(regData).length > 0) {
-          // Object format: render via generic content slide renderer
+          // Fallback when shape is non-tabular and cannot be normalized into rows.
           renderGenericContentSlide(regSummarySlide, {
             key: 'regulatorySummary',
             data: regData,
@@ -4900,21 +5280,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       }
     } catch (sectionErr) {
       console.error(`[PPT] Section "${sec.name}" crashed: ${sectionErr?.message}`);
-      // Render error placeholder slide and continue
-      const errSlide = addSlideWithTitle(`${sec.name}`, 'Section Generation Error');
-      errSlide.addText(
-        `This section could not be generated due to a data processing error.\nError: ${sectionErr?.message || 'Unknown error'}`,
-        {
-          x: LEFT_MARGIN,
-          y: 2.5,
-          w: CONTENT_WIDTH,
-          h: 2.0,
-          fontSize: 14,
-          color: COLORS.muted || '#999999',
-          fontFace: FONT,
-          align: 'center',
-          valign: 'middle',
-        }
+      throw new Error(
+        `Section "${sec.name}" generation failed: ${sectionErr?.message || 'Unknown error'}`
       );
     }
   }
@@ -5031,10 +5398,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     let emptySlideCount = 0;
     for (const sl of contentSlides) {
       const slideText = JSON.stringify(sl.data || sl);
-      if (
-        slideText.includes('Data unavailable') ||
-        slideText.includes('Insufficient research data')
-      ) {
+      if (hasSemanticEmptyText(slideText) || hasTruncationArtifactText(slideText)) {
         emptySlideCount++;
       }
     }
@@ -5060,14 +5424,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ),
     ].join(', ');
     const totalResolvedBlocks = Math.max(templateUsageStats.resolved.length, 1);
-    const failureRate = templateUsageStats.slideRenderFailures.length / totalResolvedBlocks;
-    if (failureRate > 0.35 || templateUsageStats.slideRenderFailures.length >= 10) {
-      throw new Error(
-        `PPT rendering failures detected (${templateUsageStats.slideRenderFailures.length}/${totalResolvedBlocks}): ${failKeys}`
-      );
-    }
-    console.warn(
-      `[PPT] Non-fatal rendering failures (${templateUsageStats.slideRenderFailures.length}/${totalResolvedBlocks}): ${failKeys}`
+    throw new Error(
+      `PPT rendering failures detected (${templateUsageStats.slideRenderFailures.length}/${totalResolvedBlocks}): ${failKeys}`
     );
   }
   if (templateUsageStats.tableRecoveries.length > 0) {
@@ -5093,6 +5451,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
+  const contentTypeReconcile = await reconcileContentTypesAndPackage(pptxBuffer);
+  pptxBuffer = contentTypeReconcile.buffer;
+  if (contentTypeReconcile.changed) {
+    const touched = [
+      ...(contentTypeReconcile.stats.addedOverrides || []),
+      ...(contentTypeReconcile.stats.correctedOverrides || []),
+      ...(contentTypeReconcile.stats.removedDangling || []),
+    ].length;
+    console.log(`[PPT] Reconciled content types (${touched} override adjustment(s))`);
+  }
   const formattingAudit = await auditGeneratedPptFormatting(pptxBuffer);
   if (!formattingAudit.pass) {
     const criticalIssues = formattingAudit.issues
@@ -5126,6 +5494,71 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     console.warn(
       `[PPT TEMPLATE] Formatting audit warnings (${formattingAudit.warningCount}): ${warningCodes}`
     );
+  }
+  const relZip = await JSZip.loadAsync(pptxBuffer);
+  const relIntegrity = await scanRelationshipTargets(relZip);
+  if (relIntegrity.missingInternalTargets.length > 0) {
+    const examples = relIntegrity.missingInternalTargets
+      .slice(0, 5)
+      .map((m) => `${m.relFile} -> ${m.target} (${m.reason})`)
+      .join(' | ');
+    throw new Error(
+      `PPT relationship integrity failed: ${relIntegrity.missingInternalTargets.length} broken internal target(s); ${examples}`
+    );
+  }
+  if (relIntegrity.checkedInternal > 0) {
+    console.log(
+      `[PPT] Relationship integrity check passed (${relIntegrity.checkedInternal} targets)`
+    );
+  }
+  const packageConsistency = await scanPackageConsistency(relZip);
+  const packageIssues = [];
+  if (packageConsistency.missingCriticalParts.length > 0) {
+    packageIssues.push(
+      `missing critical parts: ${packageConsistency.missingCriticalParts.join(', ')}`
+    );
+  }
+  if (packageConsistency.duplicateRelationshipIds.length > 0) {
+    const dup = packageConsistency.duplicateRelationshipIds
+      .slice(0, 5)
+      .map((x) => `${x.relFile}:${x.relId}`)
+      .join(', ');
+    packageIssues.push(`duplicate relationship ids: ${dup}`);
+  }
+  if (packageConsistency.duplicateSlideIds.length > 0) {
+    packageIssues.push(
+      `duplicate slide ids: ${packageConsistency.duplicateSlideIds.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.duplicateSlideRelIds.length > 0) {
+    packageIssues.push(
+      `duplicate slide rel ids: ${packageConsistency.duplicateSlideRelIds.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.danglingOverrides.length > 0) {
+    packageIssues.push(
+      `dangling overrides: ${packageConsistency.danglingOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.missingSlideOverrides.length > 0) {
+    packageIssues.push(
+      `missing slide overrides: ${packageConsistency.missingSlideOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.missingChartOverrides.length > 0) {
+    packageIssues.push(
+      `missing chart overrides: ${packageConsistency.missingChartOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageIssues.length > 0) {
+    throw new Error(`PPT package consistency failed: ${packageIssues.join(' | ')}`);
+  }
+  if (packageConsistency.contentTypeMismatches.length > 0) {
+    const mismatchPreview = packageConsistency.contentTypeMismatches
+      .slice(0, 5)
+      .map((x) => `${x.part}:${x.contentType || '(empty)'}`)
+      .join(', ');
+    console.warn(`[PPT] Content type mismatches detected post-reconcile: ${mismatchPreview}`);
   }
   const totalSlides = 4 + sectionDefs.length + sectionBlockCounts.reduce((a, b) => a + b, 0) + 2; // cover + TOC + exec + opps + sections + appendix TOC + summary
   const templateBackedCount = templateUsageStats.resolved.filter((x) => x.templateBacked).length;

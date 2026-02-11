@@ -37,6 +37,84 @@ function countWords(text) {
   return cleaned.split(/\s+/).length;
 }
 
+const TRUNCATION_ARTIFACT_PATTERNS = [
+  /\bunterminated string\b/i,
+  /\bunexpected end of json\b/i,
+  /\bexpected .*json\b/i,
+  /(?:\.\.\.|…)\s*$/,
+  /[{[]\s*$/,
+];
+
+const COMPETITOR_DESCRIPTION_SIGNAL_REGEX =
+  /\b(contract|project|field|offshore|onshore|lng|drilling|epc|om|maintenance|pipeline|terminal|well|procurement|technology|service|revenue|market|partner|bid|tender|capex|opex)\b/i;
+
+function hasTruncationArtifact(value) {
+  if (typeof value !== 'string') return false;
+  const text = value.trim();
+  if (!text) return false;
+  return TRUNCATION_ARTIFACT_PATTERNS.some((re) => re.test(text));
+}
+
+function hasSemanticArtifactPayload(value, depth = 0) {
+  if (depth > 8 || value == null) return false;
+  if (typeof value === 'string') {
+    return containsPlaceholderText(value) || hasTruncationArtifact(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasSemanticArtifactPayload(item, depth + 1));
+  }
+  if (typeof value !== 'object') return false;
+  return Object.entries(value).some(([key, child]) => {
+    if (String(key || '').startsWith('_')) return false;
+    return hasSemanticArtifactPayload(child, depth + 1);
+  });
+}
+
+const TRANSIENT_TOP_LEVEL_PATTERNS = [
+  /^section[_-]?\d+$/i,
+  /^gap[_-]?\d+$/i,
+  /^verify[_-]?\d+$/i,
+  /^final[_-]?review[_-]?gap[_-]?\d+$/i,
+  /^deepen[_-]?/i,
+  /^market[_-]?deepen[_-]?/i,
+  /^competitors?[_-]?deepen[_-]?/i,
+  /^policy[_-]?deepen[_-]?/i,
+  /^context[_-]?deepen[_-]?/i,
+  /^depth[_-]?deepen[_-]?/i,
+  /^insights?[_-]?deepen[_-]?/i,
+  /^marketdeepen/i,
+  /^competitorsdeepen/i,
+  /^policydeepen/i,
+  /^contextdeepen/i,
+  /^depthdeepen/i,
+  /^insightsdeepen/i,
+];
+
+function hasTransientTopLevelKeys(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.keys(value).some((key) =>
+    TRANSIENT_TOP_LEVEL_PATTERNS.some((re) => re.test(ensureString(key).trim()))
+  );
+}
+
+function hasMeaningfulCompetitorDescription(value) {
+  const text = ensureString(value).replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+  if (containsPlaceholderText(text)) return false;
+  if (hasTruncationArtifact(text)) return false;
+  const words = countWords(text);
+  if (words < 18) return false;
+  return COMPETITOR_DESCRIPTION_SIGNAL_REGEX.test(text) || /\d/.test(text);
+}
+
+function isViableCompetitorPlayer(player) {
+  if (!player || typeof player !== 'object') return false;
+  const name = ensureString(player.name).trim();
+  if (!name) return false;
+  if (containsPlaceholderText(name) || hasTruncationArtifact(name)) return false;
+  return hasMeaningfulCompetitorDescription(player.description || player.strategicAssessment || '');
+}
+
 const CURRENT_YEAR = new Date().getFullYear();
 
 function normalizeNumericScore(value, fallback = 0) {
@@ -107,11 +185,15 @@ function normalizeSectionArea(area) {
 const TRANSIENT_RESEARCH_KEY_PATTERNS = [
   /^_/,
   /^section_\d+$/,
+  /^\d+$/,
   /_wasarray/,
   /_synthesiserror/,
   /(?:^|_)deepen(?:_|$)/,
+  /deepen(?:_|-)?gap_?\d*$/,
+  /deepenfinalreviewgap_?\d*$/,
   /final[_-]?review[_-]?gap/,
   /(?:^|_)gap_\d+$/,
+  /(?:^|_)verify(?:_|$|\d)/,
 ];
 
 function isTransientResearchKey(key) {
@@ -831,35 +913,83 @@ function validateCompetitorsSynthesis(result) {
     }
   }
 
+  for (const key of Object.keys(result)) {
+    if (isTransientResearchKey(key)) delete result[key];
+  }
+
   const sections = ['japanesePlayers', 'localMajor', 'foreignPlayers'];
   const warnings = [];
 
   for (const section of sections) {
-    if (result[section] && !result[section].slideTitle) {
-      result[section].slideTitle = `Competitors - ${humanizeSectionKey(section)}`;
+    const sectionData =
+      result[section] && typeof result[section] === 'object' && !Array.isArray(result[section])
+        ? result[section]
+        : null;
+    if (!sectionData) {
+      warnings.push(`${section}: section missing`);
+      continue;
     }
-    const players = result[section]?.players || [];
+    if (!sectionData.slideTitle) {
+      sectionData.slideTitle = `Competitors - ${humanizeSectionKey(section)}`;
+    }
+    const players = Array.isArray(sectionData.players) ? sectionData.players : [];
     if (players.length === 0) {
       warnings.push(`${section}: no players found`);
     }
-    // Apply honest fallbacks to each player
-    players.forEach((player) => {
+    const seenNames = new Set();
+    const cleanedPlayers = [];
+    for (const rawPlayer of players) {
+      if (!rawPlayer || typeof rawPlayer !== 'object') continue;
+      const player = { ...rawPlayer };
       ensureHonestWebsite(player);
       ensureHonestDescription(player);
-      if (containsPlaceholderText(player?.description)) {
+      if (
+        containsPlaceholderText(player.description) ||
+        hasTruncationArtifact(player.description)
+      ) {
         ensureHonestDescription(player);
       }
-    });
+      const normalized = sanitizePlaceholderStrings(player);
+      if (!isViableCompetitorPlayer(normalized)) continue;
+      const dedupeKey = ensureString(normalized.name).toLowerCase().trim();
+      if (!dedupeKey || seenNames.has(dedupeKey)) continue;
+      seenNames.add(dedupeKey);
+      cleanedPlayers.push(normalized);
+    }
+    sectionData.players = cleanedPlayers;
+    if (cleanedPlayers.length === 0) {
+      warnings.push(`${section}: no viable players after semantic cleanup`);
+    }
+  }
+
+  for (const key of ['caseStudy', 'maActivity']) {
+    if (result[key] && containsPlaceholderText(ensureString(result[key].subtitle || ''))) {
+      result[key].subtitle = null;
+    }
+  }
+
+  const stableResult = {};
+  for (const key of [
+    'japanesePlayers',
+    'localMajor',
+    'foreignPlayers',
+    'caseStudy',
+    'maActivity',
+  ]) {
+    const value = result[key];
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      stableResult[key] = value;
+    }
   }
 
   // Remove known placeholder prose anywhere in competitors payload.
-  result = sanitizePlaceholderStrings(result);
+  const sanitizedResult = sanitizePlaceholderStrings(stableResult);
 
   if (warnings.length > 0) {
     console.log(`  [Synthesis] Competitor warnings: ${warnings.join('; ')}`);
   }
 
-  return result;
+  return sanitizedResult;
 }
 
 function isMarketSectionLike(value) {
@@ -1391,12 +1521,22 @@ function normalizePolicySynthesisResult(result) {
  * → 4. GeminiPro jsonMode → 5. GeminiPro no-jsonMode
  */
 async function synthesizeWithFallback(prompt, options = {}) {
-  const { maxTokens = 8192, jsonMode = true } = options;
+  const {
+    maxTokens = 8192,
+    jsonMode = true,
+    accept = null,
+    label = 'Synthesis',
+    allowArrayNormalization = false,
+    allowTruncationRepair = false,
+    allowRawExtractionFallback = true,
+    systemPrompt = null,
+  } = options;
   const strictSuffix =
     '\n\nCRITICAL: Return ONLY valid JSON. No markdown. No explanation. No trailing text. Just the raw JSON object. Use null for missing fields.';
 
-  // Helper: convert array responses to object with _wasArray flag
+  // Helper: convert array responses to object with _wasArray flag when explicitly allowed.
   function ensureObject(val) {
+    if (!allowArrayNormalization) return val;
     if (Array.isArray(val)) {
       console.warn(
         '  [Synthesis] WARNING: AI returned array instead of object, tagging with _wasArray'
@@ -1411,41 +1551,95 @@ async function synthesizeWithFallback(prompt, options = {}) {
     return val;
   }
 
+  function getRejectReason(acceptResult) {
+    if (acceptResult === false || acceptResult == null) return 'semantic gate returned false';
+    if (typeof acceptResult === 'string') return acceptResult;
+    if (typeof acceptResult === 'object') {
+      if (acceptResult.pass === false) {
+        return (
+          acceptResult.reason ||
+          acceptResult.message ||
+          acceptResult.details ||
+          'semantic gate returned pass=false'
+        );
+      }
+      if (acceptResult.pass === true) return '';
+      return acceptResult.reason || acceptResult.message || acceptResult.details || '';
+    }
+    return '';
+  }
+
+  function applySemanticGate(candidate, tierName) {
+    const objectCandidate = ensureObject(candidate);
+    if (!accept || typeof accept !== 'function') return objectCandidate;
+    try {
+      const gateResult = accept(objectCandidate);
+      const accepted =
+        gateResult === true ||
+        (typeof gateResult === 'object' && gateResult !== null && gateResult.pass !== false);
+      if (accepted) return objectCandidate;
+      const reason = getRejectReason(gateResult);
+      console.warn(
+        `  [${label}] ${tierName} rejected by semantic gate${reason ? `: ${reason}` : ''}`
+      );
+      return null;
+    } catch (gateErr) {
+      console.warn(`  [${label}] ${tierName} acceptance check failed: ${gateErr?.message}`);
+      return null;
+    }
+  }
+
   // Tier 1: callGemini jsonMode (fast path)
   try {
-    const result = await callGemini(prompt, { maxTokens, jsonMode, temperature: 0.2 });
+    const result = await callGemini(prompt, {
+      maxTokens,
+      jsonMode,
+      temperature: 0.2,
+      ...(systemPrompt ? { systemPrompt } : {}),
+    });
     const text = typeof result === 'string' ? result : result?.content || '';
     try {
       const parsed = parseJsonResponse(text);
       if (parsed) {
-        console.log('  [Synthesis] Tier 1 (Gemini jsonMode) succeeded');
-        return ensureObject(parsed);
+        const accepted = applySemanticGate(parsed, 'Tier 1 (Gemini jsonMode)');
+        if (accepted) {
+          console.log(`  [${label}] Tier 1 (Gemini jsonMode) succeeded`);
+          return accepted;
+        }
       }
     } catch (parseErr) {
       // Tier 2: Truncation repair on raw text
-      console.warn(`  [Synthesis] Tier 1 parse failed: ${parseErr?.message}`);
-      if (text && isJsonTruncated(text)) {
-        console.log('  [Synthesis] Tier 2: Detected truncation, attempting repair...');
+      console.warn(`  [${label}] Tier 1 parse failed: ${parseErr?.message}`);
+      if (allowRawExtractionFallback && allowTruncationRepair && text && isJsonTruncated(text)) {
+        console.log(`  [${label}] Tier 2: Detected truncation, attempting repair...`);
         try {
           const repaired = repairTruncatedJson(text);
           const extractResult = extractJsonFromContent(repaired);
           if (extractResult.status === 'success' && extractResult.data) {
-            console.log('  [Synthesis] Tier 2 (truncation repair) succeeded');
-            return ensureObject(extractResult.data);
+            const accepted = applySemanticGate(extractResult.data, 'Tier 2 (truncation repair)');
+            if (accepted) {
+              console.log(`  [${label}] Tier 2 (truncation repair) succeeded`);
+              return accepted;
+            }
           }
         } catch (repairErr) {
-          console.warn(`  [Synthesis] Tier 2 repair failed: ${repairErr?.message}`);
+          console.warn(`  [${label}] Tier 2 repair failed: ${repairErr?.message}`);
         }
       }
-      // Also try multi-strategy extraction on raw text
-      const extractResult = extractJsonFromContent(text);
-      if (extractResult.status === 'success' && extractResult.data) {
-        console.log('  [Synthesis] Tier 2 (extract from raw) succeeded');
-        return ensureObject(extractResult.data);
+      if (allowRawExtractionFallback) {
+        // Also try multi-strategy extraction on raw text
+        const extractResult = extractJsonFromContent(text);
+        if (extractResult.status === 'success' && extractResult.data) {
+          const accepted = applySemanticGate(extractResult.data, 'Tier 2 (extract from raw)');
+          if (accepted) {
+            console.log(`  [${label}] Tier 2 (extract from raw) succeeded`);
+            return accepted;
+          }
+        }
       }
     }
   } catch (geminiErr) {
-    console.warn(`  [Synthesis] Tier 1 Gemini call failed: ${geminiErr?.message}`);
+    console.warn(`  [${label}] Tier 1 Gemini call failed: ${geminiErr?.message}`);
   }
 
   // Tier 3: callGemini NO jsonMode + boosted tokens (let model finish naturally)
@@ -1455,45 +1649,82 @@ async function synthesizeWithFallback(prompt, options = {}) {
       maxTokens: boostedTokens,
       jsonMode: false,
       temperature: 0.1,
+      ...(systemPrompt ? { systemPrompt } : {}),
     });
-    const text = typeof result === 'string' ? result : result?.content || '';
-    const extractResult = extractJsonFromContent(text);
-    if (extractResult.status === 'success' && extractResult.data) {
-      console.log('  [Synthesis] Tier 3 (Gemini no-jsonMode, boosted tokens) succeeded');
-      return ensureObject(extractResult.data);
-    }
-    if (text && isJsonTruncated(text)) {
-      const repaired = repairTruncatedJson(text);
-      const repairResult = extractJsonFromContent(repaired);
-      if (repairResult.status === 'success' && repairResult.data) {
-        console.log('  [Synthesis] Tier 3 (repaired) succeeded');
-        return ensureObject(repairResult.data);
-      }
-    }
-  } catch (err3) {
-    console.warn(`  [Synthesis] Tier 3 failed: ${err3?.message}`);
-  }
-
-  // Tier 4: callGeminiPro jsonMode (stronger model)
-  try {
-    const result = await callGeminiPro(prompt, { maxTokens, jsonMode, temperature: 0.2 });
     const text = typeof result === 'string' ? result : result?.content || '';
     try {
       const parsed = parseJsonResponse(text);
       if (parsed) {
-        console.log('  [Synthesis] Tier 4 (GeminiPro jsonMode) succeeded');
-        return ensureObject(parsed);
+        const accepted = applySemanticGate(parsed, 'Tier 3 (Gemini no-jsonMode strict parse)');
+        if (accepted) {
+          console.log(`  [${label}] Tier 3 (Gemini no-jsonMode strict parse) succeeded`);
+          return accepted;
+        }
       }
-    } catch (parseErr4) {
-      console.warn(`  [Synthesis] Tier 4 parse failed: ${parseErr4?.message}`);
+    } catch (parseErr3) {
+      console.warn(`  [${label}] Tier 3 strict parse failed: ${parseErr3?.message}`);
+    }
+    if (allowRawExtractionFallback) {
       const extractResult = extractJsonFromContent(text);
       if (extractResult.status === 'success' && extractResult.data) {
-        console.log('  [Synthesis] Tier 4 (extract) succeeded');
-        return ensureObject(extractResult.data);
+        const accepted = applySemanticGate(
+          extractResult.data,
+          'Tier 3 (Gemini no-jsonMode, boosted tokens)'
+        );
+        if (accepted) {
+          console.log(`  [${label}] Tier 3 (Gemini no-jsonMode, boosted tokens) succeeded`);
+          return accepted;
+        }
+      }
+      if (allowTruncationRepair && text && isJsonTruncated(text)) {
+        const repaired = repairTruncatedJson(text);
+        const repairResult = extractJsonFromContent(repaired);
+        if (repairResult.status === 'success' && repairResult.data) {
+          const accepted = applySemanticGate(repairResult.data, 'Tier 3 (repaired)');
+          if (accepted) {
+            console.log(`  [${label}] Tier 3 (repaired) succeeded`);
+            return accepted;
+          }
+        }
+      }
+    }
+  } catch (err3) {
+    console.warn(`  [${label}] Tier 3 failed: ${err3?.message}`);
+  }
+
+  // Tier 4: callGeminiPro jsonMode (stronger model)
+  try {
+    const result = await callGeminiPro(prompt, {
+      maxTokens,
+      jsonMode,
+      temperature: 0.2,
+      ...(systemPrompt ? { systemPrompt } : {}),
+    });
+    const text = typeof result === 'string' ? result : result?.content || '';
+    try {
+      const parsed = parseJsonResponse(text);
+      if (parsed) {
+        const accepted = applySemanticGate(parsed, 'Tier 4 (GeminiPro jsonMode)');
+        if (accepted) {
+          console.log(`  [${label}] Tier 4 (GeminiPro jsonMode) succeeded`);
+          return accepted;
+        }
+      }
+    } catch (parseErr4) {
+      console.warn(`  [${label}] Tier 4 parse failed: ${parseErr4?.message}`);
+      if (allowRawExtractionFallback) {
+        const extractResult = extractJsonFromContent(text);
+        if (extractResult.status === 'success' && extractResult.data) {
+          const accepted = applySemanticGate(extractResult.data, 'Tier 4 (extract)');
+          if (accepted) {
+            console.log(`  [${label}] Tier 4 (extract) succeeded`);
+            return accepted;
+          }
+        }
       }
     }
   } catch (err4) {
-    console.warn(`  [Synthesis] Tier 4 failed: ${err4?.message}`);
+    console.warn(`  [${label}] Tier 4 failed: ${err4?.message}`);
   }
 
   // Tier 5: callGeminiPro NO jsonMode (last resort, highest capability)
@@ -1503,23 +1734,44 @@ async function synthesizeWithFallback(prompt, options = {}) {
       maxTokens: boostedTokens,
       jsonMode: false,
       temperature: 0.1,
+      ...(systemPrompt ? { systemPrompt } : {}),
     });
     const text = typeof result === 'string' ? result : result?.content || '';
-    const extractResult = extractJsonFromContent(text);
-    if (extractResult.status === 'success' && extractResult.data) {
-      console.log('  [Synthesis] Tier 5 (GeminiPro no-jsonMode) succeeded');
-      return ensureObject(extractResult.data);
+    try {
+      const parsed = parseJsonResponse(text);
+      if (parsed) {
+        const accepted = applySemanticGate(parsed, 'Tier 5 (GeminiPro no-jsonMode strict parse)');
+        if (accepted) {
+          console.log(`  [${label}] Tier 5 (GeminiPro no-jsonMode strict parse) succeeded`);
+          return accepted;
+        }
+      }
+    } catch (parseErr5) {
+      console.warn(`  [${label}] Tier 5 strict parse failed: ${parseErr5?.message}`);
     }
-    if (text && isJsonTruncated(text)) {
-      const repaired = repairTruncatedJson(text);
-      const repairResult = extractJsonFromContent(repaired);
-      if (repairResult.status === 'success' && repairResult.data) {
-        console.log('  [Synthesis] Tier 5 (GeminiPro repaired) succeeded');
-        return ensureObject(repairResult.data);
+    if (allowRawExtractionFallback) {
+      const extractResult = extractJsonFromContent(text);
+      if (extractResult.status === 'success' && extractResult.data) {
+        const accepted = applySemanticGate(extractResult.data, 'Tier 5 (GeminiPro no-jsonMode)');
+        if (accepted) {
+          console.log(`  [${label}] Tier 5 (GeminiPro no-jsonMode) succeeded`);
+          return accepted;
+        }
+      }
+      if (allowTruncationRepair && text && isJsonTruncated(text)) {
+        const repaired = repairTruncatedJson(text);
+        const repairResult = extractJsonFromContent(repaired);
+        if (repairResult.status === 'success' && repairResult.data) {
+          const accepted = applySemanticGate(repairResult.data, 'Tier 5 (GeminiPro repaired)');
+          if (accepted) {
+            console.log(`  [${label}] Tier 5 (GeminiPro repaired) succeeded`);
+            return accepted;
+          }
+        }
       }
     }
   } catch (err5) {
-    console.error(`  [Synthesis] Tier 5 (final) failed: ${err5?.message}`);
+    console.error(`  [${label}] Tier 5 (final) failed: ${err5?.message}`);
   }
 
   return null;
@@ -1864,7 +2116,37 @@ Return ONLY valid JSON.`;
     }
 
     const currentPrompt = attempt === 0 ? prompt : prompt + antiArraySuffix;
-    let currentResult = await synthesizeWithFallback(currentPrompt, { maxTokens: 10240 });
+    let currentResult = await synthesizeWithFallback(currentPrompt, {
+      maxTokens: 10240,
+      label: 'synthesizePolicy',
+      allowArrayNormalization: false,
+      allowTruncationRepair: false,
+      allowRawExtractionFallback: false,
+      accept: (candidate) => {
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+          return { pass: false, reason: 'response is not a JSON object' };
+        }
+        if (candidate._wasArray) {
+          return { pass: false, reason: 'top-level array payload is not acceptable for policy' };
+        }
+        if (hasTransientTopLevelKeys(candidate)) {
+          return { pass: false, reason: 'top-level transient section keys detected' };
+        }
+        const normalized = normalizePolicySynthesisResult(candidate);
+        const hasShape =
+          Boolean(normalized?.foundationalActs) ||
+          Boolean(normalized?.nationalPolicy) ||
+          Boolean(normalized?.investmentRestrictions);
+        if (!hasShape) return { pass: false, reason: 'missing policy section structure' };
+        if (hasSemanticArtifactPayload(normalized)) {
+          return {
+            pass: false,
+            reason: 'placeholder/truncation artifact detected in policy payload',
+          };
+        }
+        return { pass: true };
+      },
+    });
 
     if (!currentResult) {
       console.warn(`  [synthesizePolicy] Attempt ${attempt} returned null`);
@@ -2027,7 +2309,36 @@ ${sectionSchemas.join(',\n')}
 Return ONLY valid JSON.`;
 
   const antiArraySuffix =
-    '\n\nCRITICAL: Your response MUST be a JSON OBJECT with curly braces {}, NOT a JSON array []. The top-level structure must be { "section_0": {...}, "section_1": {...}, ... }. Arrays will be rejected.';
+    '\n\nCRITICAL: Your response MUST be a JSON OBJECT with canonical keys { "marketSizeAndGrowth": {...}, "supplyAndDemandDynamics": {...}, "pricingAndTariffStructures": {...} }. DO NOT return a top-level JSON array. DO NOT use section_0/section_1 keys.';
+
+  const marketAccept = (candidate) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      return { pass: false, reason: 'response is not a JSON object' };
+    }
+    if (candidate._wasArray) {
+      return { pass: false, reason: 'top-level array payload is not acceptable for market' };
+    }
+    if (hasTransientTopLevelKeys(candidate)) {
+      return { pass: false, reason: 'top-level transient section keys detected' };
+    }
+    const normalized = validateMarketSynthesis(candidate);
+    const canonicalCount = CANONICAL_MARKET_SECTION_KEYS.filter(
+      (k) => normalized?.[k] && typeof normalized[k] === 'object' && !Array.isArray(normalized[k])
+    ).length;
+    if (canonicalCount < CANONICAL_MARKET_SECTION_KEYS.length) {
+      return {
+        pass: false,
+        reason: `missing canonical market sections (${canonicalCount}/${CANONICAL_MARKET_SECTION_KEYS.length})`,
+      };
+    }
+    if (hasSemanticArtifactPayload(normalized)) {
+      return {
+        pass: false,
+        reason: 'placeholder/truncation artifact detected in market payload',
+      };
+    }
+    return { pass: true };
+  };
 
   let marketResult = null;
   const MAX_MARKET_RETRIES = 3;
@@ -2037,42 +2348,69 @@ Return ONLY valid JSON.`;
 
     if (attempt === 0) {
       // Normal synthesis (Flash)
-      currentResult = await synthesizeWithFallback(prompt, { maxTokens: 16384 });
+      currentResult = await synthesizeWithFallback(prompt, {
+        maxTokens: 16384,
+        label: 'synthesizeMarket',
+        allowArrayNormalization: false,
+        allowTruncationRepair: false,
+        allowRawExtractionFallback: false,
+        accept: marketAccept,
+      });
     } else if (attempt === 1) {
       // Flash with anti-array prompt
       console.log(`  [synthesizeMarket] Retry ${attempt}: Flash with anti-array prompt`);
-      currentResult = await synthesizeWithFallback(prompt + antiArraySuffix, { maxTokens: 16384 });
+      currentResult = await synthesizeWithFallback(prompt + antiArraySuffix, {
+        maxTokens: 16384,
+        label: 'synthesizeMarket',
+        allowArrayNormalization: false,
+        allowTruncationRepair: false,
+        allowRawExtractionFallback: false,
+        accept: marketAccept,
+      });
     } else if (attempt === 2) {
-      // Pro with anti-array prompt
-      console.log(`  [synthesizeMarket] Retry ${attempt}: Pro model with anti-array prompt`);
-      const proResult = await callGeminiPro(prompt + antiArraySuffix, {
+      // Pro-lean strict retry
+      console.log(`  [synthesizeMarket] Retry ${attempt}: strict schema with pro-lean fallback`);
+      const proLeanPrompt = `${prompt}${antiArraySuffix}
+
+HARD CONSTRAINTS:
+- Return one JSON OBJECT only
+- Use canonical keys only: marketSizeAndGrowth, supplyAndDemandDynamics, pricingAndTariffStructures
+- Never return section_* or *_deepen* keys`;
+      currentResult = await synthesizeWithFallback(proLeanPrompt, {
         maxTokens: 16384,
-        jsonMode: true,
-        temperature: 0.1,
+        label: 'synthesizeMarket',
+        allowArrayNormalization: false,
+        allowTruncationRepair: false,
+        allowRawExtractionFallback: false,
+        accept: marketAccept,
+        systemPrompt:
+          'You are a strict JSON compiler. Return exactly one JSON object with canonical market keys only.',
       });
-      const proText = typeof proResult === 'string' ? proResult : proResult?.content || '';
-      try {
-        currentResult = parseJsonResponse(proText);
-      } catch {
-        const extracted = extractJsonFromContent(proText);
-        currentResult = extracted.status === 'success' ? extracted.data : null;
-      }
     } else {
-      // Pro jsonMode, minimal prompt, near-zero temp
-      console.log(`  [synthesizeMarket] Retry ${attempt}: Pro model minimal prompt, temp 0.05`);
-      const minimalPrompt = `Return a JSON object (NOT array) with keys section_0, section_1, etc. Each section has: slideTitle, subtitle, overview, keyMetrics, chartData, keyInsight, dataType.\n\nData:\n${JSON.stringify(labeledData, null, 2)}\n\n${antiArraySuffix}`;
-      const proResult = await callGeminiPro(minimalPrompt, {
+      // Minimal strict prompt
+      console.log(`  [synthesizeMarket] Retry ${attempt}: minimal strict prompt`);
+      const minimalPrompt = `Return a JSON object (NOT array) with EXACT keys:
+- "marketSizeAndGrowth"
+- "supplyAndDemandDynamics"
+- "pricingAndTariffStructures"
+
+Each key maps to an object with:
+slideTitle, subtitle, overview, keyMetrics, chartData, keyInsight, dataType, sources.
+
+Data:
+${JSON.stringify(labeledData, null, 2)}
+
+${antiArraySuffix}`;
+      currentResult = await synthesizeWithFallback(minimalPrompt, {
         maxTokens: 16384,
-        jsonMode: true,
-        temperature: 0.05,
+        label: 'synthesizeMarket',
+        allowArrayNormalization: false,
+        allowTruncationRepair: false,
+        allowRawExtractionFallback: false,
+        accept: marketAccept,
+        systemPrompt:
+          'Return one valid JSON object only with exact canonical market keys. No markdown, no explanation.',
       });
-      const proText = typeof proResult === 'string' ? proResult : proResult?.content || '';
-      try {
-        currentResult = parseJsonResponse(proText);
-      } catch {
-        const extracted = extractJsonFromContent(proText);
-        currentResult = extracted.status === 'success' ? extracted.data : null;
-      }
     }
 
     if (!currentResult) {
@@ -2080,8 +2418,20 @@ Return ONLY valid JSON.`;
       continue;
     }
 
-    const wasArray = Boolean(currentResult && currentResult._wasArray);
+    const wasArray =
+      Array.isArray(currentResult) || Boolean(currentResult && currentResult._wasArray);
     const candidate = validateMarketSynthesis(currentResult);
+    if (hasSemanticArtifactPayload(candidate)) {
+      console.warn(
+        `  [synthesizeMarket] Attempt ${attempt}: semantic artifact found after normalization, retrying...`
+      );
+      if (attempt === MAX_MARKET_RETRIES) {
+        console.error(
+          '  [synthesizeMarket] All retries exhausted with semantic artifacts in market payload'
+        );
+      }
+      continue;
+    }
     const sectionKeys = Object.keys(candidate || {}).filter(
       (k) => !k.startsWith('_') && typeof candidate[k] === 'object' && candidate[k] !== null
     );
@@ -2115,18 +2465,40 @@ Return ONLY valid JSON.`;
     }
 
     // Accept only when market structure is substantial and multi-section quantification is present.
-    if (sectionKeys.length >= 3 && quantifiedSections >= 2) {
+    const canonicalPresent = CANONICAL_MARKET_SECTION_KEYS.filter((k) => sectionKeys.includes(k));
+    const canonicalQuantified = CANONICAL_MARKET_SECTION_KEYS.filter((k) => {
+      const section = candidate?.[k] || {};
+      const keyMetrics = Array.isArray(section.keyMetrics) ? section.keyMetrics : [];
+      const hasChartSeries =
+        Array.isArray(section.chartData?.series) && section.chartData.series.length > 0;
+      const hasChartValues =
+        Array.isArray(section.chartData?.values) && section.chartData.values.length >= 3;
+      return (
+        hasChartSeries ||
+        hasChartValues ||
+        keyMetrics.length > 0 ||
+        hasNumericSignal(section.keyInsight) ||
+        hasNumericSignal(section.subtitle) ||
+        hasNumericSignal(section.overview)
+      );
+    }).length;
+
+    if (
+      canonicalPresent.length === CANONICAL_MARKET_SECTION_KEYS.length &&
+      canonicalQuantified >= 2 &&
+      quantifiedSections >= 2
+    ) {
       marketResult = candidate;
       if (attempt > 0) {
         console.log(
-          `  [synthesizeMarket] Accepted normalized payload on attempt ${attempt} (${sectionKeys.length} sections, quantified=${quantifiedSections})`
+          `  [synthesizeMarket] Accepted normalized payload on attempt ${attempt} (${canonicalPresent.length}/${CANONICAL_MARKET_SECTION_KEYS.length} canonical, quantified=${quantifiedSections}, canonicalQuantified=${canonicalQuantified})`
         );
       }
       break;
     }
 
     console.warn(
-      `  [synthesizeMarket] Attempt ${attempt}: insufficient structured sections (${sectionKeys.length}, quantified=${quantifiedSections}), retrying...`
+      `  [synthesizeMarket] Attempt ${attempt}: insufficient canonical market structure (canonical=${canonicalPresent.length}/${CANONICAL_MARKET_SECTION_KEYS.length}, quantified=${quantifiedSections}, canonicalQuantified=${canonicalQuantified}), retrying...`
     );
     if (attempt === MAX_MARKET_RETRIES) {
       console.error(
@@ -2367,12 +2739,144 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     return Object.keys(normalized).length > 0 ? normalized : out;
   }
 
+  function buildCompetitorAccept(expectedKeys, sectionLabel) {
+    return (candidate) => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        return { pass: false, reason: `${sectionLabel}: response is not a JSON object` };
+      }
+
+      const normalized = coerceCompetitorChunk(candidate, expectedKeys);
+      if (!normalized || typeof normalized !== 'object') {
+        return { pass: false, reason: `${sectionLabel}: unable to normalize competitor payload` };
+      }
+
+      const sectionCount = expectedKeys.filter(
+        (key) =>
+          normalized[key] && typeof normalized[key] === 'object' && !Array.isArray(normalized[key])
+      ).length;
+      if (sectionCount === 0) {
+        return {
+          pass: false,
+          reason: `${sectionLabel}: expected competitor sections missing after normalization`,
+        };
+      }
+
+      if (hasSemanticArtifactPayload(normalized)) {
+        return {
+          pass: false,
+          reason: `${sectionLabel}: placeholder/truncation artifact detected`,
+        };
+      }
+
+      const presentKeys = expectedKeys.filter(
+        (key) =>
+          normalized[key] && typeof normalized[key] === 'object' && !Array.isArray(normalized[key])
+      );
+      if (presentKeys.length === 0) {
+        return {
+          pass: false,
+          reason: `${sectionLabel}: normalized payload has no expected sections`,
+        };
+      }
+
+      for (const key of presentKeys) {
+        const section = normalized[key];
+        if (!section || typeof section !== 'object' || Array.isArray(section)) {
+          return { pass: false, reason: `${sectionLabel}:${key} must be an object` };
+        }
+
+        if (['japanesePlayers', 'localMajor', 'foreignPlayers'].includes(key)) {
+          const players = Array.isArray(section.players) ? section.players : [];
+          if (players.length === 0) {
+            return { pass: false, reason: `${sectionLabel}:${key} has no players` };
+          }
+
+          const viablePlayers = players
+            .map((player) => sanitizePlaceholderStrings(player))
+            .filter((player) => isViableCompetitorPlayer(player)).length;
+          if (viablePlayers === 0) {
+            return { pass: false, reason: `${sectionLabel}:${key} has no viable players` };
+          }
+
+          const title = ensureString(section.slideTitle).trim();
+          if (!title) {
+            return { pass: false, reason: `${sectionLabel}:${key} missing slideTitle` };
+          }
+
+          const insight = ensureString(
+            section.subtitle ||
+              section.marketInsight ||
+              section.concentration ||
+              section.competitiveInsight ||
+              ''
+          ).trim();
+          if (!insight) {
+            return { pass: false, reason: `${sectionLabel}:${key} missing section insight` };
+          }
+        }
+
+        if (key === 'caseStudy') {
+          const hasCaseAnchor = Boolean(
+            ensureString(section.company).trim() ||
+            ensureString(section.entryMode).trim() ||
+            ensureString(section.outcome).trim() ||
+            (Array.isArray(section.keyLessons) && section.keyLessons.length > 0)
+          );
+          if (!hasCaseAnchor) {
+            return { pass: false, reason: `${sectionLabel}:${key} missing case-study anchors` };
+          }
+        }
+
+        if (key === 'maActivity') {
+          const deals = Array.isArray(section.recentDeals) ? section.recentDeals : [];
+          const targets = Array.isArray(section.potentialTargets) ? section.potentialTargets : [];
+          if (deals.length === 0 && targets.length === 0) {
+            return {
+              pass: false,
+              reason: `${sectionLabel}:${key} missing deals/targets`,
+            };
+          }
+        }
+      }
+
+      return { pass: true };
+    };
+  }
+
   console.log('    [Competitors] Running 4 parallel synthesis calls...');
   const [r1, r2, r3, r4] = await Promise.all([
-    synthesizeWithFallback(prompt1, { maxTokens: 8192 }),
-    synthesizeWithFallback(prompt2, { maxTokens: 8192 }),
-    synthesizeWithFallback(prompt3, { maxTokens: 8192 }),
-    synthesizeWithFallback(prompt4, { maxTokens: 8192 }),
+    synthesizeWithFallback(prompt1, {
+      maxTokens: 8192,
+      label: 'synthesizeCompetitors:japanesePlayers',
+      allowArrayNormalization: false,
+      allowTruncationRepair: false,
+      allowRawExtractionFallback: false,
+      accept: buildCompetitorAccept(['japanesePlayers'], 'japanesePlayers'),
+    }),
+    synthesizeWithFallback(prompt2, {
+      maxTokens: 8192,
+      label: 'synthesizeCompetitors:localMajor',
+      allowArrayNormalization: false,
+      allowTruncationRepair: false,
+      allowRawExtractionFallback: false,
+      accept: buildCompetitorAccept(['localMajor'], 'localMajor'),
+    }),
+    synthesizeWithFallback(prompt3, {
+      maxTokens: 8192,
+      label: 'synthesizeCompetitors:foreignPlayers',
+      allowArrayNormalization: false,
+      allowTruncationRepair: false,
+      allowRawExtractionFallback: false,
+      accept: buildCompetitorAccept(['foreignPlayers'], 'foreignPlayers'),
+    }),
+    synthesizeWithFallback(prompt4, {
+      maxTokens: 8192,
+      label: 'synthesizeCompetitors:caseStudy',
+      allowArrayNormalization: false,
+      allowTruncationRepair: false,
+      allowRawExtractionFallback: false,
+      accept: buildCompetitorAccept(['caseStudy', 'maActivity'], 'caseStudy/maActivity'),
+    }),
   ]);
 
   const merged = {};
@@ -2838,7 +3342,43 @@ Return JSON:
 
 Return ONLY valid JSON.`;
 
-  const result = await synthesizeWithFallback(prompt, { maxTokens: 16384 });
+  const result = await synthesizeWithFallback(prompt, {
+    maxTokens: 16384,
+    label: 'synthesizeSummary',
+    allowArrayNormalization: false,
+    allowTruncationRepair: false,
+    allowRawExtractionFallback: false,
+    accept: (candidate) => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        return { pass: false, reason: 'summary response is not a JSON object' };
+      }
+      if (candidate._wasArray) {
+        return { pass: false, reason: 'summary payload originated from top-level array' };
+      }
+      if (hasSemanticArtifactPayload(candidate)) {
+        return {
+          pass: false,
+          reason: 'placeholder/truncation artifact detected in summary/depth payload',
+        };
+      }
+
+      const hasSummary =
+        candidate.summary &&
+        typeof candidate.summary === 'object' &&
+        !Array.isArray(candidate.summary) &&
+        Object.keys(candidate.summary).length > 0;
+      const hasDepth =
+        candidate.depth &&
+        typeof candidate.depth === 'object' &&
+        !Array.isArray(candidate.depth) &&
+        Object.keys(candidate.depth).length > 0;
+
+      if (!hasSummary && !hasDepth) {
+        return { pass: false, reason: 'summary payload missing summary and depth sections' };
+      }
+      return { pass: true };
+    },
+  });
   if (!result) {
     console.error('  [synthesizeSummary] Synthesis completely failed — no data returned');
     return {
@@ -3180,35 +3720,53 @@ Additional requirements:
 
 Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 
-  let result;
   try {
-    result = await callGemini(prompt, { maxTokens: 16384, temperature: 0.3 });
-  } catch (e) {
-    console.warn('Gemini failed for reSynthesize, retrying with GeminiPro:', e.message);
-    result = await callGeminiPro(prompt, { maxTokens: 16384, temperature: 0.3 });
-  }
-
-  try {
-    // Handle both string and object returns
-    const rawText = typeof result === 'string' ? result : result.content || '';
-    let jsonStr = rawText.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr
-        .replace(/```json?\n?/g, '')
-        .replace(/```/g, '')
-        .trim();
-    }
-    let newSynthesis;
-    try {
-      newSynthesis = JSON.parse(jsonStr);
-    } catch (parseErr) {
-      // Attempt truncation repair before giving up
-      console.warn(
-        `  [reSynthesize] JSON parse failed, attempting truncation repair: ${parseErr?.message}`
-      );
-      const repaired = repairTruncatedJson(jsonStr);
-      newSynthesis = JSON.parse(repaired);
-      console.log('  [reSynthesize] Truncation repair succeeded');
+    const newSynthesis = await synthesizeWithFallback(prompt, {
+      maxTokens: 16384,
+      label: 'reSynthesize',
+      allowArrayNormalization: false,
+      allowTruncationRepair: false,
+      allowRawExtractionFallback: false,
+      accept: (candidate) => {
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+          return { pass: false, reason: 'response is not a JSON object' };
+        }
+        if (candidate._wasArray) {
+          return { pass: false, reason: 'array-normalized payload is not acceptable' };
+        }
+        if (hasTransientTopLevelKeys(candidate)) {
+          return { pass: false, reason: 'top-level transient section keys detected' };
+        }
+        const hasPolicy =
+          candidate.policy &&
+          typeof candidate.policy === 'object' &&
+          !Array.isArray(candidate.policy);
+        const hasMarket =
+          candidate.market &&
+          typeof candidate.market === 'object' &&
+          !Array.isArray(candidate.market);
+        const hasCompetitors =
+          candidate.competitors &&
+          typeof candidate.competitors === 'object' &&
+          !Array.isArray(candidate.competitors);
+        if (!hasPolicy || !hasMarket || !hasCompetitors) {
+          return { pass: false, reason: 'missing core sections (policy/market/competitors)' };
+        }
+        if (hasSemanticArtifactPayload(candidate)) {
+          return {
+            pass: false,
+            reason: 'placeholder/truncation artifact detected in re-synthesis payload',
+          };
+        }
+        return { pass: true };
+      },
+    });
+    if (!newSynthesis) {
+      console.warn('  [reSynthesize] strict synthesis failed; keeping original synthesis');
+      return sanitizeCountryAnalysis(originalSynthesis, {
+        country,
+        researchData: originalSynthesis.rawData || {},
+      });
     }
 
     if (newSynthesis.policy && typeof newSynthesis.policy === 'object') {
@@ -5028,47 +5586,63 @@ STOP. Before you return the JSON, run this checklist:
 
 Do NOT skip this validation. If you catch yourself returning JSON without checking word counts and number counts, you're shipping shallow work.`;
 
-  let result;
-  try {
-    result = await callGemini(prompt, { maxTokens: 16384, temperature: 0.3, systemPrompt });
-  } catch (e) {
-    console.warn('Gemini failed for synthesizeSingleCountry, retrying with GeminiPro:', e.message);
-    result = await callGeminiPro(prompt, { maxTokens: 16384, temperature: 0.3, systemPrompt });
-  }
+  const synthesis = await synthesizeWithFallback(prompt, {
+    maxTokens: 16384,
+    label: 'synthesizeSingleCountry',
+    allowArrayNormalization: false,
+    allowTruncationRepair: false,
+    allowRawExtractionFallback: false,
+    systemPrompt,
+    accept: (candidate) => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        return { pass: false, reason: 'response is not a JSON object' };
+      }
+      if (candidate._wasArray) {
+        return { pass: false, reason: 'array-normalized payload is not acceptable' };
+      }
+      if (hasTransientTopLevelKeys(candidate)) {
+        return { pass: false, reason: 'top-level transient section keys detected' };
+      }
+      if (hasSemanticArtifactPayload(candidate)) {
+        return {
+          pass: false,
+          reason: 'placeholder/truncation artifact detected in single-country synthesis payload',
+        };
+      }
 
-  let synthesis;
-  try {
-    const rawText = typeof result === 'string' ? result : result.content || '';
-    let jsonStr = rawText.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr
-        .replace(/```json?\n?/g, '')
-        .replace(/```/g, '')
-        .trim();
-    }
-    try {
-      synthesis = JSON.parse(jsonStr);
-    } catch (parseErr) {
-      // Attempt truncation repair before giving up
-      console.warn(
-        `  [synthesizeSingleCountry] JSON parse failed, attempting truncation repair: ${parseErr?.message}`
-      );
-      const repaired = repairTruncatedJson(jsonStr);
-      synthesis = JSON.parse(repaired);
-      console.log('  [synthesizeSingleCountry] Truncation repair succeeded');
-    }
-    synthesis.isSingleCountry = true;
-    synthesis.country = countryAnalysis.country;
-  } catch (error) {
-    console.error('Failed to parse single country synthesis:', error?.message);
-    const rawText = typeof result === 'string' ? result : result.content || '';
+      const hasExecSummary =
+        Array.isArray(candidate.executiveSummary) && candidate.executiveSummary.length > 0;
+      const hasKeyInsights =
+        Array.isArray(candidate.keyInsights) && candidate.keyInsights.length > 0;
+      const hasCompetitivePositioning =
+        candidate.competitivePositioning &&
+        typeof candidate.competitivePositioning === 'object' &&
+        !Array.isArray(candidate.competitivePositioning);
+
+      if (!hasExecSummary) {
+        return { pass: false, reason: 'missing executiveSummary' };
+      }
+      if (!hasKeyInsights && !hasCompetitivePositioning) {
+        return {
+          pass: false,
+          reason: 'missing strategic content (keyInsights/competitivePositioning)',
+        };
+      }
+      return { pass: true };
+    },
+  });
+
+  if (!synthesis) {
+    console.error('Failed to synthesize single country output in strict mode');
     return {
       isSingleCountry: true,
       country: countryAnalysis.country,
-      executiveSummary: ['Deep analysis parsing failed - raw content available'],
-      rawContent: rawText,
+      executiveSummary: ['Deep analysis synthesis failed in strict mode'],
     };
   }
+
+  synthesis.isSingleCountry = true;
+  synthesis.country = countryAnalysis.country;
 
   // Quality score from content validation (reviewer removed — content depth validates quality)
   synthesis.qualityScore = countryAnalysis.contentValidation?.scores?.overall || 50;

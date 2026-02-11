@@ -47,6 +47,173 @@ let lastRunDiagnostics = null;
 // Latest generated PPT artifact for operational QA download.
 let lastGeneratedPpt = null;
 
+const BOOLEAN_TRUE_LITERALS = new Set(['1', 'true', 'yes', 'y', 'on']);
+const BOOLEAN_FALSE_LITERALS = new Set(['0', 'false', 'no', 'n', 'off']);
+
+function parseBooleanOption(value, fallback = null) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return fallback;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return fallback;
+    if (BOOLEAN_TRUE_LITERALS.has(normalized)) return true;
+    if (BOOLEAN_FALSE_LITERALS.has(normalized)) return false;
+  }
+  return fallback;
+}
+
+const ALLOW_DRAFT_PPT_MODE = parseBooleanOption(process.env.ALLOW_DRAFT_PPT_MODE, false) === true;
+const CANONICAL_MARKET_SECTION_KEYS = [
+  'marketSizeAndGrowth',
+  'supplyAndDemandDynamics',
+  'pricingAndTariffStructures',
+];
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function collectGateTextFragments(value, out = [], depth = 0) {
+  if (out.length >= 40 || depth > 6 || value == null) return out;
+
+  if (typeof value === 'string') {
+    const s = value.trim();
+    if (s) out.push(s);
+    return out;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    out.push(String(value));
+    return out;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 20)) {
+      collectGateTextFragments(item, out, depth + 1);
+      if (out.length >= 40) break;
+    }
+    return out;
+  }
+
+  if (typeof value !== 'object') return out;
+
+  const skipKeys = new Set([
+    'chartData',
+    'charts',
+    'sources',
+    'citations',
+    '_synthesisError',
+    '_wasArray',
+    '_meta',
+  ]);
+
+  for (const [key, child] of Object.entries(value)) {
+    if (out.length >= 40) break;
+    if (skipKeys.has(key) || String(key).startsWith('_')) continue;
+    collectGateTextFragments(child, out, depth + 1);
+  }
+
+  return out;
+}
+
+function findGateChartData(value, depth = 0) {
+  if (depth > 6 || value == null) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const hit = findGateChartData(item, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (typeof value !== 'object') return null;
+  if (value.chartData && typeof value.chartData === 'object') return value.chartData;
+  for (const child of Object.values(value)) {
+    const hit = findGateChartData(child, depth + 1);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function buildPptGateBlocks(countryAnalysis) {
+  const sections = ['policy', 'market', 'competitors', 'depth', 'insights', 'summary'];
+  const blocks = [];
+
+  for (const key of sections) {
+    const section = countryAnalysis?.[key];
+    if (!section) continue;
+
+    const fragments = collectGateTextFragments(section, []);
+    const uniqueFragments = [];
+    const seen = new Set();
+    for (const fragment of fragments) {
+      const normalized = String(fragment).toLowerCase();
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      uniqueFragments.push(fragment);
+      if (uniqueFragments.length >= 18) break;
+    }
+
+    blocks.push({
+      key,
+      type: typeof section === 'object' ? 'section' : 'value',
+      title: key,
+      content: uniqueFragments.join(' ').slice(0, 4000),
+      chartData: findGateChartData(section),
+    });
+  }
+
+  return blocks;
+}
+
+function collectPreRenderStructureIssues(countryAnalyses) {
+  const issues = [];
+  const requiredSections = ['policy', 'market', 'competitors', 'depth', 'summary'];
+
+  for (const ca of countryAnalyses || []) {
+    const country = ca?.country || 'Unknown';
+    const countryPrefix = `${country}:`;
+
+    for (const section of requiredSections) {
+      if (!isPlainObject(ca?.[section])) {
+        issues.push(`${countryPrefix} section "${section}" must be a JSON object`);
+      }
+    }
+
+    if (isPlainObject(ca)) {
+      for (const key of Object.keys(ca)) {
+        const normalized = String(key).toLowerCase();
+        if (
+          normalized.startsWith('section_') ||
+          normalized.includes('deepen') ||
+          normalized.includes('finalreview') ||
+          normalized === '_wasarray'
+        ) {
+          issues.push(`${countryPrefix} transient top-level key "${key}" is not allowed`);
+        }
+      }
+    }
+
+    if (isPlainObject(ca?.market)) {
+      const marketKeys = Object.keys(ca.market).filter((k) => !String(k).startsWith('_'));
+      const invalid = marketKeys.filter((k) => !CANONICAL_MARKET_SECTION_KEYS.includes(k));
+      if (invalid.length > 0) {
+        issues.push(`${countryPrefix} market has non-canonical sections: ${invalid.join(', ')}`);
+      }
+
+      const missing = CANONICAL_MARKET_SECTION_KEYS.filter((k) => !(k in ca.market));
+      if (missing.length > 0) {
+        issues.push(`${countryPrefix} market missing canonical sections: ${missing.join(', ')}`);
+      }
+    }
+  }
+
+  return issues;
+}
+
 // ============ MAIN ORCHESTRATOR ============
 
 async function runMarketResearch(userPrompt, email, options = {}) {
@@ -69,9 +236,13 @@ async function runMarketResearch(userPrompt, email, options = {}) {
     try {
       // Stage 1: Parse scope
       const scope = await parseScope(userPrompt);
-      const draftPptMode = Boolean(
-        options?.draftPptMode || options?.allowDraftPpt || options?.draftPpt
-      );
+      const requestedDraftPptMode = parseBooleanOption(options?.draftPptMode, false) === true;
+      const draftPptMode = Boolean(ALLOW_DRAFT_PPT_MODE && requestedDraftPptMode);
+      if (requestedDraftPptMode && !ALLOW_DRAFT_PPT_MODE) {
+        console.warn(
+          '[Quality Gate] Draft PPT mode request ignored because ALLOW_DRAFT_PPT_MODE is not enabled'
+        );
+      }
       if (options && typeof options === 'object') {
         if (
           options.templateSlideSelections &&
@@ -337,16 +508,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
 
       // Quality Gate 3: Validate PPT data completeness before rendering
       for (const ca of countryAnalyses) {
-        const sections = ['policy', 'market', 'competitors', 'depth', 'insights'].filter(
-          (s) => ca[s]
-        );
-        const blocks = sections.map((s) => ({
-          key: s,
-          type: typeof ca[s] === 'object' ? 'section' : 'unavailable',
-          title: s,
-          content: ca[s]?._synthesisError ? 'Data unavailable' : JSON.stringify(ca[s]).slice(0, 50),
-          chartData: ca[s]?.chartData || ca[s]?.tpes?.chartData || null,
-        }));
+        const blocks = buildPptGateBlocks(ca);
         const pptGate = validatePptData(blocks);
         console.log(
           `[Quality Gate] PPT data for ${ca.country}:`,
@@ -365,13 +527,25 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         }
       }
 
+      // Hard pre-render schema guard: block transient/malformed synthesis before PPT renderer sees it.
+      const preRenderStructureIssues = collectPreRenderStructureIssues(countryAnalyses);
+      if (preRenderStructureIssues.length > 0) {
+        const issueSummary = preRenderStructureIssues.slice(0, 12).join(' | ');
+        if (lastRunDiagnostics) {
+          lastRunDiagnostics.stage = 'pre_render_structure_failed';
+          lastRunDiagnostics.preRenderStructureIssues = preRenderStructureIssues.slice(0, 50);
+          lastRunDiagnostics.error = `Pre-render structure gate failed: ${issueSummary}`;
+        }
+        throw new Error(`Pre-render structure gate failed: ${issueSummary}`);
+      }
+
       // Stage 4: Generate PPT
       const pptBuffer = await generatePPT(finalSynthesis, countryAnalyses, scope);
       const pptMetrics = (pptBuffer && (pptBuffer.__pptMetrics || pptBuffer.pptMetrics)) || null;
 
-      // Content-first policy:
-      // Formatting deviations are logged as warnings, not hard failures.
-      // We only hard-fail on catastrophic rendering loss (too many failed blocks).
+      // Formatting fidelity policy:
+      // Hard-fail on structural render loss and template-fidelity regressions.
+      // Overflow remains warning-level to preserve content depth.
       if (pptMetrics) {
         const templateTotal = Number(pptMetrics.templateTotal || 0);
         const failureCount = Number(pptMetrics.slideRenderFailureCount || 0);
@@ -388,32 +562,35 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           );
         }
 
+        const formattingFailures = [];
         const formattingWarnings = [];
-        if (Number(pptMetrics.templateCoverage || 0) < 90) {
-          formattingWarnings.push(`templateCoverage=${pptMetrics.templateCoverage}%`);
+        if (Number(pptMetrics.templateCoverage || 0) < 95) {
+          formattingFailures.push(`templateCoverage=${pptMetrics.templateCoverage}%`);
         }
         if (Number(pptMetrics.tableRecoveryCount || 0) > 0) {
-          formattingWarnings.push(`tableRecoveries=${pptMetrics.tableRecoveryCount}`);
+          formattingFailures.push(`tableRecoveries=${pptMetrics.tableRecoveryCount}`);
         }
         if (Number(pptMetrics.nonTemplatePatternCount || 0) > 0) {
-          formattingWarnings.push(`nonTemplatePatterns=${pptMetrics.nonTemplatePatternCount}`);
+          formattingFailures.push(`nonTemplatePatterns=${pptMetrics.nonTemplatePatternCount}`);
         }
         if (Number(pptMetrics.geometryIssueCount || 0) > 0) {
-          formattingWarnings.push(`geometryIssues=${pptMetrics.geometryIssueCount}`);
+          formattingFailures.push(`geometryIssues=${pptMetrics.geometryIssueCount}`);
         }
-        if (Number(pptMetrics.geometryMaxDelta || 0) > 0.15) {
-          formattingWarnings.push(`geometryMaxDelta=${pptMetrics.geometryMaxDelta}`);
+        if (Number(pptMetrics.geometryMaxDelta || 0) > 0.1) {
+          formattingFailures.push(`geometryMaxDelta=${pptMetrics.geometryMaxDelta}`);
         }
+        // Overflow and other non-critical warnings remain warning-level by design.
         if (Number(pptMetrics.formattingAuditWarningCount || 0) > 0) {
           formattingWarnings.push(`formatAuditWarnings=${pptMetrics.formattingAuditWarningCount}`);
         }
+        if (formattingFailures.length > 0) {
+          throw new Error(`PPT formatting fidelity failed: ${formattingFailures.join(', ')}`);
+        }
         if (formattingWarnings.length > 0) {
-          console.warn(
-            `[Quality Gate] Formatting warnings (content-first mode): ${formattingWarnings.join(', ')}`
-          );
-          if (lastRunDiagnostics) {
-            lastRunDiagnostics.formattingWarnings = formattingWarnings;
-          }
+          console.warn(`[Quality Gate] Formatting warnings: ${formattingWarnings.join(', ')}`);
+        }
+        if (lastRunDiagnostics) {
+          lastRunDiagnostics.formattingWarnings = formattingWarnings;
         }
       }
 
@@ -606,16 +783,8 @@ app.get('/health', (req, res) => {
 
 // Main research endpoint
 app.post('/api/market-research', async (req, res) => {
-  const {
-    prompt,
-    email,
-    options,
-    templateSlideSelections,
-    templateStrictMode,
-    draftPpt,
-    draftPptMode,
-    allowDraftPpt,
-  } = req.body;
+  const { prompt, email, options, templateSlideSelections, templateStrictMode, draftPptMode } =
+    req.body;
 
   if (!prompt || !email) {
     return res.status(400).json({ error: 'Missing required fields: prompt, email' });
@@ -650,15 +819,15 @@ app.post('/api/market-research', async (req, res) => {
   if (typeof templateStrictMode === 'boolean') {
     mergedOptions.templateStrictMode = templateStrictMode;
   }
-  if (typeof draftPpt === 'boolean') {
-    mergedOptions.draftPpt = draftPpt;
+  const parsedDraftPptMode = parseBooleanOption(draftPptMode, null);
+  if (parsedDraftPptMode !== null) {
+    mergedOptions.draftPptMode = ALLOW_DRAFT_PPT_MODE ? parsedDraftPptMode : false;
+    if (parsedDraftPptMode && !ALLOW_DRAFT_PPT_MODE) {
+      console.warn('[API] Ignoring draftPptMode=true because ALLOW_DRAFT_PPT_MODE is disabled');
+    }
   }
-  if (typeof draftPptMode === 'boolean') {
-    mergedOptions.draftPptMode = draftPptMode;
-  }
-  if (typeof allowDraftPpt === 'boolean') {
-    mergedOptions.allowDraftPpt = allowDraftPpt;
-  }
+  // Legacy aliases intentionally ignored to prevent accidental readiness bypass.
+  // Draft mode now requires explicit `draftPptMode=true`.
   Promise.race([runMarketResearch(prompt, email, mergedOptions), timeoutPromise])
     .then(() => {
       clearTimeout(timeoutId);
