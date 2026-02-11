@@ -264,8 +264,15 @@ function safeAddTable(slide, rows, options = {}, context = 'table') {
     console.warn(`[PPT] ${context}: invalid rows, skipping table`);
     return false;
   }
+  const addOptions = options && typeof options === 'object' ? { ...options } : options;
+  if (addOptions && typeof addOptions === 'object') {
+    // Keep table layout deterministic across runs and template-conformant.
+    delete addOptions.autoPage;
+    delete addOptions.autoPageRepeatHeader;
+    delete addOptions.autoPageHeaderRows;
+  }
   try {
-    slide.addTable(normalizedRows, options);
+    slide.addTable(normalizedRows, addOptions);
     return true;
   } catch (err) {
     console.warn(`[PPT] ${context}: addTable failed (${err.message})`);

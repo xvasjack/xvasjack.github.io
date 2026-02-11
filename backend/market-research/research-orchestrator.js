@@ -263,22 +263,32 @@ Return ONLY valid JSON.`;
 async function fillResearchGaps(gaps, country, industry) {
   console.log(`  [Filling research gaps for ${country}...]`);
   const additionalData = { gapResearch: [], verificationResearch: [] };
-  const MIN_GAP_FINDING_CHARS = 1200;
-  const MIN_VERIFY_FINDING_CHARS = 600;
-  const MIN_FINDING_CITATIONS = 2;
+  const MIN_GAP_FINDING_CHARS = 900;
+  const MIN_VERIFY_FINDING_CHARS = 450;
+  const MIN_FINDING_CITATIONS = 1;
+  const numericSignalCount = (text) => {
+    if (!text) return 0;
+    const matches = String(text).match(
+      /\$[\d,.]+[BMKbmk]?|\d+(\.\d+)?%|\d{4}|\d+(\.\d+)?x|\b\d{1,3}(?:,\d{3})+\b/g
+    );
+    return matches ? matches.length : 0;
+  };
 
   // Research critical gaps with Gemini
   const criticalGaps = gaps.criticalGaps || [];
-  for (const gap of criticalGaps.slice(0, 4)) {
-    // Limit to 4 most critical
+  for (const gap of criticalGaps.slice(0, 6)) {
+    // Limit to 6 most critical to improve convergence on low-score runs
     if (!gap.searchQuery) continue;
     console.log(`    Gap search: ${gap.gap.substring(0, 50)}...`);
 
     const result = await callGeminiResearch(gap.searchQuery, country, industry);
     const contentLength = (result.content || '').length;
     const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
+    const numericSignals = numericSignalCount(result.content || '');
     const usableGapFinding =
-      contentLength >= MIN_GAP_FINDING_CHARS || citationsCount >= MIN_FINDING_CITATIONS;
+      contentLength >= MIN_GAP_FINDING_CHARS ||
+      citationsCount >= MIN_FINDING_CITATIONS ||
+      (contentLength >= 600 && numericSignals >= 4);
     if (result.content && usableGapFinding) {
       additionalData.gapResearch.push({
         area: gap.area,
@@ -289,7 +299,7 @@ async function fillResearchGaps(gaps, country, industry) {
       });
     } else if (result.content) {
       console.warn(
-        `    Gap search returned thin content (${contentLength} chars, ${citationsCount} citations) — skipping low-signal result`
+        `    Gap search returned thin content (${contentLength} chars, ${citationsCount} citations, ${numericSignals} numeric signals) — skipping low-signal result`
       );
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -305,8 +315,11 @@ async function fillResearchGaps(gaps, country, industry) {
     const result = await callGeminiResearch(item.searchQuery, country, industry);
     const contentLength = (result.content || '').length;
     const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
+    const numericSignals = numericSignalCount(result.content || '');
     const usableVerification =
-      contentLength >= MIN_VERIFY_FINDING_CHARS || citationsCount >= MIN_FINDING_CITATIONS;
+      contentLength >= MIN_VERIFY_FINDING_CHARS ||
+      citationsCount >= MIN_FINDING_CITATIONS ||
+      (contentLength >= 300 && numericSignals >= 2);
     if (result.content && usableVerification) {
       additionalData.verificationResearch.push({
         claim: item.claim,
@@ -316,10 +329,32 @@ async function fillResearchGaps(gaps, country, industry) {
       });
     } else if (result.content) {
       console.warn(
-        `    Verification returned thin content (${contentLength} chars, ${citationsCount} citations) — skipping low-signal result`
+        `    Verification returned thin content (${contentLength} chars, ${citationsCount} citations, ${numericSignals} numeric signals) — skipping low-signal result`
       );
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  // Recovery path: if all gap findings were rejected as thin, do 1-2 official-source refreshes.
+  if (additionalData.gapResearch.length === 0 && criticalGaps.length > 0) {
+    console.warn('    No usable gap fills collected — running targeted recovery queries');
+    for (const gap of criticalGaps.slice(0, 2)) {
+      if (!gap.searchQuery) continue;
+      const recoveryQuery = `${gap.searchQuery} official government report regulator annual report`;
+      const result = await callGeminiResearch(recoveryQuery, country, industry);
+      const contentLength = (result.content || '').length;
+      const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
+      if (result.content && (contentLength >= 500 || citationsCount >= 1)) {
+        additionalData.gapResearch.push({
+          area: gap.area,
+          gap: `${gap.gap} (recovery)`,
+          query: recoveryQuery,
+          findings: result.content,
+          citations: result.citations || [],
+        });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
   }
 
   console.log(
@@ -1765,6 +1800,14 @@ Return ONLY valid JSON.`;
  * Validate content depth before allowing PPT generation
  * Returns { valid: boolean, failures: string[], scores: {} }
  */
+const NUMERIC_SIGNAL_REGEX =
+  /\$[\d,.]+[BMKbmk]?|\d+(\.\d+)?%|\d{4}|\d+(\.\d+)?x|\b\d{1,3}(?:,\d{3})+\b/;
+
+function hasNumericSignal(value) {
+  if (value == null) return false;
+  return NUMERIC_SIGNAL_REGEX.test(String(value));
+}
+
 function validateContentDepth(synthesis) {
   const failures = [];
   const scores = { policy: 0, market: 0, competitors: 0, overall: 0 };
@@ -1779,35 +1822,85 @@ function validateContentDepth(synthesis) {
   if (targets.length >= 2) scores.policy += 30;
   if (policy.investmentRestrictions?.incentives?.length >= 1) scores.policy += 30;
 
-  // Market check: ≥3 data series with ≥3 points (dynamic section discovery)
+  // Market check: score both chart rigor and quantitative evidence in key metrics.
+  // Some high-quality market sections are table/metric driven (not only chart driven),
+  // so we evaluate both to avoid false low scores.
   const market = synthesis.market || {};
   const marketSections = Object.keys(market).filter(
     (k) => !k.startsWith('_') && typeof market[k] === 'object' && market[k] !== null
   );
   let seriesCount = 0;
+  let sectionsWithCharts = 0;
+  let numericMetricsCount = 0;
+  let sectionsWithQuantSignals = 0;
   for (const section of marketSections) {
+    const sectionData = market[section] || {};
     const chartData = market[section]?.chartData;
+    let sectionHasChart = false;
+    let sectionHasNumbers = false;
     if (chartData) {
       if (chartData.series && Array.isArray(chartData.series)) {
         const validSeries = chartData.series.filter(
           (s) => Array.isArray(s.values) && s.values.length >= 3
         );
         seriesCount += validSeries.length;
+        if (validSeries.length > 0) sectionHasChart = true;
       } else if (
         chartData.values &&
         Array.isArray(chartData.values) &&
         chartData.values.length >= 3
       ) {
         seriesCount++;
+        sectionHasChart = true;
       }
     }
+    if (sectionHasChart) sectionsWithCharts++;
+
+    const keyMetrics = Array.isArray(sectionData.keyMetrics) ? sectionData.keyMetrics : [];
+    for (const metric of keyMetrics) {
+      if (!metric || typeof metric !== 'object') continue;
+      if (
+        hasNumericSignal(metric.value) ||
+        hasNumericSignal(metric.metric) ||
+        hasNumericSignal(metric.context)
+      ) {
+        numericMetricsCount++;
+        sectionHasNumbers = true;
+      }
+    }
+
+    if (
+      hasNumericSignal(sectionData.overview) ||
+      hasNumericSignal(sectionData.keyInsight) ||
+      hasNumericSignal(sectionData.subtitle)
+    ) {
+      sectionHasNumbers = true;
+    }
+    if (sectionHasChart || sectionHasNumbers) sectionsWithQuantSignals++;
   }
-  if (seriesCount >= 3) scores.market = 70;
-  else if (seriesCount >= 1) scores.market = 40;
-  else failures.push(`Market: only ${seriesCount} valid data series (need ≥3)`);
-  // Bonus points if any section has market size data
-  const hasMarketSize = marketSections.some((s) => market[s]?.marketSize);
-  if (hasMarketSize) scores.market += 30;
+
+  if (marketSections.length >= 3) scores.market += 20;
+  else if (marketSections.length >= 2) scores.market += 10;
+  else failures.push(`Market: only ${marketSections.length} section(s) synthesized (need ≥3)`);
+
+  if (seriesCount >= 4) scores.market += 40;
+  else if (seriesCount >= 2) scores.market += 30;
+  else if (seriesCount >= 1) scores.market += 20;
+
+  if (numericMetricsCount >= 8) scores.market += 30;
+  else if (numericMetricsCount >= 5) scores.market += 25;
+  else if (numericMetricsCount >= 3) scores.market += 15;
+  else if (numericMetricsCount >= 1) scores.market += 8;
+
+  if (sectionsWithQuantSignals >= 3) scores.market += 10;
+  else if (sectionsWithQuantSignals >= 2) scores.market += 5;
+
+  scores.market = Math.min(100, scores.market);
+  if (scores.market < 60) {
+    failures.push(
+      `Market: low quantitative depth (score=${scores.market}, sections=${marketSections.length}, series=${seriesCount}, metricSignals=${numericMetricsCount})`
+    );
+  }
 
   // Competitors check: ≥3 companies with details AND word count validation (45-60 words)
   const competitors = synthesis.competitors || {};
@@ -1848,11 +1941,13 @@ function validateContentDepth(synthesis) {
   // Strategic insights validation: check structured fields (data, implication, timing)
   const summary = synthesis.summary || {};
   const insights = summary.keyInsights || [];
+  if (insights.length < 3) {
+    failures.push(`Strategic: only ${insights.length} key insights (need ≥3)`);
+  }
   let completeInsights = 0;
   for (const insight of insights) {
     // Check structured fields: data (contains number), implication (action verb), timing (exists)
-    const hasData =
-      insight.data && /\$[\d,.]+[BMKbmk]?|\d+(\.\d+)?%|\d{4}|\d+(\.\d+)?x/.test(insight.data);
+    const hasData = insight.data && hasNumericSignal(insight.data);
     const hasAction =
       insight.implication &&
       /should|recommend|target|prioritize|position|initiate/i.test(insight.implication);
@@ -1874,6 +1969,12 @@ function validateContentDepth(synthesis) {
 
   // Partner descriptions validation (from depth.partnerAssessment)
   const depth = synthesis.summary?.depth || synthesis.depth || {};
+  const roadmapPhases = depth.implementation?.phases || [];
+  if (!Array.isArray(roadmapPhases) || roadmapPhases.length < 3) {
+    failures.push(
+      `Depth: implementation roadmap has ${Array.isArray(roadmapPhases) ? roadmapPhases.length : 0} phase(s) (need ≥3)`
+    );
+  }
   const partners = depth.partnerAssessment?.partners || [];
   let thinPartners = 0;
   let longPartners = 0;
@@ -3025,7 +3126,62 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       break;
     }
 
-    const criticalGapCount = (gaps.criticalGaps || []).filter((g) => g.priority === 'high').length;
+    if (!Array.isArray(gaps.criticalGaps)) gaps.criticalGaps = [];
+
+    // Inject gate-driven research tasks when the code gate is below threshold.
+    // This prevents reviewer/model drift where "confidence" is high but concrete
+    // market/policy/competitor data is still missing for the hard gate.
+    if (effectiveScore < MIN_CONFIDENCE_SCORE && codeGateFailures.length > 0) {
+      const existingQueries = new Set(
+        gaps.criticalGaps
+          .map((g) =>
+            String(g?.searchQuery || '')
+              .trim()
+              .toLowerCase()
+          )
+          .filter(Boolean)
+      );
+      const gateDriven = [];
+      for (const failure of codeGateFailures.slice(0, 4)) {
+        const lower = String(failure || '').toLowerCase();
+        let area = 'cross-section';
+        let searchQuery = `${country} ${industry} official statistics market size policy competitors ${new Date().getFullYear()}`;
+
+        if (lower.startsWith('policy')) {
+          area = 'policy';
+          searchQuery = `${country} ${industry} law decree regulation licensing foreign ownership official gazette ${new Date().getFullYear()}`;
+        } else if (lower.startsWith('market')) {
+          area = 'market';
+          searchQuery = `${country} ${industry} market size demand supply pricing by year official statistics ${new Date().getFullYear()}`;
+        } else if (lower.startsWith('competitors')) {
+          area = 'competitors';
+          searchQuery = `${country} ${industry} top companies revenue market share key projects ${new Date().getFullYear()}`;
+        } else if (lower.startsWith('strategic')) {
+          area = 'summary';
+          searchQuery = `${country} ${industry} trigger timeline catalyst project milestones ${new Date().getFullYear()} ${new Date().getFullYear() + 1}`;
+        } else if (lower.startsWith('depth') || lower.startsWith('partners')) {
+          area = 'depth';
+          searchQuery = `${country} ${industry} entry strategy implementation roadmap partner shortlist contracts ${new Date().getFullYear()}`;
+        }
+
+        const normQuery = searchQuery.trim().toLowerCase();
+        if (existingQueries.has(normQuery)) continue;
+        existingQueries.add(normQuery);
+        gateDriven.push({
+          area,
+          gap: `Gate failure follow-up: ${failure}`,
+          searchQuery,
+          priority: 'high',
+          impactOnScore: 'high',
+          _gateDriven: true,
+        });
+      }
+      if (gateDriven.length > 0) {
+        gaps.criticalGaps = [...gateDriven, ...gaps.criticalGaps].slice(0, 8);
+      }
+    }
+
+    let criticalGapCount = (gaps.criticalGaps || []).filter((g) => g.priority === 'high').length;
     const verificationCount = (gaps.dataToVerify || []).length;
     if (criticalGapCount === 0 && verificationCount === 0) {
       if (effectiveScore < MIN_CONFIDENCE_SCORE) {
@@ -3041,6 +3197,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             impactOnScore: 'high',
           },
         ];
+        criticalGapCount = 1;
       } else {
         console.log(`    ✓ No actionable gaps found (score: ${confidenceScore}/100) - stopping`);
         break;

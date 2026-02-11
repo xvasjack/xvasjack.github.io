@@ -210,6 +210,21 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       // Depth/readiness gate: block clearly weak outputs before synthesis/PPT generation.
       const notReadyCountries = countryAnalyses.filter((ca) => ca && ca.readyForClient === false);
       if (notReadyCountries.length > 0) {
+        const notReadyDiagnostics = notReadyCountries.map((ca) => ({
+          country: ca.country,
+          effectiveScore: Number(ca?.readiness?.effectiveScore || 0),
+          confidenceScore: Number(ca?.readiness?.confidenceScore || 0),
+          finalConfidenceScore: Number(ca?.readiness?.finalConfidenceScore || 0),
+          codeGateScore: Number(ca?.readiness?.codeGateScore || 0),
+          finalReviewCoherence: Number(ca?.readiness?.finalReviewCoherence || 0),
+          finalReviewCritical: Number(ca?.readiness?.finalReviewCritical || 0),
+          finalReviewMajor: Number(ca?.readiness?.finalReviewMajor || 0),
+          finalReviewOpenGaps: Number(ca?.readiness?.finalReviewOpenGaps || 0),
+          readinessReasons: Array.isArray(ca?.readiness?.reasons) ? ca.readiness.reasons : [],
+          synthesisFailures: Array.isArray(ca?.contentValidation?.failures)
+            ? ca.contentValidation.failures
+            : [],
+        }));
         const list = notReadyCountries
           .map((ca) => {
             const score = Number(ca?.readiness?.effectiveScore || 0);
@@ -217,6 +232,11 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             return `${ca.country} (effective=${score}, coherence=${coherence})`;
           })
           .join(', ');
+        if (lastRunDiagnostics) {
+          lastRunDiagnostics.stage = 'quality_gate_failed';
+          lastRunDiagnostics.notReadyCountries = notReadyDiagnostics;
+          lastRunDiagnostics.error = `Country analysis quality gate failed: ${list}. Refusing to generate deck below required quality threshold (>=80).`;
+        }
         console.warn(`[Quality Gate] Countries not fully ready: ${list}`);
         throw new Error(
           `Country analysis quality gate failed: ${list}. Refusing to generate deck below required quality threshold (>=80).`
@@ -399,6 +419,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
     } catch (error) {
       console.error('Market research failed:', error);
       lastRunDiagnostics = {
+        ...(lastRunDiagnostics || {}),
         timestamp: new Date().toISOString(),
         stage: 'error',
         error: error.message,

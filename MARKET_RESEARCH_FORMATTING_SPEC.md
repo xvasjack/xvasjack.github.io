@@ -4,6 +4,29 @@ This document provides formatting rules for the Market Research tool to match YC
 
 ---
 
+## 0. Project Escort Hard Requirements (2026-02-11)
+
+These are non-negotiable delivery rules for the market-research pipeline.
+
+1. Template fidelity must be slide-repository driven.
+- Maintain a 20-30 slide template repository with extracted per-slide geometry/style metadata.
+- Slide generation must select from this repository and render using extracted coordinates/styles.
+- Target is pixel-level consistency with selected template slides (not approximate similarity).
+
+2. Content quality threshold is minimum 80/100.
+- Decks must clear a hard quality gate of >=80 effective score before delivery.
+- Storyline must be insightful (clear "why now", causal logic, and actionable recommendations).
+
+3. Post-fix verification protocol is mandatory.
+- After each fix, run 2 additional verification passes to confirm the root cause is actually resolved.
+- Use up to 5 total refinement/fix rounds for a run.
+
+4. Root-cause standard: no assumption-based fixes.
+- Diagnose with concrete evidence from diagnostics/logs/output artifacts.
+- If evidence is missing, improve diagnostics first, then re-run.
+
+---
+
 ## 1. FONT SPECIFICATIONS
 
 | Element | Font | Size | Weight | Color |

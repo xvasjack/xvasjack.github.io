@@ -795,8 +795,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   function safeAddTable(slide, rows, options = {}, context = 'table') {
     const normalizedRows = normalizeTableRows(rows, context);
     if (!normalizedRows) return false;
-    const hadAutoPage = !!(options && options.autoPage);
     const addOptions = options && typeof options === 'object' ? { ...options } : options;
+    const hadAutoPage =
+      addOptions &&
+      typeof addOptions === 'object' &&
+      (Object.prototype.hasOwnProperty.call(addOptions, 'autoPage') ||
+        Object.prototype.hasOwnProperty.call(addOptions, 'autoPageRepeatHeader') ||
+        Object.prototype.hasOwnProperty.call(addOptions, 'autoPageHeaderRows'));
+    if (addOptions && typeof addOptions === 'object') {
+      // Enforce deterministic template geometry: auto-paging can mutate layout and
+      // has known intermittent failures in pptxgenjs. We disable it at source.
+      delete addOptions.autoPage;
+      delete addOptions.autoPageRepeatHeader;
+      delete addOptions.autoPageHeaderRows;
+      if (hadAutoPage) {
+        console.log(`[PPT] ${context}: stripped autoPage flags for deterministic rendering`);
+      }
+    }
     const shouldAlignToTemplate =
       typeof addOptions === 'object' &&
       TABLE_TEMPLATE_CONTEXTS.has(context) &&
@@ -838,30 +853,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       slide.addTable(normalizedRows, addOptions);
       return true;
     } catch (err) {
-      // Known pptxgenjs edge case: autoPage can fail internally even with valid rows.
-      // Retry once without auto-page flags to keep the deck valid.
-      if (hadAutoPage) {
-        const retryOptions = { ...options };
-        delete retryOptions.autoPage;
-        delete retryOptions.autoPageRepeatHeader;
-        delete retryOptions.autoPageHeaderRows;
-        try {
-          slide.addTable(normalizedRows, retryOptions);
-          console.warn(`[PPT] ${context}: addTable recovered by disabling autoPage`);
-          templateUsageStats.tableRecoveries.push({ key: context });
-          return true;
-        } catch (retryErr) {
-          console.error(
-            `[PPT] ${context} addTable retry failed: ${retryErr.message} | rows=${normalizedRows.length}`
-          );
-          templateUsageStats.slideRenderFailures.push({
-            key: context,
-            pattern: 'table',
-            error: retryErr.message,
-          });
-          return false;
-        }
-      }
       console.error(
         `[PPT] ${context} addTable failed: ${err.message} | rows=${normalizedRows.length}`
       );
