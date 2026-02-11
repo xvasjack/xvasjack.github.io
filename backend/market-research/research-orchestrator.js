@@ -1682,7 +1682,7 @@ DO NOT fabricate data. DO NOT estimate from training knowledge.
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
 - If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
-- Example: If asked for "${industry} market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Example: If asked for "${industry} market size" and you only know "country GDP is $500B" — return null, not the GDP figure
 - Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
@@ -1753,16 +1753,28 @@ Return ONLY valid JSON.`;
     const wasArray = Boolean(currentResult && currentResult._wasArray);
     currentResult = normalizePolicySynthesisResult(currentResult);
     const candidate = validatePolicySynthesis(currentResult);
-    const sectionCount = ['foundationalActs', 'nationalPolicy', 'investmentRestrictions'].filter(
-      (key) => candidate?.[key] && typeof candidate[key] === 'object'
+    const actsCount = Array.isArray(candidate?.foundationalActs?.acts)
+      ? candidate.foundationalActs.acts.filter((a) => a?.name && a?.year).length
+      : 0;
+    const targetsCount = Array.isArray(candidate?.nationalPolicy?.targets)
+      ? candidate.nationalPolicy.targets.filter((t) => t && (t.metric || t.target || t.deadline))
+          .length
+      : 0;
+    const incentivesCount = Array.isArray(candidate?.investmentRestrictions?.incentives)
+      ? candidate.investmentRestrictions.incentives.filter(
+          (i) => i && (i.name || i.scheme || i.benefit || i.eligibility)
+        ).length
+      : 0;
+    const evidenceSections = [actsCount > 0, targetsCount > 0, incentivesCount > 0].filter(
+      Boolean
     ).length;
 
-    // Accept normalized salvage immediately when core policy structure is present.
-    if (sectionCount >= 2) {
+    // Accept only when policy content has evidence-backed structure, not just object shells.
+    if (evidenceSections >= 3 || (evidenceSections >= 2 && actsCount >= 2)) {
       policyResult = candidate;
       if (attempt > 0 || wasArray) {
         console.log(
-          `  [synthesizePolicy] Accepted normalized payload on attempt ${attempt} (${sectionCount} sections)`
+          `  [synthesizePolicy] Accepted normalized payload on attempt ${attempt} (acts=${actsCount}, targets=${targetsCount}, incentives=${incentivesCount})`
         );
       }
       break;
@@ -1777,12 +1789,13 @@ Return ONLY valid JSON.`;
     }
 
     console.warn(
-      `  [synthesizePolicy] Attempt ${attempt}: only ${sectionCount} expected section(s), retrying...`
+      `  [synthesizePolicy] Attempt ${attempt}: insufficient policy evidence (acts=${actsCount}, targets=${targetsCount}, incentives=${incentivesCount}), retrying...`
     );
     if (attempt === MAX_POLICY_RETRIES) {
       console.warn(
-        '  [synthesizePolicy] All retries exhausted, accepting partial normalized result'
+        '  [synthesizePolicy] All retries exhausted; accepting weak policy payload for explicit gate failure visibility'
       );
+      candidate._weakPolicy = true;
       policyResult = candidate;
       break;
     }
@@ -1969,8 +1982,8 @@ Return ONLY valid JSON.`;
       );
     }).length;
 
-    // Accept normalized payload when structure is present and at least one section is quantified.
-    if (sectionKeys.length >= 2 && quantifiedSections >= 1) {
+    // Accept only when market structure is substantial and multi-section quantification is present.
+    if (sectionKeys.length >= 3 && quantifiedSections >= 2) {
       marketResult = candidate;
       if (attempt > 0 || wasArray) {
         console.log(
@@ -1986,8 +1999,9 @@ Return ONLY valid JSON.`;
       );
       if (attempt === MAX_MARKET_RETRIES) {
         console.warn(
-          '  [synthesizeMarket] Retries exhausted; accepting normalized salvage payload'
+          '  [synthesizeMarket] Retries exhausted; accepting weak normalized salvage payload for explicit gate failure visibility'
         );
+        candidate._weakMarket = true;
         marketResult = candidate;
       }
       continue;
@@ -1997,7 +2011,10 @@ Return ONLY valid JSON.`;
       `  [synthesizeMarket] Attempt ${attempt}: insufficient structured sections (${sectionKeys.length}, quantified=${quantifiedSections}), retrying...`
     );
     if (attempt === MAX_MARKET_RETRIES) {
-      console.warn('  [synthesizeMarket] All retries exhausted, accepting thin normalized result');
+      console.warn(
+        '  [synthesizeMarket] All retries exhausted; accepting weak market payload for explicit gate failure visibility'
+      );
+      candidate._weakMarket = true;
       marketResult = candidate;
       break;
     }
@@ -2051,7 +2068,7 @@ DO NOT fabricate data. DO NOT estimate from training knowledge.
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
 - If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
-- Example: If asked for "${industry} market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Example: If asked for "${industry} market size" and you only know "country GDP is $500B" — return null, not the GDP figure
 - Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
@@ -2603,7 +2620,7 @@ DO NOT fabricate data. DO NOT estimate from training knowledge.
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
 - If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
-- Example: If asked for "${industry} market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Example: If asked for "${industry} market size" and you only know "country GDP is $500B" — return null, not the GDP figure
 - Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
@@ -2728,7 +2745,7 @@ function hasNumericSignal(value) {
 
 function validateContentDepth(synthesis) {
   const failures = [];
-  const scores = { policy: 0, market: 0, competitors: 0, overall: 0 };
+  const scores = { policy: 0, market: 0, competitors: 0, summary: 0, depth: 0, overall: 0 };
 
   // Policy check: ≥3 named regulations with years
   const policy = synthesis.policy || {};
@@ -2886,6 +2903,21 @@ function validateContentDepth(synthesis) {
       `Strategic: only ${completeInsights}/${insights.length} insights complete (need ≥60% with data+action+timing)`
     );
   }
+  if (insights.length >= 5) scores.summary += 40;
+  else if (insights.length >= 3) scores.summary += 30;
+  else if (insights.length >= 2) scores.summary += 15;
+  const completeInsightRatio = insights.length > 0 ? completeInsights / insights.length : 0;
+  if (completeInsightRatio >= 0.8) scores.summary += 40;
+  else if (completeInsightRatio >= 0.6) scores.summary += 30;
+  else if (completeInsightRatio >= 0.4) scores.summary += 15;
+  const insightWithTiming = insights.filter(
+    (insight) =>
+      insight?.timing &&
+      /(Q[1-4]|20\d{2}|month|week|window|before|by|after)/i.test(String(insight.timing))
+  ).length;
+  if (insightWithTiming >= 3) scores.summary += 20;
+  else if (insightWithTiming >= 2) scores.summary += 10;
+  scores.summary = Math.min(100, scores.summary);
 
   // Partner descriptions validation (from depth.partnerAssessment)
   const depth = synthesis.summary?.depth || synthesis.depth || {};
@@ -2916,13 +2948,27 @@ function validateContentDepth(synthesis) {
       `  [Validation] Partners warning: ${longPartners}/${partners.length} descriptions >60 words (overflow tolerated, consider trimming)`
     );
   }
+  if (Array.isArray(roadmapPhases) && roadmapPhases.length >= 4) scores.depth += 50;
+  else if (Array.isArray(roadmapPhases) && roadmapPhases.length >= 3) scores.depth += 35;
+  else if (Array.isArray(roadmapPhases) && roadmapPhases.length >= 2) scores.depth += 20;
+  if (partners.length >= 5) scores.depth += 35;
+  else if (partners.length >= 3) scores.depth += 25;
+  else if (partners.length >= 1) scores.depth += 10;
+  if (partners.length > 0) {
+    const healthyPartnerRatio = 1 - thinPartners / partners.length;
+    if (healthyPartnerRatio >= 0.8) scores.depth += 15;
+    else if (healthyPartnerRatio >= 0.6) scores.depth += 10;
+  }
+  scores.depth = Math.min(100, scores.depth);
 
-  scores.overall = Math.round((scores.policy + scores.market + scores.competitors) / 3);
+  scores.overall = Math.round(
+    (scores.policy + scores.market + scores.competitors + scores.summary + scores.depth) / 5
+  );
 
   const valid = failures.length === 0;
 
   console.log(
-    `  [Validation] Policy: ${scores.policy}/100 | Market: ${scores.market}/100 | Competitors: ${scores.competitors}/100 | Overall: ${scores.overall}/100`
+    `  [Validation] Policy: ${scores.policy}/100 | Market: ${scores.market}/100 | Competitors: ${scores.competitors}/100 | Summary: ${scores.summary}/100 | Depth: ${scores.depth}/100 | Overall: ${scores.overall}/100`
   );
   if (failures.length > 0) {
     console.log(`  [Validation] Failures: ${failures.join('; ')}`);
@@ -4668,14 +4714,14 @@ async function synthesizeSingleCountry(countryAnalysis, scope) {
   console.log('\n=== STAGE 3: SINGLE COUNTRY DEEP DIVE ===');
   console.log(`Generating deep analysis for ${countryAnalysis.country}...`);
 
-  const systemPrompt = `You are a senior analyst at The Economist writing a market entry briefing. Your reader is a CEO - intelligent, time-poor, and needs to make a $10M+ decision based on your analysis.
+  const systemPrompt = `You are a senior partner at McKinsey writing a market entry briefing. Your reader is a CEO - intelligent, time-poor, and needs to make a $10M+ decision based on your analysis.
 
 === WRITING STYLE ===
-Write like The Economist: professional, direct, analytical. No consultant jargon, but also not dumbed down.
+Write like a top-tier strategy partner: professional, direct, analytical. No fluff, no jargon padding.
 
-GOOD: "The 49% foreign ownership cap forces joint ventures, but BOI-promoted projects can sidestep this entirely."
-BAD (too simple): "You can only own 49% so you need a partner."
-BAD (too jargon): "Foreign ownership limitations necessitate strategic partnership architectures to optimize market penetration."
+GOOD: "PDP8 accelerates gas-to-power procurement, but tender qualification rules still privilege incumbents with local execution track records."
+BAD (too simple): "The market is growing so we should enter now."
+BAD (too jargon): "Regulatory tailwinds create optionality vectors across the entry architecture."
 
 - Be precise and specific. Use technical terms where appropriate, but always explain their significance.
 - Write in complete, well-constructed sentences. Short is fine, but not choppy.
@@ -4704,7 +4750,7 @@ Surface-level analysis is WORTHLESS. The CEO can Google basic facts. You must pr
 
 6. TIMING INTELLIGENCE: Why NOW, not 2 years ago or 2 years from now?
    - WEAK: "The market is growing"
-   - STRONG: "Three factors converge in 2025: (1) BOI's new incentives expire Dec 2027, (2) three large ESCOs are seeking acquisition, (3) Thailand's carbon tax starts 2026. First movers get 3 years of tax-free operation before competitors react."
+   - STRONG: "Three factors converge in 2026: (1) PDP8 execution milestones accelerate procurement, (2) domestic gas decline tightens supply, (3) major LNG-linked projects move into execution windows. First movers secure preferred local partners before bidding intensity rises."
 
 === STORY FLOW ===
 Each slide must answer the reader's mental question and create the next one:
@@ -4730,7 +4776,7 @@ If you don't have specific data, return null or empty string. Do NOT use hedging
 === ANTI-PADDING RULE ===
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
 - If you cannot find ${scope.industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
-- Example: If asked for "${scope.industry} market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Example: If asked for "${scope.industry} market size" and you only know "country GDP is $500B" — return null, not the GDP figure
 - Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 === ANTI-PADDING VALIDATION ===
@@ -4754,7 +4800,7 @@ Return JSON with:
 {
   "executiveSummary": [
     "4 analytical paragraphs, 3-4 sentences each (50-80 words per paragraph). Write like a senior McKinsey partner — strategic, analytical, forward-looking. NOT bullet points — full flowing paragraphs. Each paragraph MUST end with a cross-reference like '(Refer: Chapter 1)'. Use conditional language ('may', 'remains to be seen', 'will depend on') for uncertain points. Frame everything in terms of client opportunity/risk, not just facts.",
-    "Paragraph 1: MARKET OPPORTUNITY OVERVIEW — Quantify the prize with specific numbers: market size, growth rate, foreign player share, TAM calculation. End with '(Refer: Chapter 2)'. Example: 'Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. (Refer: Chapter 2)'",
+    "Paragraph 1: MARKET OPPORTUNITY OVERVIEW — Quantify the prize with specific numbers: market size, growth rate, foreign player share, TAM calculation. End with '(Refer: Chapter 2)'. Example: 'Vietnam's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. (Refer: Chapter 2)'",
     "Paragraph 2: REGULATORY LANDSCAPE & TRAJECTORY — Current regulatory state, key policy shifts, where regulation is heading. Reference specific law names, enforcement realities. End with '(Refer: Chapter 1)'",
     "Paragraph 3: MARKET DEMAND & GROWTH PROJECTIONS — Demand drivers with evidence, growth projections with sources, sector-specific opportunities. End with '(Refer: Chapter 2)'",
     "Paragraph 4: COMPETITIVE POSITIONING & RECOMMENDED ENTRY PATH — Competitive gaps, recommended entry mode, specific partner/target names, timeline. End with '(Refer: Chapter 3)'"
@@ -4788,12 +4834,12 @@ Return JSON with:
       "data": "The specific evidence with AT LEAST ONE NUMBER and a TIMEFRAME. Example: 'Manufacturing wages rose 8% annually 2021-2024 while productivity gained only 2%. Average factory worker age is 45, up from 38 in 2014.'",
       "pattern": "The causal mechanism (SO WHAT). Example: 'Aging workforce drives wage inflation without productivity gains. Factories facing 5-6% annual cost increases have exhausted labor optimization - energy is the next lever.'",
       "implication": "The strategic response (NOW WHAT) with ACTION VERB and TIMING. Example: 'Position energy efficiency as cost management, not sustainability. Target CFOs with ROI messaging in Q1-Q2 2026 before budget cycles lock. The urgency is financial, not environmental.'",
-      "timing": "REQUIRED. When to act and why. Example: 'Move by Q2 2026 — carbon tax starts Jan 2027, BOI incentives expire Dec 2027. 18-month window for tax-free setup.'"
+      "timing": "REQUIRED. When to act and why. Example: 'Move by Q2 2026 — new compliance obligations begin in 2027 while current incentive windows close in late 2027. 18-month window for de-risked setup.'"
     },
     "Provide 3-5 insights. Each must reveal something that requires connecting multiple data points.",
     "COMPLETE CHAIN REQUIRED: data (with number + year) → pattern (causal link) → implication (action verb: 'should prioritize', 'recommend', 'target') → timing (specific deadline or window)",
     "TEST: If someone could find this insight on the first page of Google results, it's too obvious.",
-    "GOOD: 'Southern Thailand's grid congestion (transmission capacity 85% utilized) blocks new solar projects, creating captive demand for on-site efficiency solutions in the $2.1B EEC industrial corridor. Recommend targeting EEC zone manufacturers in Q1 2026 before Phase 4 expansion (Dec 2026) when grid upgrades reduce urgency.'"
+    "GOOD: 'Southern Vietnam grid congestion blocks new power additions in key industrial zones, creating captive demand for on-site efficiency and reliability services. Recommend targeting high-load export manufacturers in the next budget cycle before grid reinforcement reduces urgency.'"
   ],
 
   "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"]
@@ -4805,7 +4851,7 @@ CRITICAL QUALITY STANDARDS:
 3. SPECIFICITY. Every number needs a year. Every company needs context. Every regulation needs an enforcement reality check.
 4. COMPETITIVE EDGE. The reader should learn something they couldn't find in an hour of desk research.
 5. ACTIONABLE CONCLUSIONS. End each section with what the reader should DO with this information.
-6. PROFESSIONAL PROSE. Write like The Economist - clear, precise, analytical. Use technical terms where they add precision, but always explain significance.
+6. PROFESSIONAL PROSE. Write like a senior McKinsey strategy team - clear, precise, analytical. Use technical terms where they add precision, but always explain significance.
 7. COMPANY DESCRIPTIONS: Every company in keyPlayers and potentialPartners MUST have a "description" field with 45-60 words. Include revenue, growth rate, market share, key services, geographic coverage, and competitive advantages. NEVER write generic one-liners like "X is a company that provides Y" — include specific metrics and strategic context.
 8. WEBSITE URLs: Every company MUST have a "website" field with the company's actual corporate website URL.
 
