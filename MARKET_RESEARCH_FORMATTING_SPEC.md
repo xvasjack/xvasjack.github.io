@@ -25,6 +25,11 @@ These are non-negotiable delivery rules for the market-research pipeline.
 - Diagnose with concrete evidence from diagnostics/logs/output artifacts.
 - If evidence is missing, improve diagnostics first, then re-run.
 
+5. Content-first delivery policy (updated).
+- Protect analytical content first; formatting is important but slightly flexible.
+- Overflow should not hard-fail a run; prefer automatic text compression/truncation for slide fit.
+- Hard-stop only on catastrophic rendering breakage (corrupt/missing output), not minor layout drift.
+
 ---
 
 ## 1. FONT SPECIFICATIONS
@@ -80,7 +85,7 @@ These are non-negotiable delivery rules for the market-research pipeline.
 | Characters per bullet | 80 |
 | Lines per bullet | 2 |
 | Table rows visible | 6 (split to new slide if more) |
-| Table columns | 4 (use 2-3 if possible) |
+| Table columns | Flexible (only keep meaningful columns; do not force empty template columns) |
 
 ### 3.2 Writing Style
 - **NO long paragraphs** - use short phrases

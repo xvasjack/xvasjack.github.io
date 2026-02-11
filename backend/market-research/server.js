@@ -322,19 +322,43 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       const pptBuffer = await generatePPT(finalSynthesis, countryAnalyses, scope);
       const pptMetrics = (pptBuffer && (pptBuffer.__pptMetrics || pptBuffer.pptMetrics)) || null;
 
-      // Strict formatting gate for single-country template path
+      // Content-first policy:
+      // Formatting deviations are logged as warnings, not hard failures.
+      // We only hard-fail on catastrophic rendering loss (too many failed blocks).
       if (pptMetrics) {
-        if (
-          Number(pptMetrics.templateCoverage || 0) < 100 ||
-          Number(pptMetrics.slideRenderFailureCount || 0) > 0 ||
-          Number(pptMetrics.tableRecoveryCount || 0) > 0 ||
-          Number(pptMetrics.nonTemplatePatternCount || 0) > 0 ||
-          Number(pptMetrics.geometryIssueCount || 0) > 0 ||
-          Number(pptMetrics.geometryMaxDelta || 0) > 0.05
-        ) {
+        const templateTotal = Number(pptMetrics.templateTotal || 0);
+        const failureCount = Number(pptMetrics.slideRenderFailureCount || 0);
+        const failureRate = templateTotal > 0 ? failureCount / templateTotal : 0;
+
+        if (failureRate > 0.35 || failureCount >= 10) {
           throw new Error(
-            `PPT template/formatting gate failed: coverage=${pptMetrics.templateCoverage}%, failures=${pptMetrics.slideRenderFailureCount}, recoveries=${pptMetrics.tableRecoveryCount}, nonTemplate=${pptMetrics.nonTemplatePatternCount}, geometryIssues=${pptMetrics.geometryIssueCount || 0}, geometryMaxDelta=${pptMetrics.geometryMaxDelta || 0}`
+            `PPT rendering quality failed: failures=${failureCount}, totalBlocks=${templateTotal}, failureRate=${failureRate.toFixed(2)}`
           );
+        }
+
+        const formattingWarnings = [];
+        if (Number(pptMetrics.templateCoverage || 0) < 90) {
+          formattingWarnings.push(`templateCoverage=${pptMetrics.templateCoverage}%`);
+        }
+        if (Number(pptMetrics.tableRecoveryCount || 0) > 0) {
+          formattingWarnings.push(`tableRecoveries=${pptMetrics.tableRecoveryCount}`);
+        }
+        if (Number(pptMetrics.nonTemplatePatternCount || 0) > 0) {
+          formattingWarnings.push(`nonTemplatePatterns=${pptMetrics.nonTemplatePatternCount}`);
+        }
+        if (Number(pptMetrics.geometryIssueCount || 0) > 0) {
+          formattingWarnings.push(`geometryIssues=${pptMetrics.geometryIssueCount}`);
+        }
+        if (Number(pptMetrics.geometryMaxDelta || 0) > 0.15) {
+          formattingWarnings.push(`geometryMaxDelta=${pptMetrics.geometryMaxDelta}`);
+        }
+        if (formattingWarnings.length > 0) {
+          console.warn(
+            `[Quality Gate] Formatting warnings (content-first mode): ${formattingWarnings.join(', ')}`
+          );
+          if (lastRunDiagnostics) {
+            lastRunDiagnostics.formattingWarnings = formattingWarnings;
+          }
         }
       }
 

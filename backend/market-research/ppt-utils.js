@@ -258,13 +258,70 @@ function normalizeTableRows(rows) {
   return normalized.length > 0 ? normalized : null;
 }
 
+function tableCellText(cell) {
+  if (cell == null) return '';
+  if (typeof cell === 'object' && !Array.isArray(cell)) {
+    return ensureString(Object.prototype.hasOwnProperty.call(cell, 'text') ? cell.text : '').trim();
+  }
+  return ensureString(cell).trim();
+}
+
+function compactTableColumns(rows, options = {}, context = 'table') {
+  if (!Array.isArray(rows) || rows.length === 0) return { rows, options };
+  const colCount = rows.reduce((max, row) => Math.max(max, Array.isArray(row) ? row.length : 0), 0);
+  if (colCount <= 1) return { rows, options };
+
+  const usedColumns = [];
+  for (let col = 0; col < colCount; col++) {
+    let hasContent = false;
+    for (const row of rows) {
+      if (!Array.isArray(row)) continue;
+      if (tableCellText(row[col]).length > 0) {
+        hasContent = true;
+        break;
+      }
+    }
+    usedColumns.push(hasContent);
+  }
+
+  let keepIndexes = usedColumns.map((used, idx) => (used ? idx : -1)).filter((idx) => idx >= 0);
+  if (keepIndexes.length === 0) keepIndexes = [0];
+  if (keepIndexes.length === colCount) return { rows, options };
+
+  const compactedRows = rows.map((row) =>
+    keepIndexes.map((idx) => (row && row[idx] !== undefined ? row[idx] : { text: '' }))
+  );
+
+  let compactedOptions = options;
+  if (options && typeof options === 'object') {
+    compactedOptions = { ...options };
+    if (Array.isArray(compactedOptions.colW) && compactedOptions.colW.length >= colCount) {
+      const original = compactedOptions.colW.map((w) => Number(w) || 0);
+      let filtered = keepIndexes.map((idx) => original[idx] || 0);
+      const sumOriginal = original.reduce((acc, w) => acc + w, 0);
+      const sumFiltered = filtered.reduce((acc, w) => acc + w, 0);
+      if (sumOriginal > 0 && sumFiltered > 0) {
+        const scale = sumOriginal / sumFiltered;
+        filtered = filtered.map((w) => Number((w * scale).toFixed(3)));
+      }
+      compactedOptions.colW = filtered;
+    }
+  }
+
+  console.log(`[PPT] ${context}: compacted table columns ${colCount} -> ${keepIndexes.length}`);
+  return { rows: compactedRows, options: compactedOptions };
+}
+
 function safeAddTable(slide, rows, options = {}, context = 'table') {
   const normalizedRows = normalizeTableRows(rows);
   if (!normalizedRows) {
     console.warn(`[PPT] ${context}: invalid rows, skipping table`);
     return false;
   }
-  const addOptions = options && typeof options === 'object' ? { ...options } : options;
+  let addOptions = options && typeof options === 'object' ? { ...options } : options;
+  const compacted = compactTableColumns(normalizedRows, addOptions, context);
+  const tableRows = compacted.rows;
+  addOptions = compacted.options;
   if (addOptions && typeof addOptions === 'object') {
     // Keep table layout deterministic across runs and template-conformant.
     delete addOptions.autoPage;
@@ -272,7 +329,7 @@ function safeAddTable(slide, rows, options = {}, context = 'table') {
     delete addOptions.autoPageHeaderRows;
   }
   try {
-    slide.addTable(normalizedRows, addOptions);
+    slide.addTable(tableRows, addOptions);
     return true;
   } catch (err) {
     console.warn(`[PPT] ${context}: addTable failed (${err.message})`);
