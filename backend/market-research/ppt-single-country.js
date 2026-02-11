@@ -126,6 +126,235 @@ async function normalizeChartRelationshipTargets(pptxBuffer) {
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
+// Deep formatting audit against extracted template metadata.
+// This catches silent regressions (slide size drift, runaway margins, line geometry drift)
+// before a deck is shipped.
+async function auditGeneratedPptFormatting(pptxBuffer) {
+  const issues = [];
+  const checks = {};
+
+  try {
+    const zip = await JSZip.loadAsync(pptxBuffer);
+    const expectedW = Number(templatePatterns.style?.slideWidthEmu || 12192000);
+    const expectedH = Number(templatePatterns.style?.slideHeightEmu || 6858000);
+
+    const presentationXml = await zip.file('ppt/presentation.xml')?.async('string');
+    if (!presentationXml) {
+      issues.push({
+        severity: 'critical',
+        code: 'missing_presentation_xml',
+        message: 'ppt/presentation.xml not found in generated deck',
+      });
+    } else {
+      const sz = presentationXml.match(/<p:sldSz[^>]*cx="(\d+)"[^>]*cy="(\d+)"/);
+      if (sz) {
+        const w = Number(sz[1]);
+        const h = Number(sz[2]);
+        const dw = Math.abs(w - expectedW);
+        const dh = Math.abs(h - expectedH);
+        checks.slideSize = { widthEmu: w, heightEmu: h, deltaWidthEmu: dw, deltaHeightEmu: dh };
+        if (dw > 1200 || dh > 1200) {
+          issues.push({
+            severity: 'critical',
+            code: 'slide_size_mismatch',
+            message: `Slide size drift too large: got ${w}x${h}, expected ${expectedW}x${expectedH}`,
+          });
+        }
+      } else {
+        issues.push({
+          severity: 'critical',
+          code: 'slide_size_missing',
+          message: 'Unable to parse <p:sldSz> in presentation.xml',
+        });
+      }
+    }
+
+    const mainLayoutXml = await zip.file('ppt/slideLayouts/slideLayout3.xml')?.async('string');
+    if (!mainLayoutXml) {
+      issues.push({
+        severity: 'warning',
+        code: 'missing_main_layout',
+        message: 'ppt/slideLayouts/slideLayout3.xml not found; skipping line-geometry audit',
+      });
+    } else {
+      const expectedTopY = Math.round(Number(templatePatterns.style?.headerLines?.top?.y || 1.0208) * 914400);
+      const expectedBottomY = Math.round(
+        Number(templatePatterns.style?.headerLines?.bottom?.y || 1.0972) * 914400
+      );
+      const expectedFooterY = Math.round(
+        Number(templatePatterns.pptxPositions?.footerLine?.y || 7.2361) * 914400
+      );
+      const yMatches = [...mainLayoutXml.matchAll(/<a:off x="0" y="(\d+)"/g)].map((m) => Number(m[1]));
+      const nearest = (target) => {
+        if (!yMatches.length) return null;
+        let best = yMatches[0];
+        let delta = Math.abs(best - target);
+        for (const y of yMatches.slice(1)) {
+          const d = Math.abs(y - target);
+          if (d < delta) {
+            best = y;
+            delta = d;
+          }
+        }
+        return { y: best, delta };
+      };
+
+      const top = nearest(expectedTopY);
+      const bottom = nearest(expectedBottomY);
+      const footer = nearest(expectedFooterY);
+      checks.headerFooterY = {
+        expected: { top: expectedTopY, bottom: expectedBottomY, footer: expectedFooterY },
+        actual: { top: top?.y || null, bottom: bottom?.y || null, footer: footer?.y || null },
+        delta: { top: top?.delta || null, bottom: bottom?.delta || null, footer: footer?.delta || null },
+      };
+
+      if ((top?.delta || 0) > 2500 || (bottom?.delta || 0) > 2500 || (footer?.delta || 0) > 2500) {
+        issues.push({
+          severity: 'warning',
+          code: 'header_footer_line_drift',
+          message: `Header/footer line drift detected (delta EMU: top=${top?.delta}, bottom=${bottom?.delta}, footer=${footer?.delta})`,
+        });
+      }
+
+      const lineWidths = [...mainLayoutXml.matchAll(/<a:ln w="(\d+)"/g)].map((m) => Number(m[1]));
+      checks.headerFooterLineWidths = [...new Set(lineWidths)].sort((a, b) => a - b);
+      if (!lineWidths.includes(57150) || !lineWidths.includes(28575)) {
+        issues.push({
+          severity: 'warning',
+          code: 'line_width_signature_mismatch',
+          message: 'Expected header/footer line thickness signature (57150, 28575) not fully present',
+        });
+      }
+    }
+
+    const expectedMarginEmu = Math.round(
+      Number(templatePatterns.style?.table?.cellMarginLR || 0.04) * 914400
+    );
+    const runawayMarginThresholdEmu = Math.max(expectedMarginEmu * 20, 1200000);
+    const slideXmlEntries = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+    const marginValues = [];
+    const marginOutliers = [];
+    const anchorCounts = { ctr: 0, t: 0, b: 0, other: 0 };
+    const borderWidths = [];
+
+    for (const name of slideXmlEntries) {
+      const xml = await zip.file(name)?.async('string');
+      if (!xml || !xml.includes('<a:tcPr')) continue;
+
+      const tcProps = [...xml.matchAll(/<a:tcPr([^>]*)>/g)];
+      for (const m of tcProps) {
+        const attrs = m[1] || '';
+        const marL = attrs.match(/marL="(\d+)"/);
+        const marR = attrs.match(/marR="(\d+)"/);
+        if (marL) {
+          const value = Number(marL[1]);
+          marginValues.push(value);
+          if (value > runawayMarginThresholdEmu) {
+            marginOutliers.push({
+              slide: name.replace(/^ppt\/slides\//, ''),
+              side: 'L',
+              value,
+            });
+          }
+        }
+        if (marR) {
+          const value = Number(marR[1]);
+          marginValues.push(value);
+          if (value > runawayMarginThresholdEmu) {
+            marginOutliers.push({
+              slide: name.replace(/^ppt\/slides\//, ''),
+              side: 'R',
+              value,
+            });
+          }
+        }
+        const anchor = attrs.match(/anchor="([^"]+)"/)?.[1];
+        if (anchor === 'ctr') anchorCounts.ctr++;
+        else if (anchor === 't') anchorCounts.t++;
+        else if (anchor === 'b') anchorCounts.b++;
+        else anchorCounts.other++;
+      }
+
+      for (const bm of xml.matchAll(/<a:ln[LRBT] w="(\d+)"/g)) {
+        borderWidths.push(Number(bm[1]));
+      }
+    }
+
+    if (marginValues.length > 0) {
+      const maxMargin = Math.max(...marginValues);
+      const nearExpected = marginValues.filter((v) => Math.abs(v - expectedMarginEmu) <= 1000).length;
+      const nearExpectedRatio = nearExpected / marginValues.length;
+      checks.tableMargins = {
+        expectedMarginEmu,
+        runawayThresholdEmu: runawayMarginThresholdEmu,
+        minMarginEmu: Math.min(...marginValues),
+        maxMarginEmu: maxMargin,
+        nearExpectedRatio: Number(nearExpectedRatio.toFixed(3)),
+        outlierCount: marginOutliers.length,
+      };
+      if (marginOutliers.length > 0) {
+        checks.tableMarginOutliers = marginOutliers.slice(0, 20);
+      }
+
+      if (maxMargin > runawayMarginThresholdEmu) {
+        const affectedSlides = [...new Set(marginOutliers.map((m) => m.slide))].slice(0, 8);
+        issues.push({
+          severity: 'critical',
+          code: 'table_margin_runaway',
+          message: `Runaway table margin detected (max mar*= ${maxMargin} EMU, outliers=${marginOutliers.length}, slides=${affectedSlides.join(', ') || 'unknown'})`,
+        });
+      } else if (nearExpectedRatio < 0.8) {
+        issues.push({
+          severity: 'warning',
+          code: 'table_margin_drift',
+          message: `Table margins drift from template baseline (near-expected ratio=${nearExpectedRatio.toFixed(2)})`,
+        });
+      }
+    }
+
+    const totalAnchors = anchorCounts.ctr + anchorCounts.t + anchorCounts.b + anchorCounts.other;
+    checks.tableAnchors = { ...anchorCounts, total: totalAnchors };
+    if (totalAnchors > 0) {
+      const topRatio = anchorCounts.t / totalAnchors;
+      if (topRatio > 0.85) {
+        issues.push({
+          severity: 'warning',
+          code: 'table_anchor_top_heavy',
+          message: `Most table cells are top-anchored (ratio=${topRatio.toFixed(2)}); template is typically center-anchored`,
+        });
+      }
+    }
+
+    if (borderWidths.length > 0) {
+      const uniqueBorderWidths = [...new Set(borderWidths)].sort((a, b) => a - b);
+      checks.tableBorderWidths = uniqueBorderWidths;
+      if (!uniqueBorderWidths.includes(38100)) {
+        issues.push({
+          severity: 'warning',
+          code: 'table_outer_border_missing',
+          message: 'No 3pt (38100 EMU) table borders detected; template usually includes them',
+        });
+      }
+    }
+  } catch (err) {
+    issues.push({
+      severity: 'critical',
+      code: 'format_audit_exception',
+      message: `Formatting audit failed: ${err.message}`,
+    });
+  }
+
+  const criticalCount = issues.filter((i) => i.severity === 'critical').length;
+  const warningCount = issues.filter((i) => i.severity === 'warning').length;
+  return {
+    pass: criticalCount === 0,
+    criticalCount,
+    warningCount,
+    issues,
+    checks,
+  };
+}
+
 // ============ SECTION-BASED SLIDE GENERATOR ============
 // Generates slides dynamically based on data depth using pattern library
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
@@ -133,8 +362,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   const pptx = new pptxgen();
 
-  // Set exact slide size to match YCP template (13.333" x 7.5" = 16:9 widescreen)
-  pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
+  // Set exact slide size to match YCP template (13.3333" x 7.5" = 12192000 x 6858000 EMU)
+  pptx.defineLayout({ name: 'YCP', width: 13.3333, height: 7.5 });
   pptx.layout = 'YCP';
 
   // YCP Theme Colors (from Escort template extraction — template-patterns.json)
@@ -342,6 +571,132 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     'pricing',
     'escoMarket',
   ]);
+  const templateTableStyleCache = new Map();
+
+  function schemeToHexColor(scheme) {
+    const key = String(scheme || '').toLowerCase();
+    if (key === 'bg1' || key === 'lt1') return C_WHITE;
+    if (key === 'tx1' || key === 'dk1') return C_BLACK;
+    if (key.startsWith('accent')) {
+      return String(templatePatterns.style?.colors?.[key] || C_BORDER).replace('#', '').toUpperCase();
+    }
+    return C_BORDER;
+  }
+
+  function dashToBorderType(dash, fallback = 'solid') {
+    const v = String(dash || '').toLowerCase();
+    if (!v) return fallback;
+    if (v === 'sysdash') return 'dash';
+    if (v === 'solid') return 'solid';
+    if (v === 'dash') return 'dash';
+    return fallback;
+  }
+
+  function parseTemplateBorder(borderNode, fallback) {
+    const def = fallback || { pt: TABLE_BORDER_WIDTH || 1, type: C_BORDER_STYLE || 'dash', color: C_BORDER };
+    if (!borderNode || typeof borderNode !== 'object') return { ...def };
+    const width = Number(borderNode.width);
+    const fill = borderNode.fill || {};
+    let color = def.color;
+    if (fill.type === 'color' && fill.color) {
+      color = String(fill.color).replace('#', '').toUpperCase();
+    } else if (fill.type === 'scheme' && fill.scheme) {
+      color = schemeToHexColor(fill.scheme);
+    }
+    return {
+      pt: Number.isFinite(width) && width > 0 ? width : def.pt,
+      type: dashToBorderType(borderNode.dash, def.type),
+      color: color || def.color,
+    };
+  }
+
+  function getTemplateTableStyleProfile(slideNumber) {
+    const numeric = Number(slideNumber);
+    if (!Number.isFinite(numeric)) return null;
+    if (templateTableStyleCache.has(numeric)) return templateTableStyleCache.get(numeric);
+
+    const slide = (templatePatterns.slideDetails || []).find((s) => Number(s?.slideNumber) === numeric);
+    const table = (slide?.elements || []).find((el) => el?.type === 'table')?.table;
+    const rows = Array.isArray(table?.rows) ? table.rows : [];
+    if (!rows.length) {
+      templateTableStyleCache.set(numeric, null);
+      return null;
+    }
+
+    const headerCell = (rows[0]?.cells || []).find((c) => c?.cellProps);
+    const bodyCells = rows.slice(1).flatMap((r) => (Array.isArray(r?.cells) ? r.cells : []));
+    const bodyCell =
+      bodyCells.find((c) => c?.cellProps?.borders?.lnT?.width === 1) ||
+      bodyCells.find((c) => c?.cellProps) ||
+      headerCell;
+    const marginSource = bodyCell?.cellProps || headerCell?.cellProps || {};
+
+    const innerBorder = parseTemplateBorder(
+      bodyCell?.cellProps?.borders?.lnT || bodyCell?.cellProps?.borders?.lnL,
+      {
+        pt: TABLE_BORDER_WIDTH || 1,
+        type: C_BORDER_STYLE || 'dash',
+        color: C_BORDER,
+      }
+    );
+    const outerBorder = parseTemplateBorder(
+      headerCell?.cellProps?.borders?.lnL || headerCell?.cellProps?.borders?.lnT,
+      {
+        pt: Number(templatePatterns.style?.table?.outerBorderWidth || 3),
+        type: 'solid',
+        color: C_WHITE,
+      }
+    );
+
+    const margin = [
+      Number.isFinite(Number(marginSource.marginTop)) ? Number(marginSource.marginTop) : TABLE_CELL_MARGIN[0],
+      Number.isFinite(Number(marginSource.marginLeft)) ? Number(marginSource.marginLeft) : TABLE_CELL_MARGIN[1],
+      Number.isFinite(Number(marginSource.marginBottom))
+        ? Number(marginSource.marginBottom)
+        : TABLE_CELL_MARGIN[2],
+      Number.isFinite(Number(marginSource.marginRight))
+        ? Number(marginSource.marginRight)
+        : TABLE_CELL_MARGIN[3],
+    ];
+
+    const profile = {
+      margin,
+      valign: marginSource.anchor === 'ctr' ? 'mid' : 'top',
+      innerBorder,
+      outerBorder,
+    };
+    templateTableStyleCache.set(numeric, profile);
+    return profile;
+  }
+
+  function isDefaultTableBorder(border) {
+    if (!border || typeof border !== 'object') return false;
+    const pt = Number(border.pt ?? border.width ?? 0);
+    const type = dashToBorderType(border.type || border.style, '');
+    const expectedType = dashToBorderType(C_BORDER_STYLE, '');
+    const color = String(border.color || '')
+      .replace('#', '')
+      .toUpperCase();
+    const expectedColor = String(C_BORDER || '')
+      .replace('#', '')
+      .toUpperCase();
+    return Math.abs(pt - Number(TABLE_BORDER_WIDTH || 1)) < 0.01 && type === expectedType && color === expectedColor;
+  }
+
+  function withPatchedCellOptions(cell, patch) {
+    const patchOptions = patch || {};
+    const patchBorder = patchOptions.border || null;
+    const baseCell =
+      cell && typeof cell === 'object' && !Array.isArray(cell)
+        ? { ...cell, text: safeCell(Object.prototype.hasOwnProperty.call(cell, 'text') ? cell.text : '') }
+        : { text: safeCell(cell) };
+    const baseOptions = { ...(baseCell.options || {}) };
+    const nextOptions = { ...baseOptions, ...patchOptions };
+    if (patchBorder) {
+      nextOptions.border = { ...(baseOptions.border || {}), ...patchBorder };
+    }
+    return { ...baseCell, options: nextOptions };
+  }
 
   // Enrichment fallback: use synthesis when available, otherwise fall back to countryAnalysis summary
   const enrichment = synthesis || {};
@@ -859,13 +1214,66 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return { rows: compactedRows, options: compactedOptions };
   }
 
+  // Normalize table margins to inches to avoid pt-vs-inch regressions in table XML.
+  // Heuristic: margins >2 are interpreted as points and converted to inches.
+  function normalizeTableMarginValue(raw) {
+    const numeric = Number(raw);
+    if (!Number.isFinite(numeric)) return null;
+    if (numeric < 0) return 0;
+    if (numeric > 2) {
+      const inches = numeric / 72;
+      if (Number.isFinite(inches) && inches <= 2) return Number(inches.toFixed(4));
+    }
+    return numeric;
+  }
+
+  function normalizeTableMarginArray(margin, fallback = TABLE_CELL_MARGIN) {
+    if (!Array.isArray(margin) || margin.length !== 4) return null;
+    return margin.map((value, idx) => {
+      const normalized = normalizeTableMarginValue(value);
+      if (normalized == null) return Number(fallback?.[idx] || 0);
+      return normalized;
+    });
+  }
+
+  function sanitizeTableCellMargins(rows, context = 'table') {
+    if (!Array.isArray(rows) || rows.length === 0) return rows;
+    let corrected = 0;
+    const sanitized = rows.map((row) => {
+      if (!Array.isArray(row)) return row;
+      return row.map((cell) => {
+        if (!cell || typeof cell !== 'object' || Array.isArray(cell)) return cell;
+        if (!cell.options || !Array.isArray(cell.options.margin)) return cell;
+        const normalizedMargin = normalizeTableMarginArray(cell.options.margin);
+        if (!normalizedMargin) return cell;
+        const changed = normalizedMargin.some(
+          (value, idx) => Math.abs(value - Number(cell.options.margin[idx] ?? 0)) > 1e-6
+        );
+        if (!changed) return cell;
+        corrected++;
+        return {
+          ...cell,
+          options: {
+            ...cell.options,
+            margin: normalizedMargin,
+          },
+        };
+      });
+    });
+    if (corrected > 0) {
+      console.warn(`[PPT] ${context}: normalized ${corrected} table cell margin(s) to inch units`);
+    }
+    return sanitized;
+  }
+
   function safeAddTable(slide, rows, options = {}, context = 'table') {
     const normalizedRows = normalizeTableRows(rows, context);
     if (!normalizedRows) return false;
     let addOptions = options && typeof options === 'object' ? { ...options } : options;
     const compacted = compactTableColumns(normalizedRows, addOptions, context);
-    const tableRows = compacted.rows;
+    let tableRows = compacted.rows;
     addOptions = compacted.options;
+    tableRows = sanitizeTableCellMargins(tableRows, context);
     const hadAutoPage =
       addOptions &&
       typeof addOptions === 'object' &&
@@ -880,6 +1288,42 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       delete addOptions.autoPageHeaderRows;
       if (hadAutoPage) {
         console.log(`[PPT] ${context}: stripped autoPage flags for deterministic rendering`);
+      }
+      const normalizedMargin = normalizeTableMarginArray(addOptions.margin);
+      if (normalizedMargin) addOptions.margin = normalizedMargin;
+    }
+    const templateStyleProfile =
+      TABLE_TEMPLATE_CONTEXTS.has(context) && Number.isFinite(Number(activeTemplateContext.slideNumber))
+        ? getTemplateTableStyleProfile(activeTemplateContext.slideNumber)
+        : null;
+    if (templateStyleProfile && addOptions && typeof addOptions === 'object') {
+      // Keep table internals close to the selected template slide (not just x/y geometry).
+      addOptions.margin = [...templateStyleProfile.margin];
+      if (!addOptions.valign || addOptions.valign === 'top') {
+        addOptions.valign = templateStyleProfile.valign;
+      }
+      if (!addOptions.border || isDefaultTableBorder(addOptions.border)) {
+        addOptions.border = { ...templateStyleProfile.innerBorder };
+      }
+      for (let ri = 0; ri < tableRows.length; ri++) {
+        if (!Array.isArray(tableRows[ri])) continue;
+        tableRows[ri] = tableRows[ri].map((cell) =>
+          withPatchedCellOptions(cell, {
+            margin: [...templateStyleProfile.margin],
+            valign: templateStyleProfile.valign,
+          })
+        );
+      }
+      if (Array.isArray(tableRows[0])) {
+        tableRows[0] = tableRows[0].map((cell) =>
+          withPatchedCellOptions(cell, { border: templateStyleProfile.outerBorder })
+        );
+      }
+      for (let ri = 1; ri < tableRows.length; ri++) {
+        if (!Array.isArray(tableRows[ri]) || tableRows[ri].length === 0) continue;
+        tableRows[ri][0] = withPatchedCellOptions(tableRows[ri][0], {
+          border: templateStyleProfile.outerBorder,
+        });
       }
     }
     const shouldAlignToTemplate =
@@ -4522,6 +4966,38 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
+  const formattingAudit = await auditGeneratedPptFormatting(pptxBuffer);
+  if (!formattingAudit.pass) {
+    const criticalIssues = formattingAudit.issues
+      .filter((i) => i.severity === 'critical')
+      .map((i) => `${i.code}: ${i.message}`);
+    if (criticalIssues.length > 0) {
+      console.error(`[PPT TEMPLATE] Formatting audit critical issues: ${criticalIssues.join(' | ')}`);
+      if (Array.isArray(formattingAudit.checks?.tableMarginOutliers)) {
+        const outlierPreview = formattingAudit.checks.tableMarginOutliers
+          .slice(0, 8)
+          .map((o) => `${o.slide}:${o.side}=${o.value}`)
+          .join(', ');
+        if (outlierPreview) {
+          console.error(`[PPT TEMPLATE] Margin outlier preview: ${outlierPreview}`);
+        }
+      }
+    }
+    const criticalCodes = formattingAudit.issues
+      .filter((i) => i.severity === 'critical')
+      .map((i) => i.code)
+      .join(', ');
+    throw new Error(`PPT formatting audit failed: critical issues detected (${criticalCodes})`);
+  }
+  if (formattingAudit.warningCount > 0) {
+    const warningCodes = formattingAudit.issues
+      .filter((i) => i.severity === 'warning')
+      .map((i) => i.code)
+      .join(', ');
+    console.warn(
+      `[PPT TEMPLATE] Formatting audit warnings (${formattingAudit.warningCount}): ${warningCodes}`
+    );
+  }
   const totalSlides = 4 + sectionDefs.length + sectionBlockCounts.reduce((a, b) => a + b, 0) + 2; // cover + TOC + exec + opps + sections + appendix TOC + summary
   const templateBackedCount = templateUsageStats.resolved.filter((x) => x.templateBacked).length;
   const templateTotal = templateUsageStats.resolved.length;
@@ -4543,6 +5019,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     slideRenderFailureKeys: [
       ...new Set(templateUsageStats.slideRenderFailures.map((f) => f.key || 'unknown')),
     ],
+    formattingAuditIssueCount: formattingAudit.issues.length,
+    formattingAuditCriticalCount: formattingAudit.criticalCount,
+    formattingAuditWarningCount: formattingAudit.warningCount,
+    formattingAuditIssueCodes: formattingAudit.issues.map((i) => i.code),
+    formattingAuditChecks: formattingAudit.checks,
   };
   console.log(
     `[PPT TEMPLATE] Coverage: ${templateCoverage}% (${templateBackedCount}/${templateTotal}) template-backed block mappings`

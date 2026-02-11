@@ -46,12 +46,15 @@ const C_MUTED = '999999'; // Muted/unavailable text
 const C_AXIS_GRAY = TP_COLORS.gridLine || 'D6D7D9'; // Chart axis/grid lines
 const C_CALLOUT_FILL = TP_COLORS.calloutFill || 'D9D9D9'; // Callout bg (bg1 lumMod 85%)
 const C_CALLOUT_BORDER = TP_COLORS.calloutBorder || 'BFBFBF'; // Callout border (bg1 lumMod 75%)
-// Cell margins in points (pptxgenjs uses pts). Template: LR=0.04in=2.88pt, TB=0
+// Cell margins in inches (pptxgenjs table margin is inch-based).
+// NOTE: Converting to points here caused 3in cell padding in output XML
+// (e.g., marL/marR=2743200 EMU). Keep raw inch values from template metadata.
+// Template baseline: LR=0.04in, TB=0
 const TABLE_CELL_MARGIN = [
-  Math.round((templatePatterns.style?.table?.cellMarginTB || 0) * 72),
-  Math.round((templatePatterns.style?.table?.cellMarginLR || 0.04) * 72),
-  Math.round((templatePatterns.style?.table?.cellMarginTB || 0) * 72),
-  Math.round((templatePatterns.style?.table?.cellMarginLR || 0.04) * 72),
+  Number(templatePatterns.style?.table?.cellMarginTB || 0),
+  Number(templatePatterns.style?.table?.cellMarginLR || 0.04),
+  Number(templatePatterns.style?.table?.cellMarginTB || 0),
+  Number(templatePatterns.style?.table?.cellMarginLR || 0.04),
 ];
 const C_LIGHT_GRAY = 'F5F5F5'; // Panel/callout backgrounds
 const C_GRAY_BG = 'F2F2F2'; // Alternate row/content backgrounds
@@ -312,6 +315,58 @@ function compactTableColumns(rows, options = {}, context = 'table') {
   return { rows: compactedRows, options: compactedOptions };
 }
 
+// Normalize table margins to inches to avoid pt-vs-inch regressions in generated XML.
+// Heuristic: values >2 are treated as points and converted to inches.
+function normalizeTableMarginValue(raw) {
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric)) return null;
+  if (numeric < 0) return 0;
+  if (numeric > 2) {
+    const inches = numeric / 72;
+    if (Number.isFinite(inches) && inches <= 2) return Number(inches.toFixed(4));
+  }
+  return numeric;
+}
+
+function normalizeTableMarginArray(margin, fallback = TABLE_CELL_MARGIN) {
+  if (!Array.isArray(margin) || margin.length !== 4) return null;
+  return margin.map((value, idx) => {
+    const normalized = normalizeTableMarginValue(value);
+    if (normalized == null) return Number(fallback?.[idx] || 0);
+    return normalized;
+  });
+}
+
+function sanitizeTableCellMargins(rows, context = 'table') {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+  let corrected = 0;
+  const sanitized = rows.map((row) => {
+    if (!Array.isArray(row)) return row;
+    return row.map((cell) => {
+      if (!cell || typeof cell !== 'object' || Array.isArray(cell)) return cell;
+      if (!cell.options || !Array.isArray(cell.options.margin)) return cell;
+      const normalizedMargin = normalizeTableMarginArray(cell.options.margin);
+      if (!normalizedMargin) return cell;
+      const changed = normalizedMargin.some(
+        (value, idx) => Math.abs(value - Number(cell.options.margin[idx] ?? 0)) > 1e-6
+      );
+      if (!changed) return cell;
+      corrected++;
+      return {
+        ...cell,
+        options: {
+          ...cell.options,
+          margin: normalizedMargin,
+        },
+      };
+    });
+  });
+  if (corrected > 0) {
+    console.warn(`[PPT] ${context}: normalized ${corrected} table cell margin(s) to inch units`);
+  }
+  return sanitized;
+}
+
 function safeAddTable(slide, rows, options = {}, context = 'table') {
   const normalizedRows = normalizeTableRows(rows);
   if (!normalizedRows) {
@@ -320,13 +375,16 @@ function safeAddTable(slide, rows, options = {}, context = 'table') {
   }
   let addOptions = options && typeof options === 'object' ? { ...options } : options;
   const compacted = compactTableColumns(normalizedRows, addOptions, context);
-  const tableRows = compacted.rows;
+  let tableRows = compacted.rows;
   addOptions = compacted.options;
+  tableRows = sanitizeTableCellMargins(tableRows, context);
   if (addOptions && typeof addOptions === 'object') {
     // Keep table layout deterministic across runs and template-conformant.
     delete addOptions.autoPage;
     delete addOptions.autoPageRepeatHeader;
     delete addOptions.autoPageHeaderRows;
+    const normalizedMargin = normalizeTableMarginArray(addOptions.margin);
+    if (normalizedMargin) addOptions.margin = normalizedMargin;
   }
   try {
     slide.addTable(tableRows, addOptions);
@@ -622,7 +680,7 @@ function createTableRowOptions(isHeader = false, isAlternate = false, COLORS = {
     fontFace: 'Segoe UI',
     fontSize: TP_FONTS.tableBody?.size || 14,
     valign: 'top',
-    margin: [0, 3, 0, 3],
+    margin: TABLE_CELL_MARGIN,
   };
 
   if (isHeader) {
@@ -2410,7 +2468,10 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
     color: C_BORDER,
   };
   const tocBorderNone = { pt: 0, color: 'FFFFFF' };
-  const tocSectionIndent = templatePatterns.style?.toc?.sectionIndentPt || 35;
+  const tocSectionIndentPt = Number(templatePatterns.style?.toc?.sectionIndentPt || 35);
+  const tocSectionIndent = Number.isFinite(tocSectionIndentPt)
+    ? Number((Math.max(0, tocSectionIndentPt) / 72).toFixed(4))
+    : Number((35 / 72).toFixed(4));
 
   // Fix 4: TOC active section fill from JSON
   const tocActiveFill = TP_COLORS.tocActiveSectionFill || 'CCE5FF';
@@ -2449,7 +2510,12 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
           fill: isActive ? { color: tocActiveFill } : undefined,
           border: [tocBorderTB, tocBorderNone, tocBorderTB, tocBorderNone],
           valign: 'middle',
-          margin: [0, 0, 0, tocSectionIndent],
+          margin: [
+            TABLE_CELL_MARGIN[0],
+            TABLE_CELL_MARGIN[1],
+            TABLE_CELL_MARGIN[2],
+            Number((TABLE_CELL_MARGIN[3] + tocSectionIndent).toFixed(4)),
+          ],
         },
       },
     ]);

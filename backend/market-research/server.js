@@ -66,6 +66,9 @@ async function runMarketResearch(userPrompt, email, options = {}) {
     try {
       // Stage 1: Parse scope
       const scope = await parseScope(userPrompt);
+      const draftPptMode = Boolean(
+        options?.draftPptMode || options?.allowDraftPpt || options?.draftPpt
+      );
       if (options && typeof options === 'object') {
         if (
           options.templateSlideSelections &&
@@ -75,6 +78,9 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         }
         if (typeof options.templateStrictMode === 'boolean') {
           scope.templateStrictMode = options.templateStrictMode;
+        }
+        if (draftPptMode) {
+          scope.draftPptMode = true;
         }
       }
 
@@ -205,6 +211,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         totalCost: costTracker.totalCost,
         apiCalls: costTracker.calls.length,
         stage: 'complete',
+        draftPptMode,
       };
 
       // Depth/readiness gate: block clearly weak outputs before synthesis/PPT generation.
@@ -232,15 +239,26 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             return `${ca.country} (effective=${score}, coherence=${coherence})`;
           })
           .join(', ');
-        if (lastRunDiagnostics) {
-          lastRunDiagnostics.stage = 'quality_gate_failed';
-          lastRunDiagnostics.notReadyCountries = notReadyDiagnostics;
-          lastRunDiagnostics.error = `Country analysis quality gate failed: ${list}. Refusing to generate deck below required quality threshold (>=80).`;
+        if (draftPptMode) {
+          console.warn(
+            `[Quality Gate] Draft PPT mode enabled — bypassing readiness block for: ${list}`
+          );
+          if (lastRunDiagnostics) {
+            lastRunDiagnostics.stage = 'quality_gate_bypassed_draft';
+            lastRunDiagnostics.notReadyCountries = notReadyDiagnostics;
+            lastRunDiagnostics.qualityGateBypassedForDraft = true;
+          }
+        } else {
+          if (lastRunDiagnostics) {
+            lastRunDiagnostics.stage = 'quality_gate_failed';
+            lastRunDiagnostics.notReadyCountries = notReadyDiagnostics;
+            lastRunDiagnostics.error = `Country analysis quality gate failed: ${list}. Refusing to generate deck below required quality threshold (>=80).`;
+          }
+          console.warn(`[Quality Gate] Countries not fully ready: ${list}`);
+          throw new Error(
+            `Country analysis quality gate failed: ${list}. Refusing to generate deck below required quality threshold (>=80).`
+          );
         }
-        console.warn(`[Quality Gate] Countries not fully ready: ${list}`);
-        throw new Error(
-          `Country analysis quality gate failed: ${list}. Refusing to generate deck below required quality threshold (>=80).`
-        );
       }
 
       // NOTE: rawData is preserved here — PPT generation needs it for citations and fallback content.
@@ -261,10 +279,10 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         })
       );
       if (!synthesisGate.pass) {
-        if (synthesisGate.overall < 40) {
+        if (synthesisGate.overall < 40 && !draftPptMode) {
           throw new Error(`Synthesis quality too low (${synthesisGate.overall}/100). Aborting.`);
         }
-        if (synthesisGate.overall < 60) {
+        if (synthesisGate.overall < 60 && !draftPptMode) {
           console.log(
             `[Quality Gate] Quality marginal (${synthesisGate.overall}/100), retrying synthesis with boosted tokens...`
           );
@@ -280,10 +298,23 @@ async function runMarketResearch(userPrompt, email, options = {}) {
               failures: retryGate.failures,
             })
           );
-          if (!retryGate.pass && retryGate.overall < 40) {
+          if (!retryGate.pass && retryGate.overall < 40 && !draftPptMode) {
             throw new Error(
               `Synthesis quality still too low after retry (${retryGate.overall}/100). Aborting.`
             );
+          }
+        }
+        if (draftPptMode) {
+          console.warn(
+            `[Quality Gate] Draft PPT mode enabled — proceeding despite synthesis gate failures (overall=${synthesisGate.overall})`
+          );
+          if (lastRunDiagnostics) {
+            lastRunDiagnostics.synthesisGateBypassedForDraft = true;
+            lastRunDiagnostics.synthesisGate = {
+              pass: synthesisGate.pass,
+              overall: synthesisGate.overall,
+              failures: synthesisGate.failures,
+            };
           }
         }
       }
@@ -335,6 +366,11 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             `PPT rendering quality failed: failures=${failureCount}, totalBlocks=${templateTotal}, failureRate=${failureRate.toFixed(2)}`
           );
         }
+        if (Number(pptMetrics.formattingAuditCriticalCount || 0) > 0) {
+          throw new Error(
+            `PPT formatting audit failed: critical=${pptMetrics.formattingAuditCriticalCount}`
+          );
+        }
 
         const formattingWarnings = [];
         if (Number(pptMetrics.templateCoverage || 0) < 90) {
@@ -351,6 +387,9 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         }
         if (Number(pptMetrics.geometryMaxDelta || 0) > 0.15) {
           formattingWarnings.push(`geometryMaxDelta=${pptMetrics.geometryMaxDelta}`);
+        }
+        if (Number(pptMetrics.formattingAuditWarningCount || 0) > 0) {
+          formattingWarnings.push(`formatAuditWarnings=${pptMetrics.formattingAuditWarningCount}`);
         }
         if (formattingWarnings.length > 0) {
           console.warn(
@@ -386,9 +425,13 @@ async function runMarketResearch(userPrompt, email, options = {}) {
 
       // Stage 5: Send email
       const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
+      const finalFilename = draftPptMode
+        ? filename.replace(/\.pptx$/i, '_DRAFT.pptx')
+        : filename;
 
       const emailHtml = `
       <p>Your market research report is attached.</p>
+      ${draftPptMode ? '<p><strong>Mode:</strong> Draft PPT (quality gates bypassed for formatting QA)</p>' : ''}
       <p style="color: #666; font-size: 12px;">${escapeHtml(scope.industry)} - ${escapeHtml(scope.targetMarkets.join(', '))}</p>
     `;
 
@@ -397,7 +440,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         subject: `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`,
         html: emailHtml,
         attachments: {
-          filename,
+          filename: finalFilename,
           content: pptBuffer.toString('base64'),
         },
         fromName: 'Market Research AI',
@@ -492,7 +535,16 @@ app.get('/health', (req, res) => {
 
 // Main research endpoint
 app.post('/api/market-research', async (req, res) => {
-  const { prompt, email, options, templateSlideSelections, templateStrictMode } = req.body;
+  const {
+    prompt,
+    email,
+    options,
+    templateSlideSelections,
+    templateStrictMode,
+    draftPpt,
+    draftPptMode,
+    allowDraftPpt,
+  } = req.body;
 
   if (!prompt || !email) {
     return res.status(400).json({ error: 'Missing required fields: prompt, email' });
@@ -526,6 +578,15 @@ app.post('/api/market-research', async (req, res) => {
   }
   if (typeof templateStrictMode === 'boolean') {
     mergedOptions.templateStrictMode = templateStrictMode;
+  }
+  if (typeof draftPpt === 'boolean') {
+    mergedOptions.draftPpt = draftPpt;
+  }
+  if (typeof draftPptMode === 'boolean') {
+    mergedOptions.draftPptMode = draftPptMode;
+  }
+  if (typeof allowDraftPpt === 'boolean') {
+    mergedOptions.allowDraftPpt = allowDraftPpt;
   }
   Promise.race([runMarketResearch(prompt, email, mergedOptions), timeoutPromise])
     .then(() => {
