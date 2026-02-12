@@ -29,6 +29,24 @@ const CFG_REVIEW_DEEPEN_TARGET_SCORE = parsePositiveIntEnv('REVIEW_DEEPEN_TARGET
 const CFG_REFINEMENT_MAX_ITERATIONS = parsePositiveIntEnv('REFINEMENT_MAX_ITERATIONS', 3);
 const CFG_MIN_CONFIDENCE_SCORE = parsePositiveIntEnv('MIN_CONFIDENCE_SCORE', 80);
 const CFG_FINAL_REVIEW_MAX_ITERATIONS = parsePositiveIntEnv('FINAL_REVIEW_MAX_ITERATIONS', 3);
+const CFG_DYNAMIC_AGENT_CONCURRENCY = parsePositiveIntEnv('DYNAMIC_AGENT_CONCURRENCY', 2);
+const CFG_DYNAMIC_AGENT_BATCH_DELAY_MS = parsePositiveIntEnv('DYNAMIC_AGENT_BATCH_DELAY_MS', 1000);
+const CFG_DEEPEN_QUERY_CONCURRENCY = parsePositiveIntEnv('DEEPEN_QUERY_CONCURRENCY', 2);
+const CFG_DEEPEN_BATCH_DELAY_MS = parsePositiveIntEnv('DEEPEN_BATCH_DELAY_MS', 1000);
+
+async function runInBatches(items, batchSize, handler, delayMs = 0) {
+  const results = [];
+  const size = Math.max(1, Number.isFinite(batchSize) ? batchSize : 1);
+  for (let i = 0; i < items.length; i += size) {
+    const batch = items.slice(i, i + size);
+    const batchResults = await Promise.all(batch.map((item, idx) => handler(item, i + idx)));
+    results.push(...batchResults);
+    if (delayMs > 0 && i + size < items.length) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return results;
+}
 
 const PLACEHOLDER_PATTERNS = [
   /\binsufficient research data\b/i,
@@ -1310,6 +1328,59 @@ function canonicalizeMarketSectionKey(rawKey, sectionValue) {
     /[^a-z0-9\s]/g,
     ' '
   );
+  const compactHint = hint.replace(/\s+/g, '');
+  const hasCompactAlias = (aliases) =>
+    aliases.some((alias) => alias && compactHint.includes(alias));
+
+  // Handle common camelCase/merged-key drift that fails word-boundary regex tests.
+  if (
+    hasCompactAlias([
+      'marketsizeandgrowth',
+      'marketsizegrowth',
+      'marketsize',
+      'growth',
+      'segmentanalysis',
+      'marketsegments',
+      'tam',
+      'sam',
+    ])
+  ) {
+    return 'marketSizeAndGrowth';
+  }
+
+  if (
+    hasCompactAlias([
+      'supplyanddemanddynamics',
+      'supplydemanddynamics',
+      'supplyanddemand',
+      'supplydemand',
+      'infrastructuregrid',
+      'gridinfrastructure',
+      'infrastructure',
+      'transmission',
+      'distribution',
+      'capacity',
+    ])
+  ) {
+    return 'supplyAndDemandDynamics';
+  }
+
+  if (
+    hasCompactAlias([
+      'pricingandtariffstructures',
+      'pricingandtariffs',
+      'pricingtariffs',
+      'priceandtariff',
+      'pricing',
+      'tariff',
+      'dayrate',
+      'benchmark',
+      'economics',
+      'cost',
+    ])
+  ) {
+    return 'pricingAndTariffStructures';
+  }
 
   if (
     /\bmarket\s*size\b|\bgrowth\b|\bcagr\b|\btam\b|\bmarket\s*value\b|\baddressable\b|\bsegment\b|\bserviceable\b|\bsam\b/.test(
@@ -4817,9 +4888,11 @@ async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQ
     })),
   ];
 
-  // Run all in parallel with per-query timeout
-  const results = await Promise.all(
-    allQueries.map(async (query) => {
+  // Run deepen queries in small batches to avoid quota bursts.
+  const results = await runInBatches(
+    allQueries,
+    CFG_DEEPEN_QUERY_CONCURRENCY,
+    async (query) => {
       try {
         const result = await Promise.race([
           callGeminiResearch(query.searchQuery, country, industry, pipelineSignal),
@@ -4847,7 +4920,8 @@ async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQ
           success: false,
         };
       }
-    })
+    },
+    CFG_DEEPEN_BATCH_DELAY_MS
   );
 
   const successCount = results.filter((r) => r.success).length;
@@ -5348,27 +5422,31 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     }
 
     console.log(
-      `  [DYNAMIC FRAMEWORK] Launching ${categoryCount} research agents with ${totalTopics} topics for ${scope.industry}...`
+      `  [DYNAMIC FRAMEWORK] Launching ${categoryCount} research agents with ${totalTopics} topics for ${scope.industry} (concurrency=${CFG_DYNAMIC_AGENT_CONCURRENCY})...`
     );
 
-    // Run all categories in parallel
-    const categoryPromises = Object.entries(dynamicFramework).map(([category, data]) =>
-      universalResearchAgent(
-        category,
-        data.topics || [],
-        country,
-        industry,
-        clientContext,
-        scope.projectType,
-        pipelineSignal
-      )
-    );
+    // Run category agents in small batches to avoid quota spikes.
+    const categoryEntries = Object.entries(dynamicFramework);
 
     // Timeout wrapper: abort if research takes >5 minutes total
     let categoryResults;
     try {
       categoryResults = await Promise.race([
-        Promise.all(categoryPromises),
+        runInBatches(
+          categoryEntries,
+          CFG_DYNAMIC_AGENT_CONCURRENCY,
+          async ([category, data]) =>
+            universalResearchAgent(
+              category,
+              data.topics || [],
+              country,
+              industry,
+              clientContext,
+              scope.projectType,
+              pipelineSignal
+            ),
+          CFG_DYNAMIC_AGENT_BATCH_DELAY_MS
+        ),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Research timed out after 5min')), 300000)
         ),
@@ -5414,15 +5492,32 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     console.log(`    - Depth Agent (5 topics)`);
     console.log(`    - Insights Agent (4 topics)`);
 
-    const [policyData, marketData, competitorData, contextData, depthData, insightsData] =
-      await Promise.all([
-        policyResearchAgent(country, industry, clientContext, pipelineSignal),
-        marketResearchAgent(country, industry, clientContext, pipelineSignal),
-        competitorResearchAgent(country, industry, clientContext, pipelineSignal),
-        contextResearchAgent(country, industry, clientContext, pipelineSignal),
-        depthResearchAgent(country, industry, clientContext, pipelineSignal),
-        insightsResearchAgent(country, industry, clientContext, pipelineSignal),
-      ]);
+    const specializedAgents = [
+      ['policy', () => policyResearchAgent(country, industry, clientContext, pipelineSignal)],
+      ['market', () => marketResearchAgent(country, industry, clientContext, pipelineSignal)],
+      [
+        'competitors',
+        () => competitorResearchAgent(country, industry, clientContext, pipelineSignal),
+      ],
+      ['context', () => contextResearchAgent(country, industry, clientContext, pipelineSignal)],
+      ['depth', () => depthResearchAgent(country, industry, clientContext, pipelineSignal)],
+      ['insights', () => insightsResearchAgent(country, industry, clientContext, pipelineSignal)],
+    ];
+    const specializedResults = await runInBatches(
+      specializedAgents,
+      CFG_DYNAMIC_AGENT_CONCURRENCY,
+      async ([name, run]) => ({ name, data: await run() }),
+      CFG_DYNAMIC_AGENT_BATCH_DELAY_MS
+    );
+    const specializedMap = Object.fromEntries(
+      specializedResults.map((entry) => [entry.name, entry.data || {}])
+    );
+    const policyData = specializedMap.policy || {};
+    const marketData = specializedMap.market || {};
+    const competitorData = specializedMap.competitors || {};
+    const contextData = specializedMap.context || {};
+    const depthData = specializedMap.depth || {};
+    const insightsData = specializedMap.insights || {};
 
     // Merge all agent results
     researchData = {
@@ -5437,7 +5532,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     const totalTopics = Object.keys(researchData).length;
     const researchTime = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(
-      `\n  [AGENTS COMPLETE] ${totalTopics} topics researched in ${researchTime}s (parallel execution)`
+      `\n  [AGENTS COMPLETE] ${totalTopics} topics researched in ${researchTime}s (throttled execution)`
     );
 
     // Validate minimum research data before synthesis

@@ -1,6 +1,28 @@
 const { callGeminiResearch, callGemini } = require('./ai-clients');
 const { RESEARCH_FRAMEWORK, RESEARCH_TOPIC_GROUPS } = require('./research-framework');
 
+function parsePositiveIntEnv(name, fallback) {
+  const raw = Number.parseInt(process.env[name] || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+}
+
+const RESEARCH_TOPIC_CONCURRENCY = parsePositiveIntEnv('RESEARCH_TOPIC_CONCURRENCY', 2);
+const RESEARCH_TOPIC_BATCH_DELAY_MS = parsePositiveIntEnv('RESEARCH_TOPIC_BATCH_DELAY_MS', 1000);
+
+async function runInBatches(items, batchSize, handler, delayMs = 0) {
+  const results = [];
+  const size = Math.max(1, Number.isFinite(batchSize) ? batchSize : 1);
+  for (let i = 0; i < items.length; i += size) {
+    const batch = items.slice(i, i + size);
+    const batchResults = await Promise.all(batch.map((item, idx) => handler(item, i + idx)));
+    results.push(...batchResults);
+    if (delayMs > 0 && i + size < items.length) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return results;
+}
+
 /**
  * Find the outermost balanced JSON boundary starting from the first openChar.
  * Uses bracket counting instead of non-greedy regex to handle nested structures.
@@ -118,9 +140,11 @@ async function policyResearchAgent(country, industry, _clientContext, pipelineSi
   const topics = RESEARCH_TOPIC_GROUPS.policy;
   const results = {};
 
-  // Run all policy topics in parallel with per-topic timeout
-  const policyResults = await Promise.all(
-    topics.map(async (topicKey) => {
+  // Run policy topics in small batches to reduce quota spikes.
+  const policyResults = await runInBatches(
+    topics,
+    RESEARCH_TOPIC_CONCURRENCY,
+    async (topicKey) => {
       const framework = RESEARCH_FRAMEWORK[topicKey];
       if (!framework) return null;
 
@@ -235,7 +259,8 @@ REQUIREMENTS:
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         dataQuality: dataQuality,
       };
-    })
+    },
+    RESEARCH_TOPIC_BATCH_DELAY_MS
   );
 
   let droppedCount = 0;
@@ -262,9 +287,10 @@ async function marketResearchAgent(country, industry, _clientContext, pipelineSi
   const topics = RESEARCH_TOPIC_GROUPS.market;
   const results = {};
 
-  // Run market topics in batches of 3 (more topics)
-  for (let i = 0; i < topics.length; i += 3) {
-    const batch = topics.slice(i, i + 3);
+  const marketBatchSize = Math.max(1, Math.min(RESEARCH_TOPIC_CONCURRENCY, 2));
+  // Keep market batching conservative because these prompts are token-heavy.
+  for (let i = 0; i < topics.length; i += marketBatchSize) {
+    const batch = topics.slice(i, i + marketBatchSize);
 
     const batchResults = await Promise.all(
       batch.map(async (topicKey) => {
@@ -465,8 +491,8 @@ REQUIREMENTS:
     }
 
     // Brief pause between batches
-    if (i + 3 < topics.length) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (i + marketBatchSize < topics.length) {
+      await new Promise((resolve) => setTimeout(resolve, RESEARCH_TOPIC_BATCH_DELAY_MS));
     }
   }
 
@@ -486,9 +512,11 @@ async function competitorResearchAgent(country, industry, _clientContext, pipeli
   const topics = RESEARCH_TOPIC_GROUPS.competitors;
   const results = {};
 
-  // Run competitor topics in parallel
-  const compResults = await Promise.all(
-    topics.map(async (topicKey) => {
+  // Run competitor topics in small batches to reduce quota spikes.
+  const compResults = await runInBatches(
+    topics,
+    RESEARCH_TOPIC_CONCURRENCY,
+    async (topicKey) => {
       const framework = RESEARCH_FRAMEWORK[topicKey];
       if (!framework) return null;
 
@@ -652,7 +680,8 @@ REQUIREMENTS:
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         dataQuality: dataQuality,
       };
-    })
+    },
+    RESEARCH_TOPIC_BATCH_DELAY_MS
   );
 
   for (const r of compResults) {
@@ -672,9 +701,11 @@ async function contextResearchAgent(country, industry, clientContext, pipelineSi
   const topics = RESEARCH_TOPIC_GROUPS.context;
   const results = {};
 
-  // Run context topics in parallel
-  const contextResults = await Promise.all(
-    topics.map(async (topicKey) => {
+  // Run context topics in small batches to reduce quota spikes.
+  const contextResults = await runInBatches(
+    topics,
+    RESEARCH_TOPIC_CONCURRENCY,
+    async (topicKey) => {
       const framework = RESEARCH_FRAMEWORK[topicKey];
       if (!framework) return null;
 
@@ -758,7 +789,8 @@ Your response MUST include a JSON block. Use this format:
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         dataQuality: structuredData?.dataQuality || 'unknown',
       };
-    })
+    },
+    RESEARCH_TOPIC_BATCH_DELAY_MS
   );
 
   for (const r of contextResults) {
@@ -778,9 +810,11 @@ async function depthResearchAgent(country, industry, clientContext, pipelineSign
   const topics = RESEARCH_TOPIC_GROUPS.depth;
   const results = {};
 
-  // Run depth topics in parallel - these are critical for actionable recommendations
-  const depthResults = await Promise.all(
-    topics.map(async (topicKey) => {
+  // Run depth topics in small batches; these prompts are heavy and hit quota quickly.
+  const depthResults = await runInBatches(
+    topics,
+    RESEARCH_TOPIC_CONCURRENCY,
+    async (topicKey) => {
       const framework = RESEARCH_FRAMEWORK[topicKey];
       if (!framework) return null;
 
@@ -956,7 +990,8 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
         dataQuality,
         researchQuality: result.researchQuality || 'unknown',
       };
-    })
+    },
+    RESEARCH_TOPIC_BATCH_DELAY_MS
   );
 
   for (const r of depthResults) {
@@ -976,9 +1011,11 @@ async function insightsResearchAgent(country, industry, clientContext, pipelineS
   const topics = RESEARCH_TOPIC_GROUPS.insights;
   const results = {};
 
-  // Run insight queries in parallel - these uncover non-obvious intelligence
-  const insightResults = await Promise.all(
-    topics.map(async (topicKey) => {
+  // Run insight queries in small batches to reduce quota spikes.
+  const insightResults = await runInBatches(
+    topics,
+    RESEARCH_TOPIC_CONCURRENCY,
+    async (topicKey) => {
       const framework = RESEARCH_FRAMEWORK[topicKey];
       if (!framework) return null;
 
@@ -1179,7 +1216,8 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
         dataQuality,
         researchQuality: result.researchQuality || 'unknown',
       };
-    })
+    },
+    RESEARCH_TOPIC_BATCH_DELAY_MS
   );
 
   for (const r of insightResults) {
@@ -1210,9 +1248,11 @@ async function universalResearchAgent(
   const currentYear = new Date().getFullYear();
   const recentStartYear = Math.max(2019, currentYear - 3);
 
-  // Run all topics in parallel with per-topic timeout
-  const topicResults = await Promise.all(
-    topics.map(async (topic, idx) => {
+  // Run topics in small batches; full parallelism causes expensive retry storms.
+  const topicResults = await runInBatches(
+    topics,
+    RESEARCH_TOPIC_CONCURRENCY,
+    async (topic, idx) => {
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 Never use future-dated facts beyond ${currentYear}. If a source discusses a future target, present it as a target and include the official source and publication date.
 
@@ -1335,7 +1375,8 @@ REQUIREMENTS:
           dataQuality: 'failed',
         };
       }
-    })
+    },
+    RESEARCH_TOPIC_BATCH_DELAY_MS
   );
 
   for (const r of topicResults) {

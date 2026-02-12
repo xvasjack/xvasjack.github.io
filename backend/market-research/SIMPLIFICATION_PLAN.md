@@ -5,6 +5,11 @@ Recent runs showed expensive loop churn, repeated JSON repair retries, and flash
 
 This plan keeps quality strict while reducing unnecessary complexity and token burn.
 
+## Hard rule
+- Do not overengineer runtime control loops.
+- Default to simple controls first: 10s retry base delay + reduced parallelism.
+- Any added complexity must prove direct impact on cost, stability, or output quality.
+
 ## Current assessment
 
 ### 1) Content depth / insight / storyflow
@@ -39,9 +44,16 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
   - retries reduced to 2
   - final retry uses strict minimal flash-only path (no pro-tier escalation in that branch)
 - Reduced review-deepen query fan-out default from 20 to 12.
+- Throttled research execution:
+  - dynamic category agents now run in small batches (default concurrency `2`)
+  - specialized fallback agents now run in small batches (default concurrency `2`)
+  - universal/context/policy/competitor/depth/insight topic runs are batch-throttled (default concurrency `2`)
+- Throttled deepen execution:
+  - follow-up gap queries now run in small batches (default concurrency `2`)
+- Hardened market key canonicalization:
+  - merged key aliases like `supplydemandDynamics`, `pricingAndTariffs`, and `segmentAnalysis` map to canonical market sections instead of triggering retry churn.
 
 ## Next safe simplifications (if needed)
 - Add per-section retry budget (hard cap on model calls per section per run).
 - Collapse duplicate reviewer passes when issue signature is unchanged.
 - Keep a single synthesis strict mode for market/policy/competitors unless explicit debug mode is enabled.
-
