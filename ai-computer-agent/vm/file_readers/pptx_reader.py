@@ -631,27 +631,53 @@ def _estimate_overflow(slide_fmt: SlideFormatting) -> List[Dict[str, Any]]:
 
 
 def _detect_overlaps(slide_fmt: SlideFormatting) -> List[Dict[str, Any]]:
-    """Detect overlapping shapes on a slide by checking y + height > next shape y"""
+    """Detect overlapping shapes on a slide via true 2D rectangle intersection."""
     overlaps = []
-    # Only check text/table shapes, sorted by y position
-    content_shapes = [s for s in slide_fmt.shapes
-                      if s.shape_type in ("text_box", "table", "placeholder") and s.height > 0]
-    content_shapes.sort(key=lambda s: s.top)
+    # Only check content-bearing shapes.
+    content_shapes = [
+        s for s in slide_fmt.shapes
+        if s.shape_type in ("text_box", "table", "placeholder")
+        and s.height > 0
+        and s.width > 0
+        and (s.shape_type == "table" or s.text_length > 0)
+    ]
+    tol = 0.03  # ~2 px at 96 dpi; avoids flagging near-touching boxes
 
     for i in range(len(content_shapes) - 1):
-        current = content_shapes[i]
-        nxt = content_shapes[i + 1]
-        bottom = current.top + current.height
-        if bottom > nxt.top + 0.05:  # 0.05" tolerance
-            overlap_inches = round(bottom - nxt.top, 2)
+        a = content_shapes[i]
+        ax0, ay0 = a.left, a.top
+        ax1, ay1 = a.left + a.width, a.top + a.height
+        for j in range(i + 1, len(content_shapes)):
+            b = content_shapes[j]
+            bx0, by0 = b.left, b.top
+            bx1, by1 = b.left + b.width, b.top + b.height
+
+            x_overlap = min(ax1, bx1) - max(ax0, bx0)
+            y_overlap = min(ay1, by1) - max(ay0, by0)
+            if x_overlap <= tol or y_overlap <= tol:
+                continue
+
+            # Ignore nested text/background pairs (common in PPT where one text shape
+            # acts as a filled panel and another carries the foreground text).
+            a_contains_b = ax0 <= bx0 + tol and ay0 <= by0 + tol and ax1 >= bx1 - tol and ay1 >= by1 - tol
+            b_contains_a = bx0 <= ax0 + tol and by0 <= ay0 + tol and bx1 >= ax1 - tol and by1 >= ay1 - tol
+            if a_contains_b or b_contains_a:
+                continue
+
             overlaps.append({
                 "slide": slide_fmt.slide_number,
-                "shape_a_type": current.shape_type,
-                "shape_a_top": current.top,
-                "shape_a_bottom": round(bottom, 2),
-                "shape_b_type": nxt.shape_type,
-                "shape_b_top": nxt.top,
-                "overlap_inches": overlap_inches,
+                "shape_a_type": a.shape_type,
+                "shape_a_left": round(ax0, 2),
+                "shape_a_top": round(ay0, 2),
+                "shape_a_right": round(ax1, 2),
+                "shape_a_bottom": round(ay1, 2),
+                "shape_b_type": b.shape_type,
+                "shape_b_left": round(bx0, 2),
+                "shape_b_top": round(by0, 2),
+                "shape_b_right": round(bx1, 2),
+                "shape_b_bottom": round(by1, 2),
+                "overlap_x_inches": round(x_overlap, 2),
+                "overlap_y_inches": round(y_overlap, 2),
             })
     return overlaps
 

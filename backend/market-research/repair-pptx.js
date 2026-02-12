@@ -34,6 +34,13 @@ function buildIssues(packageConsistency) {
   if ((packageConsistency.duplicateSlideRelIds || []).length > 0) {
     issues.push(`duplicate slide rel ids: ${packageConsistency.duplicateSlideRelIds.join(', ')}`);
   }
+  if ((packageConsistency.missingRelationshipReferences || []).length > 0) {
+    const preview = packageConsistency.missingRelationshipReferences
+      .slice(0, 5)
+      .map((x) => `${x.ownerPart}:${x.relId}`)
+      .join(', ');
+    issues.push(`dangling xml relationship refs: ${preview}`);
+  }
   if ((packageConsistency.duplicateNonVisualShapeIds || []).length > 0) {
     const preview = packageConsistency.duplicateNonVisualShapeIds
       .slice(0, 5)
@@ -91,7 +98,7 @@ async function repair(inputPath, outputPath) {
     `[Repair] Content types reconcile: changed=${ctReconcile.changed}, removedDangling=${(ctReconcile.stats?.removedDangling || []).length}, addedOverrides=${(ctReconcile.stats?.addedOverrides || []).length}, correctedOverrides=${(ctReconcile.stats?.correctedOverrides || []).length}`
   );
   console.log(
-    `[Repair] Relationship integrity: brokenTargets=${relIntegrity.missingInternalTargets.length}`
+    `[Repair] Relationship integrity: brokenTargets=${relIntegrity.missingInternalTargets.length}, invalidExternal=${(relIntegrity.invalidExternalTargets || []).length}`
   );
   console.log(
     `[Repair] Package consistency: ${packageIssues.length === 0 ? 'PASS' : packageIssues.join(' | ')}`
@@ -102,6 +109,7 @@ async function repair(inputPath, outputPath) {
 
   if (
     relIntegrity.missingInternalTargets.length > 0 ||
+    (relIntegrity.invalidExternalTargets || []).length > 0 ||
     packageIssues.length > 0 ||
     !validation.valid
   ) {

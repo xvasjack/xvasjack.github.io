@@ -56,8 +56,8 @@ const CFG_REVIEW_DEEPEN_MAX_QUERIES = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_QUER
 const CFG_FINAL_REVIEW_MAX_QUERIES = parseBoundedIntEnv('FINAL_REVIEW_MAX_QUERIES', 2, 8);
 const CFG_FILL_GAPS_MAX_CRITICAL = parseBoundedIntEnv('FILL_GAPS_MAX_CRITICAL', 4, 6);
 const CFG_FILL_GAPS_MAX_VERIFICATIONS = parseBoundedIntEnv('FILL_GAPS_MAX_VERIFICATIONS', 1, 3);
-const CFG_SYNTHESIS_TOPIC_MAX_CHARS = parseBoundedIntEnv('SYNTHESIS_TOPIC_MAX_CHARS', 1200, 2400);
-const CFG_SYNTHESIS_TIER_DELAY_MS = parseBoundedIntEnv('SYNTHESIS_TIER_DELAY_MS', 5000, 10000);
+const CFG_SYNTHESIS_TOPIC_MAX_CHARS = parseBoundedIntEnv('SYNTHESIS_TOPIC_MAX_CHARS', 900, 2400);
+const CFG_SYNTHESIS_TIER_DELAY_MS = parseBoundedIntEnv('SYNTHESIS_TIER_DELAY_MS', 10000, 15000);
 const CFG_FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS = parseBoundedIntEnv(
   'FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS',
   1,
@@ -2612,6 +2612,9 @@ RULES:
 - Use null for any missing fields
 - Include source citations where available
 - Insights should reference specific numbers from the data
+- Keep text concise for slide readability:
+  - subtitle/overview/keyMessage/riskJustification <= 35 words each
+  - arrays max 5 items unless schema asks for fewer
 
 Return JSON:
 {
@@ -2619,7 +2622,7 @@ Return JSON:
     "slideTitle": "${country} - ${industry} Foundational Acts",
     "subtitle": "THESIS STATEMENT: 1-2 sentences (100-180 chars) explaining the KEY TAKEAWAY for the client. Example: '${country} is selectively opening competition, with recent reforms prioritizing private-sector participation in demand-side efficiency'",
     "acts": [
-      {"name": "Official Act Name", "year": "YYYY", "requirements": "30-50 words per cell with specific regulatory citations and article numbers", "penalties": "30-50 words per cell with specific monetary values, imprisonment terms, or administrative actions", "enforcement": "30-50 words on enforcement reality: agency name, capacity, actual compliance rates"}
+      {"name": "Official Act Name", "year": "YYYY", "requirements": "20-35 words per cell with specific regulatory citations and article numbers", "penalties": "20-35 words per cell with specific monetary values, imprisonment terms, or administrative actions", "enforcement": "20-35 words on enforcement reality: agency name, capacity, actual compliance rates"}
     ],
     "keyMessage": "One sentence insight connecting regulations to client opportunity"
   },
@@ -2666,7 +2669,7 @@ Return ONLY valid JSON.`;
 
     const currentPrompt = attempt === 0 ? prompt : prompt + antiArraySuffix;
     let currentResult = await synthesizeWithFallback(currentPrompt, {
-      maxTokens: 10240,
+      maxTokens: 8192,
       label: 'synthesizePolicy',
       allowArrayNormalization: false,
       allowTruncationRepair: true,
@@ -2879,6 +2882,9 @@ RULES:
 - Use null for any missing fields
 - Include source citations where available
 - Insights should reference specific numbers from the data
+- Keep text concise for slide readability:
+  - subtitle/overview/keyInsight <= 35 words each
+  - keyMetrics max 6 rows per section
 - If specific yearly data is available in the research, provide chartData with series/categories format: {"series": [{"name": "Category", "values": [1, 2, 3]}], "categories": ["2020", "2021", "2022"]}. If not, set chartData to null. Do NOT fabricate time series from training knowledge.
 - For "sources": extract any URLs from the research data that are relevant to this section. These become clickable hyperlinks in the presentation.
 
@@ -2937,7 +2943,7 @@ Return ONLY valid JSON.`;
     if (attempt === 0) {
       // Normal synthesis (Flash)
       currentResult = await synthesizeWithFallback(prompt, {
-        maxTokens: 12288,
+        maxTokens: 8192,
         label: 'synthesizeMarket',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -2949,7 +2955,7 @@ Return ONLY valid JSON.`;
       // Flash with anti-array prompt
       console.log(`  [synthesizeMarket] Retry ${attempt}: Flash with anti-array prompt`);
       currentResult = await synthesizeWithFallback(prompt + antiArraySuffix, {
-        maxTokens: 12288,
+        maxTokens: 8192,
         label: 'synthesizeMarket',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -2973,7 +2979,7 @@ ${JSON.stringify(labeledData, null, 2)}
 
 ${antiArraySuffix}`;
       currentResult = await synthesizeWithFallback(minimalPrompt, {
-        maxTokens: 12288,
+        maxTokens: 8192,
         label: 'synthesizeMarket',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3136,21 +3142,22 @@ RULES:
 - Only use data from the INPUT DATA above
 - Use null for any missing fields
 - Include source citations where available
-- Company descriptions should be 45-60 words
+- Company descriptions should be 25-35 words
 - Insights should reference specific numbers from the data
 - Limit each company to at most 1 project entry (keep payload concise and stable)
 - Include a "sources" array with relevant URLs from the research data for each section: [{"url": "https://...", "title": "Source Name"}]
+- Keep all narrative fields concise (<= 35 words each) and avoid paragraph-style responses.
 
 CRITICAL WORD COUNT RULE:
-Each "description" field MUST contain 45-60 words.
-Include at least 2 numeric facts (e.g., revenue, market share, growth rate, entry year).
+Each "description" field MUST contain 25-35 words.
+Include at least 1 numeric fact (e.g., revenue, market share, growth rate, entry year).
 
 Return ONLY valid JSON.`;
 
   const prompt1 = `${commonIntro}
 
 Return JSON with ONLY the japanesePlayers section.
-IMPORTANT: Return 3-4 Japanese companies. Include subsidiaries, JV partners, trading companies (sogo shosha), and any Japanese firm with energy/industrial operations in ${country}.
+IMPORTANT: Return exactly 3 Japanese companies. Include subsidiaries, JV partners, trading companies (sogo shosha), and any Japanese firm with energy/industrial operations in ${country}.
 
 {
   "japanesePlayers": {
@@ -3163,7 +3170,7 @@ IMPORTANT: Return 3-4 Japanese companies. Include subsidiaries, JV partners, tra
         "projects": [{ "name": "Project name", "value": "$X million", "year": "YYYY", "status": "Active/Completed/Planned", "details": "Brief description" }],
         "financialHighlights": { "investmentToDate": "$X million", "profitMargin": "X%", "growthRate": "X% CAGR" },
         "strategicAssessment": "2-3 sentences on competitive position, strengths, weaknesses, and outlook",
-        "description": "45-60 words with specific metrics, entry strategy, project details, market position"
+        "description": "25-35 words with specific metrics, entry strategy, project details, market position"
       }
     ],
     "marketInsight": "Overall assessment of Japanese presence",
@@ -3174,7 +3181,7 @@ IMPORTANT: Return 3-4 Japanese companies. Include subsidiaries, JV partners, tra
   const prompt2 = `${commonIntro}
 
 Return JSON with ONLY the localMajor section.
-IMPORTANT: Return 3-4 local/domestic companies. Include state-owned enterprises, large conglomerates, and private players active in ${industry} in ${country}.
+IMPORTANT: Return exactly 3 local/domestic companies. Include state-owned enterprises, large conglomerates, and private players active in ${industry} in ${country}.
 
 {
   "localMajor": {
@@ -3189,7 +3196,7 @@ IMPORTANT: Return 3-4 local/domestic companies. Include state-owned enterprises,
         "strategicAssessment": "2-3 sentences on market position, government relationships, expansion plans",
         "revenue": "$X million", "marketShare": "X%",
         "strengths": "Specific", "weaknesses": "Specific",
-        "description": "45-60 words with specific metrics"
+        "description": "25-35 words with specific metrics"
       }
     ],
     "concentration": "Market concentration with evidence",
@@ -3200,7 +3207,7 @@ IMPORTANT: Return 3-4 local/domestic companies. Include state-owned enterprises,
   const prompt3 = `${commonIntro}
 
 Return JSON with ONLY the foreignPlayers section.
-IMPORTANT: Return 3-4 foreign (non-Japanese, non-local) companies. Include multinationals, regional players, and any foreign firm with ${industry} operations in ${country}.
+IMPORTANT: Return exactly 3 foreign (non-Japanese, non-local) companies. Include multinationals, regional players, and any foreign firm with ${industry} operations in ${country}.
 
 {
   "foreignPlayers": {
@@ -3215,7 +3222,7 @@ IMPORTANT: Return 3-4 foreign (non-Japanese, non-local) companies. Include multi
         "strategicAssessment": "2-3 sentences on competitive position and market outlook",
         "entryYear": "YYYY", "mode": "JV/Direct",
         "success": "High/Medium/Low",
-        "description": "45-60 words with specific metrics"
+        "description": "25-35 words with specific metrics"
       }
     ],
     "competitiveInsight": "How foreign players compete",
@@ -3388,7 +3395,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt1,
       options: {
-        maxTokens: 4608,
+        maxTokens: 3584,
         label: 'synthesizeCompetitors:japanesePlayers',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3399,7 +3406,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt2,
       options: {
-        maxTokens: 4608,
+        maxTokens: 3584,
         label: 'synthesizeCompetitors:localMajor',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3410,7 +3417,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt3,
       options: {
-        maxTokens: 4608,
+        maxTokens: 3584,
         label: 'synthesizeCompetitors:foreignPlayers',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3421,7 +3428,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt4,
       options: {
-        maxTokens: 4608,
+        maxTokens: 3584,
         label: 'synthesizeCompetitors:caseStudy',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3493,28 +3500,129 @@ Return JSON with ONLY the caseStudy and maActivity sections:
 function summarizeForSummary(synthesis, section, maxChars) {
   if (!synthesis) return `[${section}: no data available]`;
   if (synthesis._synthesisError) return `[${section}: synthesis failed — ${synthesis.message}]`;
-  const json = JSON.stringify(synthesis);
-  if (json.length <= maxChars) return json;
-  const brief = {};
-  for (const key of Object.keys(synthesis)) {
-    const val = synthesis[key];
-    if (typeof val === 'string') brief[key] = val.slice(0, 200);
-    else if (Array.isArray(val)) brief[key] = val.slice(0, 3);
-    else if (typeof val === 'object' && val) {
-      brief[key] = {};
-      for (const [k, v] of Object.entries(val).slice(0, 5)) {
-        brief[key][k] = typeof v === 'string' ? v.slice(0, 150) : v;
+  const limit = Number.isFinite(Number(maxChars)) ? Math.max(300, Number(maxChars)) : 1800;
+  const snippets = [];
+  const pushSnippet = (label, value, maxLen = 170) => {
+    const cleaned = ensureString(value).replace(/\s+/g, ' ').trim();
+    if (!cleaned) return;
+    const text = cleaned.length > maxLen ? `${cleaned.slice(0, maxLen - 3)}...` : cleaned;
+    snippets.push(label ? `${label}: ${text}` : text);
+  };
+
+  const summarizeArrayItem = (item) => {
+    if (item == null) return '';
+    if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+      return ensureString(item);
+    }
+    if (Array.isArray(item)) {
+      return item
+        .slice(0, 3)
+        .map((x) => ensureString(x))
+        .filter(Boolean)
+        .join('; ');
+    }
+    if (typeof item === 'object') {
+      const fields = [
+        'name',
+        'title',
+        'label',
+        'metric',
+        'value',
+        'target',
+        'verdict',
+        'recommendation',
+        'risk',
+        'deadline',
+        'partnerName',
+      ];
+      const parts = [];
+      for (const key of fields) {
+        const raw = item[key];
+        if (raw == null) continue;
+        if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') {
+          parts.push(`${key}=${ensureString(raw)}`);
+        }
+        if (parts.length >= 3) break;
       }
-    } else brief[key] = val;
+      return parts.join(', ');
+    }
+    return '';
+  };
+
+  const summarizeObject = (obj, parentKey) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return;
+    const preferredFields = [
+      'slideTitle',
+      'subtitle',
+      'overview',
+      'keyInsight',
+      'recommendation',
+      'overallVerdict',
+      'goNoGo',
+      'timing',
+      'keyMessage',
+      'policyDirection',
+      'riskJustification',
+    ];
+    for (const field of preferredFields) {
+      const raw = obj[field];
+      if (raw == null) continue;
+      if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') {
+        pushSnippet(`${parentKey}.${field}`, raw, 180);
+      }
+    }
+
+    if (Array.isArray(obj.keyMetrics) && obj.keyMetrics.length > 0) {
+      const metricPreview = obj.keyMetrics
+        .slice(0, 3)
+        .map((metric) => summarizeArrayItem(metric))
+        .filter(Boolean)
+        .join(' | ');
+      pushSnippet(`${parentKey}.keyMetrics`, metricPreview, 210);
+    }
+
+    if (Array.isArray(obj.sources) && obj.sources.length > 0) {
+      pushSnippet(`${parentKey}.sources`, `${obj.sources.length} cited source(s)`, 80);
+    }
+
+    // Include a small deterministic fallback over first scalar fields not already covered.
+    const scalarEntries = Object.entries(obj).filter(
+      ([, v]) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+    );
+    for (const [field, raw] of scalarEntries.slice(0, 3)) {
+      if (preferredFields.includes(field)) continue;
+      pushSnippet(`${parentKey}.${field}`, raw, 150);
+    }
+  };
+
+  for (const [key, value] of Object.entries(synthesis).slice(0, 10)) {
+    if (value == null) continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      pushSnippet(key, value, 180);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      const arrPreview = value
+        .slice(0, 3)
+        .map((item) => summarizeArrayItem(item))
+        .filter(Boolean)
+        .join(' | ');
+      pushSnippet(`${key}[${value.length}]`, arrPreview, 220);
+      continue;
+    }
+    if (typeof value === 'object') {
+      summarizeObject(value, key);
+    }
   }
-  const sliced = JSON.stringify(brief).slice(0, maxChars);
-  // Repair truncated JSON from slicing
-  try {
-    JSON.parse(sliced);
-    return sliced;
-  } catch (_e) {
-    return repairTruncatedJson(sliced);
+
+  const header = `[${section}]`;
+  if (snippets.length === 0) return `${header} no actionable summary signals`;
+
+  let output = `${header} ${snippets.join(' || ')}`.replace(/\s+/g, ' ').trim();
+  if (output.length > limit) {
+    output = `${output.slice(0, Math.max(0, limit - 3)).trim()}...`;
   }
+  return output;
 }
 
 function limitWords(text, maxWords) {
@@ -4122,7 +4230,7 @@ ${Object.entries(researchData)
       k.startsWith('insight_')
   )
   .slice(0, 4)
-  .map(([k, v]) => `${k}: ${(v?.content || '').substring(0, 900)}`)
+  .map(([k, v]) => `${k}: ${(v?.content || '').substring(0, 500)}`)
   .join('\n')}
 
 If research data is insufficient for a field, set the value to:
@@ -4143,8 +4251,9 @@ RULES:
 - Only use data from the INPUT DATA above
 - Use null for any missing fields
 - Include source citations where available
-- Company descriptions should be 45-60 words
+- Company descriptions should be 25-35 words
 - Insights must have structured fields: data (with specific numbers), pattern (causal mechanism), implication (action verb + timing)
+- Keep all narrative fields concise (<= 35 words each) and lists focused (max 5 items).
 
 IMPORTANT: Use EXACTLY the JSON keys specified below (dealEconomics, partnerAssessment, entryStrategy, implementation, targetSegments). Adapt the CONTENT to ${industry} but keep the KEY NAMES exactly as shown.
 
@@ -4164,7 +4273,7 @@ Return JSON:
       "slideTitle": "${country} - Partner Assessment",
       "subtitle": "Key insight",
       "partners": [
-        {"name": "Company", "website": "https://...", "type": "Type", "revenue": "$XM", "partnershipFit": 4, "acquisitionFit": 3, "estimatedValuation": "$X-YM", "description": "45-60 words"}
+        {"name": "Company", "website": "https://...", "type": "Type", "revenue": "$XM", "partnershipFit": 4, "acquisitionFit": 3, "estimatedValuation": "$X-YM", "description": "25-35 words"}
       ],
       "recommendedPartner": "Top pick with reasoning"
     },
@@ -4228,7 +4337,7 @@ Return JSON:
 Return ONLY valid JSON.`;
 
   const result = await synthesizeWithFallback(prompt, {
-    maxTokens: 12288,
+    maxTokens: 8192,
     label: 'synthesizeSummary',
     allowArrayNormalization: false,
     allowTruncationRepair: true,

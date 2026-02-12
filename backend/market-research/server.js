@@ -90,6 +90,9 @@ function parseNonNegativeIntEnv(name, fallback) {
 }
 
 const ALLOW_DRAFT_PPT_MODE = parseBooleanOption(process.env.ALLOW_DRAFT_PPT_MODE, false) === true;
+const SOFT_READINESS_GATE = parseBooleanOption(process.env.SOFT_READINESS_GATE, true) !== false;
+const HARD_FAIL_MIN_EFFECTIVE_SCORE = parsePositiveIntEnv('HARD_FAIL_MIN_EFFECTIVE_SCORE', 70);
+const HARD_FAIL_MIN_COHERENCE_SCORE = parsePositiveIntEnv('HARD_FAIL_MIN_COHERENCE_SCORE', 70);
 const FINAL_REVIEW_MAX_CRITICAL_ISSUES = parseNonNegativeIntEnv(
   'FINAL_REVIEW_MAX_CRITICAL_ISSUES',
   1
@@ -428,6 +431,16 @@ function collectPptPackageIssues(packageConsistency) {
     );
   }
   if (
+    Array.isArray(packageConsistency?.missingRelationshipReferences) &&
+    packageConsistency.missingRelationshipReferences.length > 0
+  ) {
+    const preview = packageConsistency.missingRelationshipReferences
+      .slice(0, 5)
+      .map((x) => `${x.ownerPart}:${x.relId}`)
+      .join(', ');
+    issues.push(`dangling xml relationship refs: ${preview}`);
+  }
+  if (
     Array.isArray(packageConsistency?.duplicateNonVisualShapeIds) &&
     packageConsistency.duplicateNonVisualShapeIds.length > 0
   ) {
@@ -709,6 +722,18 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             Number(d.finalReviewMajor || 0) === 0 &&
             Number(d.finalReviewOpenGaps || 0) === 0
         );
+        const hardFailReadiness = notReadyDiagnostics.some((d) => {
+          const critical = Number(d.finalReviewCritical || 0);
+          const major = Number(d.finalReviewMajor || 0);
+          const effective = Number(d.effectiveScore || 0);
+          const coherence = Number(d.finalReviewCoherence || 0);
+          if (critical > FINAL_REVIEW_MAX_CRITICAL_ISSUES) return true;
+          // Hard-fail only when major issue count is materially beyond tolerance.
+          if (major > FINAL_REVIEW_MAX_MAJOR_ISSUES + 1) return true;
+          if (effective < HARD_FAIL_MIN_EFFECTIVE_SCORE) return true;
+          if (coherence < HARD_FAIL_MIN_COHERENCE_SCORE) return true;
+          return false;
+        });
         if (draftPptMode && draftBypassEligible) {
           console.warn(
             `[Quality Gate] Draft PPT mode enabled — bypassing readiness block for: ${list}`
@@ -724,15 +749,28 @@ async function runMarketResearch(userPrompt, email, options = {}) {
               `[Quality Gate] Draft PPT mode cannot bypass readiness when critical/major/open gaps are present: ${list}`
             );
           }
-          if (lastRunDiagnostics) {
-            lastRunDiagnostics.stage = 'quality_gate_failed';
-            lastRunDiagnostics.notReadyCountries = notReadyDiagnostics;
-            lastRunDiagnostics.error = `Country analysis quality gate failed: ${list}. ${gateRule} Reasons: ${reasons}`;
+          if (SOFT_READINESS_GATE && !hardFailReadiness) {
+            console.warn(
+              `[Quality Gate] Soft gate: countries not fully ready but continuing with warnings: ${list}`
+            );
+            if (lastRunDiagnostics) {
+              lastRunDiagnostics.stage = 'quality_gate_soft_warning';
+              lastRunDiagnostics.notReadyCountries = notReadyDiagnostics;
+              lastRunDiagnostics.readinessWarning = `${gateRule} Reasons: ${reasons}`;
+              lastRunDiagnostics.qualityGateSoftBypass = true;
+            }
+          } else {
+            if (lastRunDiagnostics) {
+              lastRunDiagnostics.stage = 'quality_gate_failed';
+              lastRunDiagnostics.notReadyCountries = notReadyDiagnostics;
+              lastRunDiagnostics.error = `Country analysis quality gate failed: ${list}. ${gateRule} Reasons: ${reasons}`;
+              lastRunDiagnostics.hardFailReadiness = hardFailReadiness;
+            }
+            console.warn(`[Quality Gate] Countries not fully ready: ${list}`);
+            throw new Error(
+              `Country analysis quality gate failed: ${list}. ${gateRule} Reasons: ${reasons}`
+            );
           }
-          console.warn(`[Quality Gate] Countries not fully ready: ${list}`);
-          throw new Error(
-            `Country analysis quality gate failed: ${list}. ${gateRule} Reasons: ${reasons}`
-          );
         }
       }
 
@@ -865,6 +903,18 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           .join(' | ');
         throw new Error(
           `Server PPT relationship integrity failed: ${serverRelIntegrity.missingInternalTargets.length} broken internal target(s); ${preview}`
+        );
+      }
+      if (
+        Array.isArray(serverRelIntegrity.invalidExternalTargets) &&
+        serverRelIntegrity.invalidExternalTargets.length > 0
+      ) {
+        const preview = serverRelIntegrity.invalidExternalTargets
+          .slice(0, 5)
+          .map((m) => `${m.relFile} -> ${m.target || '(empty)'} (${m.reason})`)
+          .join(' | ');
+        throw new Error(
+          `Server PPT external relationship integrity failed: ${serverRelIntegrity.invalidExternalTargets.length} invalid external target(s); ${preview}`
         );
       }
       const serverPackageConsistency = await scanPackageConsistency(serverZip);

@@ -112,7 +112,7 @@ function ensureString(value, defaultValue) {
 function safeCell(value, maxLen) {
   const str = ensureString(value).replace(/\s+/g, ' ').trim();
   if (!str) return '';
-  const hardCap = 12000;
+  const hardCap = 3000;
   const requestedLimit = Number(maxLen);
   const effectiveLimit =
     Number.isFinite(requestedLimit) && requestedLimit > 0
@@ -120,6 +120,115 @@ function safeCell(value, maxLen) {
       : hardCap;
   if (str.length <= effectiveLimit) return str;
   return truncate(str, effectiveLimit, true);
+}
+
+function limitWords(text, maxWords) {
+  const cleaned = ensureString(text).replace(/\s+/g, ' ').trim();
+  const words = cleaned.split(' ').filter(Boolean);
+  if (words.length <= maxWords) return cleaned;
+  return `${words.slice(0, maxWords).join(' ')}...`;
+}
+
+function getRenderTextLimit(pathKey) {
+  const key = ensureString(pathKey).toLowerCase();
+  if (!key) return 420;
+  if (key === 'url' || key === 'website') return 2048;
+  if (key.includes('slidetitle')) return 96;
+  if (key.includes('subtitle')) return 220;
+  if (key.includes('description') || key.includes('strategicassessment')) return 260;
+  if (key.includes('requirements') || key.includes('penalties') || key.includes('enforcement'))
+    return 220;
+  if (
+    key.includes('overview') ||
+    key.includes('narrative') ||
+    key.includes('riskjustification') ||
+    key.includes('windowofopportunity')
+  ) {
+    return 320;
+  }
+  if (
+    key.includes('keyinsight') ||
+    key.includes('recommendation') ||
+    key.includes('applicability') ||
+    key.includes('gotomarketapproach') ||
+    key.includes('keymessage')
+  ) {
+    return 260;
+  }
+  if (
+    key.includes('details') ||
+    key.includes('rationale') ||
+    key.includes('implication') ||
+    key.includes('timing')
+  ) {
+    return 200;
+  }
+  return 420;
+}
+
+function getRenderArrayLimit(pathKey) {
+  const key = ensureString(pathKey).toLowerCase();
+  if (!key) return 8;
+  if (key === 'sources') return 8;
+  if (key === 'keymetrics') return 8;
+  if (
+    [
+      'players',
+      'partners',
+      'segments',
+      'toptargets',
+      'recentdeals',
+      'potentialtargets',
+      'phases',
+      'triggers',
+      'criteria',
+      'opportunities',
+      'obstacles',
+      'keyinsights',
+      'activities',
+      'milestones',
+      'failures',
+      'successfactors',
+      'warningsignstowatch',
+    ].includes(key)
+  ) {
+    return 5;
+  }
+  return 8;
+}
+
+function compactRenderString(pathKey, value) {
+  const str = ensureString(value).replace(/\s+/g, ' ').trim();
+  if (!str) return '';
+  const limit = getRenderTextLimit(pathKey);
+  if (str.length <= limit) return str;
+  return truncate(str, limit, true);
+}
+
+function compactRenderPayload(node, path = []) {
+  if (node == null) return node;
+  const pathKey = ensureString(path[path.length - 1] || '');
+
+  if (typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') {
+    return compactRenderString(pathKey, node);
+  }
+
+  if (Array.isArray(node)) {
+    // Preserve chart series/categories payload exactly; trimming those distorts charts.
+    if (path.includes('chartData')) return node;
+    const maxItems = getRenderArrayLimit(pathKey);
+    return node.slice(0, maxItems).map((item, idx) => compactRenderPayload(item, [...path, idx]));
+  }
+
+  if (typeof node === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(node)) {
+      out[k] = compactRenderPayload(v, [...path, k]);
+    }
+    return out;
+  }
+
+  return node;
 }
 
 // Render-time payload normalization.
@@ -400,6 +509,16 @@ function collectPackageConsistencyIssues(packageConsistency) {
     );
   }
   if (
+    Array.isArray(packageConsistency.missingRelationshipReferences) &&
+    packageConsistency.missingRelationshipReferences.length > 0
+  ) {
+    const preview = packageConsistency.missingRelationshipReferences
+      .slice(0, 5)
+      .map((x) => `${x.ownerPart}:${x.relId}`)
+      .join(', ');
+    packageIssues.push(`dangling xml relationship refs: ${preview}`);
+  }
+  if (
     Array.isArray(packageConsistency.duplicateNonVisualShapeIds) &&
     packageConsistency.duplicateNonVisualShapeIds.length > 0
   ) {
@@ -619,10 +738,41 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
     const marginOutliers = [];
     const anchorCounts = { ctr: 0, t: 0, b: 0, other: 0 };
     const borderWidths = [];
+    const longTextRuns = [];
+    const longTableCells = [];
 
     for (const name of slideXmlEntries) {
       const xml = await zip.file(name)?.async('string');
-      if (!xml || !xml.includes('<a:tcPr')) continue;
+      if (!xml) continue;
+
+      // Detect likely formatting overflow: very long text in one shape tends to produce
+      // unreadable slides and visible corruption after PowerPoint auto-repair.
+      for (const tm of xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)) {
+        const text = ensureString(tm[1] || '');
+        if (text.length > 900) {
+          longTextRuns.push({
+            slide: name.replace(/^ppt\/slides\//, ''),
+            length: text.length,
+          });
+        }
+      }
+
+      for (const cm of xml.matchAll(/<a:tc\b[\s\S]*?<\/a:tc>/g)) {
+        const cellXml = cm[0] || '';
+        const cellText = [...cellXml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)]
+          .map((m) => ensureString(m[1] || ''))
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (cellText.length > 320) {
+          longTableCells.push({
+            slide: name.replace(/^ppt\/slides\//, ''),
+            length: cellText.length,
+          });
+        }
+      }
+
+      if (!xml.includes('<a:tcPr')) continue;
 
       const tcProps = [...xml.matchAll(/<a:tcPr([^>]*)>/g)];
       for (const m of tcProps) {
@@ -720,6 +870,31 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
           message: 'No 3pt (38100 EMU) table borders detected; template usually includes them',
         });
       }
+    }
+
+    checks.longTextRuns = longTextRuns.slice(0, 20);
+    checks.longTableCells = longTableCells.slice(0, 20);
+    if (longTextRuns.length > 0) {
+      const examples = longTextRuns
+        .slice(0, 6)
+        .map((x) => `${x.slide}:${x.length}`)
+        .join(', ');
+      issues.push({
+        severity: 'warning',
+        code: 'long_text_run_density',
+        message: `Very long text runs detected (len>900 chars), e.g. ${examples}`,
+      });
+    }
+    if (longTableCells.length > 0) {
+      const examples = longTableCells
+        .slice(0, 6)
+        .map((x) => `${x.slide}:${x.length}`)
+        .join(', ');
+      issues.push({
+        severity: 'warning',
+        code: 'long_table_cell_density',
+        message: `Overly long table cells detected (len>320 chars), e.g. ${examples}`,
+      });
     }
   } catch (err) {
     issues.push({
@@ -902,7 +1077,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   let depth = countryAnalysis.depth || {};
   // Provide safe defaults for summary to prevent empty slides
   const rawSummary = countryAnalysis.summary || countryAnalysis.summaryAssessment || {};
-  const summary = {
+  let summary = {
     timingIntelligence: rawSummary.timingIntelligence || {},
     lessonsLearned: rawSummary.lessonsLearned || {},
     opportunities: rawSummary.opportunities || [],
@@ -965,6 +1140,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const errorSummary = renderNormalizationErrors.slice(0, 6).join(' | ');
     throw new Error(`Render normalization rejected non-template/transient keys: ${errorSummary}`);
   }
+  // Render compaction: keep deck layout readable and stable even when synthesis is verbose.
+  policy = compactRenderPayload(policy, ['policy']) || {};
+  market = compactRenderPayload(market, ['market']) || {};
+  competitors = compactRenderPayload(competitors, ['competitors']) || {};
+  depth = compactRenderPayload(depth, ['depth']) || {};
+  summary = compactRenderPayload(summary, ['summary']) || summary;
+
   const country = countryAnalysis.country || (synthesis || {}).country;
   const templateSlideSelections =
     (scope && (scope.templateSlideSelections || scope.templateSelections)) || {};
@@ -1397,31 +1579,42 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const activeLayout = options.templateLayout || activeTemplateContext.layout || null;
     const titleRect = getActiveLayoutRect('title', tpTitle);
     const sourceRect = getActiveLayoutRect('source', tpSource);
-    const subtitleText = truncateSubtitle(subtitle, 220, true);
+    const titleText = truncateTitle(title);
+    const compactTitleBox = titleRect.h <= 1.0;
+    const titleLen = ensureString(titleText).length;
+    let subtitleMaxLen = compactTitleBox ? 90 : 140;
+    if (titleLen > 95) subtitleMaxLen = Math.min(subtitleMaxLen, 70);
+    if (titleLen > 120) subtitleMaxLen = Math.min(subtitleMaxLen, 45);
+    const subtitleText = truncateSubtitle(subtitle, subtitleMaxLen, true);
+    const subtitleFontSize = compactTitleBox ? 14 : 16;
+    const shouldRenderSubtitle =
+      subtitleText &&
+      subtitleText.length > (compactTitleBox ? 16 : 10) &&
+      !(compactTitleBox && titleLen > 110);
 
     // Title shape (position + font from template extraction)
     // Escort template uses title (20pt) + subtitle thesis (16pt) in same shape, separated by line break
-    if (subtitleText && subtitleText.length > 10) {
+    if (shouldRenderSubtitle) {
       slide.addText(
         [
           {
-            text: truncateTitle(title),
+            text: titleText,
             options: {
               fontSize: tpTitleFontSize,
               bold: tpTitleBold,
-              color: COLORS.dk2,
+              color: COLORS.black,
               fontFace: FONT,
-              breakType: 'none',
+              // Force subtitle onto a new line within the same title box.
+              breakLine: true,
             },
           },
           {
             text: subtitleText,
             options: {
-              fontSize: 16,
+              fontSize: subtitleFontSize,
               bold: false,
-              color: COLORS.dk2,
+              color: COLORS.black,
               fontFace: FONT,
-              breakType: 'none',
               paraSpaceBefore: 2,
             },
           },
@@ -1430,20 +1623,20 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           x: titleRect.x,
           y: titleRect.y,
           w: titleRect.w,
-          h: titleRect.h + 0.25,
+          h: titleRect.h + (compactTitleBox ? 0.12 : 0.2),
           valign: 'top',
           fit: 'shrink',
         }
       );
     } else {
-      slide.addText(truncateTitle(title), {
+      slide.addText(titleText, {
         x: titleRect.x,
         y: titleRect.y,
         w: titleRect.w,
         h: titleRect.h,
         fontSize: tpTitleFontSize,
         bold: tpTitleBold,
-        color: COLORS.dk2,
+        color: COLORS.black,
         fontFace: FONT,
         valign: 'top',
         fit: 'shrink',
@@ -1726,6 +1919,44 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return sanitized;
   }
 
+  function compactTableRowsForDensity(
+    rows,
+    { headerMaxChars = 100, bodyMaxChars = 160 } = {},
+    context = 'table'
+  ) {
+    if (!Array.isArray(rows) || rows.length === 0) return { rows, changed: 0 };
+    let changed = 0;
+    const compactedRows = rows.map((row, rowIdx) => {
+      if (!Array.isArray(row)) return row;
+      const cap = rowIdx === 0 ? headerMaxChars : bodyMaxChars;
+      return row.map((cell) => {
+        if (cell == null) return cell;
+        if (typeof cell === 'string') {
+          if (cell.length <= cap) return cell;
+          changed++;
+          return truncate(cell, cap, true);
+        }
+        if (typeof cell === 'object' && !Array.isArray(cell)) {
+          const text = ensureString(cell.text, '');
+          if (!text || text.length <= cap) return cell;
+          changed++;
+          return {
+            ...cell,
+            text: truncate(text, cap, true),
+          };
+        }
+        const asText = ensureString(cell, '');
+        if (!asText || asText.length <= cap) return cell;
+        changed++;
+        return truncate(asText, cap, true);
+      });
+    });
+    if (changed > 0) {
+      console.log(`[PPT] ${context}: compacted ${changed} dense table cell(s) for readability`);
+    }
+    return { rows: compactedRows, changed };
+  }
+
   function safeAddTable(slide, rows, options = {}, context = 'table') {
     const normalizedRows = normalizeTableRows(rows, context);
     if (!normalizedRows) return false;
@@ -1822,6 +2053,59 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           context,
           `No table geometry for selected template slide ${activeTemplateContext.slideNumber}`
         );
+      }
+    }
+    if (addOptions && typeof addOptions === 'object') {
+      const y = Number(addOptions.y);
+      const h = Number(addOptions.h);
+      // Keep table bottoms slightly above source/footer line to avoid visual collisions.
+      if (Number.isFinite(y) && Number.isFinite(h) && h > 0) {
+        const activeSourceRect = getActiveLayoutRect('source', tpSource);
+        const maxBottom = Number(activeSourceRect?.y) - 0.02;
+        const bottom = y + h;
+        if (Number.isFinite(maxBottom) && bottom > maxBottom) {
+          addOptions.h = Math.max(0.3, maxBottom - y);
+        }
+      }
+    }
+    if (addOptions && typeof addOptions === 'object') {
+      const rowCount = Array.isArray(tableRows) ? tableRows.length : 0;
+      const tableHeight = Number(addOptions.h);
+      if (rowCount > 0 && Number.isFinite(tableHeight) && tableHeight > 0) {
+        const rowHeight = tableHeight / Math.max(1, rowCount);
+        let headerMaxChars = 100;
+        let bodyMaxChars = 160;
+        let preferredFontSize = null;
+        if (rowHeight < 0.18) {
+          headerMaxChars = 55;
+          bodyMaxChars = 70;
+          preferredFontSize = 9;
+        } else if (rowHeight < 0.22) {
+          headerMaxChars = 70;
+          bodyMaxChars = 90;
+          preferredFontSize = 10;
+        } else if (rowHeight < 0.26) {
+          headerMaxChars = 85;
+          bodyMaxChars = 110;
+          preferredFontSize = 11;
+        } else if (rowHeight < 0.3) {
+          headerMaxChars = 95;
+          bodyMaxChars = 130;
+          preferredFontSize = 12;
+        }
+        if (preferredFontSize != null) {
+          const current = Number(addOptions.fontSize);
+          addOptions.fontSize =
+            Number.isFinite(current) && current > 0
+              ? Math.min(current, preferredFontSize)
+              : preferredFontSize;
+        }
+        const compacted = compactTableRowsForDensity(
+          tableRows,
+          { headerMaxChars, bodyMaxChars },
+          context
+        );
+        tableRows = compacted.rows;
       }
     }
     try {
@@ -2777,6 +3061,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         w: resolvedChartRect.w,
         h: resolvedChartRect.h,
       };
+      const hasInsightPanelRoom = chartOpts.x + chartOpts.w <= 8.3;
       if (activeTemplateContext.layout?.charts?.[0]) {
         recordGeometryCheck('chart', block.key, activeTemplateContext.layout.charts[0], chartOpts);
       } else if (CHART_TEMPLATE_CONTEXTS.has(block.key)) {
@@ -2808,7 +3093,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       }
 
       // Insight panels on right 40% using pattern library
-      if (insights.length > 0) {
+      if (insights.length > 0 && hasInsightPanelRoom) {
         const insightPanels = insights.slice(0, 3).map((text, idx) => ({
           title: idx === 0 ? 'Key Insight' : idx === 1 ? 'Market Data' : 'Opportunity',
           text: ensureString(text),
@@ -4020,16 +4305,29 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     // Use addCaseStudyRows pattern for rich rendering
     const caseRows = [
-      { label: 'Company', content: data.company || '' },
-      { label: 'Entry Year', content: data.entryYear || '' },
-      { label: 'Entry Mode', content: data.entryMode || '' },
-      { label: 'Investment', content: data.investment || '' },
-      { label: 'Outcome', content: ensureString(data.outcome) },
+      { label: 'Company', content: truncate(ensureString(data.company), 80, true) },
+      { label: 'Entry Year', content: truncate(ensureString(data.entryYear), 40, true) },
+      { label: 'Entry Mode', content: truncate(ensureString(data.entryMode), 80, true) },
+      { label: 'Investment', content: truncate(ensureString(data.investment), 90, true) },
+      { label: 'Outcome', content: truncate(ensureString(data.outcome), 150, true) },
     ].filter((row) => row.content);
-    if (caseRows.length > 0) addCaseStudyRows(slide, caseRows);
+    const lessons = safeArray(data.keyLessons, 4);
+    const hasRightLessons = lessons.length > 0;
+    if (caseRows.length > 0) {
+      const casePatternOverride = hasRightLessons
+        ? {
+            ...(templatePatterns.patterns?.case_study_rows?.elements || {}),
+            labelX: LEFT_MARGIN,
+            labelW: 1.95,
+            contentX: LEFT_MARGIN + 2.05,
+            // Preserve room for right-side lesson panels (~x>=8.6) with a visible gutter.
+            contentW: 6.2,
+          }
+        : undefined;
+      addCaseStudyRows(slide, caseRows, null, casePatternOverride);
+    }
 
     // Key lessons as insight panels on right side
-    const lessons = safeArray(data.keyLessons, 4);
     if (lessons.length > 0) {
       const lessonPanels = lessons.map((l, idx) => ({
         title: `Lesson ${idx + 1}`,
@@ -4039,7 +4337,35 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
 
     if (data.applicability) {
-      addCalloutOverlay(slide, `Applicability: ${ensureString(data.applicability)}`);
+      const sourceRect = getActiveLayoutRect('source', tpSource);
+      const sourceTop = Number(sourceRect?.y) || Number(tpSource.y) || 6.7;
+      const applicabilityText = truncate(
+        `Applicability: ${ensureString(data.applicability)}`,
+        220,
+        true
+      );
+
+      if (hasRightLessons) {
+        // Case-study slide uses right-side lesson panels; place applicability beneath them.
+        const boxX = 8.78;
+        const boxW = 4.12;
+        const boxY = 5.98;
+        const boxH = Math.max(0.34, Math.min(0.62, sourceTop - boxY - 0.03));
+        if (boxH >= 0.24) {
+          const shortApplicability = truncate(ensureString(data.applicability), 48, true);
+          addCalloutOverlay(slide, shortApplicability, { x: boxX, y: boxY, w: boxW, h: boxH });
+        }
+      } else {
+        // No right panels: keep applicability at the bottom of the content lane.
+        const boxX = LEFT_MARGIN;
+        const boxW = 8.45;
+        const boxH = 0.42;
+        const minY = CONTENT_Y + 4.95;
+        const boxY = Math.max(minY, sourceTop - boxH - 0.06);
+        if (boxY + boxH <= sourceTop - 0.02) {
+          addCalloutOverlay(slide, applicabilityText, { x: boxX, y: boxY, w: boxW, h: boxH });
+        }
+      }
     }
   }
 
@@ -4721,11 +5047,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       return;
     }
 
-    addOpportunitiesObstaclesSummary(slide, oppsFormatted, obsFormatted, {
+    const summaryLayout = addOpportunitiesObstaclesSummary(slide, oppsFormatted, obsFormatted, {
       x: LEFT_MARGIN,
       y: CONTENT_Y,
       fullWidth: CONTENT_WIDTH,
+      // Reserve vertical room for ratings + recommendation callouts at bottom.
+      maxBodyH: Math.max(1.8, CONTENT_BOTTOM - CONTENT_Y - 2.0),
     });
+    let ratingBottomY = null;
 
     if (ratings.attractiveness || ratings.feasibility) {
       // Build rating text parts with rationale
@@ -4739,32 +5068,57 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         options: { fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT },
       });
       const rationale = [];
-      if (ratings.attractivenessRationale)
-        rationale.push(`Attractiveness: ${ensureString(ratings.attractivenessRationale)}`);
-      if (ratings.feasibilityRationale)
-        rationale.push(`Feasibility: ${ensureString(ratings.feasibilityRationale)}`);
+      if (ratings.attractivenessRationale) {
+        rationale.push(
+          `Attractiveness: ${truncate(ensureString(ratings.attractivenessRationale), 85, true)}`
+        );
+      }
+      if (ratings.feasibilityRationale) {
+        rationale.push(
+          `Feasibility: ${truncate(ensureString(ratings.feasibilityRationale), 85, true)}`
+        );
+      }
       if (rationale.length > 0) {
         ratingParts.push({
           text: '\n' + rationale.join(' | '),
           options: { fontSize: 11, color: COLORS.secondary, fontFace: FONT },
         });
       }
-      const ratingH = rationale.length > 0 ? 0.5 : 0.25;
+      const ratingH = rationale.length > 0 ? 0.62 : 0.25;
+      const ratingY = Math.max(
+        summaryLayout?.bodyBottomY != null ? summaryLayout.bodyBottomY + 0.12 : CONTENT_Y + 4.4,
+        CONTENT_BOTTOM - (rationale.length > 0 ? 1.3 : 1.1)
+      );
       slide.addText(ratingParts, {
         x: LEFT_MARGIN,
-        y: CONTENT_BOTTOM - (rationale.length > 0 ? 1.3 : 1.1),
+        y: ratingY,
         w: CONTENT_WIDTH,
         h: ratingH,
         valign: 'top',
       });
+      ratingBottomY = ratingY + ratingH;
     }
     // Show recommendation only if real data exists
     if (data.recommendation) {
-      addCalloutBox(slide, 'Strategic Recommendation', ensureString(data.recommendation), {
+      const recommendationText = truncate(
+        ensureString(data.recommendation).replace(/\s+/g, ' '),
+        210,
+        true
+      );
+      let recommendationY = CONTENT_BOTTOM - 0.75;
+      if (Number.isFinite(ratingBottomY)) {
+        recommendationY = Math.max(recommendationY, ratingBottomY + 0.08);
+      }
+      let recommendationH = CONTENT_BOTTOM - recommendationY;
+      if (recommendationH < 0.5) {
+        recommendationY = CONTENT_BOTTOM - 0.5;
+        recommendationH = 0.5;
+      }
+      addCalloutBox(slide, 'Strategic Recommendation', recommendationText, {
         x: LEFT_MARGIN,
-        y: CONTENT_BOTTOM - 0.75,
+        y: recommendationY,
         w: CONTENT_WIDTH,
-        h: 0.65,
+        h: recommendationH,
         type: 'recommendation',
       });
     }
@@ -5316,9 +5670,22 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     summary.recommendation ||
     `This report provides a comprehensive analysis of the ${scope.industry || 'target'} market in ${country || 'the selected country'}. Detailed findings are presented in the following sections.`;
   // Fix 0: executiveSummary can be an array of strings — join them
-  const execText = Array.isArray(execContentRaw)
+  const execTextRaw = Array.isArray(execContentRaw)
     ? execContentRaw.join('\n\n')
     : String(execContentRaw || '');
+  const execSentenceChunks = execTextRaw
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const execText =
+    execSentenceChunks.length > 1
+      ? execSentenceChunks
+          .slice(0, 6)
+          .map((s) => `• ${limitWords(s, 20)}`)
+          .join('\n')
+      : limitWords(execTextRaw, 120);
   // Fix 9: overflow protection — shrink font to fit, never truncate
   const execFitted = fitTextToShape(execText, CONTENT_WIDTH, tpContent.h, 14);
   execSlide.addText(execFitted.text, {
@@ -5670,6 +6037,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       .join(' | ');
     throw new Error(
       `PPT relationship integrity failed: ${relIntegrity.missingInternalTargets.length} broken internal target(s); ${examples}`
+    );
+  }
+  if (
+    Array.isArray(relIntegrity.invalidExternalTargets) &&
+    relIntegrity.invalidExternalTargets.length > 0
+  ) {
+    const examples = relIntegrity.invalidExternalTargets
+      .slice(0, 5)
+      .map((m) => `${m.relFile} -> ${m.target || '(empty)'} (${m.reason})`)
+      .join(' | ');
+    throw new Error(
+      `PPT external relationship integrity failed: ${relIntegrity.invalidExternalTargets.length} invalid external target(s); ${examples}`
     );
   }
   if (relIntegrity.checkedInternal > 0) {

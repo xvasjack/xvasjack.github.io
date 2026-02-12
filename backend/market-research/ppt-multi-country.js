@@ -95,6 +95,16 @@ function collectPackageConsistencyIssues(packageConsistency) {
     );
   }
   if (
+    Array.isArray(packageConsistency.missingRelationshipReferences) &&
+    packageConsistency.missingRelationshipReferences.length > 0
+  ) {
+    const preview = packageConsistency.missingRelationshipReferences
+      .slice(0, 5)
+      .map((x) => `${x.ownerPart}:${x.relId}`)
+      .join(', ');
+    packageIssues.push(`dangling xml relationship refs: ${preview}`);
+  }
+  if (
     Array.isArray(packageConsistency.duplicateNonVisualShapeIds) &&
     packageConsistency.duplicateNonVisualShapeIds.length > 0
   ) {
@@ -996,6 +1006,18 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       .join(' | ');
     throw new Error(
       `PPT relationship integrity failed: ${relIntegrity.missingInternalTargets.length} broken internal target(s); ${examples}`
+    );
+  }
+  if (
+    Array.isArray(relIntegrity.invalidExternalTargets) &&
+    relIntegrity.invalidExternalTargets.length > 0
+  ) {
+    const examples = relIntegrity.invalidExternalTargets
+      .slice(0, 5)
+      .map((m) => `${m.relFile} -> ${m.target || '(empty)'} (${m.reason})`)
+      .join(' | ');
+    throw new Error(
+      `PPT external relationship integrity failed: ${relIntegrity.invalidExternalTargets.length} invalid external target(s); ${examples}`
     );
   }
   const packageConsistency = await scanPackageConsistency(relZip);

@@ -197,10 +197,45 @@ function resolveRelationshipTarget(ownerDir, target) {
   return path.posix.normalize(ownerDir ? path.posix.join(ownerDir, target) : target);
 }
 
+function hasAsciiControlChars(value) {
+  const text = String(value || '');
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if ((code >= 0 && code <= 31) || code === 127) return true;
+  }
+  return false;
+}
+
+function isValidExternalRelationshipTarget(rawTarget) {
+  const target = String(rawTarget || '').trim();
+  if (!target) return { valid: false, reason: 'empty_target' };
+  if (hasAsciiControlChars(target)) {
+    return { valid: false, reason: 'control_chars' };
+  }
+  if (/\s/.test(target)) {
+    return { valid: false, reason: 'contains_whitespace' };
+  }
+  try {
+    const parsed = new URL(target);
+    const protocol = String(parsed.protocol || '').toLowerCase();
+    if (protocol !== 'http:' && protocol !== 'https:' && protocol !== 'mailto:') {
+      return { valid: false, reason: `unsupported_scheme:${protocol || 'none'}` };
+    }
+    if ((protocol === 'http:' || protocol === 'https:') && !parsed.hostname) {
+      return { valid: false, reason: 'missing_hostname' };
+    }
+    return { valid: true, reason: '' };
+  } catch {
+    return { valid: false, reason: 'invalid_url' };
+  }
+}
+
 async function scanRelationshipTargets(zip) {
   const relFiles = Object.keys(zip.files).filter((f) => /\.rels$/i.test(f));
   const missingInternalTargets = [];
+  const invalidExternalTargets = [];
   let checkedInternal = 0;
+  let checkedExternal = 0;
 
   for (const relFile of relFiles) {
     const relEntry = zip.file(relFile);
@@ -216,9 +251,20 @@ async function scanRelationshipTargets(zip) {
       if (!targetMatch) continue;
       const targetModeMatch = tag.match(/\bTargetMode=(["'])(.*?)\1/i);
       const targetMode = String(targetModeMatch?.[2] || '').toLowerCase();
-      if (targetMode === 'external') continue;
-
       const rawTarget = decodeXmlAttr(targetMatch[2]).trim();
+      if (targetMode === 'external') {
+        checkedExternal++;
+        const validation = isValidExternalRelationshipTarget(rawTarget);
+        if (!validation.valid) {
+          invalidExternalTargets.push({
+            relFile,
+            target: rawTarget,
+            reason: validation.reason,
+          });
+        }
+        continue;
+      }
+
       if (!rawTarget || rawTarget.startsWith('#')) continue;
       if (/^[a-z][a-z0-9+.-]*:/i.test(rawTarget)) continue;
 
@@ -247,7 +293,47 @@ async function scanRelationshipTargets(zip) {
     }
   }
 
-  return { checkedInternal, missingInternalTargets };
+  return { checkedInternal, checkedExternal, missingInternalTargets, invalidExternalTargets };
+}
+
+async function scanRelationshipReferenceIntegrity(zip) {
+  const relFiles = Object.keys(zip.files).filter((f) => /\.rels$/i.test(f));
+  const missingRelationshipReferences = [];
+  let checkedRelationshipReferences = 0;
+
+  for (const relFile of relFiles) {
+    const ownerPart = ownerPartFromRelPath(relFile);
+    if (!ownerPart || !/\.xml$/i.test(ownerPart)) continue;
+
+    const relEntry = zip.file(relFile);
+    const ownerEntry = zip.file(ownerPart);
+    if (!relEntry || !ownerEntry) continue;
+
+    const relXml = await relEntry.async('string');
+    const ownerXml = await ownerEntry.async('string');
+    const relIds = new Set();
+
+    for (const match of relXml.matchAll(/<Relationship\b[^>]*>/g)) {
+      const id = extractXmlAttr(match[0], 'Id');
+      if (id) relIds.add(id);
+    }
+    if (relIds.size === 0) continue;
+
+    for (const match of ownerXml.matchAll(/\br:(?:id|embed|link|href)=(["'])(.*?)\1/gi)) {
+      const relId = decodeXmlAttr(match[2]).trim();
+      if (!relId) continue;
+      checkedRelationshipReferences++;
+      if (!relIds.has(relId)) {
+        missingRelationshipReferences.push({
+          ownerPart,
+          relFile,
+          relId,
+        });
+      }
+    }
+  }
+
+  return { checkedRelationshipReferences, missingRelationshipReferences };
 }
 
 async function scanSlideNonVisualIdIntegrity(zip) {
@@ -529,6 +615,7 @@ async function scanPackageConsistency(zip) {
 
   const duplicateSlideIds = [];
   const duplicateSlideRelIds = [];
+  const relationshipReferenceIntegrity = await scanRelationshipReferenceIntegrity(zip);
   const presentationEntry = zip.file('ppt/presentation.xml');
   if (presentationEntry) {
     const xml = await presentationEntry.async('string');
@@ -614,6 +701,8 @@ async function scanPackageConsistency(zip) {
     missingChartOverrides,
     missingExpectedOverrides,
     contentTypeMismatches,
+    checkedRelationshipReferences: relationshipReferenceIntegrity.checkedRelationshipReferences,
+    missingRelationshipReferences: relationshipReferenceIntegrity.missingRelationshipReferences,
   };
 }
 
@@ -730,6 +819,22 @@ async function validatePPTX(input, exp = {}) {
         `${relIntegrity.checkedInternal} internal targets resolved`
       );
     }
+    if (relIntegrity.invalidExternalTargets.length > 0) {
+      const examples = relIntegrity.invalidExternalTargets
+        .slice(0, 3)
+        .map((x) => `${x.relFile}: ${x.target || '(empty)'} (${x.reason})`)
+        .join('; ');
+      fail(
+        'External relationship target integrity',
+        'External targets are valid absolute URLs (http/https/mailto) with no whitespace',
+        `${relIntegrity.invalidExternalTargets.length} invalid external target(s), e.g. ${examples}`
+      );
+    } else {
+      pass(
+        'External relationship target integrity',
+        `${relIntegrity.checkedExternal} external targets validated`
+      );
+    }
 
     const packageConsistency = await scanPackageConsistency(zip);
     if (packageConsistency.missingCriticalParts.length > 0) {
@@ -778,6 +883,23 @@ async function validatePPTX(input, exp = {}) {
       );
     } else {
       pass('Presentation slide ID integrity', 'Slide IDs and relationship IDs are unique');
+    }
+
+    if (packageConsistency.missingRelationshipReferences.length > 0) {
+      const examples = packageConsistency.missingRelationshipReferences
+        .slice(0, 5)
+        .map((x) => `${x.ownerPart}:${x.relId}`)
+        .join(', ');
+      fail(
+        'Relationship reference integrity',
+        'Every r:id/r:embed/r:link/r:href resolves within owner .rels file',
+        `${packageConsistency.missingRelationshipReferences.length} dangling reference(s), e.g. ${examples}`
+      );
+    } else {
+      pass(
+        'Relationship reference integrity',
+        `${packageConsistency.checkedRelationshipReferences || 0} XML relationship references resolved`
+      );
     }
 
     if (packageConsistency.duplicateNonVisualShapeIds.length > 0) {
@@ -1047,6 +1169,7 @@ module.exports = {
   readPPTX,
   scanXmlIntegrity,
   scanRelationshipTargets,
+  scanRelationshipReferenceIntegrity,
   scanSlideNonVisualIdIntegrity,
   normalizeSlideNonVisualIds,
   scanPackageConsistency,

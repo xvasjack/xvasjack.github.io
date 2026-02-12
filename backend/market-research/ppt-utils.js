@@ -1011,6 +1011,10 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
   const FONT = 'Segoe UI';
   const LEFT_MARGIN = options.x || TEMPLATE.contentArea.x;
   const contentY = options.y || TEMPLATE.contentArea.y;
+  const maxBodyH =
+    Number.isFinite(Number(options.maxBodyH)) && Number(options.maxBodyH) > 0
+      ? Number(options.maxBodyH)
+      : 4.5;
   const colWidth = (TEMPLATE.contentArea.w - 0.5) / 2;
   const gap = 0.5;
   const COLORS = {
@@ -1061,7 +1065,7 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
   }));
 
   const bulletH = Math.min(
-    4.5,
+    maxBodyH,
     Math.max(0.6, Math.max(oppBullets.length, obsBullets.length, 1) * 0.4 + 0.2)
   );
   if (oppBullets.length > 0) {
@@ -1101,6 +1105,12 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
       fill: { color: COLORS.lightOrange },
     });
   }
+
+  return {
+    bodyTopY: contentY + 0.5,
+    bodyH: bulletH,
+    bodyBottomY: contentY + 0.5 + bulletH,
+  };
 }
 
 // ============ CHART GENERATION ============
@@ -2384,10 +2394,14 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
     bold: true,
   };
   const contentStyle = p.contentStyle || { fill: C_WHITE, color: C_BLACK, fontSize: 11 };
-  const labelX = TEMPLATE.contentArea.x;
-  const labelW = 2.0;
-  const contentX = TEMPLATE.contentArea.x + 2.1;
-  const contentW = TEMPLATE.contentArea.w - 2.1;
+  const labelX = Number.isFinite(Number(p.labelX)) ? Number(p.labelX) : TEMPLATE.contentArea.x;
+  const labelW = Number.isFinite(Number(p.labelW)) ? Number(p.labelW) : 2.0;
+  const contentX = Number.isFinite(Number(p.contentX))
+    ? Number(p.contentX)
+    : TEMPLATE.contentArea.x + 2.1;
+  const contentW = Number.isFinite(Number(p.contentW))
+    ? Number(p.contentW)
+    : TEMPLATE.contentArea.w - 2.1;
 
   rows.slice(0, rowDefs.length).forEach((row, idx) => {
     const def = rowDefs[idx];

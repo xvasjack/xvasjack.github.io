@@ -92,10 +92,12 @@ function calculateColumnWidths(data, totalWidth = 12.5) {
 }
 
 function addInsightsPanel(slide, insights = [], options = {}) {
-  const panelX = options.x || 9.8,
+  // Keep default panel compact on the right edge; oversized panels were
+  // colliding with main-content callouts on several slides.
+  const panelX = options.x || 10.05,
     panelY = options.y || 1.5,
-    panelW = options.w || 3.2,
-    panelH = options.h || 4.0;
+    panelW = options.w || 2.65,
+    panelH = options.h || 1.9;
   if (insights.length === 0) return;
   slide.addText('Key Insights', {
     x: panelX,
@@ -114,8 +116,8 @@ function addInsightsPanel(slide, insights = [], options = {}) {
     h: 0,
     line: { color: COLORS.dk2, width: 1.5 },
   });
-  const bulletPoints = insights.slice(0, 4).map((insight) => ({
-    text: truncate(String(insight), 150),
+  const bulletPoints = insights.slice(0, 3).map((insight) => ({
+    text: truncate(String(insight), 95),
     options: { bullet: { type: 'bullet', color: COLORS.dk2 } },
   }));
   slide.addText(bulletPoints, {
@@ -123,7 +125,7 @@ function addInsightsPanel(slide, insights = [], options = {}) {
     y: panelY + 0.5,
     w: panelW,
     h: panelH - 0.5,
-    fontSize: 10,
+    fontSize: 9,
     fontFace: FONT,
     color: COLORS.black,
     valign: 'top',
@@ -527,23 +529,25 @@ async function generateVietnamPPT() {
     const slide = pptx.addSlide();
     slide.addText(title, {
       x: LEFT_MARGIN,
-      y: 0.3,
+      y: 0.24,
       w: CONTENT_WIDTH,
-      h: 0.5,
-      fontSize: 24,
+      h: 0.64,
+      fontSize: 19,
       bold: true,
       color: COLORS.dk2,
       fontFace: FONT,
+      fit: 'shrink',
     });
     if (subtitle)
       slide.addText(subtitle, {
         x: LEFT_MARGIN,
-        y: 0.8,
+        y: 0.9,
         w: CONTENT_WIDTH,
-        h: 0.4,
-        fontSize: 12,
+        h: 0.36,
+        fontSize: 9,
         color: COLORS.gray,
         fontFace: FONT,
+        fit: 'shrink',
       });
     return slide;
   }
@@ -552,20 +556,21 @@ async function generateVietnamPPT() {
     const slide = pptx.addSlide();
     slide.addText('Table of Contents', {
       x: LEFT_MARGIN,
-      y: 0.3,
+      y: 0.24,
       w: CONTENT_WIDTH,
-      h: 0.5,
-      fontSize: 24,
+      h: 0.64,
+      fontSize: 19,
       bold: true,
       color: COLORS.dk2,
       fontFace: FONT,
+      fit: 'shrink',
     });
     slide.addText(`${mockData.country}`, {
       x: LEFT_MARGIN,
-      y: 0.85,
+      y: 0.9,
       w: CONTENT_WIDTH,
-      h: 0.3,
-      fontSize: 14,
+      h: 0.36,
+      fontSize: 13,
       color: COLORS.gray,
       fontFace: FONT,
     });
@@ -1926,7 +1931,7 @@ async function generateVietnamPPT() {
     entrySlide,
     'Confidence: HIGH – elimination logic clear',
     'Acquisition ruled out: No targets. Greenfield ruled out: Too slow. JV is the only path that meets timeline and risk requirements.',
-    { x: LEFT_MARGIN, y: 5.7, w: 9.0, h: 0.7, type: 'insight' }
+    { x: LEFT_MARGIN, y: 5.45, w: 9.0, h: 1.0, type: 'insight' }
   );
   console.log('  Slide 27: Entry Strategy - JV Recommendation');
 
@@ -2116,13 +2121,13 @@ async function generateVietnamPPT() {
 
   // Methodology note
   ooSlide.addText(
-    'Scoring Methodology: Each factor rated 1-10 based on YCP ASEAN Market Entry Framework. Weights derived from 50+ Japanese market entries since 2018. Net score >10 = Attractive, 0-10 = Conditional, <0 = Unattractive.',
+    'Method: weighted scorecard from YCP ASEAN market-entry benchmarks (50+ Japanese entries since 2018).',
     {
       x: LEFT_MARGIN,
-      y: 5.6,
+      y: 5.38,
       w: 9.0,
-      h: 0.4,
-      fontSize: 8,
+      h: 0.18,
+      fontSize: 7,
       italic: true,
       color: COLORS.gray,
       fontFace: FONT,
@@ -2133,13 +2138,9 @@ async function generateVietnamPPT() {
   addCalloutBox(
     ooSlide,
     'NET SCORE: +14 (ATTRACTIVE) | With Sensitivity Analysis',
-    `Base case: +14 = ATTRACTIVE → Recommend GO with JV structure\n\n` +
-      `Sensitivity scenarios:\n` +
-      `• If SOE blocks access: Score drops from +14 to +8 (CONDITIONAL) — mitigate via Sojitz/Itochu partner\n` +
-      `• If 49% ownership cap tightened: Score drops to +5 (CONDITIONAL) — mitigate via technical partnership model\n` +
-      `• If both risks materialize: Score drops to +2 (MARGINAL) — but unlikely given regulatory trajectory\n\n` +
-      `Partner selection de-risks 80% of downside scenarios.`,
-    { x: LEFT_MARGIN, y: 5.6, w: 12.5, h: 1.3, type: 'recommendation' }
+    `Base case +14 = GO with JV. Sensitivity: SOE access shock => +8 (still viable with Itochu/Sojitz). ` +
+      `Ownership tightening => +5 (switch to technical-partnership model). Combined downside => +2 (delay, not cancel).`,
+    { x: LEFT_MARGIN, y: 5.55, w: 12.5, h: 1.1, type: 'recommendation' }
   );
   console.log('  Slide 29: Opportunities & Obstacles Scorecard');
 
