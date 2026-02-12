@@ -17,7 +17,14 @@ const {
   validateSynthesisQuality,
   validatePptData,
 } = require('./quality-gates');
-const { validatePPTX } = require('./pptx-validator');
+const {
+  validatePPTX,
+  readPPTX,
+  scanRelationshipTargets,
+  scanPackageConsistency,
+  normalizeSlideNonVisualIds,
+  reconcileContentTypesAndPackage,
+} = require('./pptx-validator');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers({ logMemory: false });
@@ -386,6 +393,87 @@ function collectPreRenderStructureIssues(countryAnalyses) {
   return issues;
 }
 
+function collectPptPackageIssues(packageConsistency) {
+  const issues = [];
+  if (
+    Array.isArray(packageConsistency?.missingCriticalParts) &&
+    packageConsistency.missingCriticalParts.length > 0
+  ) {
+    issues.push(`missing critical parts: ${packageConsistency.missingCriticalParts.join(', ')}`);
+  }
+  if (
+    Array.isArray(packageConsistency?.duplicateRelationshipIds) &&
+    packageConsistency.duplicateRelationshipIds.length > 0
+  ) {
+    const preview = packageConsistency.duplicateRelationshipIds
+      .slice(0, 5)
+      .map((x) => `${x.relFile}:${x.relId}`)
+      .join(', ');
+    issues.push(`duplicate relationship ids: ${preview}`);
+  }
+  if (
+    Array.isArray(packageConsistency?.duplicateSlideIds) &&
+    packageConsistency.duplicateSlideIds.length > 0
+  ) {
+    issues.push(
+      `duplicate slide ids: ${packageConsistency.duplicateSlideIds.slice(0, 5).join(', ')}`
+    );
+  }
+  if (
+    Array.isArray(packageConsistency?.duplicateSlideRelIds) &&
+    packageConsistency.duplicateSlideRelIds.length > 0
+  ) {
+    issues.push(
+      `duplicate slide rel ids: ${packageConsistency.duplicateSlideRelIds.slice(0, 5).join(', ')}`
+    );
+  }
+  if (
+    Array.isArray(packageConsistency?.duplicateNonVisualShapeIds) &&
+    packageConsistency.duplicateNonVisualShapeIds.length > 0
+  ) {
+    const preview = packageConsistency.duplicateNonVisualShapeIds
+      .slice(0, 5)
+      .map((x) => `${x.slide}:id=${x.id}(x${x.count})`)
+      .join(', ');
+    issues.push(`duplicate non-visual shape ids: ${preview}`);
+  }
+  if (
+    Array.isArray(packageConsistency?.danglingOverrides) &&
+    packageConsistency.danglingOverrides.length > 0
+  ) {
+    issues.push(
+      `dangling content-type overrides: ${packageConsistency.danglingOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (
+    Array.isArray(packageConsistency?.missingExpectedOverrides) &&
+    packageConsistency.missingExpectedOverrides.length > 0
+  ) {
+    const preview = packageConsistency.missingExpectedOverrides
+      .slice(0, 5)
+      .map((x) =>
+        x && typeof x === 'object'
+          ? `${x.part || '(unknown)'}${x.expectedContentType ? `->${x.expectedContentType}` : ''}`
+          : String(x)
+      )
+      .join(', ');
+    issues.push(`missing expected content-type overrides: ${preview}`);
+  }
+  if (
+    Array.isArray(packageConsistency?.contentTypeMismatches) &&
+    packageConsistency.contentTypeMismatches.length > 0
+  ) {
+    const preview = packageConsistency.contentTypeMismatches
+      .slice(0, 5)
+      .map(
+        (x) => `${x.part}:${x.contentType || '(empty)'}=>${x.expectedContentType || '(unknown)'}`
+      )
+      .join(', ');
+    issues.push(`content-type mismatches: ${preview}`);
+  }
+  return issues;
+}
+
 // ============ MAIN ORCHESTRATOR ============
 
 async function runMarketResearch(userPrompt, email, options = {}) {
@@ -742,8 +830,50 @@ async function runMarketResearch(userPrompt, email, options = {}) {
 
       // Stage 4: Generate PPT
       throwIfAborted('ppt generation');
-      const pptBuffer = await generatePPT(finalSynthesis, countryAnalyses, scope);
+      let pptBuffer = await generatePPT(finalSynthesis, countryAnalyses, scope);
       const pptMetrics = (pptBuffer && (pptBuffer.__pptMetrics || pptBuffer.pptMetrics)) || null;
+
+      // Final server-side package hardening (defense-in-depth): normalize IDs and content-types
+      // again before any validation/delivery so no generator path can bypass structural safety.
+      const serverIdNormalize = await normalizeSlideNonVisualIds(pptBuffer);
+      pptBuffer = serverIdNormalize.buffer;
+      if (serverIdNormalize.changed) {
+        console.log(
+          `[Server PPT] Normalized duplicate slide shape ids (${serverIdNormalize.stats.reassignedIds} id reassignment(s) across ${serverIdNormalize.stats.slidesAdjusted} slide(s))`
+        );
+      }
+      const serverCtReconcile = await reconcileContentTypesAndPackage(pptBuffer);
+      pptBuffer = serverCtReconcile.buffer;
+      if (serverCtReconcile.changed) {
+        const touched = [
+          ...(serverCtReconcile.stats.addedOverrides || []),
+          ...(serverCtReconcile.stats.correctedOverrides || []),
+          ...(serverCtReconcile.stats.removedDangling || []),
+        ].length;
+        console.log(`[Server PPT] Reconciled content types (${touched} override adjustment(s))`);
+      }
+      // Preserve metrics attached by renderer after buffer replacement.
+      if (pptMetrics && Buffer.isBuffer(pptBuffer)) {
+        pptBuffer.__pptMetrics = pptMetrics;
+      }
+      const { zip: serverZip } = await readPPTX(pptBuffer);
+      const serverRelIntegrity = await scanRelationshipTargets(serverZip);
+      if (serverRelIntegrity.missingInternalTargets.length > 0) {
+        const preview = serverRelIntegrity.missingInternalTargets
+          .slice(0, 5)
+          .map((m) => `${m.relFile} -> ${m.target} (${m.reason})`)
+          .join(' | ');
+        throw new Error(
+          `Server PPT relationship integrity failed: ${serverRelIntegrity.missingInternalTargets.length} broken internal target(s); ${preview}`
+        );
+      }
+      const serverPackageConsistency = await scanPackageConsistency(serverZip);
+      const serverPackageIssues = collectPptPackageIssues(serverPackageConsistency);
+      if (serverPackageIssues.length > 0) {
+        throw new Error(
+          `Server PPT package consistency failed: ${serverPackageIssues.join(' | ')}`
+        );
+      }
 
       // Formatting fidelity policy:
       // Hard-fail on structural render loss and template-fidelity regressions.
