@@ -61,12 +61,22 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
 - Increased gap/verification spacing:
   - `GAP_QUERY_DELAY_MS` default `3000`
 - Reduced deepen query caps:
-  - review-deepen pass cap `REVIEW_DEEPEN_MAX_QUERIES` default `8`
-  - final-review escalation cap `FINAL_REVIEW_MAX_QUERIES` default `6`
+  - review-deepen pass cap `REVIEW_DEEPEN_MAX_QUERIES` default `6`
+  - final-review escalation cap `FINAL_REVIEW_MAX_QUERIES` default `4`
 - Added anti-churn guard in review-deepen:
   - if reviewer coverage drops sharply versus the best observed score, revert to best research snapshot and stop the loop
 - Hardened market key canonicalization:
   - merged key aliases like `supplydemandDynamics`, `pricingAndTariffs`, and `segmentAnalysis` map to canonical market sections instead of triggering retry churn.
+- Reduced token-heavy synthesis/review payloads:
+  - summary synthesis section previews trimmed (`policy/market/competitors`: `3500/4500/3500` chars)
+  - final-review section previews trimmed (`policy/market/competitors/summary/depth`: `3500/3500/3500/2500/2500`)
+  - summary additional-research context capped to top 6 entries and 1200 chars each
+- Added low-signal deepen filter:
+  - reject thin deepen responses before merge (requires stronger chars/citations/numeric signals)
+  - prevents low-value `final_review_gap_*` payloads from creating expensive re-synthesis churn
+- Recomputed content-depth gate after final-review fixes:
+  - readiness now uses post-fix depth score instead of stale pre-fix score
+  - removes false failures where final synthesis improved but gate score was not refreshed
 
 ## Next safe simplifications (if needed)
 - Add per-section retry budget (hard cap on model calls per section per run).

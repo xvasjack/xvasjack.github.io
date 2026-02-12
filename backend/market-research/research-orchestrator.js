@@ -44,8 +44,8 @@ const CFG_DYNAMIC_AGENT_BATCH_DELAY_MS = parseBoundedIntEnv(
 );
 const CFG_DEEPEN_QUERY_CONCURRENCY = parseBoundedIntEnv('DEEPEN_QUERY_CONCURRENCY', 2, 3);
 const CFG_DEEPEN_BATCH_DELAY_MS = parseBoundedIntEnv('DEEPEN_BATCH_DELAY_MS', 3000, 15000);
-const CFG_REVIEW_DEEPEN_MAX_QUERIES = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_QUERIES', 8, 10);
-const CFG_FINAL_REVIEW_MAX_QUERIES = parseBoundedIntEnv('FINAL_REVIEW_MAX_QUERIES', 6, 8);
+const CFG_REVIEW_DEEPEN_MAX_QUERIES = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_QUERIES', 6, 10);
+const CFG_FINAL_REVIEW_MAX_QUERIES = parseBoundedIntEnv('FINAL_REVIEW_MAX_QUERIES', 4, 8);
 const CFG_SECTION_SYNTHESIS_DELAY_MS = parseBoundedIntEnv(
   'SECTION_SYNTHESIS_DELAY_MS',
   5000,
@@ -3329,7 +3329,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
   }
 
   if (Object.keys(canonicalMerged).length === 0) {
-    console.error('  [synthesizeCompetitors] All parallel synthesis calls failed');
+    console.error('  [synthesizeCompetitors] All synthesis calls failed');
     return {
       _synthesisError: true,
       section: 'competitors',
@@ -3964,9 +3964,9 @@ async function synthesizeSummary(
 Client context: ${clientContext}
 
 SYNTHESIZED SECTIONS (already processed):
-Policy: ${summarizeForSummary(policy, 'policy', 6000)}
-Market: ${summarizeForSummary(market, 'market', 8000)}
-Competitors: ${summarizeForSummary(competitors, 'competitors', 6000)}
+Policy: ${summarizeForSummary(policy, 'policy', 3500)}
+Market: ${summarizeForSummary(market, 'market', 4500)}
+Competitors: ${summarizeForSummary(competitors, 'competitors', 3500)}
 
 Additional research context:
 ${Object.entries(researchData)
@@ -3977,7 +3977,8 @@ ${Object.entries(researchData)
       k.startsWith('depth_') ||
       k.startsWith('insight_')
   )
-  .map(([k, v]) => `${k}: ${(v?.content || '').substring(0, 2000)}`)
+  .slice(0, 6)
+  .map(([k, v]) => `${k}: ${(v?.content || '').substring(0, 1200)}`)
   .join('\n')}
 
 If research data is insufficient for a field, set the value to:
@@ -4917,6 +4918,17 @@ async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQ
     })),
   ];
 
+  const numericSignalCount = (text) => {
+    if (!text) return 0;
+    const matches = String(text).match(
+      /\$[\d,.]+[BMKbmk]?|\d+(\.\d+)?%|\d{4}|\d+(\.\d+)?x|\b\d{1,3}(?:,\d{3})+\b/g
+    );
+    return matches ? matches.length : 0;
+  };
+  const MIN_DEEPEN_FINDING_CHARS = 900;
+  const MIN_DEEPEN_FINDING_CITATIONS = 1;
+  const MIN_DEEPEN_NUMERIC_SIGNALS = 5;
+
   // Run deepen queries in small batches to avoid quota bursts.
   const results = await runInBatches(
     allQueries,
@@ -4930,14 +4942,28 @@ async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQ
           ),
         ]);
 
-        console.log(`    [DEEPEN] ${query.id}: ${(result.content || '').length} chars`);
+        const contentLength = (result.content || '').length;
+        const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
+        const numericSignals = numericSignalCount(result.content || '');
+        const usableDeepenFinding =
+          contentLength >= MIN_DEEPEN_FINDING_CHARS ||
+          citationsCount >= MIN_DEEPEN_FINDING_CITATIONS ||
+          (contentLength >= 600 && numericSignals >= MIN_DEEPEN_NUMERIC_SIGNALS);
+
+        if (!usableDeepenFinding) {
+          console.warn(
+            `    [DEEPEN] ${query.id}: thin result (${contentLength} chars, ${citationsCount} citations, ${numericSignals} numeric signals) — skipping`
+          );
+        } else {
+          console.log(`    [DEEPEN] ${query.id}: ${contentLength} chars`);
+        }
 
         return {
           ...query,
           content: result.content || '',
           citations: result.citations || [],
           researchQuality: result.researchQuality || 'unknown',
-          success: !!(result.content && result.content.length > 200),
+          success: Boolean(result.content && usableDeepenFinding),
         };
       } catch (err) {
         console.warn(`    [DEEPEN] ${query.id} failed: ${err.message}`);
@@ -5036,11 +5062,11 @@ async function finalReviewSynthesis(countryAnalysis, country, industry) {
   const reviewStart = Date.now();
 
   // Build condensed but complete view of all sections
-  const policyPreview = summarizeForSummary(countryAnalysis.policy, 'policy', 6000);
-  const marketPreview = summarizeForSummary(countryAnalysis.market, 'market', 6000);
-  const competitorsPreview = summarizeForSummary(countryAnalysis.competitors, 'competitors', 6000);
-  const summaryPreview = summarizeForSummary(countryAnalysis.summary, 'summary', 4000);
-  const depthPreview = summarizeForSummary(countryAnalysis.depth, 'depth', 4000);
+  const policyPreview = summarizeForSummary(countryAnalysis.policy, 'policy', 3500);
+  const marketPreview = summarizeForSummary(countryAnalysis.market, 'market', 3500);
+  const competitorsPreview = summarizeForSummary(countryAnalysis.competitors, 'competitors', 3500);
+  const summaryPreview = summarizeForSummary(countryAnalysis.summary, 'summary', 2500);
+  const depthPreview = summarizeForSummary(countryAnalysis.depth, 'depth', 2500);
   const synthesisText = normalizeLegalToken(
     [policyPreview, marketPreview, competitorsPreview, summaryPreview, depthPreview].join('\n')
   );
@@ -6361,7 +6387,18 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     }
   }
 
-  // Final readiness is the intersection of depth confidence and final-review coherence.
+  // Recompute deterministic content-depth score AFTER final-review fixes.
+  // Without this, readiness can fail on stale pre-fix scores (e.g., 79) even when the
+  // final synthesis is stronger after section repairs.
+  countryAnalysis = sanitizeCountryAnalysis(countryAnalysis, { country, researchData });
+  const postFinalCodeGate = validateContentDepth(countryAnalysis);
+  countryAnalysis.contentValidation = postFinalCodeGate;
+  lastCodeGateScore = Number(postFinalCodeGate?.scores?.overall || 0);
+  lastEffectiveScore = Math.min(confidenceScore || lastCodeGateScore, lastCodeGateScore);
+  countryAnalysis.finalConfidenceScore = lastCodeGateScore;
+  countryAnalysis.readyForClient = countryAnalysis.finalConfidenceScore >= MIN_CONFIDENCE_SCORE;
+
+  // Final readiness is the intersection of content-depth and final-review coherence.
   const finalReview = countryAnalysis.finalReview;
   const finalCoherence = normalizeNumericScore(finalReview?.coherenceScore, 0);
   const finalCritical = (finalReview?.issues || []).filter(
