@@ -18,9 +18,9 @@ const PRICING = {
 // ============ BUDGET GUARDRAILS ============
 const GEMINI_BUDGET_LIMIT = parseFloat(process.env.GEMINI_BUDGET_LIMIT || '20.00');
 let runBudgetUsed = 0;
-const RETRY_BASE_DELAY_GEMINI_MS = 5000;
-const RETRY_BASE_DELAY_GEMINI_RESEARCH_MS = 6000;
-const RETRY_BASE_DELAY_GEMINI_PRO_MS = 5000;
+const RETRY_BASE_DELAY_GEMINI_MS = 10000;
+const RETRY_BASE_DELAY_GEMINI_RESEARCH_MS = 10000;
+const RETRY_BASE_DELAY_GEMINI_PRO_MS = 10000;
 
 function checkBudget() {
   if (runBudgetUsed >= GEMINI_BUDGET_LIMIT) {
