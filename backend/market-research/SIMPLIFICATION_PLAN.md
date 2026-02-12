@@ -91,6 +91,21 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
 - Reduced final-review verification churn after clean passes:
   - widened reviewer-drift tolerance during verification passes
   - avoids expensive re-research/synthesis loops when only reviewer noise regresses a previously clean pass
+- Fixed depth-carrier merge in content gate:
+  - content-depth now merges top-level `depth` and `summary.depth` instead of hard-picking one
+  - prevents false low depth scores when one carrier is partial
+- Simplified and compressed gap-audit input:
+  - `identifyResearchGaps` now audits a compact section snapshot (policy/market/competitors/depth/summary) instead of full synthesis payload
+  - reduces token burn and reviewer drift from oversized prompts
+  - reviewer made fully deterministic (`temperature: 0`) with lower token ceiling
+- Added scope-discipline guard for hydrocarbon clients:
+  - prompts now inject explicit "oil/gas-first" guard when client context indicates hydrocarbon focus
+  - applied in story planning, research review, and summary synthesis prompts
+- Added anti-truncation PPT text gate:
+  - structural validator now supports `forbiddenText`
+  - runtime blocks decks containing explicit truncation/degradation markers (e.g. `[truncated]`, `synthesis failed`)
+- Added single-country identity check at PPT gate:
+  - runtime now requires the target country text to appear in single-country decks to catch wrong-country outputs earlier
 
 ## Next safe simplifications (if needed)
 - Add per-section retry budget (hard cap on model calls per section per run).

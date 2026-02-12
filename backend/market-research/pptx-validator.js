@@ -784,6 +784,21 @@ async function validatePPTX(input, exp = {}) {
       }
     }
 
+    if (exp.forbiddenText) {
+      for (const text of exp.forbiddenText) {
+        const r = await findText(zip, text);
+        if (r.found) {
+          fail(
+            `Forbidden text: "${text}"`,
+            `Must not contain "${text}"`,
+            `Found on slides ${r.matches.map((m) => m.slide).join(', ')}`
+          );
+        } else {
+          pass(`Forbidden text: "${text}"`, 'Not found');
+        }
+      }
+    }
+
     if (exp.slideChecks) {
       const textData = await extractAllText(zip);
       for (const chk of exp.slideChecks) {

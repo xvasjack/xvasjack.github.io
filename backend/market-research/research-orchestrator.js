@@ -360,6 +360,15 @@ function normalizeSectionArea(area) {
   return 'general';
 }
 
+function getClientScopeGuard(industry, clientContext) {
+  const combined = `${ensureString(industry)} ${ensureString(clientContext)}`.toLowerCase();
+  const hydrocarbonFocused = /\boil\b|\bgas\b|petroleum|lng|upstream|downstream|oilfield/.test(
+    combined
+  );
+  if (!hydrocarbonFocused) return '';
+  return 'SCOPE GUARD: prioritize hydrocarbon energy services (oil, gas, LNG, upstream/downstream, O&M, EPC, maintenance). Do not pivot the storyline to renewable-only opportunities unless the provided evidence explicitly proves a direct hydrocarbon-services adjacency.';
+}
+
 const TRANSIENT_RESEARCH_KEY_PATTERNS = [
   /^_/,
   /^section_\d+$/,
@@ -480,10 +489,21 @@ function sanitizeResearchQuery(rawQuery, country, industry, area = 'general') {
 async function identifyResearchGaps(synthesis, country, _industry, baselineCodeGate = null) {
   console.log(`  [Analyzing research quality for ${country}...]`);
 
+  const compactSnapshot = {
+    policy: summarizeForSummary(synthesis?.policy || {}, 'policy', 2200),
+    market: summarizeForSummary(synthesis?.market || {}, 'market', 2200),
+    competitors: summarizeForSummary(synthesis?.competitors || {}, 'competitors', 2200),
+    depth: summarizeForSummary(synthesis?.depth || {}, 'depth', 1800),
+    summary: summarizeForSummary(synthesis?.summary || {}, 'summary', 1800),
+    existingValidationScores:
+      baselineCodeGate?.scores || synthesis?.contentValidation?.scores || null,
+  };
+  const scopeGuard = getClientScopeGuard(_industry, synthesis?.clientContext || '');
+
   const gapPrompt = `You are a research quality auditor reviewing a market analysis. Score each section and identify critical gaps.
 
-CURRENT ANALYSIS:
-${JSON.stringify(synthesis, null, 2)}
+${scopeGuard ? `${scopeGuard}\n` : ''}CURRENT ANALYSIS SNAPSHOT:
+${JSON.stringify(compactSnapshot, null, 2)}
 
 SCORING CRITERIA (0-100 for each section):
 - 90-100: Excellent - Specific numbers, named sources, actionable insights
@@ -498,12 +518,13 @@ Return a JSON object with this structure:
     "policy": {"score": 0-100, "reasoning": "why this score", "missingData": ["list of missing items"]},
     "market": {"score": 0-100, "reasoning": "why this score", "missingData": ["list"]},
     "competitors": {"score": 0-100, "reasoning": "why this score", "missingData": ["list"]},
+    "depth": {"score": 0-100, "reasoning": "why this score", "missingData": ["list"]},
     "summary": {"score": 0-100, "reasoning": "why this score", "missingData": ["list"]}
   },
   "overallScore": 0-100,
   "criticalGaps": [
     {
-      "area": "which section (policy/market/competitors)",
+      "area": "which section (policy/market/competitors/depth/summary)",
       "gap": "what specific information is missing",
       "searchQuery": "the EXACT search query to find this for ${country}",
       "priority": "high/medium",
@@ -531,17 +552,18 @@ RULES:
 - Score >= 75 overall = "high" confidence, ready for client
 - Score 50-74 = "medium" confidence, needs refinement
 - Score < 50 = "low" confidence, significant gaps
-- Limit criticalGaps to 6 most impactful items
+- Limit criticalGaps to 6 most impactful items; avoid low-signal or redundant gaps
 - Only flag dataToVerify for claims that seem suspicious or unsourced
-- Stay strictly within "${_industry || 'industry'}" scope; do not suggest adjacent-sector queries unless explicitly present in the analysis
+- Stay strictly within "${_industry || 'industry'}" scope; do not suggest adjacent-sector queries unless explicitly present in the snapshot
+- Do not request future-dated facts beyond ${CURRENT_YEAR}
 
 Return ONLY valid JSON.`;
 
   let result;
   try {
     const geminiResult = await callGemini(gapPrompt, {
-      temperature: 0.1,
-      maxTokens: 4096,
+      temperature: 0,
+      maxTokens: 3072,
       jsonMode: true,
     });
     result = {
@@ -550,9 +572,9 @@ Return ONLY valid JSON.`;
   } catch (e) {
     console.warn('Gemini failed for gap identification, retrying:', e.message);
     const retryResult = await callGemini(gapPrompt, {
-      maxTokens: 4096,
+      maxTokens: 3072,
       jsonMode: true,
-      temperature: 0.1,
+      temperature: 0,
     });
     result = { content: typeof retryResult === 'string' ? retryResult : retryResult.content || '' };
   }
@@ -652,7 +674,7 @@ Return ONLY valid JSON.`;
       .filter(Boolean);
 
     // Normalize section scores so downstream logic never sees unknown placeholders.
-    const sectionKeys = ['policy', 'market', 'competitors', 'summary'];
+    const sectionKeys = ['policy', 'market', 'competitors', 'depth', 'summary'];
     const normalizedSectionScores = {};
     for (const sectionKey of sectionKeys) {
       const rawSection = gaps.sectionScores?.[sectionKey];
@@ -806,8 +828,9 @@ Return ONLY valid JSON.`;
     const competitorScore = Number.isFinite(scores.competitors?.score)
       ? scores.competitors.score
       : 0;
+    const depthScore = Number.isFinite(scores.depth?.score) ? scores.depth.score : 0;
     console.log(
-      `    Section Scores: Policy=${policyScore}, Market=${marketScore}, Competitors=${competitorScore}`
+      `    Section Scores: Policy=${policyScore}, Market=${marketScore}, Competitors=${competitorScore}, Depth=${depthScore}`
     );
     console.log(
       `    Overall: ${gaps.overallScore}/100 | Confidence: ${gaps.confidenceAssessment?.overall || 'unknown'}`
@@ -2268,6 +2291,7 @@ const TEMPLATE_NARRATIVE_PATTERN = {
 async function buildStoryPlan(researchData, country, industry, scope) {
   console.log(`\n  [STORY] Building narrative plan for ${country}...`);
   const storyStart = Date.now();
+  const scopeGuard = getClientScopeGuard(scope?.industry || industry, scope?.clientContext || '');
 
   // Build detailed research summary — story architect needs to see the data to plan the story
   const researchSummary = {};
@@ -2290,6 +2314,7 @@ This is the most important step. The story you plan HERE determines whether the 
 
 Client: ${scope.clientContext || 'International company evaluating market entry'}
 Project type: ${scope.projectType || 'market_entry'}
+${scopeGuard ? `\n${scopeGuard}\n` : ''}
 
 TEMPLATE NARRATIVE PATTERN (structural guide — follow this framework):
 ${JSON.stringify(TEMPLATE_NARRATIVE_PATTERN, null, 2)}
@@ -3454,24 +3479,24 @@ function collectSummaryEvidence(policy, market, competitors, researchData) {
 }
 
 function buildFallbackInsight(country, evidence, idx) {
-  const year = new Date().getFullYear();
   const titlePool = [
     'Regulatory timing defines entry window',
     'Quantified demand supports phased entry',
     'Competitive gaps favor focused positioning',
     'Execution sequence drives risk-adjusted returns',
   ];
-  const sourceTag = evidence?.source ? `${evidence.source}` : 'cross-section evidence';
+  const sourceTag = evidence?.source ? `${evidence.source}` : 'cross-section synthesis';
   const dataLine =
     evidence?.text ||
-    `${country} evidence indicates a ${year}-${year + 1} transition window with measurable financial impact.`;
+    `0 fully validated quantitative datapoints are available in the current ${country} snapshot; run a 30-90 day fact-pack sprint before committing capital.`;
   return {
     title: titlePool[idx % titlePool.length],
     data: limitWords(dataLine, 55),
-    pattern: `Cross-source evidence shows the opportunity is strongest where constraints and incentives overlap (${sourceTag}).`,
+    pattern: `Evidence quality is uneven; prioritize claims that are consistently supported across policy, market, and competitor sections (${sourceTag}).`,
     implication:
       'Recommend prioritizing the highest-evidence segment first, then scaling through staged partnerships and repeatable delivery modules.',
-    timing: `Initiate in Q${(idx % 4) + 1} ${year}; lock partner and compliance milestones before Q4 ${year}.`,
+    timing:
+      'Use a 3-month validation window, then launch first pilot in months 4-9 after partner and compliance gates are complete.',
   };
 }
 
@@ -3959,9 +3984,11 @@ async function synthesizeSummary(
   options = {}
 ) {
   console.log(`  [Synthesis] Summary & recommendations for ${country}...`);
+  const scopeGuard = getClientScopeGuard(industry, clientContext);
 
   const prompt = `You are creating the strategic summary and recommendations for ${country}'s ${industry} market.
 Client context: ${clientContext}
+${scopeGuard ? `\n${scopeGuard}\n` : ''}
 
 SYNTHESIZED SECTIONS (already processed):
 Policy: ${summarizeForSummary(policy, 'policy', 2500)}
@@ -4370,9 +4397,11 @@ function validateContentDepth(synthesis) {
     !Array.isArray(synthesis.summary.depth)
       ? synthesis.summary.depth
       : null;
-  // Prefer canonical top-level depth. Some noisy payloads may carry a partial summary.depth
-  // artifact that under-scores otherwise valid outputs.
-  const depth = rootDepth || summaryDepth || {};
+  // Merge both potential carriers and prefer semantically useful values.
+  // This avoids false low scores when top-level depth is partial but summary.depth
+  // is richer (or vice versa).
+  const depthCandidate = mergeSectionValuesPreferRich(summaryDepth || {}, rootDepth || {});
+  const depth = depthCandidate && typeof depthCandidate === 'object' ? depthCandidate : {};
   const roadmapPhases = depth.implementation?.phases || [];
   if (!Array.isArray(roadmapPhases) || roadmapPhases.length < 3) {
     failures.push(
@@ -4740,6 +4769,7 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 async function reviewResearch(researchData, country, industry, scope) {
   console.log(`\n  [REVIEW] Analyzing all research for ${country}...`);
   const reviewStart = Date.now();
+  const scopeGuard = getClientScopeGuard(scope?.industry || industry, scope?.clientContext || '');
 
   // Build condensed summary per topic for reviewer
   const topicSummaries = {};
@@ -4750,13 +4780,14 @@ async function reviewResearch(researchData, country, industry, scope) {
       extractionStatus: value.extractionStatus || 'unknown',
       citationCount: (value.citations || []).length,
       structuredData: value.structuredData || null,
-      contentPreview: value.structuredData ? null : (value.content || '').substring(0, 4000),
+      contentPreview: value.structuredData ? null : (value.content || '').substring(0, 1600),
       hasChartData: !!value.structuredData?.chartData,
     };
   }
 
   const reviewPrompt = `You are a research quality reviewer for a ${scope.projectType} project on ${scope.industry} in ${country}.
 Client context: ${scope.clientContext || 'Not specified'}
+${scopeGuard ? `\n${scopeGuard}\n` : ''}
 
 Below is a summary of ${Object.keys(topicSummaries).length} research topics already completed. Identify GAPS — critical information MISSING for a client-ready market entry report.
 
@@ -4813,9 +4844,9 @@ Return ONLY valid JSON.`;
 
   try {
     const result = await callGeminiPro(reviewPrompt, {
-      // Keep final review deterministic; reviewer variance here causes costly rework churn.
+      // Keep reviewer deterministic; variance here causes costly rework churn.
       temperature: 0,
-      maxTokens: 8192,
+      maxTokens: 6144,
       jsonMode: true,
     });
 
@@ -5173,7 +5204,7 @@ RULES:
 
   try {
     const result = await callGeminiPro(reviewPrompt, {
-      temperature: 0.1,
+      temperature: 0,
       maxTokens: 6144,
       jsonMode: true,
     });

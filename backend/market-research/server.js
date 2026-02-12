@@ -788,14 +788,25 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       // This blocks malformed or clearly truncated decks from being emailed/downloaded.
       let pptStructureValidation = null;
       try {
-        pptStructureValidation = await validatePPTX(pptBuffer, {
+        const pptValidationExpectations = {
           minFileSize: 120 * 1024,
           minSlides: 12,
           minCharts: 1,
           minTables: 3,
           requireInsights: true,
           noEmptySlides: true,
-        });
+          forbiddenText: [
+            '[truncated]',
+            'insufficient research data',
+            'analysis pending additional research',
+            'synthesis failed',
+          ],
+        };
+        if (Array.isArray(scope?.targetMarkets) && scope.targetMarkets.length === 1) {
+          // Single-country runs should visibly mention the target country somewhere in the deck.
+          pptValidationExpectations.requiredText = [scope.targetMarkets[0]];
+        }
+        pptStructureValidation = await validatePPTX(pptBuffer, pptValidationExpectations);
       } catch (validationErr) {
         throw new Error(`PPT structural validation crashed: ${validationErr.message}`);
       }
