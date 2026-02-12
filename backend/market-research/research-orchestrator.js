@@ -56,7 +56,7 @@ const CFG_REVIEW_DEEPEN_MAX_QUERIES = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_QUER
 const CFG_FINAL_REVIEW_MAX_QUERIES = parseBoundedIntEnv('FINAL_REVIEW_MAX_QUERIES', 3, 8);
 const CFG_FILL_GAPS_MAX_CRITICAL = parseBoundedIntEnv('FILL_GAPS_MAX_CRITICAL', 4, 6);
 const CFG_FILL_GAPS_MAX_VERIFICATIONS = parseBoundedIntEnv('FILL_GAPS_MAX_VERIFICATIONS', 1, 3);
-const CFG_SYNTHESIS_TOPIC_MAX_CHARS = parseBoundedIntEnv('SYNTHESIS_TOPIC_MAX_CHARS', 1600, 2400);
+const CFG_SYNTHESIS_TOPIC_MAX_CHARS = parseBoundedIntEnv('SYNTHESIS_TOPIC_MAX_CHARS', 1200, 2400);
 const CFG_SYNTHESIS_TIER_DELAY_MS = parseBoundedIntEnv('SYNTHESIS_TIER_DELAY_MS', 5000, 10000);
 const CFG_FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS = parseBoundedIntEnv(
   'FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS',
@@ -1050,14 +1050,40 @@ async function fillResearchGaps(gaps, country, industry) {
  * Parse JSON from AI response, stripping markdown fences
  */
 function parseJsonResponse(text) {
-  let jsonStr = text.trim();
+  const raw = ensureString(text).trim();
+  if (!raw) throw new Error('Empty JSON response');
+
+  let jsonStr = raw;
   if (jsonStr.startsWith('```')) {
     jsonStr = jsonStr
       .replace(/```json?\n?/g, '')
       .replace(/```/g, '')
       .trim();
   }
-  return JSON.parse(jsonStr);
+
+  try {
+    return JSON.parse(jsonStr);
+  } catch (directErr) {
+    const extracted = extractJsonFromContent(raw);
+    if (extracted.status === 'success' && extracted.data) {
+      return extracted.data;
+    }
+
+    if (isJsonTruncated(jsonStr)) {
+      const repaired = repairTruncatedJson(jsonStr);
+      const repairedExtracted = extractJsonFromContent(repaired);
+      if (repairedExtracted.status === 'success' && repairedExtracted.data) {
+        return repairedExtracted.data;
+      }
+      try {
+        return JSON.parse(repaired);
+      } catch (_repairErr) {
+        // Fall through and throw original parse error for clearer diagnostics.
+      }
+    }
+
+    throw directErr;
+  }
 }
 
 function truncatePromptText(value, maxChars = 2400) {
@@ -1074,7 +1100,7 @@ function compactResearchEntryForPrompt(entry, options = {}) {
   const {
     maxContentChars = 2200,
     maxCitations = 8,
-    maxStructuredChars = 1200,
+    maxStructuredChars = 800,
     maxTitleChars = 220,
   } = options;
 

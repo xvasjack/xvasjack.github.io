@@ -11,6 +11,13 @@
 const PptxGenJS = require('pptxgenjs');
 const fs = require('fs');
 const path = require('path');
+const {
+  readPPTX,
+  normalizeSlideNonVisualIds,
+  reconcileContentTypesAndPackage,
+  scanSlideNonVisualIdIntegrity,
+  scanPackageConsistency,
+} = require('./pptx-validator');
 
 // ============ STYLING CONSTANTS ============
 const COLORS = {
@@ -2616,9 +2623,51 @@ async function generateVietnamPPT() {
   );
   console.log('  Slide 36: Data Methodology');
 
-  // Save PPT
+  // Save PPT with post-write package normalization (same integrity safeguards as production path)
   const outputPath = path.join(__dirname, 'vietnam-output.pptx');
-  await pptx.writeFile({ fileName: outputPath });
+  let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+
+  const idNormalize = await normalizeSlideNonVisualIds(pptxBuffer);
+  if (idNormalize.changed) {
+    pptxBuffer = idNormalize.buffer;
+    console.log(
+      `  [PostWrite] Normalized duplicate slide shape ids (${idNormalize.stats.reassignedIds} id reassignment(s) across ${idNormalize.stats.slidesAdjusted} slide(s))`
+    );
+  }
+
+  const contentTypeNormalize = await reconcileContentTypesAndPackage(pptxBuffer);
+  if (contentTypeNormalize.changed) {
+    pptxBuffer = contentTypeNormalize.buffer;
+    const contentAdjustments =
+      contentTypeNormalize.stats.removedDangling.length +
+      contentTypeNormalize.stats.addedOverrides.length +
+      contentTypeNormalize.stats.correctedOverrides.length +
+      contentTypeNormalize.stats.dedupedOverrides.length;
+    console.log(`  [PostWrite] Reconciled content types (${contentAdjustments} adjustment(s))`);
+  }
+
+  fs.writeFileSync(outputPath, pptxBuffer);
+
+  // Quick structural sanity check for this local generator path.
+  const { zip: postWriteZip } = await readPPTX(pptxBuffer);
+  const nonVisualIdScan = await scanSlideNonVisualIdIntegrity(postWriteZip);
+  const packageScan = await scanPackageConsistency(postWriteZip);
+  const hasShapeIdIssues = nonVisualIdScan.duplicateNonVisualShapeIds.length > 0;
+  const hasPackageIssues =
+    packageScan.missingCriticalParts.length > 0 ||
+    packageScan.duplicateRelationshipIds.length > 0 ||
+    packageScan.duplicateSlideIds.length > 0 ||
+    packageScan.duplicateSlideRelIds.length > 0 ||
+    packageScan.danglingOverrides.length > 0 ||
+    packageScan.missingSlideOverrides.length > 0 ||
+    packageScan.missingChartOverrides.length > 0 ||
+    packageScan.missingExpectedOverrides.length > 0 ||
+    packageScan.contentTypeMismatches.length > 0;
+  if (hasShapeIdIssues || hasPackageIssues) {
+    console.warn(
+      `  [PostWrite] Structural warnings remain: shapeIds=${hasShapeIdIssues}, package=${hasPackageIssues}`
+    );
+  }
 
   const stats = fs.statSync(outputPath);
   console.log(`\n${'='.repeat(60)}`);
@@ -2635,7 +2684,7 @@ async function generateVietnamPPT() {
 generateVietnamPPT()
   .then((outputPath) => {
     console.log('\nGeneration successful!');
-    console.log('Next step: node compare-to-template.js vietnam-output.pptx');
+    console.log('Next step: node pptx-validator.js vietnam-output.pptx --validate');
   })
   .catch((err) => {
     console.error('\nGeneration failed:', err.message);

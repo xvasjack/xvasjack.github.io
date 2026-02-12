@@ -76,6 +76,10 @@ const {
   reconcileContentTypesAndPackage,
 } = require('./pptx-validator');
 
+const STRICT_TEMPLATE_FIDELITY = !/^(0|false|no|off)$/i.test(
+  String(process.env.STRICT_TEMPLATE_FIDELITY || 'true').trim()
+);
+
 // PPTX-safe ensureString: strips XML-invalid control characters after conversion.
 // PPTX = ZIP of XML files. Characters \x00-\x08, \x0B, \x0C, \x0E-\x1F are invalid in
 // XML 1.0 and cause "PowerPoint can't read this file" errors.
@@ -5560,6 +5564,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const recoveredKeys = [...new Set(templateUsageStats.tableRecoveries.map((r) => r.key))].join(
       ', '
     );
+    if (STRICT_TEMPLATE_FIDELITY) {
+      throw new Error(
+        `Template fidelity violation: table recoveries used (${templateUsageStats.tableRecoveries.length}) on keys: ${recoveredKeys}`
+      );
+    }
     console.warn(
       `[PPT TEMPLATE] Table recoveries used (${templateUsageStats.tableRecoveries.length}): ${recoveredKeys}`
     );
@@ -5572,6 +5581,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     ),
   ];
   if (geometryIssues.length > 0) {
+    if (STRICT_TEMPLATE_FIDELITY) {
+      throw new Error(
+        `Template fidelity violation: geometry issues (${geometryIssues.length}): ${geometryIssues.slice(0, 10).join(', ')}`
+      );
+    }
     console.warn(
       `[PPT TEMPLATE] Geometry issues (${geometryIssues.length}): ${geometryIssues.slice(0, 10).join(', ')}`
     );

@@ -33,6 +33,18 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
 - Rate-limit handling relied mostly on per-call backoff, not shared model cooldown.
 
 ## Implemented now
+- Fixed local Vietnam generator integrity path:
+  - `test-vietnam-research.js` now runs post-write ID normalization + content-type reconciliation
+  - added structural scan on generated buffer to catch package/id issues immediately
+- Hardened JSON parsing to reduce retry churn:
+  - `parseJsonResponse()` now falls back to multi-strategy extraction + truncation repair before retrying model calls
+- Reduced synthesis payload size (simple, local control):
+  - default `SYNTHESIS_TOPIC_MAX_CHARS` lowered to `1200`
+  - compacted `structuredData` payload cap lowered to `800`
+- Enforced strict template fidelity as hard-fail:
+  - fail if table recovery paths are used
+  - fail if geometry fidelity issues are detected
+- Added `STRICT_TEMPLATE_FIDELITY` runtime switch (default `true`, can be disabled only explicitly)
 - Lower default iteration limits (5 -> 3):
   - `REVIEW_DEEPEN_MAX_ITERATIONS`
   - `REFINEMENT_MAX_ITERATIONS`
