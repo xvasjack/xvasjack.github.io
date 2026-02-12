@@ -6,8 +6,8 @@ function parsePositiveIntEnv(name, fallback) {
   return Number.isFinite(raw) && raw > 0 ? raw : fallback;
 }
 
-const RESEARCH_TOPIC_CONCURRENCY = parsePositiveIntEnv('RESEARCH_TOPIC_CONCURRENCY', 2);
-const RESEARCH_TOPIC_BATCH_DELAY_MS = parsePositiveIntEnv('RESEARCH_TOPIC_BATCH_DELAY_MS', 1000);
+const RESEARCH_TOPIC_CONCURRENCY = parsePositiveIntEnv('RESEARCH_TOPIC_CONCURRENCY', 1);
+const RESEARCH_TOPIC_BATCH_DELAY_MS = parsePositiveIntEnv('RESEARCH_TOPIC_BATCH_DELAY_MS', 3000);
 
 async function runInBatches(items, batchSize, handler, delayMs = 0) {
   const results = [];

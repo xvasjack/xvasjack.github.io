@@ -57,7 +57,7 @@ const CFG_FINAL_REVIEW_MAX_QUERIES = parseBoundedIntEnv('FINAL_REVIEW_MAX_QUERIE
 const CFG_FILL_GAPS_MAX_CRITICAL = parseBoundedIntEnv('FILL_GAPS_MAX_CRITICAL', 4, 6);
 const CFG_FILL_GAPS_MAX_VERIFICATIONS = parseBoundedIntEnv('FILL_GAPS_MAX_VERIFICATIONS', 1, 3);
 const CFG_SYNTHESIS_TOPIC_MAX_CHARS = parseBoundedIntEnv('SYNTHESIS_TOPIC_MAX_CHARS', 1600, 2400);
-const CFG_SYNTHESIS_TIER_DELAY_MS = parseBoundedIntEnv('SYNTHESIS_TIER_DELAY_MS', 2000, 10000);
+const CFG_SYNTHESIS_TIER_DELAY_MS = parseBoundedIntEnv('SYNTHESIS_TIER_DELAY_MS', 5000, 10000);
 const CFG_FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS = parseBoundedIntEnv(
   'FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS',
   1,
@@ -82,6 +82,11 @@ const CFG_FINAL_FIX_SECTION_DELAY_MS = parseBoundedIntEnv(
   'FINAL_FIX_SECTION_DELAY_MS',
   5000,
   10000
+);
+const CFG_FINAL_FIX_MAX_SECTIONS_PER_PASS = parseBoundedIntEnv(
+  'FINAL_FIX_MAX_SECTIONS_PER_PASS',
+  3,
+  5
 );
 const CFG_GAP_QUERY_DELAY_MS = parseBoundedIntEnv('GAP_QUERY_DELAY_MS', 3000, 10000);
 
@@ -655,24 +660,6 @@ Return ONLY valid JSON.`;
       })
       .filter(Boolean);
 
-    // If quality is low but reviewer returned no actionable gaps, inject a fallback gap.
-    if (normalizedCriticalGaps.length === 0 && normalizedOverallScore < 70) {
-      normalizedCriticalGaps.push({
-        area: 'general',
-        gap: 'Reviewer returned no actionable gaps despite low confidence; collect fresh grounded facts',
-        searchQuery: sanitizeResearchQuery(
-          `${country} ${_industry || 'industry'} official statistics regulations competitors market size latest`,
-          country,
-          _industry,
-          'general'
-        ),
-        priority: 'high',
-        impactOnScore: 'high',
-        _normalized: true,
-        _fallback: true,
-      });
-    }
-
     const rawVerifications = Array.isArray(gaps.dataToVerify) ? gaps.dataToVerify : [];
     const normalizedVerifications = rawVerifications
       .map((item) => {
@@ -721,6 +708,37 @@ Return ONLY valid JSON.`;
               : 'Score normalized from overall confidence due incomplete reviewer section output',
         missingData,
       };
+    }
+
+    // If quality is low but reviewer returned no actionable gaps, inject a fallback
+    // query targeted to the weakest section instead of a generic broad query.
+    if (normalizedCriticalGaps.length === 0 && normalizedOverallScore < 70) {
+      const weakestSection = sectionKeys.reduce(
+        (weakest, sectionKey) => {
+          const score = Number(normalizedSectionScores?.[sectionKey]?.score || 0);
+          if (score < weakest.score) return { key: sectionKey, score };
+          return weakest;
+        },
+        { key: 'general', score: Number.POSITIVE_INFINITY }
+      ).key;
+      const fallbackArea = weakestSection === 'summary' ? 'depth' : weakestSection;
+      const fallbackQueryMap = {
+        policy: `${country} ${_industry || 'industry'} law decree regulation licensing foreign ownership official gazette latest`,
+        market: `${country} ${_industry || 'industry'} market size demand supply pricing official statistics latest`,
+        competitors: `${country} ${_industry || 'industry'} top companies revenue market share key projects latest`,
+        depth: `${country} ${_industry || 'industry'} entry strategy implementation roadmap partner shortlist contracts latest`,
+        general: `${country} ${_industry || 'industry'} official statistics regulations competitors market size latest`,
+      };
+      const fallbackQuery = fallbackQueryMap[fallbackArea] || fallbackQueryMap.general;
+      normalizedCriticalGaps.push({
+        area: fallbackArea,
+        gap: `Reviewer returned no actionable gaps despite low confidence; collect fresh grounded facts for weakest section: ${weakestSection}`,
+        searchQuery: sanitizeResearchQuery(fallbackQuery, country, _industry, fallbackArea),
+        priority: 'high',
+        impactOnScore: 'high',
+        _normalized: true,
+        _fallback: true,
+      });
     }
 
     // Calibrate reviewer outputs against deterministic code-gate scores.
@@ -1000,9 +1018,9 @@ async function fillResearchGaps(gaps, country, industry) {
       const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
       const numericSignals = numericSignalCount(result.content || '');
       const usableRecoveryFinding =
-        contentLength >= MIN_GAP_FINDING_CHARS ||
         citationsCount >= MIN_FINDING_CITATIONS ||
-        (contentLength >= 700 && numericSignals >= 8);
+        (contentLength >= MIN_GAP_FINDING_CHARS && numericSignals >= 6) ||
+        (contentLength >= 1400 && numericSignals >= 10);
       if (result.content && usableRecoveryFinding) {
         additionalData.gapResearch.push({
           area: gap.area,
@@ -3094,21 +3112,19 @@ RULES:
 - Include source citations where available
 - Company descriptions should be 45-60 words
 - Insights should reference specific numbers from the data
+- Limit each company to at most 1 project entry (keep payload concise and stable)
 - Include a "sources" array with relevant URLs from the research data for each section: [{"url": "https://...", "title": "Source Name"}]
 
-CRITICAL WORD COUNT RULE — DESCRIPTIONS WILL BE REJECTED IF WRONG:
-Each "description" field MUST contain exactly 45-60 words. Count them.
-
-EXAMPLE (52 words): "Baker Hughes entered Vietnam in 2015 through a JV with PTSC, generating $45M annual revenue by 2023. Operating 3 service bases in Vung Tau and Hanoi, the company holds 12% market share in drilling services. Growth of 8% CAGR driven by offshore deepwater contracts with PVEP and Murphy Oil exploration programs."
-
-A description of 20-30 words WILL BE REJECTED. Include: revenue figures, entry year, market share, key projects, growth rate.
+CRITICAL WORD COUNT RULE:
+Each "description" field MUST contain 45-60 words.
+Include at least 2 numeric facts (e.g., revenue, market share, growth rate, entry year).
 
 Return ONLY valid JSON.`;
 
   const prompt1 = `${commonIntro}
 
 Return JSON with ONLY the japanesePlayers section.
-IMPORTANT: Return AT LEAST 3-5 Japanese companies. Search thoroughly — include subsidiaries, JV partners, trading companies (sogo shosha), and any Japanese firm with energy/industrial operations in ${country}.
+IMPORTANT: Return 3-4 Japanese companies. Include subsidiaries, JV partners, trading companies (sogo shosha), and any Japanese firm with energy/industrial operations in ${country}.
 
 {
   "japanesePlayers": {
@@ -3132,7 +3148,7 @@ IMPORTANT: Return AT LEAST 3-5 Japanese companies. Search thoroughly — include
   const prompt2 = `${commonIntro}
 
 Return JSON with ONLY the localMajor section.
-IMPORTANT: Return AT LEAST 5 local/domestic companies. Include state-owned enterprises, large conglomerates, and private players active in ${industry} in ${country}.
+IMPORTANT: Return 3-4 local/domestic companies. Include state-owned enterprises, large conglomerates, and private players active in ${industry} in ${country}.
 
 {
   "localMajor": {
@@ -3158,7 +3174,7 @@ IMPORTANT: Return AT LEAST 5 local/domestic companies. Include state-owned enter
   const prompt3 = `${commonIntro}
 
 Return JSON with ONLY the foreignPlayers section.
-IMPORTANT: Return AT LEAST 3-5 foreign (non-Japanese, non-local) companies. Include multinationals, regional players, and any foreign firm with ${industry} operations in ${country}.
+IMPORTANT: Return 3-4 foreign (non-Japanese, non-local) companies. Include multinationals, regional players, and any foreign firm with ${industry} operations in ${country}.
 
 {
   "foreignPlayers": {
@@ -3346,7 +3362,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt1,
       options: {
-        maxTokens: 6144,
+        maxTokens: 4608,
         label: 'synthesizeCompetitors:japanesePlayers',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3357,7 +3373,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt2,
       options: {
-        maxTokens: 6144,
+        maxTokens: 4608,
         label: 'synthesizeCompetitors:localMajor',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3368,7 +3384,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt3,
       options: {
-        maxTokens: 6144,
+        maxTokens: 4608,
         label: 'synthesizeCompetitors:foreignPlayers',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3379,7 +3395,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt4,
       options: {
-        maxTokens: 6144,
+        maxTokens: 4608,
         label: 'synthesizeCompetitors:caseStudy',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -5434,13 +5450,28 @@ async function applyFinalReviewFixes(
   if (!review || !review.sectionFixes) return countryAnalysis;
 
   const fixes = review.sectionFixes;
-  const sectionsToFix = Object.entries(fixes).filter(
+  let sectionsToFix = Object.entries(fixes).filter(
     ([, instruction]) => instruction && instruction !== 'null'
   );
 
   if (sectionsToFix.length === 0) {
     console.log('  [FINAL REVIEW] No section fixes needed');
     return countryAnalysis;
+  }
+
+  if (sectionsToFix.length > CFG_FINAL_FIX_MAX_SECTIONS_PER_PASS) {
+    const priority = ['market', 'competitors', 'policy', 'depth', 'summary'];
+    sectionsToFix = sectionsToFix
+      .slice()
+      .sort(
+        ([a], [b]) =>
+          priority.indexOf(a) - priority.indexOf(b) ||
+          ensureString(a).localeCompare(ensureString(b))
+      )
+      .slice(0, CFG_FINAL_FIX_MAX_SECTIONS_PER_PASS);
+    console.warn(
+      `  [FINAL REVIEW] Limiting section fixes to ${CFG_FINAL_FIX_MAX_SECTIONS_PER_PASS} per pass to control cost/quota pressure`
+    );
   }
 
   console.log(
@@ -6395,9 +6426,20 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             stagnantFinalReviewIterations = 0;
           }
           if (stagnantFinalReviewIterations >= 1) {
-            console.warn(
-              `  [FINAL REVIEW] Stagnation detected (coherence=${lastCoherenceScore}, repeated issue set). Stopping further expensive review cycles.`
-            );
+            if (lastCleanReviewSnapshot) {
+              countryAnalysis.finalReview = JSON.parse(JSON.stringify(lastCleanReviewSnapshot));
+              lastCoherenceScore = normalizeNumericScore(
+                lastCleanReviewSnapshot?.coherenceScore,
+                lastCoherenceScore
+              );
+              console.warn(
+                `  [FINAL REVIEW] Stagnation detected (coherence=${lastCoherenceScore}, repeated issue set). Reverting to last clean review snapshot.`
+              );
+            } else {
+              console.warn(
+                `  [FINAL REVIEW] Stagnation detected (coherence=${lastCoherenceScore}, repeated issue set). Stopping further expensive review cycles.`
+              );
+            }
             break;
           }
         }
@@ -6591,10 +6633,63 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         }
 
         if (!reviewClean && !escalationApplied) {
-          console.warn(
-            '  [FINAL REVIEW] No further escalation budget/progress available. Stopping review loop.'
-          );
+          if (lastCleanReviewSnapshot) {
+            countryAnalysis.finalReview = JSON.parse(JSON.stringify(lastCleanReviewSnapshot));
+            lastCoherenceScore = normalizeNumericScore(
+              lastCleanReviewSnapshot?.coherenceScore,
+              lastCoherenceScore
+            );
+            console.warn(
+              '  [FINAL REVIEW] No further escalation budget/progress. Reverting to last clean review snapshot.'
+            );
+          } else {
+            console.warn(
+              '  [FINAL REVIEW] No further escalation budget/progress available. Stopping review loop.'
+            );
+          }
           break;
+        }
+      }
+
+      // Defensive post-loop fallback: if latest review regressed relative to a previously clean
+      // snapshot, preserve the clean snapshot to avoid ending on reviewer noise.
+      if (lastCleanReviewSnapshot) {
+        const currentCritical = (countryAnalysis.finalReview?.issues || []).filter(
+          (i) => i?.severity === 'critical'
+        ).length;
+        const currentMajor = (countryAnalysis.finalReview?.issues || []).filter(
+          (i) => i?.severity === 'major'
+        ).length;
+        const currentOpenGaps = Array.isArray(countryAnalysis.finalReview?.researchGaps)
+          ? countryAnalysis.finalReview.researchGaps.length
+          : 0;
+        const cleanCritical = (lastCleanReviewSnapshot.issues || []).filter(
+          (i) => i?.severity === 'critical'
+        ).length;
+        const cleanMajor = (lastCleanReviewSnapshot.issues || []).filter(
+          (i) => i?.severity === 'major'
+        ).length;
+        const cleanOpenGaps = Array.isArray(lastCleanReviewSnapshot?.researchGaps)
+          ? lastCleanReviewSnapshot.researchGaps.length
+          : 0;
+        const cleanCoherence = normalizeNumericScore(lastCleanReviewSnapshot?.coherenceScore, 0);
+        const currentCoherence = normalizeNumericScore(
+          countryAnalysis.finalReview?.coherenceScore,
+          0
+        );
+        const cleanSnapshotLooksBetter =
+          cleanCritical < currentCritical ||
+          (cleanCritical === currentCritical && cleanMajor < currentMajor) ||
+          (cleanCritical === currentCritical &&
+            cleanMajor === currentMajor &&
+            cleanOpenGaps < currentOpenGaps);
+
+        if (cleanSnapshotLooksBetter && cleanCoherence >= currentCoherence - 5) {
+          countryAnalysis.finalReview = JSON.parse(JSON.stringify(lastCleanReviewSnapshot));
+          lastCoherenceScore = cleanCoherence;
+          console.warn(
+            `  [FINAL REVIEW] Preserving better clean snapshot (coherence=${cleanCoherence}, critical=${cleanCritical}, major=${cleanMajor}, gaps=${cleanOpenGaps}) over noisier latest review`
+          );
         }
       }
 

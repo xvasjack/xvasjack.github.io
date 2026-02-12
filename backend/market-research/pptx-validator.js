@@ -250,6 +250,109 @@ async function scanRelationshipTargets(zip) {
   return { checkedInternal, missingInternalTargets };
 }
 
+async function scanSlideNonVisualIdIntegrity(zip) {
+  const slideFiles = Object.keys(zip.files)
+    .filter((f) => /^ppt\/slides\/slide\d+\.xml$/i.test(f))
+    .sort((a, b) => {
+      const ai = Number((a.match(/slide(\d+)\.xml/i) || [])[1] || 0);
+      const bi = Number((b.match(/slide(\d+)\.xml/i) || [])[1] || 0);
+      return ai - bi;
+    });
+  const duplicateNonVisualShapeIds = [];
+
+  for (const slideFile of slideFiles) {
+    const slideEntry = zip.file(slideFile);
+    if (!slideEntry) continue;
+    const xml = await slideEntry.async('string');
+    const idCounts = new Map();
+    for (const match of xml.matchAll(/<p:cNvPr\b[^>]*\bid="(\d+)"/gi)) {
+      const id = String(match[1] || '').trim();
+      if (!id) continue;
+      idCounts.set(id, (idCounts.get(id) || 0) + 1);
+    }
+    for (const [id, count] of idCounts.entries()) {
+      if (count <= 1) continue;
+      duplicateNonVisualShapeIds.push({
+        slide: slideFile.replace(/^ppt\/slides\//i, ''),
+        id,
+        count,
+      });
+    }
+  }
+
+  return { checkedSlides: slideFiles.length, duplicateNonVisualShapeIds };
+}
+
+async function normalizeSlideNonVisualIds(pptxBuffer) {
+  if (!Buffer.isBuffer(pptxBuffer) || pptxBuffer.length === 0) {
+    return { buffer: pptxBuffer, changed: false, stats: { skipped: true } };
+  }
+
+  const zip = await JSZip.loadAsync(pptxBuffer);
+  const slideFiles = Object.keys(zip.files)
+    .filter((f) => /^ppt\/slides\/slide\d+\.xml$/i.test(f))
+    .sort((a, b) => {
+      const ai = Number((a.match(/slide(\d+)\.xml/i) || [])[1] || 0);
+      const bi = Number((b.match(/slide(\d+)\.xml/i) || [])[1] || 0);
+      return ai - bi;
+    });
+
+  const stats = {
+    slidesScanned: slideFiles.length,
+    slidesAdjusted: 0,
+    reassignedIds: 0,
+  };
+  let changed = false;
+
+  for (const slideFile of slideFiles) {
+    const slideEntry = zip.file(slideFile);
+    if (!slideEntry) continue;
+    const xml = await slideEntry.async('string');
+    if (!xml.includes('<p:cNvPr')) continue;
+
+    let maxExistingId = 1;
+    for (const match of xml.matchAll(/<p:cNvPr\b[^>]*\bid="(\d+)"/gi)) {
+      const idNum = Number.parseInt(match[1], 10);
+      if (Number.isFinite(idNum) && idNum > maxExistingId) maxExistingId = idNum;
+    }
+
+    const seen = new Set();
+    let reassignedOnSlide = 0;
+    const updated = xml.replace(/<p:cNvPr\b[^>]*>/gi, (tag) => {
+      const idMatch = tag.match(/\bid="(\d+)"/i);
+      if (!idMatch) return tag;
+      const originalId = String(idMatch[1]);
+      let resolvedId = originalId;
+
+      if (seen.has(resolvedId)) {
+        do {
+          maxExistingId += 1;
+          resolvedId = String(maxExistingId);
+        } while (seen.has(resolvedId));
+        reassignedOnSlide++;
+      }
+
+      seen.add(resolvedId);
+      if (resolvedId === originalId) return tag;
+      return tag.replace(/\bid="(\d+)"/i, `id="${resolvedId}"`);
+    });
+
+    if (updated !== xml) {
+      zip.file(slideFile, updated);
+      changed = true;
+      stats.slidesAdjusted += 1;
+      stats.reassignedIds += reassignedOnSlide;
+    }
+  }
+
+  if (!changed) return { buffer: pptxBuffer, changed: false, stats };
+  return {
+    buffer: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }),
+    changed: true,
+    stats,
+  };
+}
+
 function extractXmlAttr(tag, attrName) {
   const re = new RegExp(`\\b${attrName}=(["'])(.*?)\\1`, 'i');
   const m = tag.match(re);
@@ -452,6 +555,7 @@ async function scanPackageConsistency(zip) {
   const missingChartOverrides = [];
   const missingExpectedOverrides = [];
   const contentTypeMismatches = [];
+  const nonVisualIdIntegrity = await scanSlideNonVisualIdIntegrity(zip);
   const contentTypesEntry = zip.file('[Content_Types].xml');
   if (contentTypesEntry) {
     const xml = await contentTypesEntry.async('string');
@@ -503,6 +607,8 @@ async function scanPackageConsistency(zip) {
     duplicateRelationshipIds,
     duplicateSlideIds,
     duplicateSlideRelIds,
+    duplicateNonVisualShapeIds: nonVisualIdIntegrity.duplicateNonVisualShapeIds,
+    slidesCheckedForNonVisualShapeIds: nonVisualIdIntegrity.checkedSlides,
     danglingOverrides,
     missingSlideOverrides,
     missingChartOverrides,
@@ -672,6 +778,19 @@ async function validatePPTX(input, exp = {}) {
       );
     } else {
       pass('Presentation slide ID integrity', 'Slide IDs and relationship IDs are unique');
+    }
+
+    if (packageConsistency.duplicateNonVisualShapeIds.length > 0) {
+      const examples = packageConsistency.duplicateNonVisualShapeIds
+        .slice(0, 5)
+        .map((x) => `${x.slide}:id=${x.id} (x${x.count})`)
+        .join(', ');
+      fail('Slide non-visual shape ID integrity', 'Unique p:cNvPr id values per slide', examples);
+    } else {
+      pass(
+        'Slide non-visual shape ID integrity',
+        `No duplicate p:cNvPr ids across ${packageConsistency.slidesCheckedForNonVisualShapeIds || 0} slide(s)`
+      );
     }
 
     if (
@@ -928,6 +1047,8 @@ module.exports = {
   readPPTX,
   scanXmlIntegrity,
   scanRelationshipTargets,
+  scanSlideNonVisualIdIntegrity,
+  normalizeSlideNonVisualIds,
   scanPackageConsistency,
   reconcileContentTypesAndPackage,
   countSlides,

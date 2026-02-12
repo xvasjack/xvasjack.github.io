@@ -775,6 +775,11 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         if (Number(pptMetrics.nonTemplatePatternCount || 0) > 0) {
           formattingFailures.push(`nonTemplatePatterns=${pptMetrics.nonTemplatePatternCount}`);
         }
+        if (Number(pptMetrics.fallbackTemplateMappingCount || 0) > 0) {
+          formattingFailures.push(
+            `fallbackTemplateMappings=${pptMetrics.fallbackTemplateMappingCount}`
+          );
+        }
         if (Number(pptMetrics.geometryIssueCount || 0) > 0) {
           formattingFailures.push(`geometryIssues=${pptMetrics.geometryIssueCount}`);
         }

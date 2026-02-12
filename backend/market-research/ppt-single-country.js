@@ -72,6 +72,7 @@ const { validatePptData } = require('./quality-gates');
 const {
   scanRelationshipTargets,
   scanPackageConsistency,
+  normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
 } = require('./pptx-validator');
 
@@ -104,13 +105,17 @@ function ensureString(value, defaultValue) {
 // Safety wrapper: ensure any value going into a table cell is a plain, XML-safe string.
 // AI sometimes returns nested objects/arrays — this prevents pptxgenjs crashes.
 // XML sanitization happens in ensureString() above.
-function safeCell(value, _maxLen) {
+function safeCell(value, maxLen) {
   const str = ensureString(value).replace(/\s+/g, ' ').trim();
   if (!str) return '';
-  // Preserve content by default. Only hard-trim pathological payloads.
   const hardCap = 12000;
-  if (str.length <= hardCap) return str;
-  return str.slice(0, hardCap);
+  const requestedLimit = Number(maxLen);
+  const effectiveLimit =
+    Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.max(16, Math.min(Math.round(requestedLimit), hardCap))
+      : hardCap;
+  if (str.length <= effectiveLimit) return str;
+  return truncate(str, effectiveLimit, true);
 }
 
 // Render-time payload normalization.
@@ -389,6 +394,16 @@ function collectPackageConsistencyIssues(packageConsistency) {
     packageIssues.push(
       `duplicate slide rel ids: ${packageConsistency.duplicateSlideRelIds.slice(0, 5).join(', ')}`
     );
+  }
+  if (
+    Array.isArray(packageConsistency.duplicateNonVisualShapeIds) &&
+    packageConsistency.duplicateNonVisualShapeIds.length > 0
+  ) {
+    const dupShapePreview = packageConsistency.duplicateNonVisualShapeIds
+      .slice(0, 5)
+      .map((x) => `${x.slide}:id=${x.id}(x${x.count})`)
+      .join(', ');
+    packageIssues.push(`duplicate non-visual shape ids: ${dupShapePreview}`);
   }
   if (packageConsistency.danglingOverrides.length > 0) {
     packageIssues.push(
@@ -4760,8 +4775,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const scaledMax = Math.floor(maxChars * (baseFontPt / fs));
       if (text.length <= scaledMax) return { text, fontSize: fs };
     }
-    // Text still doesn't fit at floor font — show full text at floor size
-    return { text, fontSize: minPt };
+    // If content still exceeds floor-size capacity, trim to avoid unreadable overflow.
+    const floorScaledMax = Math.max(maxChars, Math.floor(maxChars * (baseFontPt / minPt)));
+    return { text: truncate(ensureString(text), floorScaledMax, true), fontSize: minPt };
   }
 
   function renderKeyInsights(slide, data) {
@@ -5561,8 +5577,32 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
   }
 
+  const fallbackTemplateMappings = templateUsageStats.resolved.filter((entry) =>
+    /fallback/i.test(ensureString(entry?.source).toLowerCase())
+  );
+  if (fallbackTemplateMappings.length > 0) {
+    const fallbackKeys = [
+      ...new Set(
+        fallbackTemplateMappings.map(
+          (entry) =>
+            `${entry.key}${entry.pattern ? `:${entry.pattern}` : ''} [${entry.source || 'fallback'}]`
+        )
+      ),
+    ].slice(0, 20);
+    throw new Error(
+      `Template mapping fallback detected (${fallbackTemplateMappings.length} block(s)): ${fallbackKeys.join(', ')}. Add explicit template mappings for these block keys.`
+    );
+  }
+
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
+  const nonVisualIdNormalize = await normalizeSlideNonVisualIds(pptxBuffer);
+  pptxBuffer = nonVisualIdNormalize.buffer;
+  if (nonVisualIdNormalize.changed) {
+    console.log(
+      `[PPT] Normalized duplicate slide shape ids (${nonVisualIdNormalize.stats.reassignedIds} id reassignment(s) across ${nonVisualIdNormalize.stats.slidesAdjusted} slide(s))`
+    );
+  }
   const contentTypeReconcile = await reconcileContentTypesAndPackage(pptxBuffer);
   pptxBuffer = contentTypeReconcile.buffer;
   if (contentTypeReconcile.changed) {
@@ -5674,6 +5714,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     formattingAuditWarningCount: formattingAudit.warningCount,
     formattingAuditIssueCodes: formattingAudit.issues.map((i) => i.code),
     formattingAuditChecks: formattingAudit.checks,
+    fallbackTemplateMappingCount: fallbackTemplateMappings.length,
+    fallbackTemplateMappingKeys: fallbackTemplateMappings
+      .map((entry) => `${entry.key}:${entry.source || 'fallback'}`)
+      .slice(0, 30),
   };
   console.log(
     `[PPT TEMPLATE] Coverage: ${templateCoverage}% (${templateBackedCount}/${templateTotal}) template-backed block mappings`

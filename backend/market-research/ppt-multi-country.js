@@ -18,6 +18,7 @@ const { ensureString: _ensureStringRaw } = require('./shared/utils');
 const {
   scanRelationshipTargets,
   scanPackageConsistency,
+  normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
 } = require('./pptx-validator');
 
@@ -92,6 +93,16 @@ function collectPackageConsistencyIssues(packageConsistency) {
     packageIssues.push(
       `duplicate slide rel ids: ${packageConsistency.duplicateSlideRelIds.slice(0, 5).join(', ')}`
     );
+  }
+  if (
+    Array.isArray(packageConsistency.duplicateNonVisualShapeIds) &&
+    packageConsistency.duplicateNonVisualShapeIds.length > 0
+  ) {
+    const dupShapePreview = packageConsistency.duplicateNonVisualShapeIds
+      .slice(0, 5)
+      .map((x) => `${x.slide}:id=${x.id} (x${x.count})`)
+      .join(', ');
+    packageIssues.push(`duplicate slide shape ids: ${dupShapePreview}`);
   }
   if (packageConsistency.danglingOverrides.length > 0) {
     packageIssues.push(
@@ -959,6 +970,13 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
+  const nonVisualIdNormalize = await normalizeSlideNonVisualIds(pptxBuffer);
+  pptxBuffer = nonVisualIdNormalize.buffer;
+  if (nonVisualIdNormalize.changed) {
+    console.log(
+      `[PPT] Normalized duplicate slide shape ids (${nonVisualIdNormalize.stats.reassignedIds} id reassignment(s) across ${nonVisualIdNormalize.stats.slidesAdjusted} slide(s))`
+    );
+  }
   const contentTypeReconcile = await reconcileContentTypesAndPackage(pptxBuffer);
   pptxBuffer = contentTypeReconcile.buffer;
   if (contentTypeReconcile.changed) {
