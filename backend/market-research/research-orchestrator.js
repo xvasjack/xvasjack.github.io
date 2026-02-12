@@ -3139,7 +3139,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     const jobResult = await synthesizeWithFallback(job.prompt, job.options);
     competitorRawResults.push(jobResult);
     if (index < competitorJobs.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
   }
   const [r1, r2, r3, r4] = competitorRawResults;
@@ -4942,23 +4942,24 @@ async function applyFinalReviewFixes(
     `  [FINAL REVIEW] Re-synthesizing ${sectionsToFix.length} sections: ${sectionsToFix.map(([s]) => s).join(', ')}`
   );
 
-  // Re-synthesize flagged sections in parallel
-  const fixPromises = sectionsToFix.map(async ([section, instruction]) => {
+  // Re-synthesize flagged sections sequentially to avoid flash burst/rate-limit spikes.
+  const results = [];
+  for (const [section, instruction] of sectionsToFix) {
     try {
       const fixContext = `${clientContext || ''}\n\nFINAL REVIEW FEEDBACK — MUST ADDRESS:\n${instruction}`;
 
       if (section === 'policy') {
-        return {
+        results.push({
           section,
           result: await synthesizePolicy(researchData, country, industry, fixContext, storyPlan),
-        };
+        });
       } else if (section === 'market') {
-        return {
+        results.push({
           section,
           result: await synthesizeMarket(researchData, country, industry, fixContext, storyPlan),
-        };
+        });
       } else if (section === 'competitors') {
-        return {
+        results.push({
           section,
           result: await synthesizeCompetitors(
             researchData,
@@ -4967,7 +4968,7 @@ async function applyFinalReviewFixes(
             fixContext,
             storyPlan
           ),
-        };
+        });
       } else if (section === 'summary') {
         // Summary depends on other sections, re-synthesize with updated data
         const summaryResult = await synthesizeSummary(
@@ -4983,11 +4984,11 @@ async function applyFinalReviewFixes(
             existingDepth: countryAnalysis.depth || {},
           }
         );
-        return {
+        results.push({
           section: 'summary',
           result: summaryResult.summary || summaryResult,
           depth: summaryResult.depth || null,
-        };
+        });
       } else if (section === 'depth') {
         // Depth is produced by synthesizeSummary along with summary.
         const summaryResult = await synthesizeSummary(
@@ -5003,21 +5004,21 @@ async function applyFinalReviewFixes(
             existingDepth: countryAnalysis.depth || {},
           }
         );
-        return {
+        results.push({
           section: 'depth',
           result: summaryResult.depth || null,
           summary: summaryResult.summary || null,
-        };
+        });
+      } else {
+        console.warn(`  [FINAL REVIEW] Unsupported section fix requested: ${section}`);
       }
-      console.warn(`  [FINAL REVIEW] Unsupported section fix requested: ${section}`);
-      return null;
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     } catch (err) {
       console.warn(`  [FINAL REVIEW] Failed to fix ${section}: ${err.message}`);
-      return null;
+      results.push(null);
     }
-  });
-
-  const results = await Promise.all(fixPromises);
+  }
   let refreshedSummaryRequired = false;
 
   for (const fix of results) {
@@ -5390,12 +5391,30 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   // ============ PER-SECTION GEMINI SYNTHESIS ============
   console.log(`  [Synthesizing ${country} data per-section with Gemini...]`);
 
-  // Run policy, market, and competitor synthesis in parallel
-  const [policySynthesis, marketSynthesis, competitorsSynthesis] = await Promise.all([
-    synthesizePolicy(researchData, country, industry, clientContext, storyPlan),
-    synthesizeMarket(researchData, country, industry, clientContext, storyPlan),
-    synthesizeCompetitors(researchData, country, industry, clientContext, storyPlan),
-  ]);
+  // Run synthesis sequentially to reduce flash-token burst/rate-limit risk.
+  const policySynthesis = await synthesizePolicy(
+    researchData,
+    country,
+    industry,
+    clientContext,
+    storyPlan
+  );
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const marketSynthesis = await synthesizeMarket(
+    researchData,
+    country,
+    industry,
+    clientContext,
+    storyPlan
+  );
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const competitorsSynthesis = await synthesizeCompetitors(
+    researchData,
+    country,
+    industry,
+    clientContext,
+    storyPlan
+  );
 
   // Check if too many synthesis sections failed
   const failedSections = [policySynthesis, marketSynthesis, competitorsSynthesis]

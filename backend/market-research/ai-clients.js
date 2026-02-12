@@ -18,6 +18,9 @@ const PRICING = {
 // ============ BUDGET GUARDRAILS ============
 const GEMINI_BUDGET_LIMIT = parseFloat(process.env.GEMINI_BUDGET_LIMIT || '20.00');
 let runBudgetUsed = 0;
+const RETRY_BASE_DELAY_GEMINI_MS = 5000;
+const RETRY_BASE_DELAY_GEMINI_RESEARCH_MS = 6000;
+const RETRY_BASE_DELAY_GEMINI_PRO_MS = 5000;
 
 function checkBudget() {
   if (runBudgetUsed >= GEMINI_BUDGET_LIMIT) {
@@ -260,7 +263,7 @@ async function callGemini(prompt, options = {}) {
       }
     },
     maxRetries,
-    1000,
+    RETRY_BASE_DELAY_GEMINI_MS,
     'Gemini'
   );
 }
@@ -441,7 +444,7 @@ Be specific. Cite sources. No fluff.`;
       }
     },
     3,
-    2000,
+    RETRY_BASE_DELAY_GEMINI_RESEARCH_MS,
     'Gemini Research',
     pipelineSignal
   );
@@ -537,7 +540,7 @@ async function callGeminiPro(prompt, options = {}) {
       }
     },
     maxRetries,
-    1000,
+    RETRY_BASE_DELAY_GEMINI_PRO_MS,
     'Gemini Pro'
   );
 }

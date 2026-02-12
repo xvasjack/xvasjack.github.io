@@ -2,6 +2,10 @@
 
 Purpose: record concrete mistakes, why they hurt, and how to prevent repeats.
 
+## Hard Rules (Do Not Break)
+
+1. Gemini `gemini-3-flash` rate-limit protection is mandatory: no unbounded parallel fan-out/retry storms. Use a global per-model token throttle (TPM-aware), keep flash synthesis concurrency bounded (default `<=1`), and honor provider `retryDelay` fully before retrying after any `429 RESOURCE_EXHAUSTED`.
+
 ## 2026-02-11
 
 | # | Mistake | Why it was wrong | Prevention rule |
