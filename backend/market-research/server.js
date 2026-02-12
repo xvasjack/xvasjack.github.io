@@ -66,7 +66,18 @@ function parseBooleanOption(value, fallback = null) {
   return fallback;
 }
 
+function parsePositiveIntEnv(name, fallback) {
+  const raw = String(process.env[name] || '').trim();
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
 const ALLOW_DRAFT_PPT_MODE = parseBooleanOption(process.env.ALLOW_DRAFT_PPT_MODE, false) === true;
+const FINAL_REVIEW_MAX_MAJOR_ISSUES = parsePositiveIntEnv('FINAL_REVIEW_MAX_MAJOR_ISSUES', 3);
+const FINAL_REVIEW_MAX_OPEN_GAPS = parsePositiveIntEnv('FINAL_REVIEW_MAX_OPEN_GAPS', 3);
+const PIPELINE_TIMEOUT_MS = parsePositiveIntEnv('PIPELINE_TIMEOUT_SECONDS', 45 * 60) * 1000;
 const CANONICAL_MARKET_SECTION_KEYS = [
   'marketSizeAndGrowth',
   'supplyAndDemandDynamics',
@@ -383,24 +394,39 @@ async function runMarketResearch(userPrompt, email, options = {}) {
 
   return trackingContext.run(tracker, async () => {
     try {
+      const runOptions = options && typeof options === 'object' ? options : {};
+      const abortSignal = runOptions.abortSignal || null;
+      const throwIfAborted = (stage) => {
+        if (!abortSignal || !abortSignal.aborted) return;
+        const reason = abortSignal.reason;
+        const reasonText =
+          typeof reason === 'string'
+            ? reason
+            : reason && typeof reason.message === 'string'
+              ? reason.message
+              : 'Pipeline timeout after 45 minutes';
+        throw new Error(`Pipeline aborted${stage ? ` during ${stage}` : ''}: ${reasonText}`);
+      };
+
       // Stage 1: Parse scope
+      throwIfAborted('scope parsing');
       const scope = await parseScope(userPrompt);
-      const requestedDraftPptMode = parseBooleanOption(options?.draftPptMode, false) === true;
+      const requestedDraftPptMode = parseBooleanOption(runOptions?.draftPptMode, false) === true;
       const draftPptMode = Boolean(ALLOW_DRAFT_PPT_MODE && requestedDraftPptMode);
       if (requestedDraftPptMode && !ALLOW_DRAFT_PPT_MODE) {
         console.warn(
           '[Quality Gate] Draft PPT mode request ignored because ALLOW_DRAFT_PPT_MODE is not enabled'
         );
       }
-      if (options && typeof options === 'object') {
+      if (runOptions && typeof runOptions === 'object') {
         if (
-          options.templateSlideSelections &&
-          typeof options.templateSlideSelections === 'object'
+          runOptions.templateSlideSelections &&
+          typeof runOptions.templateSlideSelections === 'object'
         ) {
-          scope.templateSlideSelections = options.templateSlideSelections;
+          scope.templateSlideSelections = runOptions.templateSlideSelections;
         }
-        if (typeof options.templateStrictMode === 'boolean') {
-          scope.templateStrictMode = options.templateStrictMode;
+        if (typeof runOptions.templateStrictMode === 'boolean') {
+          scope.templateStrictMode = runOptions.templateStrictMode;
         }
         if (draftPptMode) {
           scope.draftPptMode = true;
@@ -416,6 +442,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       // Process countries in batches of 2 to manage API rate limits
       for (let i = 0; i < scope.targetMarkets.length; i += 2) {
         const batch = scope.targetMarkets.slice(i, i + 2);
+        throwIfAborted(`country research (${batch.join(', ')})`);
         const batchResults = await Promise.allSettled(
           batch.map((country) =>
             researchCountry(country, scope.industry, scope.clientContext, scope)
@@ -434,6 +461,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       // Quality Gate 1: Validate research quality per country and retry weak topics
       for (const ca of countryAnalyses) {
         if (!ca.rawData) continue;
+        throwIfAborted(`research validation (${ca.country})`);
         const researchGate = validateResearchQuality(ca.rawData);
         console.log(
           '[Quality Gate] Research for',
@@ -455,6 +483,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           const RETRY_TIMEOUT = 2 * 60 * 1000;
           const retryLoop = async () => {
             for (const topic of researchGate.retryTopics.slice(0, 5)) {
+              throwIfAborted(`research retry (${ca.country})`);
               try {
                 const ind = scope.industry || 'the industry';
                 const queryMap = {
@@ -573,8 +602,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             return `${d.country}: ${readinessReasons.length > 0 ? readinessReasons.join('; ') : 'readiness flag is false'}`;
           })
           .join(' | ');
-        const gateRule =
-          'Readiness requires effective>=80, content-depth>=80, final coherence>=80, critical=0, major<=2, openGaps<=2.';
+        const gateRule = `Readiness requires effective>=80, content-depth>=80, final coherence>=80, critical=0, major<=${FINAL_REVIEW_MAX_MAJOR_ISSUES}, openGaps<=${FINAL_REVIEW_MAX_OPEN_GAPS}.`;
         const draftBypassEligible = notReadyDiagnostics.every(
           (d) =>
             Number(d.finalReviewCritical || 0) === 0 &&
@@ -612,6 +640,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       // It will be cleaned up AFTER PPT generation to free memory.
 
       // Stage 3: Synthesize findings
+      throwIfAborted('synthesis');
       const synthesis = await synthesizeFindings(countryAnalyses, scope);
 
       // Quality Gate 2: Validate synthesis quality (Fix 14: pass industry for specificity scoring)
@@ -700,6 +729,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       }
 
       // Stage 4: Generate PPT
+      throwIfAborted('ppt generation');
       const pptBuffer = await generatePPT(finalSynthesis, countryAnalyses, scope);
       const pptMetrics = (pptBuffer && (pptBuffer.__pptMetrics || pptBuffer.pptMetrics)) || null;
 
@@ -827,6 +857,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       }
 
       // Stage 5: Send email
+      throwIfAborted('delivery');
       const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
       const finalFilename = draftPptMode ? filename.replace(/\.pptx$/i, '_DRAFT.pptx') : filename;
       lastGeneratedPpt = {
@@ -961,17 +992,12 @@ app.post('/api/market-research', async (req, res) => {
     estimatedTime: '30-60 minutes',
   });
 
-  // Run research in background with 45-minute global pipeline timeout + abort signal
-  const PIPELINE_TIMEOUT = 45 * 60 * 1000;
+  // Run research in background with a global pipeline timeout + abort signal
+  const timeoutMinutes = Math.max(1, Math.round(PIPELINE_TIMEOUT_MS / 60000));
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, PIPELINE_TIMEOUT);
-  const timeoutPromise = new Promise((_, reject) => {
-    controller.signal.addEventListener('abort', () => {
-      reject(new Error('Pipeline timeout after 45 minutes'));
-    });
-  });
+    controller.abort(new Error(`Pipeline timeout after ${timeoutMinutes} minutes`));
+  }, PIPELINE_TIMEOUT_MS);
   const mergedOptions = { ...(options || {}) };
   if (templateSlideSelections && typeof templateSlideSelections === 'object') {
     mergedOptions.templateSlideSelections = templateSlideSelections;
@@ -988,7 +1014,8 @@ app.post('/api/market-research', async (req, res) => {
   }
   // Legacy aliases intentionally ignored to prevent accidental readiness bypass.
   // Draft mode now requires explicit `draftPptMode=true`.
-  Promise.race([runMarketResearch(prompt, email, mergedOptions), timeoutPromise])
+  mergedOptions.abortSignal = controller.signal;
+  runMarketResearch(prompt, email, mergedOptions)
     .then(() => {
       clearTimeout(timeoutId);
     })

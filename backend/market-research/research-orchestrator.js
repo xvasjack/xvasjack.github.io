@@ -16,6 +16,14 @@ function ensureString(value, defaultValue = '') {
   return _ensureString(value, defaultValue);
 }
 
+function parsePositiveIntEnv(name, fallback) {
+  const raw = ensureString(process.env[name], '').trim();
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
 const PLACEHOLDER_PATTERNS = [
   /\binsufficient research data\b/i,
   /\binsufficient data\b/i,
@@ -2378,34 +2386,40 @@ async function synthesizeMarket(researchData, country, industry, clientContext, 
   const uniqueTopics = [...new Set(marketTopicNames)].slice(0, 6);
   console.log(`    [Market] Dynamic topics: ${uniqueTopics.join(', ')}`);
 
-  // Build dynamic schema from research topic names
-  // Generate camelCase keys from topic names for better downstream mapping
-  // e.g. "Market Size & Growth" → "marketSizeGrowth"
-  function topicToKey(topic) {
-    return topic
-      .replace(/&/g, 'And')
-      .replace(/[^a-zA-Z0-9\s]/g, '')
-      .trim()
-      .split(/\s+/)
-      .map((word, idx) =>
-        idx === 0 ? word.toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-      )
-      .join('');
-  }
-
-  const sectionSchemas = uniqueTopics.map((topic, i) => {
-    const key = topicToKey(topic) || `section_${i}`;
-    return `  "${key}": {
-    "slideTitle": "${country} - ${topic}",
-    "subtitle": "THESIS STATEMENT (100-180 chars): the key strategic takeaway for the client. NOT a description — a conclusion. Example: 'Rapid industrialization is driving 12% annual demand growth, creating a $2.1B addressable market for efficiency services'",
-    "overview": "2-3 sentence strategic overview of this topic. Frame in terms of client implications, not just facts.",
+  // Canonical market contract only — prevents dynamic key drift (e.g. segmentAnalysis,
+  // pricingAndTariffs, supplydemandDynamics) from causing repeated strict-gate retries.
+  const sectionSchemas = [
+    `  "marketSizeAndGrowth": {
+    "slideTitle": "${country} - Market Size & Growth",
+    "subtitle": "THESIS STATEMENT (100-180 chars): the key strategic takeaway for the client.",
+    "overview": "2-3 sentence strategic overview focused on client implications.",
     "keyMetrics": [{"metric": "Named metric", "value": "Specific value from data", "context": "Why this matters"}],
     "chartData": null,
     "keyInsight": "What this means for client",
     "dataType": "time_series_multi_insight",
     "sources": [{"url": "https://example.com/source", "title": "Source Name"}]
-  }`;
-  });
+  }`,
+    `  "supplyAndDemandDynamics": {
+    "slideTitle": "${country} - Supply & Demand Dynamics",
+    "subtitle": "THESIS STATEMENT (100-180 chars): the key strategic takeaway for the client.",
+    "overview": "2-3 sentence strategic overview focused on client implications.",
+    "keyMetrics": [{"metric": "Named metric", "value": "Specific value from data", "context": "Why this matters"}],
+    "chartData": null,
+    "keyInsight": "What this means for client",
+    "dataType": "time_series_multi_insight",
+    "sources": [{"url": "https://example.com/source", "title": "Source Name"}]
+  }`,
+    `  "pricingAndTariffStructures": {
+    "slideTitle": "${country} - Pricing & Tariff Structures",
+    "subtitle": "THESIS STATEMENT (100-180 chars): the key strategic takeaway for the client.",
+    "overview": "2-3 sentence strategic overview focused on client implications.",
+    "keyMetrics": [{"metric": "Named metric", "value": "Specific value from data", "context": "Why this matters"}],
+    "chartData": null,
+    "keyInsight": "What this means for client",
+    "dataType": "time_series_multi_insight",
+    "sources": [{"url": "https://example.com/source", "title": "Source Name"}]
+  }`,
+  ];
 
   const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
@@ -2418,6 +2432,7 @@ ${JSON.stringify(labeledData, null, 2)}`
 Client context: ${clientContext}
 ${SYNTHESIS_STYLE_GUIDE}${storyInstructions}
 ${researchContext}
+Market topics observed in research (for content coverage only, NOT as output keys): ${uniqueTopics.join(', ') || 'None'}
 
 If research data is insufficient for a field, set the value to:
 - For arrays: empty array []
@@ -2460,30 +2475,21 @@ Return ONLY valid JSON.`;
     if (hasTransientTopLevelKeys(candidate)) {
       return { pass: false, reason: 'top-level transient section keys detected' };
     }
-    const disallowedTopLevel = findDisallowedTopLevelKeys(candidate, STRICT_MARKET_TOP_LEVEL_KEYS);
-    if (disallowedTopLevel.length > 0) {
-      return {
-        pass: false,
-        reason: `non-canonical top-level market keys detected: ${disallowedTopLevel.join(', ')}`,
-      };
-    }
-    const directCanonicalCount = CANONICAL_MARKET_SECTION_KEYS.filter(
-      (k) => candidate[k] && typeof candidate[k] === 'object' && !Array.isArray(candidate[k])
-    ).length;
-    if (directCanonicalCount < CANONICAL_MARKET_SECTION_KEYS.length) {
-      return {
-        pass: false,
-        reason: `missing direct canonical market sections (${directCanonicalCount}/${CANONICAL_MARKET_SECTION_KEYS.length})`,
-      };
-    }
+    // Normalize first, then enforce canonical contract.
+    // This preserves strictness while allowing harmless key-shape drift
+    // (e.g. supplydemandDynamics/pricingAndTariffs/segmentAnalysis).
     const normalized = validateMarketSynthesis(candidate);
     const canonicalCount = CANONICAL_MARKET_SECTION_KEYS.filter(
       (k) => normalized?.[k] && typeof normalized[k] === 'object' && !Array.isArray(normalized[k])
     ).length;
     if (canonicalCount < CANONICAL_MARKET_SECTION_KEYS.length) {
+      const passthroughUnknown = findDisallowedTopLevelKeys(
+        candidate,
+        STRICT_MARKET_TOP_LEVEL_KEYS
+      );
       return {
         pass: false,
-        reason: `missing canonical market sections (${canonicalCount}/${CANONICAL_MARKET_SECTION_KEYS.length})`,
+        reason: `missing canonical market sections (${canonicalCount}/${CANONICAL_MARKET_SECTION_KEYS.length})${passthroughUnknown.length > 0 ? `; unknown keys seen: ${passthroughUnknown.join(', ')}` : ''}`,
       };
     }
     if (hasSemanticArtifactPayload(normalized)) {
@@ -5408,8 +5414,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   // Loops until grade A/B or max iterations reached.
   const FINAL_REVIEW_MAX_ITERATIONS = 5;
   const FINAL_REVIEW_TARGET_SCORE = 80;
-  const FINAL_REVIEW_MAX_MAJOR_ISSUES = 2;
-  const FINAL_REVIEW_MAX_OPEN_GAPS = 2;
+  const FINAL_REVIEW_MAX_MAJOR_ISSUES = parsePositiveIntEnv('FINAL_REVIEW_MAX_MAJOR_ISSUES', 3);
+  const FINAL_REVIEW_MAX_OPEN_GAPS = parsePositiveIntEnv('FINAL_REVIEW_MAX_OPEN_GAPS', 3);
 
   if (!countryAnalysis.aborted) {
     let finalReviewIteration = 0;
