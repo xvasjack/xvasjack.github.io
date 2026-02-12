@@ -1,41 +1,37 @@
 {
-  "timestamp": "2026-01-17T16:32:41.252Z",
+  "timestamp": "2026-02-12T01:26:55.157Z",
   "file": "vietnam-output.pptx",
   "valid": false,
   "summary": {
-    "passed": 24,
-    "failed": 1,
-    "warnings": 2
+    "passed": 30,
+    "failed": 3,
+    "warnings": 0
   },
   "failed": [
     {
-      "check": "Slide 2 length",
-      "expected": ">= 100",
-      "actual": 99
-    }
-  ],
-  "warnings": [
-    {
-      "check": "Empty slides",
-      "message": "Slides with <50 chars: 30"
+      "check": "Content types consistency",
+      "expected": "No dangling/missing overrides and all expected package parts have correct content types",
+      "actual": "dangling overrides: ppt/slideMasters/slideMaster2.xml, ppt/slideMasters/slideMaster3.xml, ppt/slideMasters/slideMaster4.xml, ppt/slideMasters/slideMaster5.xml, ppt/slideMasters/slideMaster6.xml"
     },
     {
-      "check": "Empty slides",
-      "message": "6 slides with <100 chars"
+      "check": "Slide 2 \"Table of Contents\"",
+      "expected": "Contains \"Table of Contents\"",
+      "actual": "Why Vietnam? Shizuoka Gas&apos;s strategic imperative for overseas expansion Pro"
+    },
+    {
+      "check": "Slide 3 tables",
+      "expected": ">= 1",
+      "actual": 0
     }
   ],
+  "warnings": [],
   "structure": {
-    "slides": 33,
-    "charts": 4,
-    "tables": 63,
-    "text": 12632
+    "slides": 38,
+    "charts": 17,
+    "tables": 90,
+    "text": 32398
   },
   "sections": {
-    "Total Primary Energy Supply Coal dominat": 1,
-    "Electricity Consumption vs Capacity Dema": 1,
-    "Electricity Price Electricity prices fro": 1,
-    "Gas &amp; LNG Market Domestic gas produc": 1,
-    "Entry Strategy Options JV with local ind": 1,
-    "Opportunities &amp; Obstacles Summary of": 1
+    "specific con": 2
   }
 }

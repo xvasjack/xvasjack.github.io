@@ -113,6 +113,36 @@ Lock the pipeline so every generated deck is:
 - Remaining work:
   - enforce phase time budgets, resumable checkpoints, and idempotent restart handling.
 
+### RC-9: XML safety gap in shared text path
+- Symptoms:
+  - decks occasionally open with repair prompts despite passing high-level synthesis checks.
+- Cause:
+  - shared `safeText()` returned raw strings, bypassing XML-safe sanitization for control chars/unpaired surrogates.
+- Fix status:
+  - Fixed: `safeText()` now routes all text through XML-safe normalization.
+- Remaining work:
+  - keep this as a non-regression check in pre-run QA.
+
+### RC-10: Content-type scanner false positives
+- Symptoms:
+  - package diagnostics reported “missing expected overrides” for parts that were already valid via `<Default Extension=...>`.
+- Cause:
+  - package consistency scanner only evaluated `<Override>` entries and ignored valid extension defaults.
+- Fix status:
+  - Fixed: scanner now parses defaults and treats extension-level matches as satisfied.
+- Remaining work:
+  - keep reconcile + re-scan in final pipeline and only flag true mismatches.
+
+### RC-11: Opaque package diagnostics
+- Symptoms:
+  - logs showed `[object Object]` in missing override messages.
+- Cause:
+  - object arrays were directly joined in diagnostic strings.
+- Fix status:
+  - Fixed: renderer diagnostics now print `part->expectedContentType`.
+- Remaining work:
+  - none (monitor for regressions in new diagnostics paths).
+
 ## 4) Execution Plan (Exhaustive)
 
 ## Phase A: Contract Lockdown (Schema + Acceptance)
@@ -238,11 +268,13 @@ A run is "done" only when all are true:
 
 ## 7) Immediate Next Tasks
 
-1. Extend canonical contract filter to policy/competitors/depth/summary outputs.
+1. Keep strict render normalization for all sections and block any transient keys at render boundary.
 2. Add strict per-shape text budget + compaction step in `ppt-single-country.js`.
 3. Add strict-mode switch in API request/options with default for production.
 4. Add slide-style regression checker (font/size/color/bounds) against template map.
 5. Add final run report artifact (pass/fail reasons by slide/block).
+6. Add an end-of-run “XML-safe text” non-regression assertion over all slide text nodes.
+7. Add end-of-run package audit assertion requiring zero dangling overrides and zero content-type mismatches.
 
 ## 8) Tracking
 

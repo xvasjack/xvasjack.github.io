@@ -4,8 +4,27 @@ const { ensureString: _ensureString } = require('./shared/utils');
 // PPTX-safe ensureString: strips XML-invalid control characters.
 // eslint-disable-next-line no-control-regex
 const XML_INVALID_CHARS_UTILS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+function stripInvalidSurrogates(value) {
+  let out = '';
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += value[i] + value[i + 1];
+        i++;
+      }
+      continue;
+    }
+    if (code >= 0xdc00 && code <= 0xdfff) continue;
+    out += value[i];
+  }
+  return out;
+}
 function ensureString(value, defaultValue) {
-  return _ensureString(value, defaultValue).replace(XML_INVALID_CHARS_UTILS, '');
+  return stripInvalidSurrogates(
+    _ensureString(value, defaultValue).replace(XML_INVALID_CHARS_UTILS, '')
+  );
 }
 
 // Load template patterns for smart layout engine
@@ -397,19 +416,40 @@ function safeAddTable(slide, rows, options = {}, context = 'table') {
 
 // Helper: safely convert any value to text for addText calls
 function safeText(value) {
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value))
-    return value.map((v) => (typeof v === 'string' ? v : ensureString(v))).join('\n\n');
+  if (typeof value === 'string') return ensureString(value);
+  if (Array.isArray(value)) return value.map((v) => ensureString(v)).join('\n\n');
   if (value && typeof value === 'object') return ensureString(value);
   return String(value || '');
 }
 
+function sanitizeHyperlinkUrl(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 // Helper: ensure company has a website URL, construct fallback from name if missing
 function ensureWebsite(company) {
-  if (company && company.name && !company.website) {
-    // Build a plausible search URL as fallback so the company name is still clickable
+  if (!company || typeof company !== 'object') return company;
+  const existing = sanitizeHyperlinkUrl(company.website);
+  if (existing) {
+    company.website = existing;
+    return company;
+  }
+
+  if (company.name) {
+    // Build a plausible search URL as fallback so the company name is still clickable.
     const searchName = encodeURIComponent(String(company.name).trim());
-    company.website = `https://www.google.com/search?q=${searchName}+official+website`;
+    const fallback = `https://www.google.com/search?q=${searchName}+official+website`;
+    company.website = sanitizeHyperlinkUrl(fallback);
+  } else if (Object.prototype.hasOwnProperty.call(company, 'website')) {
+    delete company.website;
   }
   return company;
 }
@@ -719,11 +759,12 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
         });
       }
 
-      const sourceUrl = typeof source === 'object' ? source.url : null;
+      const sourceUrlRaw = typeof source === 'object' ? source.url : null;
+      const sourceUrl = sanitizeHyperlinkUrl(sourceUrlRaw);
       const sourceTitle =
         typeof source === 'object' ? source.title || source.name || source.source : String(source);
 
-      if (sourceUrl && sourceUrl.startsWith('http')) {
+      if (sourceUrl) {
         let displayText;
         try {
           const url = new URL(sourceUrl);
@@ -2788,6 +2829,7 @@ module.exports = {
   truncateSubtitle,
   safeArray,
   safeText,
+  sanitizeHyperlinkUrl,
   ensureWebsite,
   isValidCompany,
   dedupeCompanies,

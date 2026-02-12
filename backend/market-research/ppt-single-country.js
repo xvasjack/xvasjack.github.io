@@ -22,6 +22,7 @@ const {
   truncateSubtitle,
   fitTextToShape,
   safeArray,
+  sanitizeHyperlinkUrl,
   ensureWebsite,
   isValidCompany,
   dedupeCompanies,
@@ -103,18 +104,13 @@ function ensureString(value, defaultValue) {
 // Safety wrapper: ensure any value going into a table cell is a plain, XML-safe string.
 // AI sometimes returns nested objects/arrays — this prevents pptxgenjs crashes.
 // XML sanitization happens in ensureString() above.
-function safeCell(value, maxLen) {
+function safeCell(value, _maxLen) {
   const str = ensureString(value).replace(/\s+/g, ' ').trim();
   if (!str) return '';
-
-  // Content-first clipping: keep substantially more text than the legacy cell hint.
-  // The small maxLen hints were causing aggressive truncation and poor deck readability.
-  const requested = Number.isFinite(maxLen) && maxLen > 0 ? Math.floor(maxLen) : 360;
-  const hardCap = Math.min(1400, Math.max(240, requested * 8));
+  // Preserve content by default. Only hard-trim pathological payloads.
+  const hardCap = 12000;
   if (str.length <= hardCap) return str;
-
-  const clipped = str.substring(0, hardCap - 3).trimEnd();
-  return `${clipped}...`;
+  return str.slice(0, hardCap);
 }
 
 // Render-time payload normalization.
@@ -169,6 +165,12 @@ const MARKET_LEGACY_KEYS = [
   'escoMarket',
 ];
 
+const MARKET_RENDER_ALLOWED_KEYS = new Set([
+  ...Object.keys(MARKET_CANONICAL_ALIAS_MAP),
+  ...MARKET_LEGACY_KEYS,
+  'sources',
+]);
+
 const POLICY_ALIAS_MAP = {
   foundationalActs: [
     'foundationalActs',
@@ -210,6 +212,8 @@ const DEPTH_ALIAS_MAP = {
   implementation: ['implementation', 'implementationRoadmap'],
   targetSegments: ['targetSegments'],
 };
+// Production safety guard: never allow transient/non-template sections to reach renderer.
+const STRICT_RENDER_NORMALIZATION = true;
 
 function isTransientRenderKey(key) {
   const normalized = ensureString(key).trim().toLowerCase();
@@ -287,15 +291,6 @@ function normalizeMarketForRender(rawSection) {
     if (match.alias !== canonicalKey) consumed.add(canonicalKey);
   }
 
-  if (Object.keys(output).length === 0) {
-    for (const key of MARKET_LEGACY_KEYS) {
-      const value = cleaned[key];
-      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
-      output[key] = value;
-      consumed.add(key);
-    }
-  }
-
   if (Array.isArray(cleaned.sources) && cleaned.sources.length > 0) {
     output.sources = cleaned.sources;
     consumed.add('sources');
@@ -357,6 +352,75 @@ function normalizeRegulatorySummaryRows(raw) {
   }
 
   return rows;
+}
+
+function collectPackageConsistencyIssues(packageConsistency) {
+  const packageIssues = [];
+  if (packageConsistency.missingCriticalParts.length > 0) {
+    packageIssues.push(
+      `missing critical parts: ${packageConsistency.missingCriticalParts.join(', ')}`
+    );
+  }
+  if (packageConsistency.duplicateRelationshipIds.length > 0) {
+    const dup = packageConsistency.duplicateRelationshipIds
+      .slice(0, 5)
+      .map((x) => `${x.relFile}:${x.relId}`)
+      .join(', ');
+    packageIssues.push(`duplicate relationship ids: ${dup}`);
+  }
+  if (packageConsistency.duplicateSlideIds.length > 0) {
+    packageIssues.push(
+      `duplicate slide ids: ${packageConsistency.duplicateSlideIds.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.duplicateSlideRelIds.length > 0) {
+    packageIssues.push(
+      `duplicate slide rel ids: ${packageConsistency.duplicateSlideRelIds.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.danglingOverrides.length > 0) {
+    packageIssues.push(
+      `dangling overrides: ${packageConsistency.danglingOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.missingSlideOverrides.length > 0) {
+    packageIssues.push(
+      `missing slide overrides: ${packageConsistency.missingSlideOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.missingChartOverrides.length > 0) {
+    packageIssues.push(
+      `missing chart overrides: ${packageConsistency.missingChartOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (
+    Array.isArray(packageConsistency.missingExpectedOverrides) &&
+    packageConsistency.missingExpectedOverrides.length > 0
+  ) {
+    const missingExpectedPreview = packageConsistency.missingExpectedOverrides
+      .slice(0, 5)
+      .map((x) =>
+        x && typeof x === 'object'
+          ? `${x.part || '(unknown)'}${x.expectedContentType ? `->${x.expectedContentType}` : ''}`
+          : String(x)
+      )
+      .join(', ');
+    packageIssues.push(`missing expected overrides: ${missingExpectedPreview}`);
+  }
+  if (
+    Array.isArray(packageConsistency.contentTypeMismatches) &&
+    packageConsistency.contentTypeMismatches.length > 0
+  ) {
+    const mismatchPreview = packageConsistency.contentTypeMismatches
+      .slice(0, 5)
+      .map(
+        (x) =>
+          `${x.part}:${x.contentType || '(empty)'}${x.expectedContentType ? `=>${x.expectedContentType}` : ''}`
+      )
+      .join(', ');
+    packageIssues.push(`content type mismatches: ${mismatchPreview}`);
+  }
+  return packageIssues;
 }
 
 // PptxGenJS can emit absolute relationship targets (/ppt/...).
@@ -818,38 +882,57 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     recommendation: rawSummary.recommendation || '',
   };
   const renderNormalizationWarnings = [];
+  const renderNormalizationErrors = [];
   {
-    const policyNormalized = normalizeByAliasMap(policy, POLICY_ALIAS_MAP);
+    const policyNormalized = normalizeByAliasMap(policy, POLICY_ALIAS_MAP, {
+      passThroughKeys: ['sources'],
+    });
     policy = policyNormalized.data;
     if (policyNormalized.droppedKeys.length > 0) {
-      renderNormalizationWarnings.push(
-        `[policy] dropped non-template keys: ${policyNormalized.droppedKeys.join(', ')}`
-      );
+      const msg = `[policy] dropped non-template keys: ${policyNormalized.droppedKeys.join(', ')}`;
+      renderNormalizationWarnings.push(msg);
+      renderNormalizationErrors.push(msg);
     }
 
     const marketNormalized = normalizeMarketForRender(market);
     market = marketNormalized.data;
     if (marketNormalized.droppedKeys.length > 0) {
-      renderNormalizationWarnings.push(
-        `[market] dropped transient/non-template keys: ${marketNormalized.droppedKeys.join(', ')}`
-      );
+      const msg = `[market] dropped transient/non-template keys: ${marketNormalized.droppedKeys.join(', ')}`;
+      renderNormalizationWarnings.push(msg);
+      renderNormalizationErrors.push(msg);
+    }
+    const unsupportedMarketKeys = Object.keys(market).filter(
+      (key) => !MARKET_RENDER_ALLOWED_KEYS.has(key)
+    );
+    if (unsupportedMarketKeys.length > 0) {
+      const msg = `[market] unsupported render keys after normalization: ${unsupportedMarketKeys.join(', ')}`;
+      renderNormalizationWarnings.push(msg);
+      renderNormalizationErrors.push(msg);
     }
 
-    const competitorsNormalized = normalizeByAliasMap(competitors, COMPETITOR_ALIAS_MAP);
+    const competitorsNormalized = normalizeByAliasMap(competitors, COMPETITOR_ALIAS_MAP, {
+      passThroughKeys: ['sources'],
+    });
     competitors = competitorsNormalized.data;
     if (competitorsNormalized.droppedKeys.length > 0) {
-      renderNormalizationWarnings.push(
-        `[competitors] dropped non-template keys: ${competitorsNormalized.droppedKeys.join(', ')}`
-      );
+      const msg = `[competitors] dropped non-template keys: ${competitorsNormalized.droppedKeys.join(', ')}`;
+      renderNormalizationWarnings.push(msg);
+      renderNormalizationErrors.push(msg);
     }
 
-    const depthNormalized = normalizeByAliasMap(depth, DEPTH_ALIAS_MAP);
+    const depthNormalized = normalizeByAliasMap(depth, DEPTH_ALIAS_MAP, {
+      passThroughKeys: ['sources'],
+    });
     depth = depthNormalized.data;
     if (depthNormalized.droppedKeys.length > 0) {
-      renderNormalizationWarnings.push(
-        `[depth] dropped non-template keys: ${depthNormalized.droppedKeys.join(', ')}`
-      );
+      const msg = `[depth] dropped non-template keys: ${depthNormalized.droppedKeys.join(', ')}`;
+      renderNormalizationWarnings.push(msg);
+      renderNormalizationErrors.push(msg);
     }
+  }
+  if (STRICT_RENDER_NORMALIZATION && renderNormalizationErrors.length > 0) {
+    const errorSummary = renderNormalizationErrors.slice(0, 6).join(' | ');
+    throw new Error(`Render normalization rejected non-template/transient keys: ${errorSummary}`);
   }
   const country = countryAnalysis.country || (synthesis || {}).country;
   const templateSlideSelections =
@@ -1374,10 +1457,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             options: { fontSize: 10, fontFace: FONT, color: COLORS.muted },
           });
 
-        const sourceUrl = typeof source === 'object' ? source.url : source;
+        const sourceUrl = sanitizeHyperlinkUrl(typeof source === 'object' ? source.url : source);
         const sourceTitle = typeof source === 'object' ? source.title : null;
 
-        if (sourceUrl && sourceUrl.startsWith('http')) {
+        if (sourceUrl) {
           let displayText;
           try {
             const url = new URL(sourceUrl);
@@ -2881,43 +2964,25 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
         if (data.narrative) insights.push(ensureString(data.narrative));
         safeArray(data.keyDrivers, 3).forEach((d) => insights.push(ensureString(d)));
-        // Also check for generic market fields
         if (data.marketSize) insights.push(`Market Size: ${data.marketSize}`);
         if (data.growthRate) insights.push(`Growth: ${data.growthRate}`);
         if (data.demandGrowth) insights.push(`Demand Growth: ${data.demandGrowth}`);
         if (data.totalCapacity) insights.push(`Capacity: ${data.totalCapacity}`);
-        // Last resort: extract ANY string fields from data as insights
+        // Keep fallback extraction intentionally narrow to avoid verbose/truncated blocks.
         if (insights.length === 0 && data && typeof data === 'object') {
-          const skipFields = new Set([
-            'slideTitle',
-            'subtitle',
-            'dataType',
-            'chartData',
-            'structuredData',
-            'keyInsight',
-            'overview',
-            'narrative',
-            'keyMetrics',
-            'keyDrivers',
-          ]);
-          for (const [fieldKey, fieldVal] of Object.entries(data)) {
-            if (skipFields.has(fieldKey)) continue;
-            if (typeof fieldVal === 'string' && fieldVal.length > 15 && fieldVal.length < 2000) {
-              insights.push(ensureString(fieldVal));
-            } else if (Array.isArray(fieldVal)) {
-              fieldVal
-                .filter((v) => typeof v === 'string' && v.length > 10)
-                .slice(0, 3)
-                .forEach((v) => insights.push(ensureString(v)));
-            } else if (fieldVal && typeof fieldVal === 'object' && !Array.isArray(fieldVal)) {
-              // Extract from nested object (e.g., structuredData sub-fields)
-              for (const [subKey, subVal] of Object.entries(fieldVal)) {
-                if (typeof subVal === 'string' && subVal.length > 15 && subVal.length < 2000) {
-                  insights.push(`${subKey.replace(/([A-Z])/g, ' $1').trim()}: ${subVal}`);
-                }
-              }
+          const fallbackFields = [
+            'outlook',
+            'comparison',
+            'regulatoryImpact',
+            'demandOutlook',
+            'supplyOutlook',
+          ];
+          for (const field of fallbackFields) {
+            const value = data[field];
+            if (typeof value === 'string' && value.length > 15) {
+              insights.push(ensureString(value));
             }
-            if (insights.length >= 6) break;
+            if (insights.length >= 4) break;
           }
         }
         break;
@@ -3054,19 +3119,22 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         'Description',
       ];
       defaultColW = [1.8, 1.2, 1.2, 1.2, 1.2, 6.0];
-      rowBuilder = (p) => [
-        p.website
-          ? {
-              text: safeCell(p.name, 35),
-              options: { hyperlink: { url: p.website }, color: COLORS.hyperlink },
-            }
-          : { text: safeCell(p.name, 35) },
-        { text: safeCell(p.type, 30) },
-        { text: safeCell(p.revenue) },
-        { text: p.partnershipFit ? `${safeCell(p.partnershipFit)}/5` : '' },
-        { text: p.acquisitionFit ? `${safeCell(p.acquisitionFit)}/5` : '' },
-        { text: safeCell(p.description, 220), options: { fontSize: 14 } },
-      ];
+      rowBuilder = (p) => {
+        const website = sanitizeHyperlinkUrl(p.website);
+        return [
+          website
+            ? {
+                text: safeCell(p.name, 35),
+                options: { hyperlink: { url: website }, color: COLORS.hyperlink },
+              }
+            : { text: safeCell(p.name, 35) },
+          { text: safeCell(p.type, 30) },
+          { text: safeCell(p.revenue) },
+          { text: p.partnershipFit ? `${safeCell(p.partnershipFit)}/5` : '' },
+          { text: p.acquisitionFit ? `${safeCell(p.acquisitionFit)}/5` : '' },
+          { text: safeCell(p.description, 220), options: { fontSize: 14 } },
+        ];
+      };
     } else if (block.key === 'foreignPlayers') {
       headerCols = ['Company', 'Origin', 'Mode', 'Description'];
       defaultColW = [1.8, 1.2, 1.2, 8.4];
@@ -3083,11 +3151,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           descParts.push(`Entered: ${safeCell(p.entryYear)}.`);
         if (baseDesc) descParts.push(baseDesc);
         const desc = safeCell(descParts.join(' '), 240);
+        const website = sanitizeHyperlinkUrl(p.website);
         return [
-          p.website
+          website
             ? {
                 text: safeCell(p.name),
-                options: { hyperlink: { url: p.website }, color: COLORS.hyperlink },
+                options: { hyperlink: { url: website }, color: COLORS.hyperlink },
               }
             : { text: safeCell(p.name) },
           { text: safeCell(p.origin) },
@@ -3108,11 +3177,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           '';
         if (baseDesc) descParts.push(baseDesc);
         const desc = safeCell(descParts.join(' '), 240);
+        const website = sanitizeHyperlinkUrl(p.website);
         return [
-          p.website
+          website
             ? {
                 text: safeCell(p.name),
-                options: { hyperlink: { url: p.website }, color: COLORS.hyperlink },
+                options: { hyperlink: { url: website }, color: COLORS.hyperlink },
               }
             : { text: safeCell(p.name) },
           { text: safeCell(p.type) },
@@ -3133,11 +3203,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           descParts.push(`Revenue: ${safeCell(p.revenue)}.`);
         if (baseDesc) descParts.push(baseDesc);
         const desc = safeCell(descParts.join(' '), 240);
+        const website = sanitizeHyperlinkUrl(p.website);
         return [
-          p.website
+          website
             ? {
                 text: safeCell(p.name),
-                options: { hyperlink: { url: p.website }, color: COLORS.hyperlink },
+                options: { hyperlink: { url: website }, color: COLORS.hyperlink },
               }
             : { text: safeCell(p.name) },
           { text: safeCell(p.entryYear) },
@@ -3362,8 +3433,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             generateMarketChartSlide(slide, block);
             addMarketSubTable(slide, block);
           } else {
-            // Smart generic renderer: detect data shape and render appropriately
-            renderGenericContentSlide(slide, block);
+            // Non-market unknown blocks must never silently fall back to generic slides.
+            throw new Error(
+              `Unsupported non-market block key "${block.key}" (pattern=${block._templatePattern || 'none'})`
+            );
           }
       }
     } catch (err) {
@@ -4014,10 +4087,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       maNextY += 0.35;
       const targetRows = [tableHeader(['Company', 'Est. Value', 'Rationale', 'Timing'])];
       potentialTargets.forEach((t) => {
-        const nameCell = t.website
+        const website = sanitizeHyperlinkUrl(t.website);
+        const nameCell = website
           ? {
               text: safeCell(t.name),
-              options: { hyperlink: { url: t.website }, color: COLORS.hyperlink },
+              options: { hyperlink: { url: website }, color: COLORS.hyperlink },
             }
           : { text: safeCell(t.name) };
         targetRows.push([
@@ -4459,10 +4533,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
       const targetCompRows = [tableHeader(['Company', 'Industry', 'Annual Spend', 'Location'])];
       topTargets.forEach((t) => {
-        const nameCell = t.website
+        const website = sanitizeHyperlinkUrl(t.website);
+        const nameCell = website
           ? {
               text: safeCell(t.company || t.name, 25),
-              options: { hyperlink: { url: t.website }, color: COLORS.hyperlink },
+              options: { hyperlink: { url: website }, color: COLORS.hyperlink },
             }
           : { text: safeCell(t.company || t.name, 25) };
         targetCompRows.push([
@@ -5269,13 +5344,38 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           // Always render with the template's horizontal flow geometry for policy consistency.
           addHorizontalFlowTable(regSummarySlide, regRows, { font: FONT });
         } else if (typeof regData === 'object' && Object.keys(regData).length > 0) {
-          // Fallback when shape is non-tabular and cannot be normalized into rows.
-          renderGenericContentSlide(regSummarySlide, {
-            key: 'regulatorySummary',
-            data: regData,
-            title: `${country} - Regulatory Transition Summary`,
-            subtitle: '',
-          });
+          // Keep policy rendering template-anchored even for malformed structures.
+          const fallbackRows = [];
+          const summaryText = ensureString(
+            regData.overview || regData.summary || regData.narrative || ''
+          );
+          if (summaryText) {
+            fallbackRows.push({
+              label: 'Regulatory Summary',
+              currentState: summaryText,
+              transition: '',
+              futureState: '',
+            });
+          }
+          for (const [k, v] of Object.entries(regData)) {
+            if (fallbackRows.length >= 4) break;
+            if (String(k).startsWith('_')) continue;
+            if (typeof v !== 'string' || !v.trim()) continue;
+            fallbackRows.push({
+              label: humanizeKeyLabel(k),
+              currentState: ensureString(v),
+              transition: '',
+              futureState: '',
+            });
+          }
+          if (fallbackRows.length > 0) {
+            addHorizontalFlowTable(regSummarySlide, fallbackRows, { font: FONT });
+          } else {
+            addDataUnavailableMessage(
+              regSummarySlide,
+              `${country} regulatory summary not renderable in table format`
+            );
+          }
         }
       }
     } catch (sectionErr) {
@@ -5512,54 +5612,30 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
   }
   const packageConsistency = await scanPackageConsistency(relZip);
-  const packageIssues = [];
-  if (packageConsistency.missingCriticalParts.length > 0) {
-    packageIssues.push(
-      `missing critical parts: ${packageConsistency.missingCriticalParts.join(', ')}`
-    );
-  }
-  if (packageConsistency.duplicateRelationshipIds.length > 0) {
-    const dup = packageConsistency.duplicateRelationshipIds
-      .slice(0, 5)
-      .map((x) => `${x.relFile}:${x.relId}`)
-      .join(', ');
-    packageIssues.push(`duplicate relationship ids: ${dup}`);
-  }
-  if (packageConsistency.duplicateSlideIds.length > 0) {
-    packageIssues.push(
-      `duplicate slide ids: ${packageConsistency.duplicateSlideIds.slice(0, 5).join(', ')}`
-    );
-  }
-  if (packageConsistency.duplicateSlideRelIds.length > 0) {
-    packageIssues.push(
-      `duplicate slide rel ids: ${packageConsistency.duplicateSlideRelIds.slice(0, 5).join(', ')}`
-    );
-  }
-  if (packageConsistency.danglingOverrides.length > 0) {
-    packageIssues.push(
-      `dangling overrides: ${packageConsistency.danglingOverrides.slice(0, 5).join(', ')}`
-    );
-  }
-  if (packageConsistency.missingSlideOverrides.length > 0) {
-    packageIssues.push(
-      `missing slide overrides: ${packageConsistency.missingSlideOverrides.slice(0, 5).join(', ')}`
-    );
-  }
-  if (packageConsistency.missingChartOverrides.length > 0) {
-    packageIssues.push(
-      `missing chart overrides: ${packageConsistency.missingChartOverrides.slice(0, 5).join(', ')}`
-    );
-  }
+  const packageIssues = collectPackageConsistencyIssues(packageConsistency);
   if (packageIssues.length > 0) {
     throw new Error(`PPT package consistency failed: ${packageIssues.join(' | ')}`);
   }
-  if (packageConsistency.contentTypeMismatches.length > 0) {
-    const mismatchPreview = packageConsistency.contentTypeMismatches
-      .slice(0, 5)
-      .map((x) => `${x.part}:${x.contentType || '(empty)'}`)
-      .join(', ');
-    console.warn(`[PPT] Content type mismatches detected post-reconcile: ${mismatchPreview}`);
+
+  // Last-mile reconcile + re-scan to catch any final [Content_Types] drift before delivery.
+  const finalReconcile = await reconcileContentTypesAndPackage(pptxBuffer);
+  pptxBuffer = finalReconcile.buffer;
+  if (finalReconcile.changed) {
+    const touched = [
+      ...(finalReconcile.stats.addedOverrides || []),
+      ...(finalReconcile.stats.correctedOverrides || []),
+      ...(finalReconcile.stats.removedDangling || []),
+    ].length;
+    console.log(`[PPT] Final content-type reconcile applied (${touched} override adjustment(s))`);
   }
+  const finalZip = await JSZip.loadAsync(pptxBuffer);
+  const finalPackageConsistency = await scanPackageConsistency(finalZip);
+  const finalPackageIssues = collectPackageConsistencyIssues(finalPackageConsistency);
+  if (finalPackageIssues.length > 0) {
+    throw new Error(`PPT package final consistency failed: ${finalPackageIssues.join(' | ')}`);
+  }
+  console.log('[PPT] Final package consistency check passed');
+
   const totalSlides = 4 + sectionDefs.length + sectionBlockCounts.reduce((a, b) => a + b, 0) + 2; // cover + TOC + exec + opps + sections + appendix TOC + summary
   const templateBackedCount = templateUsageStats.resolved.filter((x) => x.templateBacked).length;
   const templateTotal = templateUsageStats.resolved.length;

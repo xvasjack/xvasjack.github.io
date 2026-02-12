@@ -72,6 +72,73 @@ const CANONICAL_MARKET_SECTION_KEYS = [
   'supplyAndDemandDynamics',
   'pricingAndTariffStructures',
 ];
+const CANONICAL_POLICY_SECTION_KEYS = [
+  'foundationalActs',
+  'nationalPolicy',
+  'investmentRestrictions',
+  'regulatorySummary',
+  'keyIncentives',
+  'sources',
+];
+const REQUIRED_POLICY_SECTION_KEYS = [
+  'foundationalActs',
+  'nationalPolicy',
+  'investmentRestrictions',
+];
+const CANONICAL_COMPETITOR_SECTION_KEYS = [
+  'japanesePlayers',
+  'localMajor',
+  'foreignPlayers',
+  'caseStudy',
+  'maActivity',
+];
+const REQUIRED_COMPETITOR_SECTION_KEYS = ['japanesePlayers', 'localMajor', 'foreignPlayers'];
+const CANONICAL_SUMMARY_SECTION_KEYS = [
+  'timingIntelligence',
+  'lessonsLearned',
+  'opportunities',
+  'obstacles',
+  'ratings',
+  'keyInsights',
+  'recommendation',
+  'goNoGo',
+];
+const REQUIRED_SUMMARY_SECTION_KEYS = [
+  'timingIntelligence',
+  'lessonsLearned',
+  'keyInsights',
+  'recommendation',
+  'goNoGo',
+];
+const CANONICAL_DEPTH_SECTION_KEYS = [
+  'dealEconomics',
+  'partnerAssessment',
+  'entryStrategy',
+  'implementation',
+  'targetSegments',
+];
+const REQUIRED_DEPTH_SECTION_KEYS = [
+  'dealEconomics',
+  'partnerAssessment',
+  'entryStrategy',
+  'implementation',
+  'targetSegments',
+];
+const TRANSIENT_SECTION_KEY_PATTERNS = [
+  /^section[_-]?\d+$/i,
+  /^gap[_-]?\d+$/i,
+  /^verify[_-]?\d+$/i,
+  /^final[_-]?review[_-]?gap[_-]?\d+$/i,
+  /^deepen[_-]?/i,
+  /deepen/i,
+  /_wasarray/i,
+];
+
+function isTransientSectionKey(key) {
+  const normalized = String(key || '').trim();
+  if (!normalized) return true;
+  return TRANSIENT_SECTION_KEY_PATTERNS.some((re) => re.test(normalized));
+}
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -199,6 +266,12 @@ function collectPreRenderStructureIssues(countryAnalyses) {
 
     if (isPlainObject(ca?.market)) {
       const marketKeys = Object.keys(ca.market).filter((k) => !String(k).startsWith('_'));
+      const transientMarketKeys = marketKeys.filter((k) => isTransientSectionKey(k));
+      if (transientMarketKeys.length > 0) {
+        issues.push(
+          `${countryPrefix} market has transient sections: ${transientMarketKeys.join(', ')}`
+        );
+      }
       const invalid = marketKeys.filter((k) => !CANONICAL_MARKET_SECTION_KEYS.includes(k));
       if (invalid.length > 0) {
         issues.push(`${countryPrefix} market has non-canonical sections: ${invalid.join(', ')}`);
@@ -207,6 +280,82 @@ function collectPreRenderStructureIssues(countryAnalyses) {
       const missing = CANONICAL_MARKET_SECTION_KEYS.filter((k) => !(k in ca.market));
       if (missing.length > 0) {
         issues.push(`${countryPrefix} market missing canonical sections: ${missing.join(', ')}`);
+      }
+    }
+
+    if (isPlainObject(ca?.policy)) {
+      const policyKeys = Object.keys(ca.policy).filter((k) => !String(k).startsWith('_'));
+      const transientPolicyKeys = policyKeys.filter((k) => isTransientSectionKey(k));
+      if (transientPolicyKeys.length > 0) {
+        issues.push(
+          `${countryPrefix} policy has transient sections: ${transientPolicyKeys.join(', ')}`
+        );
+      }
+      const invalid = policyKeys.filter((k) => !CANONICAL_POLICY_SECTION_KEYS.includes(k));
+      if (invalid.length > 0) {
+        issues.push(`${countryPrefix} policy has non-canonical sections: ${invalid.join(', ')}`);
+      }
+      const missing = REQUIRED_POLICY_SECTION_KEYS.filter((k) => !(k in ca.policy));
+      if (missing.length > 0) {
+        issues.push(`${countryPrefix} policy missing required sections: ${missing.join(', ')}`);
+      }
+    }
+
+    if (isPlainObject(ca?.competitors)) {
+      const competitorKeys = Object.keys(ca.competitors).filter((k) => !String(k).startsWith('_'));
+      const transientCompetitorKeys = competitorKeys.filter((k) => isTransientSectionKey(k));
+      if (transientCompetitorKeys.length > 0) {
+        issues.push(
+          `${countryPrefix} competitors has transient sections: ${transientCompetitorKeys.join(', ')}`
+        );
+      }
+      const invalid = competitorKeys.filter((k) => !CANONICAL_COMPETITOR_SECTION_KEYS.includes(k));
+      if (invalid.length > 0) {
+        issues.push(
+          `${countryPrefix} competitors has non-canonical sections: ${invalid.join(', ')}`
+        );
+      }
+      const missing = REQUIRED_COMPETITOR_SECTION_KEYS.filter((k) => !(k in ca.competitors));
+      if (missing.length > 0) {
+        issues.push(
+          `${countryPrefix} competitors missing required sections: ${missing.join(', ')}`
+        );
+      }
+    }
+
+    if (isPlainObject(ca?.summary)) {
+      const summaryKeys = Object.keys(ca.summary).filter((k) => !String(k).startsWith('_'));
+      const transientSummaryKeys = summaryKeys.filter((k) => isTransientSectionKey(k));
+      if (transientSummaryKeys.length > 0) {
+        issues.push(
+          `${countryPrefix} summary has transient sections: ${transientSummaryKeys.join(', ')}`
+        );
+      }
+      const invalid = summaryKeys.filter((k) => !CANONICAL_SUMMARY_SECTION_KEYS.includes(k));
+      if (invalid.length > 0) {
+        issues.push(`${countryPrefix} summary has non-canonical sections: ${invalid.join(', ')}`);
+      }
+      const missing = REQUIRED_SUMMARY_SECTION_KEYS.filter((k) => !(k in ca.summary));
+      if (missing.length > 0) {
+        issues.push(`${countryPrefix} summary missing required sections: ${missing.join(', ')}`);
+      }
+    }
+
+    if (isPlainObject(ca?.depth)) {
+      const depthKeys = Object.keys(ca.depth).filter((k) => !String(k).startsWith('_'));
+      const transientDepthKeys = depthKeys.filter((k) => isTransientSectionKey(k));
+      if (transientDepthKeys.length > 0) {
+        issues.push(
+          `${countryPrefix} depth has transient sections: ${transientDepthKeys.join(', ')}`
+        );
+      }
+      const invalid = depthKeys.filter((k) => !CANONICAL_DEPTH_SECTION_KEYS.includes(k));
+      if (invalid.length > 0) {
+        issues.push(`${countryPrefix} depth has non-canonical sections: ${invalid.join(', ')}`);
+      }
+      const missing = REQUIRED_DEPTH_SECTION_KEYS.filter((k) => !(k in ca.depth));
+      if (missing.length > 0) {
+        issues.push(`${countryPrefix} depth missing required sections: ${missing.join(', ')}`);
       }
     }
   }
@@ -426,7 +575,13 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           .join(' | ');
         const gateRule =
           'Readiness requires effective>=80, content-depth>=80, final coherence>=80, critical=0, major<=2, openGaps<=2.';
-        if (draftPptMode) {
+        const draftBypassEligible = notReadyDiagnostics.every(
+          (d) =>
+            Number(d.finalReviewCritical || 0) === 0 &&
+            Number(d.finalReviewMajor || 0) === 0 &&
+            Number(d.finalReviewOpenGaps || 0) === 0
+        );
+        if (draftPptMode && draftBypassEligible) {
           console.warn(
             `[Quality Gate] Draft PPT mode enabled — bypassing readiness block for: ${list}`
           );
@@ -436,6 +591,11 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             lastRunDiagnostics.qualityGateBypassedForDraft = true;
           }
         } else {
+          if (draftPptMode && !draftBypassEligible) {
+            console.warn(
+              `[Quality Gate] Draft PPT mode cannot bypass readiness when critical/major/open gaps are present: ${list}`
+            );
+          }
           if (lastRunDiagnostics) {
             lastRunDiagnostics.stage = 'quality_gate_failed';
             lastRunDiagnostics.notReadyCountries = notReadyDiagnostics;

@@ -97,6 +97,123 @@ function hasTransientTopLevelKeys(value) {
   );
 }
 
+const STRICT_POLICY_TOP_LEVEL_KEYS = new Set([
+  'foundationalActs',
+  'nationalPolicy',
+  'investmentRestrictions',
+  'regulatorySummary',
+  'keyIncentives',
+  'sources',
+]);
+
+const STRICT_MARKET_TOP_LEVEL_KEYS = new Set([
+  'marketSizeAndGrowth',
+  'supplyAndDemandDynamics',
+  'pricingAndTariffStructures',
+  'sources',
+]);
+const STRICT_SUMMARY_TOP_LEVEL_KEYS = new Set([
+  'timingIntelligence',
+  'lessonsLearned',
+  'opportunities',
+  'obstacles',
+  'ratings',
+  'keyInsights',
+  'recommendation',
+  'goNoGo',
+]);
+const STRICT_DEPTH_TOP_LEVEL_KEYS = new Set([
+  'dealEconomics',
+  'partnerAssessment',
+  'entryStrategy',
+  'implementation',
+  'targetSegments',
+]);
+
+function findDisallowedTopLevelKeys(value, allowedKeys) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  const allow = allowedKeys instanceof Set ? allowedKeys : new Set(allowedKeys || []);
+  return Object.keys(value).filter((key) => {
+    const normalized = ensureString(key).trim();
+    if (!normalized || normalized.startsWith('_')) return false;
+    return !allow.has(normalized);
+  });
+}
+
+function pickAllowedTopLevelKeys(value, allowedKeys) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const allow = allowedKeys instanceof Set ? [...allowedKeys] : [...new Set(allowedKeys || [])];
+  const out = {};
+  for (const key of allow) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+    out[key] = value[key];
+  }
+  return out;
+}
+
+function isPlainSectionObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isSemanticallyUsefulValue(value, depth = 0) {
+  if (depth > 8 || value == null) return false;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'boolean') return true;
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) return false;
+    if (containsPlaceholderText(text)) return false;
+    if (hasTruncationArtifact(text)) return false;
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => isSemanticallyUsefulValue(item, depth + 1));
+  }
+  if (!isPlainSectionObject(value)) return false;
+  return Object.values(value).some((child) => isSemanticallyUsefulValue(child, depth + 1));
+}
+
+function mergeSectionValuesPreferRich(existingValue, incomingValue, depth = 0) {
+  if (depth > 10) return incomingValue ?? existingValue;
+  if (incomingValue === undefined) return existingValue;
+  if (existingValue === undefined) return incomingValue;
+
+  if (isPlainSectionObject(existingValue) && isPlainSectionObject(incomingValue)) {
+    const merged = { ...existingValue };
+    for (const [key, nextChild] of Object.entries(incomingValue)) {
+      merged[key] = mergeSectionValuesPreferRich(existingValue[key], nextChild, depth + 1);
+    }
+    return merged;
+  }
+
+  if (Array.isArray(existingValue) && Array.isArray(incomingValue)) {
+    const existingUseful = existingValue.filter((item) =>
+      isSemanticallyUsefulValue(item, depth + 1)
+    );
+    const incomingUseful = incomingValue.filter((item) =>
+      isSemanticallyUsefulValue(item, depth + 1)
+    );
+    return incomingUseful.length >= existingUseful.length ? incomingValue : existingValue;
+  }
+
+  if (isSemanticallyUsefulValue(incomingValue, depth + 1)) return incomingValue;
+  if (isSemanticallyUsefulValue(existingValue, depth + 1)) return existingValue;
+  return incomingValue ?? existingValue;
+}
+
+function mergeCanonicalSectionsPreferRich(existingSection, incomingSection, allowedKeys) {
+  const base = pickAllowedTopLevelKeys(existingSection, allowedKeys);
+  const next = pickAllowedTopLevelKeys(incomingSection, allowedKeys);
+  const allow = allowedKeys instanceof Set ? [...allowedKeys] : [...new Set(allowedKeys || [])];
+  const merged = { ...base };
+
+  for (const key of allow) {
+    if (!Object.prototype.hasOwnProperty.call(next, key)) continue;
+    merged[key] = mergeSectionValuesPreferRich(base[key], next[key]);
+  }
+  return merged;
+}
+
 function hasMeaningfulCompetitorDescription(value) {
   const text = ensureString(value).replace(/\s+/g, ' ').trim();
   if (!text) return false;
@@ -1024,6 +1141,7 @@ function getCanonicalMarketSlideTitle(sectionKey) {
 }
 
 function canonicalizeMarketSectionKey(rawKey, sectionValue) {
+  if (isTransientResearchKey(rawKey)) return null;
   const keyToken = ensureString(rawKey).toLowerCase();
   const titleToken = ensureString(sectionValue?.slideTitle).toLowerCase();
   const subtitleToken = ensureString(sectionValue?.subtitle).toLowerCase();
@@ -2132,6 +2250,27 @@ Return ONLY valid JSON.`;
         if (hasTransientTopLevelKeys(candidate)) {
           return { pass: false, reason: 'top-level transient section keys detected' };
         }
+        const disallowedTopLevel = findDisallowedTopLevelKeys(
+          candidate,
+          STRICT_POLICY_TOP_LEVEL_KEYS
+        );
+        if (disallowedTopLevel.length > 0) {
+          return {
+            pass: false,
+            reason: `non-canonical top-level policy keys detected: ${disallowedTopLevel.join(', ')}`,
+          };
+        }
+        const directShapeCount = [
+          'foundationalActs',
+          'nationalPolicy',
+          'investmentRestrictions',
+        ].filter(
+          (key) =>
+            candidate[key] && typeof candidate[key] === 'object' && !Array.isArray(candidate[key])
+        ).length;
+        if (directShapeCount === 0) {
+          return { pass: false, reason: 'missing direct canonical policy section objects' };
+        }
         const normalized = normalizePolicySynthesisResult(candidate);
         const hasShape =
           Boolean(normalized?.foundationalActs) ||
@@ -2189,7 +2328,7 @@ Return ONLY valid JSON.`;
       policyResult = candidate;
       if (attempt > 0) {
         console.log(
-          `  [synthesizePolicy] Accepted normalized payload on attempt ${attempt} (acts=${actsCount}, targets=${targetsCount}, incentives=${incentivesCount})`
+          `  [synthesizePolicy] Accepted strict payload on attempt ${attempt} (acts=${actsCount}, targets=${targetsCount}, incentives=${incentivesCount})`
         );
       }
       break;
@@ -2320,6 +2459,22 @@ Return ONLY valid JSON.`;
     }
     if (hasTransientTopLevelKeys(candidate)) {
       return { pass: false, reason: 'top-level transient section keys detected' };
+    }
+    const disallowedTopLevel = findDisallowedTopLevelKeys(candidate, STRICT_MARKET_TOP_LEVEL_KEYS);
+    if (disallowedTopLevel.length > 0) {
+      return {
+        pass: false,
+        reason: `non-canonical top-level market keys detected: ${disallowedTopLevel.join(', ')}`,
+      };
+    }
+    const directCanonicalCount = CANONICAL_MARKET_SECTION_KEYS.filter(
+      (k) => candidate[k] && typeof candidate[k] === 'object' && !Array.isArray(candidate[k])
+    ).length;
+    if (directCanonicalCount < CANONICAL_MARKET_SECTION_KEYS.length) {
+      return {
+        pass: false,
+        reason: `missing direct canonical market sections (${directCanonicalCount}/${CANONICAL_MARKET_SECTION_KEYS.length})`,
+      };
     }
     const normalized = validateMarketSynthesis(candidate);
     const canonicalCount = CANONICAL_MARKET_SECTION_KEYS.filter(
@@ -2491,7 +2646,7 @@ ${antiArraySuffix}`;
       marketResult = candidate;
       if (attempt > 0) {
         console.log(
-          `  [synthesizeMarket] Accepted normalized payload on attempt ${attempt} (${canonicalPresent.length}/${CANONICAL_MARKET_SECTION_KEYS.length} canonical, quantified=${quantifiedSections}, canonicalQuantified=${canonicalQuantified})`
+          `  [synthesizeMarket] Accepted strict payload on attempt ${attempt} (${canonicalPresent.length}/${CANONICAL_MARKET_SECTION_KEYS.length} canonical, quantified=${quantifiedSections}, canonicalQuantified=${canonicalQuantified})`
         );
       }
       break;
@@ -2683,60 +2838,26 @@ Return JSON with ONLY the caseStudy and maActivity sections:
 
     const out = { ...r };
     if (out._wasArray) delete out._wasArray;
+    const normalized = {};
 
-    // Unwrap array/object wrappers produced by synthesis fallbacks.
-    for (const [k, v] of Object.entries({ ...out })) {
+    const candidates = [out];
+    for (const [k, v] of Object.entries(out)) {
       if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
       if (/^section_\d+$/.test(k) || /^\d+$/.test(k)) {
-        Object.assign(out, v);
-        delete out[k];
+        candidates.push(v);
       }
     }
 
-    const normalized = {};
     for (const expected of expectedKeys) {
-      if (out[expected] && typeof out[expected] === 'object') {
-        normalized[expected] = out[expected];
-        continue;
-      }
-      // Nested wrapper containing expected key
-      for (const v of Object.values(out)) {
-        if (v && typeof v === 'object' && !Array.isArray(v) && v[expected]) {
-          normalized[expected] = v[expected];
-          break;
-        }
-      }
-      if (normalized[expected]) continue;
-
-      // Prompt-specific salvage when section key is omitted.
-      if (
-        ['japanesePlayers', 'localMajor', 'foreignPlayers'].includes(expected) &&
-        (Array.isArray(out.players) ||
-          out.marketInsight ||
-          out.concentration ||
-          out.competitiveInsight)
-      ) {
-        normalized[expected] = out;
-        continue;
-      }
-      if (
-        expected === 'caseStudy' &&
-        (out.company || out.entryYear || Array.isArray(out.keyLessons) || out.applicability)
-      ) {
-        normalized.caseStudy = out;
-        continue;
-      }
-      if (
-        expected === 'maActivity' &&
-        (Array.isArray(out.recentDeals) ||
-          Array.isArray(out.potentialTargets) ||
-          out.valuationMultiples)
-      ) {
-        normalized.maActivity = out;
+      for (const candidate of candidates) {
+        const value = candidate?.[expected];
+        if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+        normalized[expected] = value;
+        break;
       }
     }
 
-    return Object.keys(normalized).length > 0 ? normalized : out;
+    return Object.keys(normalized).length > 0 ? normalized : null;
   }
 
   function buildCompetitorAccept(expectedKeys, sectionLabel) {
@@ -3144,10 +3265,21 @@ function ensureImplementationRoadmap(depth, country) {
 }
 
 function ensureSummaryCompleteness(summaryResult, context) {
-  const { country, policy, market, competitors, researchData } = context;
+  const { country, policy, market, competitors, researchData, existingDepth, existingSummary } =
+    context;
   const result = summaryResult && typeof summaryResult === 'object' ? { ...summaryResult } : {};
-  result.depth = ensureImplementationRoadmap(result.depth, country);
-  const summary = result.summary && typeof result.summary === 'object' ? { ...result.summary } : {};
+  const canonicalDepth = mergeCanonicalSectionsPreferRich(
+    existingDepth,
+    result.depth,
+    STRICT_DEPTH_TOP_LEVEL_KEYS
+  );
+  const canonicalSummary = mergeCanonicalSectionsPreferRich(
+    existingSummary,
+    result.summary,
+    STRICT_SUMMARY_TOP_LEVEL_KEYS
+  );
+  result.depth = ensureImplementationRoadmap(canonicalDepth, country);
+  const summary = canonicalSummary;
   const evidence = collectSummaryEvidence(policy, market, competitors, researchData);
   const existingInsights = Array.isArray(summary.keyInsights) ? summary.keyInsights : [];
   const normalizedInsights = existingInsights
@@ -3163,7 +3295,14 @@ function ensureSummaryCompleteness(summaryResult, context) {
   }
 
   summary.keyInsights = normalizedInsights.slice(0, 5);
-  result.summary = summary;
+  result.summary = pickAllowedTopLevelKeys(
+    mergeCanonicalSectionsPreferRich(existingSummary, summary, STRICT_SUMMARY_TOP_LEVEL_KEYS),
+    STRICT_SUMMARY_TOP_LEVEL_KEYS
+  );
+  result.depth = pickAllowedTopLevelKeys(
+    mergeCanonicalSectionsPreferRich(existingDepth, result.depth, STRICT_DEPTH_TOP_LEVEL_KEYS),
+    STRICT_DEPTH_TOP_LEVEL_KEYS
+  );
   return result;
 }
 
@@ -3192,6 +3331,8 @@ function sanitizeCountryAnalysis(countryAnalysis, context = {}) {
       market: countryAnalysis.market || {},
       competitors: countryAnalysis.competitors || {},
       researchData: context.researchData || countryAnalysis.rawData || {},
+      existingDepth: countryAnalysis.depth || {},
+      existingSummary: countryAnalysis.summary || {},
     }
   );
   countryAnalysis.depth = summaryPack.depth || countryAnalysis.depth || {};
@@ -3216,7 +3357,8 @@ async function synthesizeSummary(
   competitors,
   country,
   industry,
-  clientContext
+  clientContext,
+  options = {}
 ) {
   console.log(`  [Synthesis] Summary & recommendations for ${country}...`);
 
@@ -3376,6 +3518,36 @@ Return ONLY valid JSON.`;
       if (!hasSummary && !hasDepth) {
         return { pass: false, reason: 'summary payload missing summary and depth sections' };
       }
+      if (hasSummary && hasTransientTopLevelKeys(candidate.summary)) {
+        return { pass: false, reason: 'summary contains transient top-level keys' };
+      }
+      if (hasDepth && hasTransientTopLevelKeys(candidate.depth)) {
+        return { pass: false, reason: 'depth contains transient top-level keys' };
+      }
+      if (hasSummary) {
+        const disallowedSummaryKeys = findDisallowedTopLevelKeys(
+          candidate.summary,
+          STRICT_SUMMARY_TOP_LEVEL_KEYS
+        );
+        if (disallowedSummaryKeys.length > 0) {
+          return {
+            pass: false,
+            reason: `summary contains non-canonical keys: ${disallowedSummaryKeys.join(', ')}`,
+          };
+        }
+      }
+      if (hasDepth) {
+        const disallowedDepthKeys = findDisallowedTopLevelKeys(
+          candidate.depth,
+          STRICT_DEPTH_TOP_LEVEL_KEYS
+        );
+        if (disallowedDepthKeys.length > 0) {
+          return {
+            pass: false,
+            reason: `depth contains non-canonical keys: ${disallowedDepthKeys.join(', ')}`,
+          };
+        }
+      }
       return { pass: true };
     },
   });
@@ -3395,6 +3567,8 @@ Return ONLY valid JSON.`;
     market,
     competitors,
     researchData,
+    existingDepth: options?.existingDepth || {},
+    existingSummary: options?.existingSummary || {},
   });
 }
 
@@ -3758,6 +3932,52 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
             reason: 'placeholder/truncation artifact detected in re-synthesis payload',
           };
         }
+        if (Object.prototype.hasOwnProperty.call(candidate, 'summary')) {
+          if (
+            candidate.summary &&
+            (typeof candidate.summary !== 'object' || Array.isArray(candidate.summary))
+          ) {
+            return { pass: false, reason: 'summary must be an object when present' };
+          }
+          if (candidate.summary && hasTransientTopLevelKeys(candidate.summary)) {
+            return { pass: false, reason: 'summary contains transient top-level keys' };
+          }
+          if (candidate.summary) {
+            const disallowedSummaryKeys = findDisallowedTopLevelKeys(
+              candidate.summary,
+              STRICT_SUMMARY_TOP_LEVEL_KEYS
+            );
+            if (disallowedSummaryKeys.length > 0) {
+              return {
+                pass: false,
+                reason: `summary contains non-canonical keys: ${disallowedSummaryKeys.join(', ')}`,
+              };
+            }
+          }
+        }
+        if (Object.prototype.hasOwnProperty.call(candidate, 'depth')) {
+          if (
+            candidate.depth &&
+            (typeof candidate.depth !== 'object' || Array.isArray(candidate.depth))
+          ) {
+            return { pass: false, reason: 'depth must be an object when present' };
+          }
+          if (candidate.depth && hasTransientTopLevelKeys(candidate.depth)) {
+            return { pass: false, reason: 'depth contains transient top-level keys' };
+          }
+          if (candidate.depth) {
+            const disallowedDepthKeys = findDisallowedTopLevelKeys(
+              candidate.depth,
+              STRICT_DEPTH_TOP_LEVEL_KEYS
+            );
+            if (disallowedDepthKeys.length > 0) {
+              return {
+                pass: false,
+                reason: `depth contains non-canonical keys: ${disallowedDepthKeys.join(', ')}`,
+              };
+            }
+          }
+        }
         return { pass: true };
       },
     });
@@ -3806,10 +4026,20 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       if (hasCompetitors) {
         originalSynthesis.competitors = validateCompetitorsSynthesis(newSynthesis.competitors);
       }
-      if (newSynthesis.depth && typeof newSynthesis.depth === 'object')
-        originalSynthesis.depth = newSynthesis.depth;
-      if (newSynthesis.summary && typeof newSynthesis.summary === 'object')
-        originalSynthesis.summary = newSynthesis.summary;
+      if (newSynthesis.depth && typeof newSynthesis.depth === 'object') {
+        originalSynthesis.depth = mergeCanonicalSectionsPreferRich(
+          originalSynthesis.depth,
+          newSynthesis.depth,
+          STRICT_DEPTH_TOP_LEVEL_KEYS
+        );
+      }
+      if (newSynthesis.summary && typeof newSynthesis.summary === 'object') {
+        originalSynthesis.summary = mergeCanonicalSectionsPreferRich(
+          originalSynthesis.summary,
+          newSynthesis.summary,
+          STRICT_SUMMARY_TOP_LEVEL_KEYS
+        );
+      }
       originalSynthesis.country = country;
       return sanitizeCountryAnalysis(originalSynthesis, {
         country,
@@ -3817,26 +4047,30 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       });
     }
 
-    // Ensure depth and summary sections are preserved — if AI dropped them, recover from original
-    if (
-      originalSynthesis.depth &&
-      typeof originalSynthesis.depth === 'object' &&
-      !newSynthesis.depth
-    ) {
-      console.warn(
-        '  [reSynthesize] depth section missing from re-synthesis — recovering from original'
+    // Preserve depth/summary richness: merge partial refreshes with prior canonical sections.
+    if (originalSynthesis.depth && typeof originalSynthesis.depth === 'object') {
+      if (!newSynthesis.depth) {
+        console.warn(
+          '  [reSynthesize] depth section missing from re-synthesis — recovering from original'
+        );
+      }
+      newSynthesis.depth = mergeCanonicalSectionsPreferRich(
+        originalSynthesis.depth,
+        newSynthesis.depth,
+        STRICT_DEPTH_TOP_LEVEL_KEYS
       );
-      newSynthesis.depth = originalSynthesis.depth;
     }
-    if (
-      originalSynthesis.summary &&
-      typeof originalSynthesis.summary === 'object' &&
-      !newSynthesis.summary
-    ) {
-      console.warn(
-        '  [reSynthesize] summary section missing from re-synthesis — recovering from original'
+    if (originalSynthesis.summary && typeof originalSynthesis.summary === 'object') {
+      if (!newSynthesis.summary) {
+        console.warn(
+          '  [reSynthesize] summary section missing from re-synthesis — recovering from original'
+        );
+      }
+      newSynthesis.summary = mergeCanonicalSectionsPreferRich(
+        originalSynthesis.summary,
+        newSynthesis.summary,
+        STRICT_SUMMARY_TOP_LEVEL_KEYS
       );
-      newSynthesis.summary = originalSynthesis.summary;
     }
 
     // Re-synthesis verification: count how many top-level sections actually changed
@@ -4435,7 +4669,11 @@ async function applyFinalReviewFixes(
           countryAnalysis.competitors,
           country,
           industry,
-          fixContext
+          fixContext,
+          {
+            existingSummary: countryAnalysis.summary || {},
+            existingDepth: countryAnalysis.depth || {},
+          }
         );
         return {
           section: 'summary',
@@ -4451,7 +4689,11 @@ async function applyFinalReviewFixes(
           countryAnalysis.competitors,
           country,
           industry,
-          fixContext
+          fixContext,
+          {
+            existingSummary: countryAnalysis.summary || {},
+            existingDepth: countryAnalysis.depth || {},
+          }
         );
         return {
           section: 'depth',
@@ -4473,17 +4715,35 @@ async function applyFinalReviewFixes(
   for (const fix of results) {
     if (fix && fix.result && !fix.result._synthesisError) {
       if (fix.section === 'depth') {
-        countryAnalysis.depth = fix.result;
+        countryAnalysis.depth = mergeCanonicalSectionsPreferRich(
+          countryAnalysis.depth,
+          fix.result,
+          STRICT_DEPTH_TOP_LEVEL_KEYS
+        );
         if (fix.summary) {
-          countryAnalysis.summary = fix.summary;
+          countryAnalysis.summary = mergeCanonicalSectionsPreferRich(
+            countryAnalysis.summary,
+            fix.summary,
+            STRICT_SUMMARY_TOP_LEVEL_KEYS
+          );
         }
         refreshedSummaryRequired = true;
+      } else if (fix.section === 'summary') {
+        countryAnalysis.summary = mergeCanonicalSectionsPreferRich(
+          countryAnalysis.summary,
+          fix.result,
+          STRICT_SUMMARY_TOP_LEVEL_KEYS
+        );
       } else {
         countryAnalysis[fix.section] = fix.result;
       }
       // synthesizeSummary returns { depth, summary } — update depth too if present.
       if (fix.section === 'summary' && fix.depth) {
-        countryAnalysis.depth = fix.depth;
+        countryAnalysis.depth = mergeCanonicalSectionsPreferRich(
+          countryAnalysis.depth,
+          fix.depth,
+          STRICT_DEPTH_TOP_LEVEL_KEYS
+        );
       }
       if (['policy', 'market', 'competitors'].includes(fix.section)) {
         refreshedSummaryRequired = true;
@@ -4503,10 +4763,26 @@ async function applyFinalReviewFixes(
         countryAnalysis.competitors,
         country,
         industry,
-        refreshContext
+        refreshContext,
+        {
+          existingSummary: countryAnalysis.summary || {},
+          existingDepth: countryAnalysis.depth || {},
+        }
       );
-      if (refreshed?.summary) countryAnalysis.summary = refreshed.summary;
-      if (refreshed?.depth) countryAnalysis.depth = refreshed.depth;
+      if (refreshed?.summary) {
+        countryAnalysis.summary = mergeCanonicalSectionsPreferRich(
+          countryAnalysis.summary,
+          refreshed.summary,
+          STRICT_SUMMARY_TOP_LEVEL_KEYS
+        );
+      }
+      if (refreshed?.depth) {
+        countryAnalysis.depth = mergeCanonicalSectionsPreferRich(
+          countryAnalysis.depth,
+          refreshed.depth,
+          STRICT_DEPTH_TOP_LEVEL_KEYS
+        );
+      }
       console.log('  [FINAL REVIEW] Refreshed summary/depth after section fixes');
     } catch (err) {
       console.warn(`  [FINAL REVIEW] Summary/depth refresh failed: ${err.message}`);

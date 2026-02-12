@@ -6,6 +6,7 @@ const {
   truncateSubtitle,
   safeArray,
   ensureWebsite,
+  sanitizeHyperlinkUrl,
   isValidCompany,
   dedupeCompanies,
   enrichCompanyDesc,
@@ -66,6 +67,75 @@ async function normalizeChartRelationshipTargets(pptxBuffer) {
     `[PPT] Normalized ${mutatedTargets} absolute relationship target(s) to relative paths`
   );
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+}
+
+function collectPackageConsistencyIssues(packageConsistency) {
+  const packageIssues = [];
+  if (packageConsistency.missingCriticalParts.length > 0) {
+    packageIssues.push(
+      `missing critical parts: ${packageConsistency.missingCriticalParts.join(', ')}`
+    );
+  }
+  if (packageConsistency.duplicateRelationshipIds.length > 0) {
+    const dup = packageConsistency.duplicateRelationshipIds
+      .slice(0, 5)
+      .map((x) => `${x.relFile}:${x.relId}`)
+      .join(', ');
+    packageIssues.push(`duplicate relationship ids: ${dup}`);
+  }
+  if (packageConsistency.duplicateSlideIds.length > 0) {
+    packageIssues.push(
+      `duplicate slide ids: ${packageConsistency.duplicateSlideIds.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.duplicateSlideRelIds.length > 0) {
+    packageIssues.push(
+      `duplicate slide rel ids: ${packageConsistency.duplicateSlideRelIds.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.danglingOverrides.length > 0) {
+    packageIssues.push(
+      `dangling overrides: ${packageConsistency.danglingOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.missingSlideOverrides.length > 0) {
+    packageIssues.push(
+      `missing slide overrides: ${packageConsistency.missingSlideOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (packageConsistency.missingChartOverrides.length > 0) {
+    packageIssues.push(
+      `missing chart overrides: ${packageConsistency.missingChartOverrides.slice(0, 5).join(', ')}`
+    );
+  }
+  if (
+    Array.isArray(packageConsistency.missingExpectedOverrides) &&
+    packageConsistency.missingExpectedOverrides.length > 0
+  ) {
+    const missingExpectedPreview = packageConsistency.missingExpectedOverrides
+      .slice(0, 5)
+      .map((x) =>
+        x && typeof x === 'object'
+          ? `${x.part || '(unknown)'}${x.expectedContentType ? `->${x.expectedContentType}` : ''}`
+          : String(x)
+      )
+      .join(', ');
+    packageIssues.push(`missing expected overrides: ${missingExpectedPreview}`);
+  }
+  if (
+    Array.isArray(packageConsistency.contentTypeMismatches) &&
+    packageConsistency.contentTypeMismatches.length > 0
+  ) {
+    const mismatchPreview = packageConsistency.contentTypeMismatches
+      .slice(0, 5)
+      .map(
+        (x) =>
+          `${x.part}:${x.contentType || '(empty)'}${x.expectedContentType ? `=>${x.expectedContentType}` : ''}`
+      )
+      .join(', ');
+    packageIssues.push(`content type mismatches: ${mismatchPreview}`);
+  }
+  return packageIssues;
 }
 
 // Multi-country comparison PPT - Matches YCP Escort format
@@ -804,10 +874,11 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     ).forEach((p) => {
       const name = p.name || 'Unknown';
       const desc = p.description || '';
-      const nameCell = p.website
+      const website = sanitizeHyperlinkUrl(p.website);
+      const nameCell = website
         ? {
             text: truncate(name, 30),
-            options: { hyperlink: { url: p.website }, color: '0066CC' },
+            options: { hyperlink: { url: website }, color: '0066CC' },
           }
         : { text: truncate(name, 30) };
       compRows.push([nameCell, { text: 'Local' }, { text: desc, options: { fontSize: 9 } }]);
@@ -823,10 +894,11 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     ).forEach((p) => {
       const name = p.name || 'Unknown';
       const desc = p.description || '';
-      const nameCell = p.website
+      const website = sanitizeHyperlinkUrl(p.website);
+      const nameCell = website
         ? {
             text: truncate(name, 30),
-            options: { hyperlink: { url: p.website }, color: '0066CC' },
+            options: { hyperlink: { url: website }, color: '0066CC' },
           }
         : { text: truncate(name, 30) };
       compRows.push([nameCell, { text: 'Foreign' }, { text: desc, options: { fontSize: 9 } }]);
@@ -909,47 +981,29 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     );
   }
   const packageConsistency = await scanPackageConsistency(relZip);
-  const packageIssues = [];
-  if (packageConsistency.missingCriticalParts.length > 0) {
-    packageIssues.push(
-      `missing critical parts: ${packageConsistency.missingCriticalParts.join(', ')}`
-    );
-  }
-  if (packageConsistency.duplicateRelationshipIds.length > 0) {
-    const dup = packageConsistency.duplicateRelationshipIds
-      .slice(0, 5)
-      .map((x) => `${x.relFile}:${x.relId}`)
-      .join(', ');
-    packageIssues.push(`duplicate relationship ids: ${dup}`);
-  }
-  if (packageConsistency.duplicateSlideIds.length > 0) {
-    packageIssues.push(
-      `duplicate slide ids: ${packageConsistency.duplicateSlideIds.slice(0, 5).join(', ')}`
-    );
-  }
-  if (packageConsistency.duplicateSlideRelIds.length > 0) {
-    packageIssues.push(
-      `duplicate slide rel ids: ${packageConsistency.duplicateSlideRelIds.slice(0, 5).join(', ')}`
-    );
-  }
-  if (packageConsistency.danglingOverrides.length > 0) {
-    packageIssues.push(
-      `dangling overrides: ${packageConsistency.danglingOverrides.slice(0, 5).join(', ')}`
-    );
-  }
-  if (packageConsistency.missingSlideOverrides.length > 0) {
-    packageIssues.push(
-      `missing slide overrides: ${packageConsistency.missingSlideOverrides.slice(0, 5).join(', ')}`
-    );
-  }
-  if (packageConsistency.missingChartOverrides.length > 0) {
-    packageIssues.push(
-      `missing chart overrides: ${packageConsistency.missingChartOverrides.slice(0, 5).join(', ')}`
-    );
-  }
+  const packageIssues = collectPackageConsistencyIssues(packageConsistency);
   if (packageIssues.length > 0) {
     throw new Error(`PPT package consistency failed: ${packageIssues.join(' | ')}`);
   }
+
+  // Last-mile reconcile + re-scan to catch any final [Content_Types] drift before delivery.
+  const finalReconcile = await reconcileContentTypesAndPackage(pptxBuffer);
+  pptxBuffer = finalReconcile.buffer;
+  if (finalReconcile.changed) {
+    const touched = [
+      ...(finalReconcile.stats.addedOverrides || []),
+      ...(finalReconcile.stats.correctedOverrides || []),
+      ...(finalReconcile.stats.removedDangling || []),
+    ].length;
+    console.log(`[PPT] Final content-type reconcile applied (${touched} override adjustment(s))`);
+  }
+  const finalZip = await JSZip.loadAsync(pptxBuffer);
+  const finalPackageConsistency = await scanPackageConsistency(finalZip);
+  const finalPackageIssues = collectPackageConsistencyIssues(finalPackageConsistency);
+  if (finalPackageIssues.length > 0) {
+    throw new Error(`PPT package final consistency failed: ${finalPackageIssues.join(' | ')}`);
+  }
+  console.log('[PPT] Final package consistency check passed');
   console.log(`PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB`);
 
   return pptxBuffer;

@@ -8,6 +8,113 @@ const path = require('path');
 
 const CONTENT_TYPE_SLIDE = 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml';
 const CONTENT_TYPE_CHART = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
+const EXPECTED_CONTENT_TYPE_RULES = [
+  {
+    re: /^ppt\/presentation\.xml$/i,
+    contentType:
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml',
+  },
+  {
+    re: /^ppt\/slides\/slide\d+\.xml$/i,
+    contentType: CONTENT_TYPE_SLIDE,
+  },
+  {
+    re: /^ppt\/slideLayouts\/slideLayout\d+\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml',
+  },
+  {
+    re: /^ppt\/slideMasters\/slideMaster\d+\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml',
+  },
+  {
+    re: /^ppt\/theme\/theme\d+\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.theme+xml',
+  },
+  {
+    re: /^ppt\/notesSlides\/notesSlide\d+\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml',
+  },
+  {
+    re: /^ppt\/notesMasters\/notesMaster\d+\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml',
+  },
+  {
+    re: /^ppt\/handoutMasters\/handoutMaster\d+\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.handoutMaster+xml',
+  },
+  {
+    re: /^ppt\/charts\/chart\d+\.xml$/i,
+    contentType: CONTENT_TYPE_CHART,
+  },
+  {
+    re: /^ppt\/charts\/style\d+\.xml$/i,
+    contentType: 'application/vnd.ms-office.chartstyle+xml',
+  },
+  {
+    re: /^ppt\/charts\/colors\d+\.xml$/i,
+    contentType: 'application/vnd.ms-office.chartcolorstyle+xml',
+  },
+  {
+    re: /^ppt\/tableStyles\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.tableStyles+xml',
+  },
+  {
+    re: /^ppt\/presProps\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presProps+xml',
+  },
+  {
+    re: /^ppt\/viewProps\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.viewProps+xml',
+  },
+  {
+    re: /^ppt\/commentAuthors\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.commentAuthors+xml',
+  },
+  {
+    re: /^ppt\/embeddings\/.*\.xlsx$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  },
+  {
+    re: /^ppt\/embeddings\/.*\.xlsm$/i,
+    contentType: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+  },
+  {
+    re: /^ppt\/printerSettings\/printerSettings\d+\.bin$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.presentationml.printerSettings',
+  },
+  {
+    re: /^docProps\/core\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-package.core-properties+xml',
+  },
+  {
+    re: /^docProps\/app\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.extended-properties+xml',
+  },
+  {
+    re: /^docProps\/custom\.xml$/i,
+    contentType: 'application/vnd.openxmlformats-officedocument.custom-properties+xml',
+  },
+];
+
+function getExpectedContentTypeForPart(partName) {
+  const normalized = String(partName || '').replace(/^\/+/, '');
+  if (!normalized) return null;
+  for (const rule of EXPECTED_CONTENT_TYPE_RULES) {
+    if (rule.re.test(normalized)) return rule.contentType;
+  }
+  return null;
+}
+
+function sameContentType(a, b) {
+  return (
+    String(a || '')
+      .trim()
+      .toLowerCase() ===
+    String(b || '')
+      .trim()
+      .toLowerCase()
+  );
+}
 
 async function readPPTX(input) {
   const buffer = typeof input === 'string' ? fs.readFileSync(input) : input;
@@ -164,7 +271,15 @@ function parseContentTypesXml(xml) {
   const typesOpen =
     (contentXml.match(/<Types\b[^>]*>/i) || [])[0] ||
     '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">';
-  const defaults = Array.from(contentXml.matchAll(/<Default\b[^>]*\/>/gi)).map((m) => m[0].trim());
+  const defaults = [];
+  const defaultByExtension = new Map();
+  for (const match of contentXml.matchAll(/<Default\b[^>]*\/>/gi)) {
+    const tag = match[0].trim();
+    defaults.push(tag);
+    const extension = extractXmlAttr(tag, 'Extension').replace(/^\./, '').toLowerCase();
+    const contentType = extractXmlAttr(tag, 'ContentType');
+    if (extension && contentType) defaultByExtension.set(extension, contentType);
+  }
   const overrides = [];
   for (const match of contentXml.matchAll(
     /<Override\b[^>]*\/>|<Override\b[^>]*>[\s\S]*?<\/Override>/gi
@@ -179,6 +294,7 @@ function parseContentTypesXml(xml) {
     xmlDecl,
     typesOpen,
     defaults,
+    defaultByExtension,
     overrides,
     newline: contentXml.includes('\r\n') ? '\r\n' : '\n',
   };
@@ -248,39 +364,20 @@ async function reconcileContentTypesAndPackage(pptxBuffer) {
     }
   }
 
-  const slideParts = Array.from(packageParts).filter((f) =>
-    /^ppt\/slides\/slide\d+\.xml$/i.test(f)
-  );
-  const chartParts = Array.from(packageParts).filter((f) =>
-    /^ppt\/charts\/chart\d+\.xml$/i.test(f)
-  );
+  for (const partName of Array.from(packageParts)) {
+    const expected = getExpectedContentTypeForPart(partName);
+    if (!expected) continue;
 
-  for (const slidePart of slideParts) {
-    const existing = overrideMap.get(slidePart);
+    const existing = overrideMap.get(partName);
     if (!existing) {
-      overrideMap.set(slidePart, CONTENT_TYPE_SLIDE);
-      stats.addedOverrides.push(slidePart);
+      overrideMap.set(partName, expected);
+      stats.addedOverrides.push(partName);
       changed = true;
       continue;
     }
-    if (!/slide\+xml$/i.test(existing)) {
-      overrideMap.set(slidePart, CONTENT_TYPE_SLIDE);
-      stats.correctedOverrides.push(slidePart);
-      changed = true;
-    }
-  }
-
-  for (const chartPart of chartParts) {
-    const existing = overrideMap.get(chartPart);
-    if (!existing) {
-      overrideMap.set(chartPart, CONTENT_TYPE_CHART);
-      stats.addedOverrides.push(chartPart);
-      changed = true;
-      continue;
-    }
-    if (!/drawingml\.chart\+xml$/i.test(existing)) {
-      overrideMap.set(chartPart, CONTENT_TYPE_CHART);
-      stats.correctedOverrides.push(chartPart);
+    if (!sameContentType(existing, expected)) {
+      overrideMap.set(partName, expected);
+      stats.correctedOverrides.push(partName);
       changed = true;
     }
   }
@@ -353,17 +450,14 @@ async function scanPackageConsistency(zip) {
   const danglingOverrides = [];
   const missingSlideOverrides = [];
   const missingChartOverrides = [];
+  const missingExpectedOverrides = [];
   const contentTypeMismatches = [];
   const contentTypesEntry = zip.file('[Content_Types].xml');
   if (contentTypesEntry) {
     const xml = await contentTypesEntry.async('string');
-    const overrides = new Map();
-    for (const match of xml.matchAll(/<Override\b[^>]*>/g)) {
-      const tag = match[0];
-      const partName = extractXmlAttr(tag, 'PartName').replace(/^\/+/, '');
-      const contentType = extractXmlAttr(tag, 'ContentType');
-      if (partName) overrides.set(partName, contentType);
-    }
+    const parsed = parseContentTypesXml(xml);
+    const overrides = new Map(parsed.overrides.map((x) => [x.partName, x.contentType]));
+    const defaultByExtension = parsed.defaultByExtension || new Map();
 
     for (const [partName] of overrides.entries()) {
       if (!zip.file(partName)) {
@@ -371,26 +465,35 @@ async function scanPackageConsistency(zip) {
       }
     }
 
-    const slideParts = Object.keys(zip.files).filter((f) =>
-      /^ppt\/slides\/slide\d+\.xml$/i.test(f)
-    );
-    const chartParts = Object.keys(zip.files).filter((f) =>
-      /^ppt\/charts\/chart\d+\.xml$/i.test(f)
-    );
+    const packageParts = Object.keys(zip.files).filter((f) => !zip.files[f].dir);
+    for (const partName of packageParts) {
+      const expectedContentType = getExpectedContentTypeForPart(partName);
+      if (!expectedContentType) continue;
 
-    for (const slidePart of slideParts) {
-      if (!overrides.has(slidePart)) {
-        missingSlideOverrides.push(slidePart);
+      const hasOverride = overrides.has(partName);
+      const overrideContentType = hasOverride ? overrides.get(partName) || '' : '';
+      if (!hasOverride) {
+        const extension = path.posix.extname(partName).replace(/^\./, '').toLowerCase();
+        const defaultContentType = defaultByExtension.get(extension) || '';
+        if (defaultContentType && sameContentType(defaultContentType, expectedContentType)) {
+          continue;
+        }
+        missingExpectedOverrides.push({ part: partName, expectedContentType });
+        if (/^ppt\/slides\/slide\d+\.xml$/i.test(partName)) {
+          missingSlideOverrides.push(partName);
+        }
+        if (/^ppt\/charts\/chart\d+\.xml$/i.test(partName)) {
+          missingChartOverrides.push(partName);
+        }
         continue;
       }
-      const ct = overrides.get(slidePart) || '';
-      if (!/slide\+xml$/i.test(ct)) {
-        contentTypeMismatches.push({ part: slidePart, contentType: ct });
-      }
-    }
-    for (const chartPart of chartParts) {
-      if (!overrides.has(chartPart)) {
-        missingChartOverrides.push(chartPart);
+
+      if (!sameContentType(overrideContentType, expectedContentType)) {
+        contentTypeMismatches.push({
+          part: partName,
+          contentType: overrideContentType,
+          expectedContentType,
+        });
       }
     }
   }
@@ -403,6 +506,7 @@ async function scanPackageConsistency(zip) {
     danglingOverrides,
     missingSlideOverrides,
     missingChartOverrides,
+    missingExpectedOverrides,
     contentTypeMismatches,
   };
 }
@@ -573,7 +677,9 @@ async function validatePPTX(input, exp = {}) {
     if (
       packageConsistency.danglingOverrides.length > 0 ||
       packageConsistency.missingSlideOverrides.length > 0 ||
-      packageConsistency.missingChartOverrides.length > 0
+      packageConsistency.missingChartOverrides.length > 0 ||
+      packageConsistency.missingExpectedOverrides.length > 0 ||
+      packageConsistency.contentTypeMismatches.length > 0
     ) {
       const details = [];
       if (packageConsistency.danglingOverrides.length > 0) {
@@ -591,23 +697,29 @@ async function validatePPTX(input, exp = {}) {
           `missing chart overrides: ${packageConsistency.missingChartOverrides.slice(0, 5).join(', ')}`
         );
       }
+      if (packageConsistency.missingExpectedOverrides.length > 0) {
+        details.push(
+          `missing expected overrides: ${packageConsistency.missingExpectedOverrides
+            .slice(0, 5)
+            .map((x) => `${x.part}->${x.expectedContentType}`)
+            .join(', ')}`
+        );
+      }
+      if (packageConsistency.contentTypeMismatches.length > 0) {
+        details.push(
+          `content type mismatches: ${packageConsistency.contentTypeMismatches
+            .slice(0, 5)
+            .map((x) => `${x.part}:${x.contentType || '(empty)'}=>${x.expectedContentType}`)
+            .join(', ')}`
+        );
+      }
       fail(
         'Content types consistency',
-        'No dangling overrides and all slide/chart parts are declared',
+        'No dangling/missing overrides and all expected package parts have correct content types',
         details.join(' | ')
       );
     } else {
-      pass('Content types consistency', 'Overrides align with slide/chart parts');
-    }
-
-    if (packageConsistency.contentTypeMismatches.length > 0) {
-      warn(
-        'Content type mismatch',
-        packageConsistency.contentTypeMismatches
-          .slice(0, 3)
-          .map((x) => `${x.part}:${x.contentType || '(empty)'}`)
-          .join(', ')
-      );
+      pass('Content types consistency', 'Overrides align with expected package parts');
     }
 
     const minSize = exp.minFileSize || 50 * 1024,
