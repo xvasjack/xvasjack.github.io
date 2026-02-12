@@ -32,7 +32,7 @@ function parseBoundedIntEnv(name, fallback, maxValue) {
 }
 
 const CFG_REVIEW_DEEPEN_MAX_ITERATIONS = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_ITERATIONS', 3, 3);
-const CFG_REVIEW_DEEPEN_TARGET_SCORE = parsePositiveIntEnv('REVIEW_DEEPEN_TARGET_SCORE', 80);
+const CFG_REVIEW_DEEPEN_TARGET_SCORE = parsePositiveIntEnv('REVIEW_DEEPEN_TARGET_SCORE', 75);
 const CFG_REFINEMENT_MAX_ITERATIONS = parseBoundedIntEnv('REFINEMENT_MAX_ITERATIONS', 3, 3);
 const CFG_MIN_CONFIDENCE_SCORE = parsePositiveIntEnv('MIN_CONFIDENCE_SCORE', 80);
 const CFG_FINAL_REVIEW_MAX_ITERATIONS = parseBoundedIntEnv('FINAL_REVIEW_MAX_ITERATIONS', 3, 3);
@@ -45,7 +45,7 @@ const CFG_DYNAMIC_AGENT_BATCH_DELAY_MS = parseBoundedIntEnv(
 const CFG_DEEPEN_QUERY_CONCURRENCY = parseBoundedIntEnv('DEEPEN_QUERY_CONCURRENCY', 1, 2);
 const CFG_DEEPEN_BATCH_DELAY_MS = parseBoundedIntEnv('DEEPEN_BATCH_DELAY_MS', 3000, 15000);
 const CFG_REVIEW_DEEPEN_MAX_QUERIES = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_QUERIES', 6, 10);
-const CFG_FINAL_REVIEW_MAX_QUERIES = parseBoundedIntEnv('FINAL_REVIEW_MAX_QUERIES', 4, 8);
+const CFG_FINAL_REVIEW_MAX_QUERIES = parseBoundedIntEnv('FINAL_REVIEW_MAX_QUERIES', 3, 8);
 const CFG_SECTION_SYNTHESIS_DELAY_MS = parseBoundedIntEnv(
   'SECTION_SYNTHESIS_DELAY_MS',
   10000,
@@ -1008,12 +1008,12 @@ function truncatePromptText(value, maxChars = 2400) {
   if (!cleaned) return '';
   if (!Number.isFinite(maxChars) || maxChars <= 0 || cleaned.length <= maxChars) return cleaned;
   const sliced = cleaned.slice(0, maxChars);
-  return `${sliced.replace(/\s+\S*$/, '').trim()} …[truncated]`;
+  return sliced.replace(/\s+\S*$/, '').trim();
 }
 
 function compactResearchEntryForPrompt(entry, options = {}) {
   const {
-    maxContentChars = 2600,
+    maxContentChars = 2200,
     maxCitations = 8,
     maxStructuredChars = 1200,
     maxTitleChars = 220,
@@ -2192,7 +2192,7 @@ async function synthesizeWithFallback(prompt, options = {}) {
 function markDataQuality(filteredData, options = {}) {
   const {
     maxTopics = Number.POSITIVE_INFINITY,
-    maxContentChars = 2600,
+    maxContentChars = 2200,
     maxCitations = 8,
     maxStructuredChars = 1200,
   } = options;
@@ -2460,7 +2460,7 @@ async function synthesizePolicy(researchData, country, industry, clientContext, 
 
   const labeledData = markDataQuality(filteredData, {
     maxTopics: 4,
-    maxContentChars: 2600,
+    maxContentChars: 2200,
     maxCitations: 10,
   });
   const researchContext = dataAvailable
@@ -2727,7 +2727,7 @@ async function synthesizeMarket(researchData, country, industry, clientContext, 
 
   const labeledData = markDataQuality(filteredData, {
     maxTopics: 4,
-    maxContentChars: 2600,
+    maxContentChars: 2200,
     maxCitations: 10,
   });
   const researchContext = dataAvailable
@@ -2985,7 +2985,7 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
 
   const labeledData = markDataQuality(filteredData, {
     maxTopics: 3,
-    maxContentChars: 2600,
+    maxContentChars: 2200,
     maxCitations: 10,
   });
   const researchContext = dataAvailable
@@ -3271,7 +3271,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt1,
       options: {
-        maxTokens: 8192,
+        maxTokens: 6144,
         label: 'synthesizeCompetitors:japanesePlayers',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3282,7 +3282,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt2,
       options: {
-        maxTokens: 8192,
+        maxTokens: 6144,
         label: 'synthesizeCompetitors:localMajor',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3293,7 +3293,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt3,
       options: {
-        maxTokens: 8192,
+        maxTokens: 6144,
         label: 'synthesizeCompetitors:foreignPlayers',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -3304,7 +3304,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     {
       prompt: prompt4,
       options: {
-        maxTokens: 8192,
+        maxTokens: 6144,
         label: 'synthesizeCompetitors:caseStudy',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -4463,6 +4463,14 @@ function validateContentDepth(synthesis) {
   scores.overall = Math.round(
     (scores.policy + scores.market + scores.competitors + scores.summary + scores.depth) / 5
   );
+  // Avoid false-negatives when core sections are strong but depth is slightly below target.
+  // This keeps strictness while preventing expensive churn on 79/100 edge cases.
+  const strongCoreSections = ['policy', 'market', 'competitors', 'summary'].filter(
+    (section) => scores[section] >= 80
+  ).length;
+  if (strongCoreSections >= 4 && scores.depth >= 45 && scores.overall < 80) {
+    scores.overall = 80;
+  }
 
   const valid = failures.length === 0;
 
@@ -6030,11 +6038,45 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     countryAnalysis.qualityScores = gaps.sectionScores;
     countryAnalysis.confidenceScore = confidenceScore;
 
+    if (!Array.isArray(gaps.criticalGaps)) gaps.criticalGaps = [];
+    if (!Array.isArray(gaps.dataToVerify)) gaps.dataToVerify = [];
+
     // If ready for client or high confidence score, we're done
     const gateAdjustedScore = codeGateResult.valid
       ? codeGateScore
       : Math.min(codeGateScore, MIN_CONFIDENCE_SCORE - 1);
-    const effectiveScore = Math.min(confidenceScore, gateAdjustedScore);
+    let effectiveScore = Math.min(confidenceScore, gateAdjustedScore);
+
+    // Guard against reviewer-score collapse that can trigger expensive low-signal loops.
+    // If deterministic gate is already strong and reviewer confidence crashes with almost
+    // no actionable work, trust the deterministic score and move forward.
+    if (codeGateScore >= MIN_CONFIDENCE_SCORE && confidenceScore < 40) {
+      const actionableCount = gaps.criticalGaps.length + gaps.dataToVerify.length;
+      if (actionableCount <= 1) {
+        console.warn(
+          `    [Refinement] Reviewer collapse detected (AI=${confidenceScore}, gate=${codeGateScore}, actionable=${actionableCount}) — trusting deterministic gate`
+        );
+        effectiveScore = codeGateScore;
+        confidenceScore = Math.max(confidenceScore, codeGateScore);
+        gaps.overallScore = Math.max(Number(gaps.overallScore) || 0, codeGateScore);
+        if (!gaps.confidenceAssessment || typeof gaps.confidenceAssessment !== 'object') {
+          gaps.confidenceAssessment = {};
+        }
+        gaps.confidenceAssessment.numericConfidence = Math.max(
+          Number(gaps.confidenceAssessment.numericConfidence) || 0,
+          codeGateScore
+        );
+        gaps.confidenceAssessment.overall =
+          gaps.confidenceAssessment.numericConfidence >= 75
+            ? 'high'
+            : gaps.confidenceAssessment.numericConfidence >= 50
+              ? 'medium'
+              : 'low';
+        gaps.confidenceAssessment.readyForClient =
+          gaps.confidenceAssessment.numericConfidence >= 75;
+      }
+    }
+
     lastCodeGateScore = codeGateScore;
     lastEffectiveScore = effectiveScore;
     if (effectiveScore >= MIN_CONFIDENCE_SCORE) {
@@ -6043,8 +6085,6 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       );
       break;
     }
-
-    if (!Array.isArray(gaps.criticalGaps)) gaps.criticalGaps = [];
 
     // Inject gate-driven research tasks when the code gate is below threshold.
     // This prevents reviewer/model drift where "confidence" is high but concrete

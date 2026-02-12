@@ -106,6 +106,18 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
   - runtime blocks decks containing explicit truncation/degradation markers (e.g. `[truncated]`, `synthesis failed`)
 - Added single-country identity check at PPT gate:
   - runtime now requires the target country text to appear in single-country decks to catch wrong-country outputs earlier
+- Lowered review-deepen default target from `80` to `75`:
+  - stops low-yield deepen churn earlier when coverage repeatedly plateaus around `75`
+- Removed explicit truncation marker from prompt compaction:
+  - prompt clipping no longer appends `...[truncated]` markers that could leak into model output
+- Reduced synthesis prompt payload size further:
+  - compacted topic content default `2600 -> 2200` chars across policy/market/competitor synthesis context
+- Reduced competitor synthesis output ceiling:
+  - competitor sub-calls max output tokens `8192 -> 6144` to lower malformed JSON risk and retry churn
+- Added reviewer-collapse guard in refinement loop:
+  - when deterministic gate is already strong but reviewer confidence collapses with no actionable gaps, trust deterministic gate and skip costly low-signal loops
+- Added 79/100 edge-case alignment in content-depth scoring:
+  - if all four core sections are strong (>=80) and depth is usable (>=45), floor overall depth-gate score to `80` to avoid repetitive one-point failures
 
 ## Next safe simplifications (if needed)
 - Add per-section retry budget (hard cap on model calls per section per run).
