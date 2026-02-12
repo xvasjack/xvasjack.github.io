@@ -24,11 +24,11 @@ function parsePositiveIntEnv(name, fallback) {
   return parsed;
 }
 
-const CFG_REVIEW_DEEPEN_MAX_ITERATIONS = parsePositiveIntEnv('REVIEW_DEEPEN_MAX_ITERATIONS', 5);
+const CFG_REVIEW_DEEPEN_MAX_ITERATIONS = parsePositiveIntEnv('REVIEW_DEEPEN_MAX_ITERATIONS', 3);
 const CFG_REVIEW_DEEPEN_TARGET_SCORE = parsePositiveIntEnv('REVIEW_DEEPEN_TARGET_SCORE', 80);
-const CFG_REFINEMENT_MAX_ITERATIONS = parsePositiveIntEnv('REFINEMENT_MAX_ITERATIONS', 5);
+const CFG_REFINEMENT_MAX_ITERATIONS = parsePositiveIntEnv('REFINEMENT_MAX_ITERATIONS', 3);
 const CFG_MIN_CONFIDENCE_SCORE = parsePositiveIntEnv('MIN_CONFIDENCE_SCORE', 80);
-const CFG_FINAL_REVIEW_MAX_ITERATIONS = parsePositiveIntEnv('FINAL_REVIEW_MAX_ITERATIONS', 5);
+const CFG_FINAL_REVIEW_MAX_ITERATIONS = parsePositiveIntEnv('FINAL_REVIEW_MAX_ITERATIONS', 3);
 
 const PLACEHOLDER_PATTERNS = [
   /\binsufficient research data\b/i,
@@ -2335,7 +2335,7 @@ async function synthesizePolicy(researchData, country, industry, clientContext, 
 
   const labeledData = markDataQuality(filteredData, {
     maxTopics: 4,
-    maxContentChars: 3200,
+    maxContentChars: 2600,
     maxCitations: 10,
   });
   const researchContext = dataAvailable
@@ -2413,7 +2413,7 @@ Return ONLY valid JSON.`;
     '\n\nCRITICAL: Return a JSON OBJECT with policy keys (foundationalActs, nationalPolicy, investmentRestrictions). DO NOT return a top-level JSON array.';
 
   let policyResult = null;
-  const MAX_POLICY_RETRIES = 3;
+  const MAX_POLICY_RETRIES = 2;
 
   for (let attempt = 0; attempt <= MAX_POLICY_RETRIES; attempt++) {
     if (attempt > 0) {
@@ -2602,7 +2602,7 @@ async function synthesizeMarket(researchData, country, industry, clientContext, 
 
   const labeledData = markDataQuality(filteredData, {
     maxTopics: 4,
-    maxContentChars: 3400,
+    maxContentChars: 2600,
     maxCitations: 10,
   });
   const researchContext = dataAvailable
@@ -2685,7 +2685,7 @@ Return ONLY valid JSON.`;
   };
 
   let marketResult = null;
-  const MAX_MARKET_RETRIES = 3;
+  const MAX_MARKET_RETRIES = 2;
 
   for (let attempt = 0; attempt <= MAX_MARKET_RETRIES; attempt++) {
     let currentResult;
@@ -2713,27 +2713,8 @@ Return ONLY valid JSON.`;
         allowProTiers: false,
         accept: marketAccept,
       });
-    } else if (attempt === 2) {
-      // Pro-lean strict retry
-      console.log(`  [synthesizeMarket] Retry ${attempt}: strict schema with pro-lean fallback`);
-      const proLeanPrompt = `${prompt}${antiArraySuffix}
-
-HARD CONSTRAINTS:
-- Return one JSON OBJECT only
-- Use canonical keys only: marketSizeAndGrowth, supplyAndDemandDynamics, pricingAndTariffStructures
-- Never return section_* or *_deepen* keys`;
-      currentResult = await synthesizeWithFallback(proLeanPrompt, {
-        maxTokens: 16384,
-        label: 'synthesizeMarket',
-        allowArrayNormalization: false,
-        allowTruncationRepair: true,
-        allowRawExtractionFallback: true,
-        accept: marketAccept,
-        systemPrompt:
-          'You are a strict JSON compiler. Return exactly one JSON object with canonical market keys only.',
-      });
     } else {
-      // Minimal strict prompt
+      // Retry 2: minimal strict prompt (flash-only to avoid pro-tier escalation churn)
       console.log(`  [synthesizeMarket] Retry ${attempt}: minimal strict prompt`);
       const minimalPrompt = `Return a JSON object (NOT array) with EXACT keys:
 - "marketSizeAndGrowth"
@@ -2753,6 +2734,7 @@ ${antiArraySuffix}`;
         allowArrayNormalization: false,
         allowTruncationRepair: true,
         allowRawExtractionFallback: true,
+        allowProTiers: false,
         accept: marketAccept,
         systemPrompt:
           'Return one valid JSON object only with exact canonical market keys. No markdown, no explanation.',
@@ -2878,7 +2860,7 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
 
   const labeledData = markDataQuality(filteredData, {
     maxTopics: 3,
-    maxContentChars: 3200,
+    maxContentChars: 2600,
     maxCitations: 10,
   });
   const researchContext = dataAvailable
@@ -4783,7 +4765,7 @@ Return ONLY valid JSON.`;
   }
 }
 
-async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQueries = 20) {
+async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQueries = 12) {
   if (!gapReport || !gapReport.gaps || gapReport.gaps.length === 0) {
     console.log('  [DEEPEN] No gaps to fill, skipping');
     return {
@@ -5586,7 +5568,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         country,
         industry,
         pipelineSignal,
-        20
+        12
       );
 
       if (deepenedResults.length > 0) {

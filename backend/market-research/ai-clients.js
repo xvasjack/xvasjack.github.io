@@ -21,6 +21,7 @@ let runBudgetUsed = 0;
 const RETRY_BASE_DELAY_GEMINI_MS = 10000;
 const RETRY_BASE_DELAY_GEMINI_RESEARCH_MS = 10000;
 const RETRY_BASE_DELAY_GEMINI_PRO_MS = 10000;
+const modelCooldownUntilMs = new Map();
 
 function checkBudget() {
   if (runBudgetUsed >= GEMINI_BUDGET_LIMIT) {
@@ -38,6 +39,23 @@ function checkBudget() {
 function resetBudget() {
   runBudgetUsed = 0;
   console.log('[Budget] Reset budget tracker');
+}
+
+function setModelCooldown(model, retryAfterMs, fallbackMs) {
+  const delayMs = Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? retryAfterMs : fallbackMs;
+  if (!Number.isFinite(delayMs) || delayMs <= 0) return;
+  const nextUntil = Date.now() + delayMs;
+  const currentUntil = modelCooldownUntilMs.get(model) || 0;
+  if (nextUntil > currentUntil) modelCooldownUntilMs.set(model, nextUntil);
+}
+
+async function waitForModelCooldown(model, signal = null) {
+  const until = Number(modelCooldownUntilMs.get(model) || 0);
+  if (!Number.isFinite(until) || until <= Date.now()) return;
+  const waitMs = Math.max(0, until - Date.now());
+  if (waitMs <= 0) return;
+  console.log(`  [Retry] ${model} cooling down for ${waitMs}ms due to recent rate limit`);
+  await waitForRetryDelay(waitMs, signal);
 }
 
 function trackCost(
@@ -196,6 +214,7 @@ async function callGemini(prompt, options = {}) {
 
   return withRetry(
     async () => {
+      await waitForModelCooldown('gemini-3-flash-preview');
       const contents = [];
       contents.push({ role: 'user', parts: [{ text: prompt }] });
 
@@ -233,6 +252,9 @@ async function callGemini(prompt, options = {}) {
             parseRetryAfterHeaderMs(response.headers?.get('retry-after')) ||
             parseRetryDelayMsFromText(errText);
           if (retryAfterMs) error.retryAfterMs = retryAfterMs;
+          if (response.status === 429) {
+            setModelCooldown('gemini-3-flash-preview', retryAfterMs, RETRY_BASE_DELAY_GEMINI_MS);
+          }
           if (response.status >= 400 && response.status < 500 && response.status !== 429) {
             error.nonRetryable = true;
           }
@@ -311,6 +333,7 @@ Be specific. Cite sources. No fluff.`;
 
   return withRetry(
     async () => {
+      await waitForModelCooldown('gemini-2.5-flash', pipelineSignal);
       checkBudget();
 
       if (pipelineSignal?.aborted) {
@@ -353,6 +376,7 @@ Be specific. Cite sources. No fluff.`;
               parseRetryAfterHeaderMs(response.headers?.get('retry-after')) ||
               parseRetryDelayMsFromText(errText);
             if (retryAfterMs) error.retryAfterMs = retryAfterMs;
+            setModelCooldown('gemini-2.5-flash', retryAfterMs, RETRY_BASE_DELAY_GEMINI_RESEARCH_MS);
             throw error;
           }
           console.error(
@@ -473,6 +497,7 @@ async function callGeminiPro(prompt, options = {}) {
 
   return withRetry(
     async () => {
+      await waitForModelCooldown('gemini-3-pro-preview');
       const contents = [];
       contents.push({ role: 'user', parts: [{ text: prompt }] });
 
@@ -510,6 +535,9 @@ async function callGeminiPro(prompt, options = {}) {
             parseRetryAfterHeaderMs(response.headers?.get('retry-after')) ||
             parseRetryDelayMsFromText(errText);
           if (retryAfterMs) error.retryAfterMs = retryAfterMs;
+          if (response.status === 429) {
+            setModelCooldown('gemini-3-pro-preview', retryAfterMs, RETRY_BASE_DELAY_GEMINI_PRO_MS);
+          }
           if (response.status >= 400 && response.status < 500 && response.status !== 429) {
             error.nonRetryable = true;
           }
