@@ -45,7 +45,7 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
   - fail if table recovery paths are used
   - fail if geometry fidelity issues are detected
 - Added `STRICT_TEMPLATE_FIDELITY` runtime switch (default `true`, can be disabled only explicitly)
-- Lower default iteration limits (5 -> 3):
+- Lower default iteration limits (5 -> 2):
   - `REVIEW_DEEPEN_MAX_ITERATIONS`
   - `REFINEMENT_MAX_ITERATIONS`
   - `FINAL_REVIEW_MAX_ITERATIONS`
@@ -74,8 +74,11 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
 - Increased gap/verification spacing:
   - `GAP_QUERY_DELAY_MS` default `3000`
 - Reduced deepen query caps:
-  - review-deepen pass cap `REVIEW_DEEPEN_MAX_QUERIES` default `6`
-  - final-review escalation cap `FINAL_REVIEW_MAX_QUERIES` default `4`
+  - review-deepen pass cap `REVIEW_DEEPEN_MAX_QUERIES` default `5`
+  - final-review escalation cap `FINAL_REVIEW_MAX_QUERIES` default `2`
+- Reduced final-fix churn defaults:
+  - final-review synthesis escalation cap `FINAL_REVIEW_MAX_SYNTHESIS_ESCALATIONS` default `1`
+  - per-pass section-fix cap `FINAL_FIX_MAX_SECTIONS_PER_PASS` default `2`
 - Added anti-churn guard in review-deepen:
   - if reviewer coverage drops sharply versus the best observed score, revert to best research snapshot and stop the loop
 - Hardened market key canonicalization:
