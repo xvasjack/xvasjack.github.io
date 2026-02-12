@@ -36,6 +36,8 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
   - `REVIEW_DEEPEN_MAX_ITERATIONS`
   - `REFINEMENT_MAX_ITERATIONS`
   - `FINAL_REVIEW_MAX_ITERATIONS`
+- Hard-cap env overrides for iteration loops:
+  - even if env is set higher, loops are bounded to `3` to prevent runaway spend
 - Added model-level cooldown lock on 429 in `ai-clients.js`:
   - shared cooldown per model key
   - all calls wait for cooldown before firing
@@ -43,13 +45,26 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
 - Simplified market retry strategy:
   - retries reduced to 2
   - final retry uses strict minimal flash-only path (no pro-tier escalation in that branch)
-- Reduced review-deepen query fan-out default from 20 to 12.
 - Throttled research execution:
   - dynamic category agents now run in small batches (default concurrency `2`)
   - specialized fallback agents now run in small batches (default concurrency `2`)
   - universal/context/policy/competitor/depth/insight topic runs are batch-throttled (default concurrency `2`)
 - Throttled deepen execution:
   - follow-up gap queries now run in small batches (default concurrency `2`)
+- Increased batch spacing to reduce token-per-minute bursts:
+  - `DYNAMIC_AGENT_BATCH_DELAY_MS` default `3000`
+  - `DEEPEN_BATCH_DELAY_MS` default `3000`
+- Increased synthesis spacing defaults:
+  - section-to-section delay `SECTION_SYNTHESIS_DELAY_MS` default `5000`
+  - competitor sub-section delay `COMPETITOR_SYNTHESIS_DELAY_MS` default `5000`
+  - final-review section-fix delay `FINAL_FIX_SECTION_DELAY_MS` default `3000`
+- Increased gap/verification spacing:
+  - `GAP_QUERY_DELAY_MS` default `3000`
+- Reduced deepen query caps:
+  - review-deepen pass cap `REVIEW_DEEPEN_MAX_QUERIES` default `8`
+  - final-review escalation cap `FINAL_REVIEW_MAX_QUERIES` default `6`
+- Added anti-churn guard in review-deepen:
+  - if reviewer coverage drops sharply versus the best observed score, revert to best research snapshot and stop the loop
 - Hardened market key canonicalization:
   - merged key aliases like `supplydemandDynamics`, `pricingAndTariffs`, and `segmentAnalysis` map to canonical market sections instead of triggering retry churn.
 

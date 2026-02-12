@@ -24,15 +24,44 @@ function parsePositiveIntEnv(name, fallback) {
   return parsed;
 }
 
-const CFG_REVIEW_DEEPEN_MAX_ITERATIONS = parsePositiveIntEnv('REVIEW_DEEPEN_MAX_ITERATIONS', 3);
+function parseBoundedIntEnv(name, fallback, maxValue) {
+  const parsed = parsePositiveIntEnv(name, fallback);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  if (!Number.isFinite(maxValue) || maxValue <= 0) return parsed;
+  return Math.min(parsed, maxValue);
+}
+
+const CFG_REVIEW_DEEPEN_MAX_ITERATIONS = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_ITERATIONS', 3, 3);
 const CFG_REVIEW_DEEPEN_TARGET_SCORE = parsePositiveIntEnv('REVIEW_DEEPEN_TARGET_SCORE', 80);
-const CFG_REFINEMENT_MAX_ITERATIONS = parsePositiveIntEnv('REFINEMENT_MAX_ITERATIONS', 3);
+const CFG_REFINEMENT_MAX_ITERATIONS = parseBoundedIntEnv('REFINEMENT_MAX_ITERATIONS', 3, 3);
 const CFG_MIN_CONFIDENCE_SCORE = parsePositiveIntEnv('MIN_CONFIDENCE_SCORE', 80);
-const CFG_FINAL_REVIEW_MAX_ITERATIONS = parsePositiveIntEnv('FINAL_REVIEW_MAX_ITERATIONS', 3);
-const CFG_DYNAMIC_AGENT_CONCURRENCY = parsePositiveIntEnv('DYNAMIC_AGENT_CONCURRENCY', 2);
-const CFG_DYNAMIC_AGENT_BATCH_DELAY_MS = parsePositiveIntEnv('DYNAMIC_AGENT_BATCH_DELAY_MS', 1000);
-const CFG_DEEPEN_QUERY_CONCURRENCY = parsePositiveIntEnv('DEEPEN_QUERY_CONCURRENCY', 2);
-const CFG_DEEPEN_BATCH_DELAY_MS = parsePositiveIntEnv('DEEPEN_BATCH_DELAY_MS', 1000);
+const CFG_FINAL_REVIEW_MAX_ITERATIONS = parseBoundedIntEnv('FINAL_REVIEW_MAX_ITERATIONS', 3, 3);
+const CFG_DYNAMIC_AGENT_CONCURRENCY = parseBoundedIntEnv('DYNAMIC_AGENT_CONCURRENCY', 2, 3);
+const CFG_DYNAMIC_AGENT_BATCH_DELAY_MS = parseBoundedIntEnv(
+  'DYNAMIC_AGENT_BATCH_DELAY_MS',
+  3000,
+  15000
+);
+const CFG_DEEPEN_QUERY_CONCURRENCY = parseBoundedIntEnv('DEEPEN_QUERY_CONCURRENCY', 2, 3);
+const CFG_DEEPEN_BATCH_DELAY_MS = parseBoundedIntEnv('DEEPEN_BATCH_DELAY_MS', 3000, 15000);
+const CFG_REVIEW_DEEPEN_MAX_QUERIES = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_QUERIES', 8, 10);
+const CFG_FINAL_REVIEW_MAX_QUERIES = parseBoundedIntEnv('FINAL_REVIEW_MAX_QUERIES', 6, 8);
+const CFG_SECTION_SYNTHESIS_DELAY_MS = parseBoundedIntEnv(
+  'SECTION_SYNTHESIS_DELAY_MS',
+  5000,
+  20000
+);
+const CFG_COMPETITOR_SYNTHESIS_DELAY_MS = parseBoundedIntEnv(
+  'COMPETITOR_SYNTHESIS_DELAY_MS',
+  5000,
+  20000
+);
+const CFG_FINAL_FIX_SECTION_DELAY_MS = parseBoundedIntEnv(
+  'FINAL_FIX_SECTION_DELAY_MS',
+  3000,
+  10000
+);
+const CFG_GAP_QUERY_DELAY_MS = parseBoundedIntEnv('GAP_QUERY_DELAY_MS', 3000, 10000);
 
 async function runInBatches(items, batchSize, handler, delayMs = 0) {
   const results = [];
@@ -865,7 +894,7 @@ async function fillResearchGaps(gaps, country, industry) {
         `    Gap search returned thin content (${contentLength} chars, ${citationsCount} citations, ${numericSignals} numeric signals) — skipping low-signal result`
       );
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, CFG_GAP_QUERY_DELAY_MS));
   }
 
   // Verify questionable claims with Gemini
@@ -896,7 +925,7 @@ async function fillResearchGaps(gaps, country, industry) {
         `    Verification returned thin content (${contentLength} chars, ${citationsCount} citations, ${numericSignals} numeric signals) — skipping low-signal result`
       );
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, CFG_GAP_QUERY_DELAY_MS));
   }
 
   // Recovery path: if all gap findings were rejected as thin, do 1-2 official-source refreshes.
@@ -923,7 +952,7 @@ async function fillResearchGaps(gaps, country, industry) {
           citations: result.citations || [],
         });
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, CFG_GAP_QUERY_DELAY_MS));
     }
   }
 
@@ -3266,7 +3295,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     const jobResult = await synthesizeWithFallback(job.prompt, job.options);
     competitorRawResults.push(jobResult);
     if (index < competitorJobs.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, CFG_COMPETITOR_SYNTHESIS_DELAY_MS));
     }
   }
   const [r1, r2, r3, r4] = competitorRawResults;
@@ -5306,7 +5335,7 @@ async function applyFinalReviewFixes(
         console.warn(`  [FINAL REVIEW] Unsupported section fix requested: ${section}`);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, CFG_FINAL_FIX_SECTION_DELAY_MS));
     } catch (err) {
       console.warn(`  [FINAL REVIEW] Failed to fix ${section}: ${err.message}`);
       results.push(null);
@@ -5560,6 +5589,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   let lastCoverageScore = 0;
   let previousCoverageScore = 0;
   let bestCoverageScore = 0;
+  let bestCoverageResearchSnapshot = JSON.parse(JSON.stringify(researchData || {}));
   let staleBestCoverageIterations = 0;
   let stagnantCoverageIterations = 0;
   let previousGapSignature = '';
@@ -5597,6 +5627,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       if (lastCoverageScore > bestCoverageScore + 1) {
         bestCoverageScore = lastCoverageScore;
         staleBestCoverageIterations = 0;
+        bestCoverageResearchSnapshot = JSON.parse(JSON.stringify(researchData || {}));
       } else {
         staleBestCoverageIterations++;
       }
@@ -5634,6 +5665,15 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           );
           break;
         }
+        if (bestCoverageScore > 0 && lastCoverageScore + 8 < bestCoverageScore) {
+          console.warn(
+            `  [REVIEW-DEEPEN] Reviewer score dropped sharply (${bestCoverageScore} -> ${lastCoverageScore}). Reverting to best-known research snapshot and stopping cycle.`
+          );
+          if (bestCoverageResearchSnapshot && typeof bestCoverageResearchSnapshot === 'object') {
+            researchData = JSON.parse(JSON.stringify(bestCoverageResearchSnapshot));
+          }
+          break;
+        }
       }
       previousCoverageScore = lastCoverageScore;
       previousGapSignature = currentGapSignature;
@@ -5663,7 +5703,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         country,
         industry,
         pipelineSignal,
-        12
+        CFG_REVIEW_DEEPEN_MAX_QUERIES
       );
 
       if (deepenedResults.length > 0) {
@@ -5713,7 +5753,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     clientContext,
     storyPlan
   );
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await new Promise((resolve) => setTimeout(resolve, CFG_SECTION_SYNTHESIS_DELAY_MS));
   const marketSynthesis = await synthesizeMarket(
     researchData,
     country,
@@ -5721,7 +5761,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     clientContext,
     storyPlan
   );
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await new Promise((resolve) => setTimeout(resolve, CFG_SECTION_SYNTHESIS_DELAY_MS));
   const competitorsSynthesis = await synthesizeCompetitors(
     researchData,
     country,
@@ -6260,7 +6300,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             country,
             industry,
             pipelineSignal,
-            10
+            CFG_FINAL_REVIEW_MAX_QUERIES
           );
 
           if (deepenedResults.length > 0) {
