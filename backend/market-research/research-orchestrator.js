@@ -931,6 +931,48 @@ function parseJsonResponse(text) {
   return JSON.parse(jsonStr);
 }
 
+function truncatePromptText(value, maxChars = 2400) {
+  const cleaned = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  if (!Number.isFinite(maxChars) || maxChars <= 0 || cleaned.length <= maxChars) return cleaned;
+  const sliced = cleaned.slice(0, maxChars);
+  return `${sliced.replace(/\s+\S*$/, '').trim()} …[truncated]`;
+}
+
+function compactResearchEntryForPrompt(entry, options = {}) {
+  const {
+    maxContentChars = 2600,
+    maxCitations = 8,
+    maxStructuredChars = 1200,
+    maxTitleChars = 220,
+  } = options;
+
+  if (!entry || typeof entry !== 'object') return entry;
+  const compact = { ...entry };
+  compact.content = truncatePromptText(compact.content, maxContentChars);
+  compact.name = truncatePromptText(compact.name, maxTitleChars);
+  compact.slideTitle = truncatePromptText(compact.slideTitle, maxTitleChars);
+  compact.description = truncatePromptText(compact.description, maxTitleChars);
+
+  if (Array.isArray(compact.citations)) {
+    compact.citations = compact.citations.slice(0, Math.max(0, maxCitations));
+  }
+  if (compact.structuredData && typeof compact.structuredData === 'object') {
+    const serialized = JSON.stringify(compact.structuredData);
+    compact.structuredData = truncatePromptText(serialized, maxStructuredChars);
+  }
+
+  // Drop heavy/raw fields that do not help synthesis quality but increase token burn.
+  delete compact.rawHtml;
+  delete compact.rawResponse;
+  delete compact.fullText;
+  delete compact.sourceHtml;
+
+  return compact;
+}
+
 /**
  * Detect if JSON text was truncated (unbalanced brackets, unterminated strings)
  */
@@ -1270,13 +1312,15 @@ function canonicalizeMarketSectionKey(rawKey, sectionValue) {
   );
 
   if (
-    /\bmarket\s*size\b|\bgrowth\b|\bcagr\b|\btam\b|\bmarket\s*value\b|\baddressable\b/.test(hint)
+    /\bmarket\s*size\b|\bgrowth\b|\bcagr\b|\btam\b|\bmarket\s*value\b|\baddressable\b|\bsegment\b|\bserviceable\b|\bsam\b/.test(
+      hint
+    )
   ) {
     return 'marketSizeAndGrowth';
   }
 
   if (
-    /\bsupply\b|\bdemand\b|\bconsumption\b|\bproduction\b|\bimport\b|\bexport\b|\bbalance\b/.test(
+    /\bsupply\b|\bdemand\b|\bconsumption\b|\bproduction\b|\bimport\b|\bexport\b|\bbalance\b|\binfrastructure\b|\bgrid\b|\bcapacity\b|\btransmission\b|\bdistribution\b/.test(
       hint
     )
   ) {
@@ -1284,7 +1328,9 @@ function canonicalizeMarketSectionKey(rawKey, sectionValue) {
   }
 
   if (
-    /\bpricing\b|\bprice\b|\btariff\b|\bcost\b|\bbenchmark\b|\beconomics\b|\bmmbtu\b/.test(hint)
+    /\bpricing\b|\bprice\b|\btariff\b|\bcost\b|\bbenchmark\b|\beconomics\b|\bmmbtu\b|\brate\b|\bfee\b/.test(
+      hint
+    )
   ) {
     return 'pricingAndTariffStructures';
   }
@@ -2020,16 +2066,32 @@ async function synthesizeWithFallback(prompt, options = {}) {
  * Mark low-confidence research data with quality labels in the prompt context.
  * Topics with dataQuality "low" or "incomplete" get prefixed so the AI model hedges appropriately.
  */
-function markDataQuality(filteredData) {
+function markDataQuality(filteredData, options = {}) {
+  const {
+    maxTopics = Number.POSITIVE_INFINITY,
+    maxContentChars = 2600,
+    maxCitations = 8,
+    maxStructuredChars = 1200,
+  } = options;
+
   const marked = {};
-  for (const [key, value] of Object.entries(filteredData)) {
+  const entries = Object.entries(filteredData || {});
+  const topicLimit = Number.isFinite(Number(maxTopics))
+    ? Math.max(1, Number(maxTopics))
+    : entries.length;
+  for (const [key, value] of entries.slice(0, topicLimit)) {
+    const compactValue = compactResearchEntryForPrompt(value, {
+      maxContentChars,
+      maxCitations,
+      maxStructuredChars,
+    });
     const quality = value?.dataQuality;
     if (quality === 'low' || quality === 'estimated') {
-      marked[`[ESTIMATED] ${key}`] = value;
+      marked[`[ESTIMATED] ${key}`] = compactValue;
     } else if (quality === 'incomplete') {
-      marked[`[UNVERIFIED] ${key}`] = value;
+      marked[`[UNVERIFIED] ${key}`] = compactValue;
     } else {
-      marked[key] = value;
+      marked[key] = compactValue;
     }
   }
   return marked;
@@ -2271,7 +2333,11 @@ async function synthesizePolicy(researchData, country, industry, clientContext, 
     `    [Policy] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
-  const labeledData = markDataQuality(filteredData);
+  const labeledData = markDataQuality(filteredData, {
+    maxTopics: 4,
+    maxContentChars: 3200,
+    maxCitations: 10,
+  });
   const researchContext = dataAvailable
     ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
 ${JSON.stringify(labeledData, null, 2)}`
@@ -2359,8 +2425,8 @@ Return ONLY valid JSON.`;
       maxTokens: 10240,
       label: 'synthesizePolicy',
       allowArrayNormalization: false,
-      allowTruncationRepair: false,
-      allowRawExtractionFallback: false,
+      allowTruncationRepair: true,
+      allowRawExtractionFallback: true,
       accept: (candidate) => {
         if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
           return { pass: false, reason: 'response is not a JSON object' };
@@ -2534,7 +2600,11 @@ async function synthesizeMarket(researchData, country, industry, clientContext, 
   }`,
   ];
 
-  const labeledData = markDataQuality(filteredData);
+  const labeledData = markDataQuality(filteredData, {
+    maxTopics: 4,
+    maxContentChars: 3400,
+    maxCitations: 10,
+  });
   const researchContext = dataAvailable
     ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
 ${JSON.stringify(labeledData, null, 2)}`
@@ -2626,8 +2696,8 @@ Return ONLY valid JSON.`;
         maxTokens: 16384,
         label: 'synthesizeMarket',
         allowArrayNormalization: false,
-        allowTruncationRepair: false,
-        allowRawExtractionFallback: false,
+        allowTruncationRepair: true,
+        allowRawExtractionFallback: true,
         allowProTiers: false,
         accept: marketAccept,
       });
@@ -2638,8 +2708,8 @@ Return ONLY valid JSON.`;
         maxTokens: 16384,
         label: 'synthesizeMarket',
         allowArrayNormalization: false,
-        allowTruncationRepair: false,
-        allowRawExtractionFallback: false,
+        allowTruncationRepair: true,
+        allowRawExtractionFallback: true,
         allowProTiers: false,
         accept: marketAccept,
       });
@@ -2656,8 +2726,8 @@ HARD CONSTRAINTS:
         maxTokens: 16384,
         label: 'synthesizeMarket',
         allowArrayNormalization: false,
-        allowTruncationRepair: false,
-        allowRawExtractionFallback: false,
+        allowTruncationRepair: true,
+        allowRawExtractionFallback: true,
         accept: marketAccept,
         systemPrompt:
           'You are a strict JSON compiler. Return exactly one JSON object with canonical market keys only.',
@@ -2681,8 +2751,8 @@ ${antiArraySuffix}`;
         maxTokens: 16384,
         label: 'synthesizeMarket',
         allowArrayNormalization: false,
-        allowTruncationRepair: false,
-        allowRawExtractionFallback: false,
+        allowTruncationRepair: true,
+        allowRawExtractionFallback: true,
         accept: marketAccept,
         systemPrompt:
           'Return one valid JSON object only with exact canonical market keys. No markdown, no explanation.',
@@ -2806,7 +2876,11 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
     `    [Competitors] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
-  const labeledData = markDataQuality(filteredData);
+  const labeledData = markDataQuality(filteredData, {
+    maxTopics: 3,
+    maxContentChars: 3200,
+    maxCitations: 10,
+  });
   const researchContext = dataAvailable
     ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
 ${JSON.stringify(labeledData, null, 2)}`
@@ -3093,8 +3167,8 @@ Return JSON with ONLY the caseStudy and maActivity sections:
         maxTokens: 8192,
         label: 'synthesizeCompetitors:japanesePlayers',
         allowArrayNormalization: false,
-        allowTruncationRepair: false,
-        allowRawExtractionFallback: false,
+        allowTruncationRepair: true,
+        allowRawExtractionFallback: true,
         accept: buildCompetitorAccept(['japanesePlayers'], 'japanesePlayers'),
       },
     },
@@ -3104,8 +3178,8 @@ Return JSON with ONLY the caseStudy and maActivity sections:
         maxTokens: 8192,
         label: 'synthesizeCompetitors:localMajor',
         allowArrayNormalization: false,
-        allowTruncationRepair: false,
-        allowRawExtractionFallback: false,
+        allowTruncationRepair: true,
+        allowRawExtractionFallback: true,
         accept: buildCompetitorAccept(['localMajor'], 'localMajor'),
       },
     },
@@ -3115,8 +3189,8 @@ Return JSON with ONLY the caseStudy and maActivity sections:
         maxTokens: 8192,
         label: 'synthesizeCompetitors:foreignPlayers',
         allowArrayNormalization: false,
-        allowTruncationRepair: false,
-        allowRawExtractionFallback: false,
+        allowTruncationRepair: true,
+        allowRawExtractionFallback: true,
         accept: buildCompetitorAccept(['foreignPlayers'], 'foreignPlayers'),
       },
     },
@@ -3126,8 +3200,8 @@ Return JSON with ONLY the caseStudy and maActivity sections:
         maxTokens: 8192,
         label: 'synthesizeCompetitors:caseStudy',
         allowArrayNormalization: false,
-        allowTruncationRepair: false,
-        allowRawExtractionFallback: false,
+        allowTruncationRepair: true,
+        allowRawExtractionFallback: true,
         accept: buildCompetitorAccept(['caseStudy', 'maActivity'], 'caseStudy/maActivity'),
       },
     },
@@ -3543,6 +3617,167 @@ function ensurePartnerAssessment(depth, country, competitors) {
   return out;
 }
 
+function ensureDepthStrategyAndSegments(depth, country) {
+  const out = depth && typeof depth === 'object' ? { ...depth } : {};
+
+  const entryStrategy =
+    out.entryStrategy && typeof out.entryStrategy === 'object' ? { ...out.entryStrategy } : {};
+  const defaultOptions = [
+    {
+      mode: 'Joint Venture',
+      timeline: '6-12 months',
+      investment: 'Stage-gated pilot budget',
+      controlLevel: 'Shared control',
+      pros: ['Fast market access via local relationships', 'Lower upfront capex risk'],
+      cons: ['Shared decision rights can slow execution', 'Requires partner governance discipline'],
+      riskLevel: 'Medium',
+    },
+    {
+      mode: 'Acquisition',
+      timeline: '9-18 months',
+      investment: 'Valuation-led, target dependent',
+      controlLevel: 'High control',
+      pros: [
+        'Immediate installed base and operating team',
+        'Direct access to contracts and permits',
+      ],
+      cons: ['Integration risk and legacy liabilities', 'Higher one-time capital requirement'],
+      riskLevel: 'Medium',
+    },
+    {
+      mode: 'Greenfield',
+      timeline: '12-24 months',
+      investment: 'Full build-out capex',
+      controlLevel: 'Full control',
+      pros: [
+        'Maximum process control and brand consistency',
+        'Can optimize org design from day one',
+      ],
+      cons: ['Slowest time-to-revenue', 'Highest execution and permitting exposure'],
+      riskLevel: 'High',
+    },
+  ];
+  const existingOptions = Array.isArray(entryStrategy.options)
+    ? entryStrategy.options.filter((o) => o && typeof o === 'object')
+    : [];
+  const seenModes = new Set();
+  const mergedOptions = [];
+  for (const option of [...existingOptions, ...defaultOptions]) {
+    const mode = ensureString(option?.mode || '').trim();
+    const dedupeKey = mode.toLowerCase();
+    if (!dedupeKey || seenModes.has(dedupeKey)) continue;
+    seenModes.add(dedupeKey);
+    mergedOptions.push(option);
+    if (mergedOptions.length >= 3) break;
+  }
+  while (mergedOptions.length < 2) mergedOptions.push(defaultOptions[mergedOptions.length]);
+  entryStrategy.slideTitle = ensureString(
+    entryStrategy.slideTitle || `${country} - Entry Strategy Options`
+  );
+  entryStrategy.subtitle = ensureString(
+    entryStrategy.subtitle || 'Choose control level by phase, not all at once'
+  );
+  entryStrategy.options = mergedOptions;
+  if (!entryStrategy.recommendation) {
+    const preferred = ensureString(entryStrategy.options?.[0]?.mode || 'Joint Venture');
+    entryStrategy.recommendation = `${preferred} first, then escalate control after pilot performance and compliance proof points.`;
+  }
+  const defaultHarveyBalls = {
+    criteria: ['Speed', 'Investment', 'Risk', 'Control', 'Local Knowledge'],
+    jv: [4, 4, 3, 2, 5],
+    acquisition: [3, 2, 3, 5, 4],
+    greenfield: [1, 3, 4, 5, 1],
+  };
+  if (!entryStrategy.harveyBalls || typeof entryStrategy.harveyBalls !== 'object') {
+    entryStrategy.harveyBalls = defaultHarveyBalls;
+  } else {
+    const hb = { ...entryStrategy.harveyBalls };
+    hb.criteria =
+      Array.isArray(hb.criteria) && hb.criteria.length >= 3
+        ? hb.criteria
+        : defaultHarveyBalls.criteria;
+    hb.jv = Array.isArray(hb.jv) && hb.jv.length >= 3 ? hb.jv : defaultHarveyBalls.jv;
+    hb.acquisition =
+      Array.isArray(hb.acquisition) && hb.acquisition.length >= 3
+        ? hb.acquisition
+        : defaultHarveyBalls.acquisition;
+    hb.greenfield =
+      Array.isArray(hb.greenfield) && hb.greenfield.length >= 3
+        ? hb.greenfield
+        : defaultHarveyBalls.greenfield;
+    entryStrategy.harveyBalls = hb;
+  }
+  out.entryStrategy = entryStrategy;
+
+  const targetSegments =
+    out.targetSegments && typeof out.targetSegments === 'object' ? { ...out.targetSegments } : {};
+  const existingSegments = Array.isArray(targetSegments.segments)
+    ? targetSegments.segments.filter((s) => s && typeof s === 'object')
+    : [];
+  const defaultSegments = [
+    {
+      name: 'Power and gas operators',
+      size: 'To be validated',
+      marketIntensity: 'High',
+      decisionMaker: 'Operations and asset leadership',
+      priority: 5,
+    },
+    {
+      name: 'Industrial energy-intensive users',
+      size: 'To be validated',
+      marketIntensity: 'Medium',
+      decisionMaker: 'CFO / COO',
+      priority: 4,
+    },
+    {
+      name: 'Grid and infrastructure service buyers',
+      size: 'To be validated',
+      marketIntensity: 'Medium',
+      decisionMaker: 'Engineering and procurement teams',
+      priority: 3,
+    },
+  ];
+  const mergedSegments = [];
+  const seenSegments = new Set();
+  for (const segment of [...existingSegments, ...defaultSegments]) {
+    const name = ensureString(segment?.name || '').trim();
+    const dedupeKey = name.toLowerCase();
+    if (!dedupeKey || seenSegments.has(dedupeKey)) continue;
+    seenSegments.add(dedupeKey);
+    mergedSegments.push(segment);
+    if (mergedSegments.length >= 4) break;
+  }
+  if (mergedSegments.length === 0) mergedSegments.push(defaultSegments[0]);
+  targetSegments.slideTitle = ensureString(
+    targetSegments.slideTitle || `${country} - Target Customer Segments`
+  );
+  targetSegments.subtitle = ensureString(
+    targetSegments.subtitle || 'Prioritize buyers with immediate compliance and cost pressure'
+  );
+  targetSegments.segments = mergedSegments;
+  if (!Array.isArray(targetSegments.topTargets)) {
+    const partners = Array.isArray(out.partnerAssessment?.partners)
+      ? out.partnerAssessment.partners
+      : [];
+    targetSegments.topTargets = partners.slice(0, 3).map((partner) => ({
+      company: ensureString(partner?.name || ''),
+      website:
+        ensureString(partner?.website || '').trim() ||
+        `https://www.google.com/search?q=${encodeURIComponent(ensureString(partner?.name || 'target company'))}+official+website`,
+      industry: ensureString(partner?.type || 'Energy services'),
+      annualSpend: null,
+      location: null,
+    }));
+  }
+  if (!targetSegments.goToMarketApproach) {
+    targetSegments.goToMarketApproach =
+      'Sequence by account readiness: prove value in 2-3 lighthouse accounts, then scale through partner-led replication in similar buyer clusters.';
+  }
+  out.targetSegments = targetSegments;
+
+  return out;
+}
+
 function ensureSummaryCompleteness(summaryResult, context) {
   const { country, policy, market, competitors, researchData, existingDepth, existingSummary } =
     context;
@@ -3559,6 +3794,7 @@ function ensureSummaryCompleteness(summaryResult, context) {
   );
   result.depth = ensureImplementationRoadmap(canonicalDepth, country);
   result.depth = ensurePartnerAssessment(result.depth, country, competitors);
+  result.depth = ensureDepthStrategyAndSegments(result.depth, country);
   const summary = canonicalSummary;
   const evidence = collectSummaryEvidence(policy, market, competitors, researchData);
   const existingInsights = Array.isArray(summary.keyInsights) ? summary.keyInsights : [];
@@ -3768,8 +4004,8 @@ Return ONLY valid JSON.`;
     maxTokens: 16384,
     label: 'synthesizeSummary',
     allowArrayNormalization: false,
-    allowTruncationRepair: false,
-    allowRawExtractionFallback: false,
+    allowTruncationRepair: true,
+    allowRawExtractionFallback: true,
     accept: (candidate) => {
       if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
         return { pass: false, reason: 'summary response is not a JSON object' };
@@ -4197,8 +4433,8 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       maxTokens: 16384,
       label: 'reSynthesize',
       allowArrayNormalization: false,
-      allowTruncationRepair: false,
-      allowRawExtractionFallback: false,
+      allowTruncationRepair: true,
+      allowRawExtractionFallback: true,
       accept: (candidate) => {
         if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
           return { pass: false, reason: 'response is not a JSON object' };
@@ -4482,7 +4718,8 @@ Return ONLY valid JSON.`;
 
   try {
     const result = await callGeminiPro(reviewPrompt, {
-      temperature: 0.1,
+      // Keep final review deterministic; reviewer variance here causes costly rework churn.
+      temperature: 0,
       maxTokens: 8192,
       jsonMode: true,
     });
@@ -5766,6 +6003,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     let previousFinalCoherence = 0;
     let previousIssueSignature = '';
     let stagnantFinalReviewIterations = 0;
+    let lastCleanReviewSnapshot = null;
 
     try {
       while (finalReviewIteration < FINAL_REVIEW_MAX_ITERATIONS) {
@@ -5842,6 +6080,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         // are bounded. This avoids excessive churn on noisy reviewer outputs.
         // If we just fixed sections, enforce two extra clean validation passes.
         if (reviewClean) {
+          lastCleanReviewSnapshot = JSON.parse(JSON.stringify(finalReview));
           if (verificationPassesRemaining > 0) {
             console.log(
               `  [FINAL REVIEW] Clean verification pass (${3 - verificationPassesRemaining}/2)`
@@ -5859,6 +6098,41 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             `  [FINAL REVIEW] Coherence ${lastCoherenceScore}/100 with critical=${criticalCount}, major=${majorCount}, openGaps=${reviewOpenGaps}. Done.`
           );
           break;
+        }
+
+        if (!reviewClean && verificationPassesRemaining > 0 && lastCleanReviewSnapshot) {
+          const cleanCritical = (lastCleanReviewSnapshot.issues || []).filter(
+            (i) => i?.severity === 'critical'
+          ).length;
+          const cleanMajor = (lastCleanReviewSnapshot.issues || []).filter(
+            (i) => i?.severity === 'major'
+          ).length;
+          const cleanOpenGaps = Array.isArray(lastCleanReviewSnapshot?.researchGaps)
+            ? lastCleanReviewSnapshot.researchGaps.length
+            : 0;
+          const likelyReviewerNoise =
+            lastCoherenceScore >= FINAL_REVIEW_TARGET_SCORE - 10 &&
+            criticalCount <= cleanCritical + 1 &&
+            majorCount <= Math.max(cleanMajor + 1, FINAL_REVIEW_MAX_MAJOR_ISSUES + 1) &&
+            reviewOpenGaps <= cleanOpenGaps + 1;
+          if (likelyReviewerNoise) {
+            verificationPassesRemaining--;
+            console.warn(
+              `  [FINAL REVIEW] Verification drift detected (clean baseline: critical=${cleanCritical}, major=${cleanMajor}; current: critical=${criticalCount}, major=${majorCount}). Treating as reviewer noise.`
+            );
+            if (verificationPassesRemaining === 0) {
+              countryAnalysis.finalReview = lastCleanReviewSnapshot;
+              lastCoherenceScore = normalizeNumericScore(
+                lastCleanReviewSnapshot?.coherenceScore,
+                lastCoherenceScore
+              );
+              console.log(
+                `  [FINAL REVIEW] Accepted stable clean baseline after verification. Coherence ${lastCoherenceScore}/100.`
+              );
+              break;
+            }
+            continue;
+          }
         }
 
         // Exit: no actionable issues despite low score
@@ -5958,6 +6232,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           );
           // Hard rule: after each fix, run at least 2 additional review passes.
           verificationPassesRemaining = Math.max(verificationPassesRemaining, 2);
+          lastCleanReviewSnapshot = null;
         }
       }
 
