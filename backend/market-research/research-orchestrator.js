@@ -1642,9 +1642,9 @@ function normalizePolicySynthesisResult(result) {
 }
 
 /**
- * Synthesize with 5-tier fallback chain:
+ * Synthesize with fallback chain:
  * 1. Gemini jsonMode → 2. Truncation repair → 3. Gemini no-jsonMode + boosted tokens
- * → 4. GeminiPro jsonMode → 5. GeminiPro no-jsonMode
+ * → optional 4. GeminiPro jsonMode → optional 5. GeminiPro no-jsonMode
  */
 async function synthesizeWithFallback(prompt, options = {}) {
   const {
@@ -1655,6 +1655,7 @@ async function synthesizeWithFallback(prompt, options = {}) {
     allowArrayNormalization = false,
     allowTruncationRepair = false,
     allowRawExtractionFallback = true,
+    allowProTiers = true,
     systemPrompt = null,
   } = options;
   const strictSuffix =
@@ -1818,86 +1819,88 @@ async function synthesizeWithFallback(prompt, options = {}) {
     console.warn(`  [${label}] Tier 3 failed: ${err3?.message}`);
   }
 
-  // Tier 4: callGeminiPro jsonMode (stronger model)
-  try {
-    const result = await callGeminiPro(prompt, {
-      maxTokens,
-      jsonMode,
-      temperature: 0.2,
-      ...(systemPrompt ? { systemPrompt } : {}),
-    });
-    const text = typeof result === 'string' ? result : result?.content || '';
+  if (allowProTiers) {
+    // Tier 4: callGeminiPro jsonMode (stronger model)
     try {
-      const parsed = parseJsonResponse(text);
-      if (parsed) {
-        const accepted = applySemanticGate(parsed, 'Tier 4 (GeminiPro jsonMode)');
-        if (accepted) {
-          console.log(`  [${label}] Tier 4 (GeminiPro jsonMode) succeeded`);
-          return accepted;
+      const result = await callGeminiPro(prompt, {
+        maxTokens,
+        jsonMode,
+        temperature: 0.2,
+        ...(systemPrompt ? { systemPrompt } : {}),
+      });
+      const text = typeof result === 'string' ? result : result?.content || '';
+      try {
+        const parsed = parseJsonResponse(text);
+        if (parsed) {
+          const accepted = applySemanticGate(parsed, 'Tier 4 (GeminiPro jsonMode)');
+          if (accepted) {
+            console.log(`  [${label}] Tier 4 (GeminiPro jsonMode) succeeded`);
+            return accepted;
+          }
+        }
+      } catch (parseErr4) {
+        console.warn(`  [${label}] Tier 4 parse failed: ${parseErr4?.message}`);
+        if (allowRawExtractionFallback) {
+          const extractResult = extractJsonFromContent(text);
+          if (extractResult.status === 'success' && extractResult.data) {
+            const accepted = applySemanticGate(extractResult.data, 'Tier 4 (extract)');
+            if (accepted) {
+              console.log(`  [${label}] Tier 4 (extract) succeeded`);
+              return accepted;
+            }
+          }
         }
       }
-    } catch (parseErr4) {
-      console.warn(`  [${label}] Tier 4 parse failed: ${parseErr4?.message}`);
+    } catch (err4) {
+      console.warn(`  [${label}] Tier 4 failed: ${err4?.message}`);
+    }
+
+    // Tier 5: callGeminiPro NO jsonMode (last resort, highest capability)
+    try {
+      const boostedTokens = Math.min(Math.round(maxTokens * 1.5), 32768);
+      const result = await callGeminiPro(prompt + strictSuffix, {
+        maxTokens: boostedTokens,
+        jsonMode: false,
+        temperature: 0.1,
+        ...(systemPrompt ? { systemPrompt } : {}),
+      });
+      const text = typeof result === 'string' ? result : result?.content || '';
+      try {
+        const parsed = parseJsonResponse(text);
+        if (parsed) {
+          const accepted = applySemanticGate(parsed, 'Tier 5 (GeminiPro no-jsonMode strict parse)');
+          if (accepted) {
+            console.log(`  [${label}] Tier 5 (GeminiPro no-jsonMode strict parse) succeeded`);
+            return accepted;
+          }
+        }
+      } catch (parseErr5) {
+        console.warn(`  [${label}] Tier 5 strict parse failed: ${parseErr5?.message}`);
+      }
       if (allowRawExtractionFallback) {
         const extractResult = extractJsonFromContent(text);
         if (extractResult.status === 'success' && extractResult.data) {
-          const accepted = applySemanticGate(extractResult.data, 'Tier 4 (extract)');
+          const accepted = applySemanticGate(extractResult.data, 'Tier 5 (GeminiPro no-jsonMode)');
           if (accepted) {
-            console.log(`  [${label}] Tier 4 (extract) succeeded`);
+            console.log(`  [${label}] Tier 5 (GeminiPro no-jsonMode) succeeded`);
             return accepted;
           }
         }
-      }
-    }
-  } catch (err4) {
-    console.warn(`  [${label}] Tier 4 failed: ${err4?.message}`);
-  }
-
-  // Tier 5: callGeminiPro NO jsonMode (last resort, highest capability)
-  try {
-    const boostedTokens = Math.min(Math.round(maxTokens * 1.5), 32768);
-    const result = await callGeminiPro(prompt + strictSuffix, {
-      maxTokens: boostedTokens,
-      jsonMode: false,
-      temperature: 0.1,
-      ...(systemPrompt ? { systemPrompt } : {}),
-    });
-    const text = typeof result === 'string' ? result : result?.content || '';
-    try {
-      const parsed = parseJsonResponse(text);
-      if (parsed) {
-        const accepted = applySemanticGate(parsed, 'Tier 5 (GeminiPro no-jsonMode strict parse)');
-        if (accepted) {
-          console.log(`  [${label}] Tier 5 (GeminiPro no-jsonMode strict parse) succeeded`);
-          return accepted;
-        }
-      }
-    } catch (parseErr5) {
-      console.warn(`  [${label}] Tier 5 strict parse failed: ${parseErr5?.message}`);
-    }
-    if (allowRawExtractionFallback) {
-      const extractResult = extractJsonFromContent(text);
-      if (extractResult.status === 'success' && extractResult.data) {
-        const accepted = applySemanticGate(extractResult.data, 'Tier 5 (GeminiPro no-jsonMode)');
-        if (accepted) {
-          console.log(`  [${label}] Tier 5 (GeminiPro no-jsonMode) succeeded`);
-          return accepted;
-        }
-      }
-      if (allowTruncationRepair && text && isJsonTruncated(text)) {
-        const repaired = repairTruncatedJson(text);
-        const repairResult = extractJsonFromContent(repaired);
-        if (repairResult.status === 'success' && repairResult.data) {
-          const accepted = applySemanticGate(repairResult.data, 'Tier 5 (GeminiPro repaired)');
-          if (accepted) {
-            console.log(`  [${label}] Tier 5 (GeminiPro repaired) succeeded`);
-            return accepted;
+        if (allowTruncationRepair && text && isJsonTruncated(text)) {
+          const repaired = repairTruncatedJson(text);
+          const repairResult = extractJsonFromContent(repaired);
+          if (repairResult.status === 'success' && repairResult.data) {
+            const accepted = applySemanticGate(repairResult.data, 'Tier 5 (GeminiPro repaired)');
+            if (accepted) {
+              console.log(`  [${label}] Tier 5 (GeminiPro repaired) succeeded`);
+              return accepted;
+            }
           }
         }
       }
+    } catch (err5) {
+      console.error(`  [${label}] Tier 5 (final) failed: ${err5?.message}`);
     }
-  } catch (err5) {
-    console.error(`  [${label}] Tier 5 (final) failed: ${err5?.message}`);
   }
 
   return null;
@@ -2515,6 +2518,7 @@ Return ONLY valid JSON.`;
         allowArrayNormalization: false,
         allowTruncationRepair: false,
         allowRawExtractionFallback: false,
+        allowProTiers: false,
         accept: marketAccept,
       });
     } else if (attempt === 1) {
@@ -2526,6 +2530,7 @@ Return ONLY valid JSON.`;
         allowArrayNormalization: false,
         allowTruncationRepair: false,
         allowRawExtractionFallback: false,
+        allowProTiers: false,
         accept: marketAccept,
       });
     } else if (attempt === 2) {
