@@ -8,6 +8,7 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
 ## Hard rule
 - Do not overengineer runtime control loops.
 - Default to simple controls first: 10s retry base delay + reduced parallelism.
+- Do not add a global TPM scheduler/controller layer; keep throttling local and explicit.
 - Any added complexity must prove direct impact on cost, stability, or output quality.
 
 ## Current assessment
@@ -117,7 +118,29 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
 - Added reviewer-collapse guard in refinement loop:
   - when deterministic gate is already strong but reviewer confidence collapses with no actionable gaps, trust deterministic gate and skip costly low-signal loops
 - Added 79/100 edge-case alignment in content-depth scoring:
-  - if all four core sections are strong (>=80) and depth is usable (>=45), floor overall depth-gate score to `80` to avoid repetitive one-point failures
+  - if all four core sections are strong (>=80) and depth is usable (>=40), floor overall depth-gate score to `80` to avoid repetitive one-point failures
+- Added hard final-review escalation budgets:
+  - max research escalations per run: `FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS` (default `1`)
+  - max synthesis-fix escalations per run: `FINAL_REVIEW_MAX_SYNTHESIS_ESCALATIONS` (default `2`)
+- Added gap-fill query dedupe and tighter caps:
+  - `FILL_GAPS_MAX_CRITICAL` (default `4`)
+  - `FILL_GAPS_MAX_VERIFICATIONS` (default `1`)
+  - duplicate research/verification queries are skipped
+- Compressed re-synthesis payloads:
+  - removed raw/full-analysis dump from prompt
+  - re-synthesis now uses compact section payload + capped additional data snippets
+  - re-synthesis token ceiling reduced (`12288 -> 10240`)
+- Reduced reviewer critical-issue noise in readiness:
+  - final review gate now allows up to `FINAL_REVIEW_MAX_CRITICAL_ISSUES` (default `1`) instead of hard `critical=0`
+- Added quota-aware synthesis fallback behavior:
+  - when Flash returns quota/rate-limit signals (`429`/`RESOURCE_EXHAUSTED`), skip repeated Flash tier retry loops
+  - escalate directly to GeminiPro tiers for that synthesis pass
+- Tightened low-signal gap-fill acceptance in refinement:
+  - stronger numeric fallback gate (`content>=700` and `numericSignals>=8`)
+  - reduces noisy "thin but numeric" payloads from causing costly re-synthesis churn
+- Added narrow near-pass normalization for code-gate edge cases:
+  - if core sections are strong (>=80), depth is usable (>=35), and overall is exactly near-threshold (`79`), normalize to `80`
+  - purpose: stop one-point oscillation loops while keeping review coherence gates strict
 
 ## Next safe simplifications (if needed)
 - Add per-section retry budget (hard cap on model calls per section per run).

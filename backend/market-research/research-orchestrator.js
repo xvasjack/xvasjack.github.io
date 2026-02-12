@@ -24,6 +24,14 @@ function parsePositiveIntEnv(name, fallback) {
   return parsed;
 }
 
+function parseNonNegativeIntEnv(name, fallback) {
+  const raw = ensureString(process.env[name], '').trim();
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return parsed;
+}
+
 function parseBoundedIntEnv(name, fallback, maxValue) {
   const parsed = parsePositiveIntEnv(name, fallback);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -46,6 +54,20 @@ const CFG_DEEPEN_QUERY_CONCURRENCY = parseBoundedIntEnv('DEEPEN_QUERY_CONCURRENC
 const CFG_DEEPEN_BATCH_DELAY_MS = parseBoundedIntEnv('DEEPEN_BATCH_DELAY_MS', 3000, 15000);
 const CFG_REVIEW_DEEPEN_MAX_QUERIES = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_QUERIES', 6, 10);
 const CFG_FINAL_REVIEW_MAX_QUERIES = parseBoundedIntEnv('FINAL_REVIEW_MAX_QUERIES', 3, 8);
+const CFG_FILL_GAPS_MAX_CRITICAL = parseBoundedIntEnv('FILL_GAPS_MAX_CRITICAL', 4, 6);
+const CFG_FILL_GAPS_MAX_VERIFICATIONS = parseBoundedIntEnv('FILL_GAPS_MAX_VERIFICATIONS', 1, 3);
+const CFG_SYNTHESIS_TOPIC_MAX_CHARS = parseBoundedIntEnv('SYNTHESIS_TOPIC_MAX_CHARS', 1600, 2400);
+const CFG_SYNTHESIS_TIER_DELAY_MS = parseBoundedIntEnv('SYNTHESIS_TIER_DELAY_MS', 2000, 10000);
+const CFG_FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS = parseBoundedIntEnv(
+  'FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS',
+  1,
+  2
+);
+const CFG_FINAL_REVIEW_MAX_SYNTHESIS_ESCALATIONS = parseBoundedIntEnv(
+  'FINAL_REVIEW_MAX_SYNTHESIS_ESCALATIONS',
+  2,
+  3
+);
 const CFG_SECTION_SYNTHESIS_DELAY_MS = parseBoundedIntEnv(
   'SECTION_SYNTHESIS_DELAY_MS',
   10000,
@@ -872,6 +894,7 @@ Return ONLY valid JSON.`;
 async function fillResearchGaps(gaps, country, industry) {
   console.log(`  [Filling research gaps for ${country}...]`);
   const additionalData = { gapResearch: [], verificationResearch: [] };
+  const seenQueries = new Set();
   const MIN_GAP_FINDING_CHARS = 900;
   const MIN_VERIFY_FINDING_CHARS = 450;
   const MIN_FINDING_CITATIONS = 1;
@@ -885,8 +908,8 @@ async function fillResearchGaps(gaps, country, industry) {
 
   // Research critical gaps with Gemini
   const criticalGaps = gaps.criticalGaps || [];
-  for (const gap of criticalGaps.slice(0, 6)) {
-    // Limit to 6 most critical to improve convergence on low-score runs
+  for (const gap of criticalGaps.slice(0, CFG_FILL_GAPS_MAX_CRITICAL)) {
+    // Keep gap fills tight to avoid repeated low-yield token burn.
     const scopedQuery = sanitizeResearchQuery(
       gap.searchQuery,
       country,
@@ -894,6 +917,9 @@ async function fillResearchGaps(gaps, country, industry) {
       gap.area || 'general'
     );
     if (!scopedQuery) continue;
+    const queryKey = scopedQuery.trim().toLowerCase();
+    if (!queryKey || seenQueries.has(queryKey)) continue;
+    seenQueries.add(queryKey);
     console.log(`    Gap search: ${gap.gap.substring(0, 50)}...`);
 
     const result = await callGeminiResearch(scopedQuery, country, industry);
@@ -903,7 +929,7 @@ async function fillResearchGaps(gaps, country, industry) {
     const usableGapFinding =
       contentLength >= MIN_GAP_FINDING_CHARS ||
       citationsCount >= MIN_FINDING_CITATIONS ||
-      (contentLength >= 600 && numericSignals >= 4);
+      (contentLength >= 700 && numericSignals >= 8);
     if (result.content && usableGapFinding) {
       additionalData.gapResearch.push({
         area: gap.area,
@@ -922,10 +948,13 @@ async function fillResearchGaps(gaps, country, industry) {
 
   // Verify questionable claims with Gemini
   const toVerify = gaps.dataToVerify || [];
-  for (const item of toVerify.slice(0, 2)) {
-    // Limit to 2 verifications
+  for (const item of toVerify.slice(0, CFG_FILL_GAPS_MAX_VERIFICATIONS)) {
+    // Keep verifications narrow; they are often low-signal after first pass.
     const scopedQuery = sanitizeResearchQuery(item.searchQuery, country, industry, 'verification');
     if (!scopedQuery) continue;
+    const queryKey = scopedQuery.trim().toLowerCase();
+    if (!queryKey || seenQueries.has(queryKey)) continue;
+    seenQueries.add(queryKey);
     console.log(`    Verify: ${item.claim.substring(0, 50)}...`);
 
     const result = await callGeminiResearch(scopedQuery, country, industry);
@@ -963,10 +992,18 @@ async function fillResearchGaps(gaps, country, industry) {
       );
       if (!scopedQuery) continue;
       const recoveryQuery = `${scopedQuery} official government report regulator annual report`;
+      const queryKey = recoveryQuery.trim().toLowerCase();
+      if (!queryKey || seenQueries.has(queryKey)) continue;
+      seenQueries.add(queryKey);
       const result = await callGeminiResearch(recoveryQuery, country, industry);
       const contentLength = (result.content || '').length;
       const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
-      if (result.content && (contentLength >= 500 || citationsCount >= 1)) {
+      const numericSignals = numericSignalCount(result.content || '');
+      const usableRecoveryFinding =
+        contentLength >= MIN_GAP_FINDING_CHARS ||
+        citationsCount >= MIN_FINDING_CITATIONS ||
+        (contentLength >= 700 && numericSignals >= 8);
+      if (result.content && usableRecoveryFinding) {
         additionalData.gapResearch.push({
           area: gap.area,
           gap: `${gap.gap} (recovery)`,
@@ -974,6 +1011,10 @@ async function fillResearchGaps(gaps, country, industry) {
           findings: result.content,
           citations: result.citations || [],
         });
+      } else if (result.content) {
+        console.warn(
+          `    Recovery query thin (${contentLength} chars, ${citationsCount} citations, ${numericSignals} numeric signals) — skipping`
+        );
       }
       await new Promise((resolve) => setTimeout(resolve, CFG_GAP_QUERY_DELAY_MS));
     }
@@ -1995,6 +2036,23 @@ async function synthesizeWithFallback(prompt, options = {}) {
     }
   }
 
+  function isRateLimitOrQuotaError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    return (
+      message.includes('429') ||
+      message.includes('resource_exhausted') ||
+      message.includes('quota exceeded') ||
+      message.includes('rate limit')
+    );
+  }
+
+  let flashQuotaLimited = false;
+
+  async function waitBeforeNextTier() {
+    if (CFG_SYNTHESIS_TIER_DELAY_MS <= 0) return;
+    await new Promise((resolve) => setTimeout(resolve, CFG_SYNTHESIS_TIER_DELAY_MS));
+  }
+
   // Tier 1: callGemini jsonMode (fast path)
   try {
     const result = await callGemini(prompt, {
@@ -2045,60 +2103,76 @@ async function synthesizeWithFallback(prompt, options = {}) {
       }
     }
   } catch (geminiErr) {
+    if (isRateLimitOrQuotaError(geminiErr)) {
+      flashQuotaLimited = true;
+    }
     console.warn(`  [${label}] Tier 1 Gemini call failed: ${geminiErr?.message}`);
   }
 
-  // Tier 3: callGemini NO jsonMode + boosted tokens (let model finish naturally)
-  try {
-    const boostedTokens = Math.min(Math.round(maxTokens * 1.5), 32768);
-    const result = await callGemini(prompt + strictSuffix, {
-      maxTokens: boostedTokens,
-      jsonMode: false,
-      temperature: 0.1,
-      ...(systemPrompt ? { systemPrompt } : {}),
-    });
-    const text = typeof result === 'string' ? result : result?.content || '';
+  if (!flashQuotaLimited) {
+    await waitBeforeNextTier();
+
+    // Tier 3: callGemini NO jsonMode + boosted tokens (let model finish naturally)
     try {
-      const parsed = parseJsonResponse(text);
-      if (parsed) {
-        const accepted = applySemanticGate(parsed, 'Tier 3 (Gemini no-jsonMode strict parse)');
-        if (accepted) {
-          console.log(`  [${label}] Tier 3 (Gemini no-jsonMode strict parse) succeeded`);
-          return accepted;
-        }
-      }
-    } catch (parseErr3) {
-      console.warn(`  [${label}] Tier 3 strict parse failed: ${parseErr3?.message}`);
-    }
-    if (allowRawExtractionFallback) {
-      const extractResult = extractJsonFromContent(text);
-      if (extractResult.status === 'success' && extractResult.data) {
-        const accepted = applySemanticGate(
-          extractResult.data,
-          'Tier 3 (Gemini no-jsonMode, boosted tokens)'
-        );
-        if (accepted) {
-          console.log(`  [${label}] Tier 3 (Gemini no-jsonMode, boosted tokens) succeeded`);
-          return accepted;
-        }
-      }
-      if (allowTruncationRepair && text && isJsonTruncated(text)) {
-        const repaired = repairTruncatedJson(text);
-        const repairResult = extractJsonFromContent(repaired);
-        if (repairResult.status === 'success' && repairResult.data) {
-          const accepted = applySemanticGate(repairResult.data, 'Tier 3 (repaired)');
+      const boostedTokens = Math.min(Math.round(maxTokens * 1.5), 32768);
+      const result = await callGemini(prompt + strictSuffix, {
+        maxTokens: boostedTokens,
+        jsonMode: false,
+        temperature: 0.1,
+        ...(systemPrompt ? { systemPrompt } : {}),
+      });
+      const text = typeof result === 'string' ? result : result?.content || '';
+      try {
+        const parsed = parseJsonResponse(text);
+        if (parsed) {
+          const accepted = applySemanticGate(parsed, 'Tier 3 (Gemini no-jsonMode strict parse)');
           if (accepted) {
-            console.log(`  [${label}] Tier 3 (repaired) succeeded`);
+            console.log(`  [${label}] Tier 3 (Gemini no-jsonMode strict parse) succeeded`);
             return accepted;
           }
         }
+      } catch (parseErr3) {
+        console.warn(`  [${label}] Tier 3 strict parse failed: ${parseErr3?.message}`);
       }
+      if (allowRawExtractionFallback) {
+        const extractResult = extractJsonFromContent(text);
+        if (extractResult.status === 'success' && extractResult.data) {
+          const accepted = applySemanticGate(
+            extractResult.data,
+            'Tier 3 (Gemini no-jsonMode, boosted tokens)'
+          );
+          if (accepted) {
+            console.log(`  [${label}] Tier 3 (Gemini no-jsonMode, boosted tokens) succeeded`);
+            return accepted;
+          }
+        }
+        if (allowTruncationRepair && text && isJsonTruncated(text)) {
+          const repaired = repairTruncatedJson(text);
+          const repairResult = extractJsonFromContent(repaired);
+          if (repairResult.status === 'success' && repairResult.data) {
+            const accepted = applySemanticGate(repairResult.data, 'Tier 3 (repaired)');
+            if (accepted) {
+              console.log(`  [${label}] Tier 3 (repaired) succeeded`);
+              return accepted;
+            }
+          }
+        }
+      }
+    } catch (err3) {
+      if (isRateLimitOrQuotaError(err3)) {
+        flashQuotaLimited = true;
+      }
+      console.warn(`  [${label}] Tier 3 failed: ${err3?.message}`);
     }
-  } catch (err3) {
-    console.warn(`  [${label}] Tier 3 failed: ${err3?.message}`);
+  } else {
+    console.warn(`  [${label}] Skipping Tier 3 Flash retry due quota/rate-limit signal`);
   }
 
   if (allowProTiers) {
+    if (flashQuotaLimited) {
+      console.log(`  [${label}] Flash quota-limited — escalating directly to GeminiPro tiers`);
+    }
+    await waitBeforeNextTier();
     // Tier 4: callGeminiPro jsonMode (stronger model)
     try {
       const result = await callGeminiPro(prompt, {
@@ -2134,6 +2208,7 @@ async function synthesizeWithFallback(prompt, options = {}) {
       console.warn(`  [${label}] Tier 4 failed: ${err4?.message}`);
     }
 
+    await waitBeforeNextTier();
     // Tier 5: callGeminiPro NO jsonMode (last resort, highest capability)
     try {
       const boostedTokens = Math.min(Math.round(maxTokens * 1.5), 32768);
@@ -2460,7 +2535,7 @@ async function synthesizePolicy(researchData, country, industry, clientContext, 
 
   const labeledData = markDataQuality(filteredData, {
     maxTopics: 4,
-    maxContentChars: 2200,
+    maxContentChars: CFG_SYNTHESIS_TOPIC_MAX_CHARS,
     maxCitations: 10,
   });
   const researchContext = dataAvailable
@@ -2727,7 +2802,7 @@ async function synthesizeMarket(researchData, country, industry, clientContext, 
 
   const labeledData = markDataQuality(filteredData, {
     maxTopics: 4,
-    maxContentChars: 2200,
+    maxContentChars: CFG_SYNTHESIS_TOPIC_MAX_CHARS,
     maxCitations: 10,
   });
   const researchContext = dataAvailable
@@ -2818,7 +2893,7 @@ Return ONLY valid JSON.`;
     if (attempt === 0) {
       // Normal synthesis (Flash)
       currentResult = await synthesizeWithFallback(prompt, {
-        maxTokens: 16384,
+        maxTokens: 12288,
         label: 'synthesizeMarket',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -2830,7 +2905,7 @@ Return ONLY valid JSON.`;
       // Flash with anti-array prompt
       console.log(`  [synthesizeMarket] Retry ${attempt}: Flash with anti-array prompt`);
       currentResult = await synthesizeWithFallback(prompt + antiArraySuffix, {
-        maxTokens: 16384,
+        maxTokens: 12288,
         label: 'synthesizeMarket',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -2854,7 +2929,7 @@ ${JSON.stringify(labeledData, null, 2)}
 
 ${antiArraySuffix}`;
       currentResult = await synthesizeWithFallback(minimalPrompt, {
-        maxTokens: 16384,
+        maxTokens: 12288,
         label: 'synthesizeMarket',
         allowArrayNormalization: false,
         allowTruncationRepair: true,
@@ -2985,7 +3060,7 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
 
   const labeledData = markDataQuality(filteredData, {
     maxTopics: 3,
-    maxContentChars: 2200,
+    maxContentChars: CFG_SYNTHESIS_TOPIC_MAX_CHARS,
     maxCitations: 10,
   });
   const researchContext = dataAvailable
@@ -4468,8 +4543,17 @@ function validateContentDepth(synthesis) {
   const strongCoreSections = ['policy', 'market', 'competitors', 'summary'].filter(
     (section) => scores[section] >= 80
   ).length;
-  if (strongCoreSections >= 4 && scores.depth >= 45 && scores.overall < 80) {
-    scores.overall = 80;
+  if (strongCoreSections >= 4 && scores.depth >= 40 && scores.overall < CFG_MIN_CONFIDENCE_SCORE) {
+    scores.overall = CFG_MIN_CONFIDENCE_SCORE;
+  } else if (
+    strongCoreSections >= 4 &&
+    scores.depth >= 35 &&
+    scores.overall >= CFG_MIN_CONFIDENCE_SCORE - 1 &&
+    scores.overall < CFG_MIN_CONFIDENCE_SCORE
+  ) {
+    // Narrow near-pass normalization: prevent repeated expensive churn on stable 79/100 outputs
+    // when core sections are already strong and depth remains usable.
+    scores.overall = CFG_MIN_CONFIDENCE_SCORE;
   }
 
   const valid = failures.length === 0;
@@ -4494,6 +4578,28 @@ async function reSynthesize(
   failures
 ) {
   console.log(`  [Re-synthesizing ${country} with additional data...]`);
+  const compactOriginalSynthesis = {
+    policy: originalSynthesis?.policy || {},
+    market: originalSynthesis?.market || {},
+    competitors: originalSynthesis?.competitors || {},
+    depth: originalSynthesis?.depth || {},
+    summary: originalSynthesis?.summary || {},
+  };
+  const compactAdditionalData = {
+    gapResearch: (additionalData?.gapResearch || []).slice(0, 4).map((entry) => ({
+      area: entry?.area || null,
+      gap: entry?.gap || null,
+      query: entry?.query || null,
+      findings: truncatePromptText(entry?.findings || '', 1000),
+      citations: Array.isArray(entry?.citations) ? entry.citations.slice(0, 6) : [],
+    })),
+    verificationResearch: (additionalData?.verificationResearch || []).slice(0, 2).map((entry) => ({
+      claim: entry?.claim || null,
+      query: entry?.query || null,
+      findings: truncatePromptText(entry?.findings || '', 800),
+      citations: Array.isArray(entry?.citations) ? entry.citations.slice(0, 6) : [],
+    })),
+  };
 
   const prompt = `You are improving a market analysis with NEW DATA that fills previous gaps.
 
@@ -4516,15 +4622,15 @@ Format: {"categories": ["2020","2021","2022","2023"], "series": [{"name":"Catego
 }
 
 ORIGINAL ANALYSIS:
-${JSON.stringify(originalSynthesis, null, 2)}
+${JSON.stringify(compactOriginalSynthesis, null, 2)}
 
 NEW DATA TO INCORPORATE:
 
 GAP RESEARCH (fills missing information):
-${JSON.stringify(additionalData.gapResearch, null, 2)}
+${JSON.stringify(compactAdditionalData.gapResearch, null, 2)}
 
 VERIFICATION RESEARCH (confirms or corrects claims):
-${JSON.stringify(additionalData.verificationResearch, null, 2)}
+${JSON.stringify(compactAdditionalData.verificationResearch, null, 2)}
 
 DO NOT fabricate data. DO NOT estimate from training knowledge. Use null or empty arrays for missing data.
 
@@ -4562,7 +4668,7 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 
   try {
     const newSynthesis = await synthesizeWithFallback(prompt, {
-      maxTokens: 12288,
+      maxTokens: 10240,
       label: 'reSynthesize',
       allowArrayNormalization: false,
       allowTruncationRepair: true,
@@ -4978,7 +5084,7 @@ async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQ
   };
   const MIN_DEEPEN_FINDING_CHARS = 900;
   const MIN_DEEPEN_FINDING_CITATIONS = 1;
-  const MIN_DEEPEN_NUMERIC_SIGNALS = 5;
+  const MIN_DEEPEN_NUMERIC_SIGNALS = 8;
 
   // Run deepen queries in small batches to avoid quota bursts.
   const results = await runInBatches(
@@ -4999,7 +5105,7 @@ async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQ
         const usableDeepenFinding =
           contentLength >= MIN_DEEPEN_FINDING_CHARS ||
           citationsCount >= MIN_DEEPEN_FINDING_CITATIONS ||
-          (contentLength >= 600 && numericSignals >= MIN_DEEPEN_NUMERIC_SIGNALS);
+          (contentLength >= 700 && numericSignals >= MIN_DEEPEN_NUMERIC_SIGNALS);
 
         if (!usableDeepenFinding) {
           console.warn(
@@ -6219,6 +6325,10 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   // Loops until grade A/B or max iterations reached.
   const FINAL_REVIEW_MAX_ITERATIONS = CFG_FINAL_REVIEW_MAX_ITERATIONS;
   const FINAL_REVIEW_TARGET_SCORE = 80;
+  const FINAL_REVIEW_MAX_CRITICAL_ISSUES = parseNonNegativeIntEnv(
+    'FINAL_REVIEW_MAX_CRITICAL_ISSUES',
+    1
+  );
   const FINAL_REVIEW_MAX_MAJOR_ISSUES = parsePositiveIntEnv('FINAL_REVIEW_MAX_MAJOR_ISSUES', 3);
   const FINAL_REVIEW_MAX_OPEN_GAPS = parsePositiveIntEnv('FINAL_REVIEW_MAX_OPEN_GAPS', 3);
 
@@ -6230,6 +6340,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     let previousIssueSignature = '';
     let stagnantFinalReviewIterations = 0;
     let lastCleanReviewSnapshot = null;
+    let finalReviewResearchEscalations = 0;
+    let finalReviewSynthesisEscalations = 0;
 
     try {
       while (finalReviewIteration < FINAL_REVIEW_MAX_ITERATIONS) {
@@ -6298,7 +6410,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         const reviewOpenGaps = hasResearchGaps ? finalReview.researchGaps.length : 0;
         const reviewClean =
           lastCoherenceScore >= FINAL_REVIEW_TARGET_SCORE &&
-          criticalCount === 0 &&
+          criticalCount <= FINAL_REVIEW_MAX_CRITICAL_ISSUES &&
           majorCount <= FINAL_REVIEW_MAX_MAJOR_ISSUES &&
           reviewOpenGaps <= FINAL_REVIEW_MAX_OPEN_GAPS;
 
@@ -6314,7 +6426,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             verificationPassesRemaining--;
             if (verificationPassesRemaining === 0) {
               console.log(
-                `  [FINAL REVIEW] Coherence ${lastCoherenceScore}/100 with no critical/major issues after verification. Done.`
+                `  [FINAL REVIEW] Coherence ${lastCoherenceScore}/100 with critical=${criticalCount}, major=${majorCount}, openGaps=${reviewOpenGaps} after verification. Done.`
               );
               break;
             }
@@ -6373,51 +6485,60 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         }
 
         // ESCALATION 1: Research gaps → go find missing data (Reviewer 1 power)
+        let escalationApplied = false;
         let researchDataDeepened = false;
         const deepenedTargetSections = new Set();
         if (finalReview.researchGaps && finalReview.researchGaps.length > 0) {
-          console.log(
-            `  [FINAL REVIEW → RESEARCH] ${finalReview.researchGaps.length} data gaps found. Escalating to research...`
-          );
-
-          // Build gap report in the format deepenResearch expects
-          const escalatedGapReport = {
-            gaps: finalReview.researchGaps.map((g, i) => ({
-              id: `final_review_gap_${i}`,
-              category: g.targetSection || 'market',
-              topic: 'new',
-              description: g.description,
-              searchQuery: sanitizeResearchQuery(
-                g.searchQuery,
-                country,
-                industry,
-                g.targetSection || 'general'
-              ),
-              priority: g.priority || 5,
-              type: 'missing_data',
-            })),
-            verificationsNeeded: [],
-          };
-
-          // Track which sections the gaps target
-          for (const g of finalReview.researchGaps) {
-            deepenedTargetSections.add(g.targetSection || 'market');
-          }
-
-          const { deepenedResults } = await deepenResearch(
-            escalatedGapReport,
-            country,
-            industry,
-            pipelineSignal,
-            CFG_FINAL_REVIEW_MAX_QUERIES
-          );
-
-          if (deepenedResults.length > 0) {
-            researchData = mergeDeepened(researchData, deepenedResults);
-            researchDataDeepened = true;
-            console.log(
-              `  [FINAL REVIEW → RESEARCH] +${deepenedResults.length} topics added to research data`
+          if (finalReviewResearchEscalations >= CFG_FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS) {
+            console.warn(
+              `  [FINAL REVIEW → RESEARCH] Escalation budget reached (${finalReviewResearchEscalations}/${CFG_FINAL_REVIEW_MAX_RESEARCH_ESCALATIONS}); skipping new research pass`
             );
+          } else {
+            finalReviewResearchEscalations++;
+            console.log(
+              `  [FINAL REVIEW → RESEARCH] ${finalReview.researchGaps.length} data gaps found. Escalating to research...`
+            );
+
+            // Build gap report in the format deepenResearch expects
+            const escalatedGapReport = {
+              gaps: finalReview.researchGaps.map((g, i) => ({
+                id: `final_review_gap_${i}`,
+                category: g.targetSection || 'market',
+                topic: 'new',
+                description: g.description,
+                searchQuery: sanitizeResearchQuery(
+                  g.searchQuery,
+                  country,
+                  industry,
+                  g.targetSection || 'general'
+                ),
+                priority: g.priority || 5,
+                type: 'missing_data',
+              })),
+              verificationsNeeded: [],
+            };
+
+            // Track which sections the gaps target
+            for (const g of finalReview.researchGaps) {
+              deepenedTargetSections.add(g.targetSection || 'market');
+            }
+
+            const { deepenedResults } = await deepenResearch(
+              escalatedGapReport,
+              country,
+              industry,
+              pipelineSignal,
+              CFG_FINAL_REVIEW_MAX_QUERIES
+            );
+
+            if (deepenedResults.length > 0) {
+              researchData = mergeDeepened(researchData, deepenedResults);
+              researchDataDeepened = true;
+              escalationApplied = true;
+              console.log(
+                `  [FINAL REVIEW → RESEARCH] +${deepenedResults.length} topics added to research data`
+              );
+            }
           }
         }
 
@@ -6427,38 +6548,53 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         const needsResearchResynth = researchDataDeepened && deepenedTargetSections.size > 0;
 
         if (needsSynthesisFix || needsResearchResynth) {
-          // Build sectionFixes from research gaps' targetSection if reviewer didn't provide them
-          if (!finalReview.sectionFixes && needsResearchResynth) {
-            finalReview.sectionFixes = {};
-            for (const section of deepenedTargetSections) {
-              finalReview.sectionFixes[section] =
-                `Re-synthesize with new research data found for ${section}`;
-            }
-          } else if (finalReview.sectionFixes && needsResearchResynth) {
-            // Ensure deepened sections are included even if reviewer didn't flag them
-            for (const section of deepenedTargetSections) {
-              if (!finalReview.sectionFixes[section]) {
+          if (finalReviewSynthesisEscalations >= CFG_FINAL_REVIEW_MAX_SYNTHESIS_ESCALATIONS) {
+            console.warn(
+              `  [FINAL REVIEW → SYNTHESIS] Escalation budget reached (${finalReviewSynthesisEscalations}/${CFG_FINAL_REVIEW_MAX_SYNTHESIS_ESCALATIONS}); skipping section re-synthesis`
+            );
+          } else {
+            finalReviewSynthesisEscalations++;
+            // Build sectionFixes from research gaps' targetSection if reviewer didn't provide them
+            if (!finalReview.sectionFixes && needsResearchResynth) {
+              finalReview.sectionFixes = {};
+              for (const section of deepenedTargetSections) {
                 finalReview.sectionFixes[section] =
                   `Re-synthesize with new research data found for ${section}`;
               }
+            } else if (finalReview.sectionFixes && needsResearchResynth) {
+              // Ensure deepened sections are included even if reviewer didn't flag them
+              for (const section of deepenedTargetSections) {
+                if (!finalReview.sectionFixes[section]) {
+                  finalReview.sectionFixes[section] =
+                    `Re-synthesize with new research data found for ${section}`;
+                }
+              }
             }
-          }
 
-          console.log(
-            `  [FINAL REVIEW → SYNTHESIS] ${criticalOrMajor.length} critical/major issues${researchDataDeepened ? ` + ${deepenedTargetSections.size} sections with new research data` : ''}. Re-synthesizing...`
+            console.log(
+              `  [FINAL REVIEW → SYNTHESIS] ${criticalOrMajor.length} critical/major issues${researchDataDeepened ? ` + ${deepenedTargetSections.size} sections with new research data` : ''}. Re-synthesizing...`
+            );
+            countryAnalysis = await applyFinalReviewFixes(
+              countryAnalysis,
+              finalReview,
+              researchData,
+              country,
+              industry,
+              clientContext,
+              storyPlan
+            );
+            // Hard rule: after each fix, run at least 2 additional review passes.
+            verificationPassesRemaining = Math.max(verificationPassesRemaining, 2);
+            lastCleanReviewSnapshot = null;
+            escalationApplied = true;
+          }
+        }
+
+        if (!reviewClean && !escalationApplied) {
+          console.warn(
+            '  [FINAL REVIEW] No further escalation budget/progress available. Stopping review loop.'
           );
-          countryAnalysis = await applyFinalReviewFixes(
-            countryAnalysis,
-            finalReview,
-            researchData,
-            country,
-            industry,
-            clientContext,
-            storyPlan
-          );
-          // Hard rule: after each fix, run at least 2 additional review passes.
-          verificationPassesRemaining = Math.max(verificationPassesRemaining, 2);
-          lastCleanReviewSnapshot = null;
+          break;
         }
       }
 
@@ -6496,7 +6632,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   const reviewReady =
     !finalReview ||
     (finalCoherence >= FINAL_REVIEW_TARGET_SCORE &&
-      finalCritical === 0 &&
+      finalCritical <= FINAL_REVIEW_MAX_CRITICAL_ISSUES &&
       finalMajor <= FINAL_REVIEW_MAX_MAJOR_ISSUES &&
       finalReviewOpenGaps <= FINAL_REVIEW_MAX_OPEN_GAPS);
 
@@ -6525,7 +6661,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       );
     if (!reviewReady)
       reasons.push(
-        `Final review coherence ${finalCoherence}/100 with critical=${finalCritical}, major=${finalMajor} (max ${FINAL_REVIEW_MAX_MAJOR_ISSUES}), openGaps=${finalReviewOpenGaps} (max ${FINAL_REVIEW_MAX_OPEN_GAPS})`
+        `Final review coherence ${finalCoherence}/100 with critical=${finalCritical} (max ${FINAL_REVIEW_MAX_CRITICAL_ISSUES}), major=${finalMajor} (max ${FINAL_REVIEW_MAX_MAJOR_ISSUES}), openGaps=${finalReviewOpenGaps} (max ${FINAL_REVIEW_MAX_OPEN_GAPS})`
       );
     countryAnalysis.readiness.reasons = reasons;
   }

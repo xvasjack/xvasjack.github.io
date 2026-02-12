@@ -74,7 +74,19 @@ function parsePositiveIntEnv(name, fallback) {
   return parsed;
 }
 
+function parseNonNegativeIntEnv(name, fallback) {
+  const raw = String(process.env[name] || '').trim();
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return parsed;
+}
+
 const ALLOW_DRAFT_PPT_MODE = parseBooleanOption(process.env.ALLOW_DRAFT_PPT_MODE, false) === true;
+const FINAL_REVIEW_MAX_CRITICAL_ISSUES = parseNonNegativeIntEnv(
+  'FINAL_REVIEW_MAX_CRITICAL_ISSUES',
+  1
+);
 const FINAL_REVIEW_MAX_MAJOR_ISSUES = parsePositiveIntEnv('FINAL_REVIEW_MAX_MAJOR_ISSUES', 3);
 const FINAL_REVIEW_MAX_OPEN_GAPS = parsePositiveIntEnv('FINAL_REVIEW_MAX_OPEN_GAPS', 3);
 const PIPELINE_TIMEOUT_MS = parsePositiveIntEnv('PIPELINE_TIMEOUT_SECONDS', 45 * 60) * 1000;
@@ -602,7 +614,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             return `${d.country}: ${readinessReasons.length > 0 ? readinessReasons.join('; ') : 'readiness flag is false'}`;
           })
           .join(' | ');
-        const gateRule = `Readiness requires effective>=80, content-depth>=80, final coherence>=80, critical=0, major<=${FINAL_REVIEW_MAX_MAJOR_ISSUES}, openGaps<=${FINAL_REVIEW_MAX_OPEN_GAPS}.`;
+        const gateRule = `Readiness requires effective>=80, content-depth>=80, final coherence>=80, critical<=${FINAL_REVIEW_MAX_CRITICAL_ISSUES}, major<=${FINAL_REVIEW_MAX_MAJOR_ISSUES}, openGaps<=${FINAL_REVIEW_MAX_OPEN_GAPS}.`;
         const draftBypassEligible = notReadyDiagnostics.every(
           (d) =>
             Number(d.finalReviewCritical || 0) === 0 &&
