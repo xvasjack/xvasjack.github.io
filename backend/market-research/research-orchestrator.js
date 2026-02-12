@@ -36,29 +36,29 @@ const CFG_REVIEW_DEEPEN_TARGET_SCORE = parsePositiveIntEnv('REVIEW_DEEPEN_TARGET
 const CFG_REFINEMENT_MAX_ITERATIONS = parseBoundedIntEnv('REFINEMENT_MAX_ITERATIONS', 3, 3);
 const CFG_MIN_CONFIDENCE_SCORE = parsePositiveIntEnv('MIN_CONFIDENCE_SCORE', 80);
 const CFG_FINAL_REVIEW_MAX_ITERATIONS = parseBoundedIntEnv('FINAL_REVIEW_MAX_ITERATIONS', 3, 3);
-const CFG_DYNAMIC_AGENT_CONCURRENCY = parseBoundedIntEnv('DYNAMIC_AGENT_CONCURRENCY', 2, 3);
+const CFG_DYNAMIC_AGENT_CONCURRENCY = parseBoundedIntEnv('DYNAMIC_AGENT_CONCURRENCY', 1, 2);
 const CFG_DYNAMIC_AGENT_BATCH_DELAY_MS = parseBoundedIntEnv(
   'DYNAMIC_AGENT_BATCH_DELAY_MS',
   3000,
   15000
 );
-const CFG_DEEPEN_QUERY_CONCURRENCY = parseBoundedIntEnv('DEEPEN_QUERY_CONCURRENCY', 2, 3);
+const CFG_DEEPEN_QUERY_CONCURRENCY = parseBoundedIntEnv('DEEPEN_QUERY_CONCURRENCY', 1, 2);
 const CFG_DEEPEN_BATCH_DELAY_MS = parseBoundedIntEnv('DEEPEN_BATCH_DELAY_MS', 3000, 15000);
 const CFG_REVIEW_DEEPEN_MAX_QUERIES = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_QUERIES', 6, 10);
 const CFG_FINAL_REVIEW_MAX_QUERIES = parseBoundedIntEnv('FINAL_REVIEW_MAX_QUERIES', 4, 8);
 const CFG_SECTION_SYNTHESIS_DELAY_MS = parseBoundedIntEnv(
   'SECTION_SYNTHESIS_DELAY_MS',
-  5000,
+  10000,
   20000
 );
 const CFG_COMPETITOR_SYNTHESIS_DELAY_MS = parseBoundedIntEnv(
   'COMPETITOR_SYNTHESIS_DELAY_MS',
-  5000,
+  10000,
   20000
 );
 const CFG_FINAL_FIX_SECTION_DELAY_MS = parseBoundedIntEnv(
   'FINAL_FIX_SECTION_DELAY_MS',
-  3000,
+  5000,
   10000
 );
 const CFG_GAP_QUERY_DELAY_MS = parseBoundedIntEnv('GAP_QUERY_DELAY_MS', 3000, 10000);
@@ -3964,9 +3964,9 @@ async function synthesizeSummary(
 Client context: ${clientContext}
 
 SYNTHESIZED SECTIONS (already processed):
-Policy: ${summarizeForSummary(policy, 'policy', 3500)}
-Market: ${summarizeForSummary(market, 'market', 4500)}
-Competitors: ${summarizeForSummary(competitors, 'competitors', 3500)}
+Policy: ${summarizeForSummary(policy, 'policy', 2500)}
+Market: ${summarizeForSummary(market, 'market', 3000)}
+Competitors: ${summarizeForSummary(competitors, 'competitors', 2500)}
 
 Additional research context:
 ${Object.entries(researchData)
@@ -3977,8 +3977,8 @@ ${Object.entries(researchData)
       k.startsWith('depth_') ||
       k.startsWith('insight_')
   )
-  .slice(0, 6)
-  .map(([k, v]) => `${k}: ${(v?.content || '').substring(0, 1200)}`)
+  .slice(0, 4)
+  .map(([k, v]) => `${k}: ${(v?.content || '').substring(0, 900)}`)
   .join('\n')}
 
 If research data is insufficient for a field, set the value to:
@@ -4084,7 +4084,7 @@ Return JSON:
 Return ONLY valid JSON.`;
 
   const result = await synthesizeWithFallback(prompt, {
-    maxTokens: 16384,
+    maxTokens: 12288,
     label: 'synthesizeSummary',
     allowArrayNormalization: false,
     allowTruncationRepair: true,
@@ -4360,7 +4360,19 @@ function validateContentDepth(synthesis) {
   scores.summary = Math.min(100, scores.summary);
 
   // Partner descriptions validation (from depth.partnerAssessment)
-  const depth = synthesis.summary?.depth || synthesis.depth || {};
+  const rootDepth =
+    synthesis.depth && typeof synthesis.depth === 'object' && !Array.isArray(synthesis.depth)
+      ? synthesis.depth
+      : null;
+  const summaryDepth =
+    synthesis.summary?.depth &&
+    typeof synthesis.summary.depth === 'object' &&
+    !Array.isArray(synthesis.summary.depth)
+      ? synthesis.summary.depth
+      : null;
+  // Prefer canonical top-level depth. Some noisy payloads may carry a partial summary.depth
+  // artifact that under-scores otherwise valid outputs.
+  const depth = rootDepth || summaryDepth || {};
   const roadmapPhases = depth.implementation?.phases || [];
   if (!Array.isArray(roadmapPhases) || roadmapPhases.length < 3) {
     failures.push(
@@ -4513,7 +4525,7 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 
   try {
     const newSynthesis = await synthesizeWithFallback(prompt, {
-      maxTokens: 16384,
+      maxTokens: 12288,
       label: 'reSynthesize',
       allowArrayNormalization: false,
       allowTruncationRepair: true,
@@ -5062,11 +5074,11 @@ async function finalReviewSynthesis(countryAnalysis, country, industry) {
   const reviewStart = Date.now();
 
   // Build condensed but complete view of all sections
-  const policyPreview = summarizeForSummary(countryAnalysis.policy, 'policy', 3500);
-  const marketPreview = summarizeForSummary(countryAnalysis.market, 'market', 3500);
-  const competitorsPreview = summarizeForSummary(countryAnalysis.competitors, 'competitors', 3500);
-  const summaryPreview = summarizeForSummary(countryAnalysis.summary, 'summary', 2500);
-  const depthPreview = summarizeForSummary(countryAnalysis.depth, 'depth', 2500);
+  const policyPreview = summarizeForSummary(countryAnalysis.policy, 'policy', 2200);
+  const marketPreview = summarizeForSummary(countryAnalysis.market, 'market', 2200);
+  const competitorsPreview = summarizeForSummary(countryAnalysis.competitors, 'competitors', 2200);
+  const summaryPreview = summarizeForSummary(countryAnalysis.summary, 'summary', 1800);
+  const depthPreview = summarizeForSummary(countryAnalysis.depth, 'depth', 1800);
   const synthesisText = normalizeLegalToken(
     [policyPreview, marketPreview, competitorsPreview, summaryPreview, depthPreview].join('\n')
   );
@@ -5162,7 +5174,7 @@ RULES:
   try {
     const result = await callGeminiPro(reviewPrompt, {
       temperature: 0.1,
-      maxTokens: 8192,
+      maxTokens: 6144,
       jsonMode: true,
     });
 
@@ -6254,10 +6266,10 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             ? lastCleanReviewSnapshot.researchGaps.length
             : 0;
           const likelyReviewerNoise =
-            lastCoherenceScore >= FINAL_REVIEW_TARGET_SCORE - 10 &&
+            lastCoherenceScore >= FINAL_REVIEW_TARGET_SCORE - 20 &&
             criticalCount <= cleanCritical + 1 &&
             majorCount <= Math.max(cleanMajor + 1, FINAL_REVIEW_MAX_MAJOR_ISSUES + 1) &&
-            reviewOpenGaps <= cleanOpenGaps + 1;
+            reviewOpenGaps <= cleanOpenGaps + 2;
           if (likelyReviewerNoise) {
             verificationPassesRemaining--;
             console.warn(

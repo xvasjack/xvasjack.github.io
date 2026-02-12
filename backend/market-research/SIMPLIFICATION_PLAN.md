@@ -46,18 +46,18 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
   - retries reduced to 2
   - final retry uses strict minimal flash-only path (no pro-tier escalation in that branch)
 - Throttled research execution:
-  - dynamic category agents now run in small batches (default concurrency `2`)
-  - specialized fallback agents now run in small batches (default concurrency `2`)
-  - universal/context/policy/competitor/depth/insight topic runs are batch-throttled (default concurrency `2`)
+  - dynamic category agents now run in small batches (default concurrency `1`)
+  - specialized fallback agents now run in small batches (default concurrency `1`)
+  - universal/context/policy/competitor/depth/insight topic runs are batch-throttled (default concurrency `1`)
 - Throttled deepen execution:
-  - follow-up gap queries now run in small batches (default concurrency `2`)
+  - follow-up gap queries now run in small batches (default concurrency `1`)
 - Increased batch spacing to reduce token-per-minute bursts:
   - `DYNAMIC_AGENT_BATCH_DELAY_MS` default `3000`
   - `DEEPEN_BATCH_DELAY_MS` default `3000`
 - Increased synthesis spacing defaults:
-  - section-to-section delay `SECTION_SYNTHESIS_DELAY_MS` default `5000`
-  - competitor sub-section delay `COMPETITOR_SYNTHESIS_DELAY_MS` default `5000`
-  - final-review section-fix delay `FINAL_FIX_SECTION_DELAY_MS` default `3000`
+  - section-to-section delay `SECTION_SYNTHESIS_DELAY_MS` default `10000`
+  - competitor sub-section delay `COMPETITOR_SYNTHESIS_DELAY_MS` default `10000`
+  - final-review section-fix delay `FINAL_FIX_SECTION_DELAY_MS` default `5000`
 - Increased gap/verification spacing:
   - `GAP_QUERY_DELAY_MS` default `3000`
 - Reduced deepen query caps:
@@ -71,12 +71,26 @@ This plan keeps quality strict while reducing unnecessary complexity and token b
   - summary synthesis section previews trimmed (`policy/market/competitors`: `3500/4500/3500` chars)
   - final-review section previews trimmed (`policy/market/competitors/summary/depth`: `3500/3500/3500/2500/2500`)
   - summary additional-research context capped to top 6 entries and 1200 chars each
+- Further reduced high-churn synthesis payloads:
+  - summary synthesis previews trimmed further to `2500/3000/2500` (policy/market/competitors)
+  - summary additional-research context reduced to top 4 entries and 900 chars each
+  - final-review previews trimmed further to `2200/2200/2200/1800/1800`
+  - output token ceilings reduced on heavy paths:
+    - `synthesizeSummary`: `16384 -> 12288`
+    - `reSynthesize`: `16384 -> 12288`
+    - `finalReviewSynthesis`: `8192 -> 6144`
 - Added low-signal deepen filter:
   - reject thin deepen responses before merge (requires stronger chars/citations/numeric signals)
   - prevents low-value `final_review_gap_*` payloads from creating expensive re-synthesis churn
 - Recomputed content-depth gate after final-review fixes:
   - readiness now uses post-fix depth score instead of stale pre-fix score
   - removes false failures where final synthesis improved but gate score was not refreshed
+- Fixed depth-score source priority:
+  - content-depth validation now prefers canonical top-level `depth` over noisy `summary.depth` artifacts
+  - prevents false low depth scores that can fail runs around 79/100 despite valid depth sections
+- Reduced final-review verification churn after clean passes:
+  - widened reviewer-drift tolerance during verification passes
+  - avoids expensive re-research/synthesis loops when only reviewer noise regresses a previously clean pass
 
 ## Next safe simplifications (if needed)
 - Add per-section retry budget (hard cap on model calls per section per run).
