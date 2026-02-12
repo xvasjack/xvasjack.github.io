@@ -71,6 +71,68 @@ function trackCost(
 
 // ============ AI TOOLS ============
 
+function parseRetryAfterHeaderMs(rawValue) {
+  const raw = String(rawValue || '').trim();
+  if (!raw) return null;
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const seconds = Number.parseFloat(raw);
+    return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : null;
+  }
+  const asDate = Date.parse(raw);
+  if (!Number.isNaN(asDate)) {
+    const delta = asDate - Date.now();
+    return delta > 0 ? delta : null;
+  }
+  return null;
+}
+
+function parseRetryDelayMsFromText(text) {
+  const body = String(text || '');
+  if (!body) return null;
+  const patterns = [
+    /retry(?:ing)?\s+in\s+([0-9]+(?:\.[0-9]+)?)\s*s/i,
+    /"retryDelay"\s*:\s*"([0-9]+(?:\.[0-9]+)?)s"/i,
+  ];
+  for (const re of patterns) {
+    const match = body.match(re);
+    if (!match) continue;
+    const seconds = Number.parseFloat(match[1]);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.round(seconds * 1000);
+    }
+  }
+  return null;
+}
+
+function computeRetryDelayMs(error, baseDelayMs, attempt) {
+  const exponentialDelay = baseDelayMs * Math.pow(2, attempt - 1); // 1x, 2x, 4x...
+  const hintedDelay = Number.isFinite(error?.retryAfterMs) ? Number(error.retryAfterMs) : null;
+  const delay = Math.max(exponentialDelay, hintedDelay || 0);
+  // Small jitter avoids synchronized retries across parallel requests.
+  const jitter = Math.round(delay * (Math.random() * 0.1));
+  return Math.max(250, delay + jitter);
+}
+
+async function waitForRetryDelay(delayMs, signal = null) {
+  if (!signal) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    return;
+  }
+
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
+      reject(new Error('Retry wait aborted'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 // Retry utility with exponential backoff
 // Accepts optional signal (AbortSignal) to cancel retries when pipeline aborts
 async function withRetry(
@@ -89,15 +151,18 @@ async function withRetry(
       return await fn();
     } catch (error) {
       lastError = error;
+      if (error?.nonRetryable) {
+        throw error;
+      }
       if (signal?.aborted) {
         throw new Error(`${operationName} aborted during attempt ${attempt}`);
       }
       if (attempt < maxRetries) {
-        const delay = baseDelayMs * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+        const delay = computeRetryDelayMs(error, baseDelayMs, attempt);
         console.log(
           `  [Retry] ${operationName} failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`
         );
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await waitForRetryDelay(delay, signal);
       }
     }
   }
@@ -159,7 +224,16 @@ async function callGemini(prompt, options = {}) {
 
         if (!response.ok) {
           const errText = await response.text();
-          throw new Error(`Gemini API error ${response.status}: ${errText}`);
+          const error = new Error(`Gemini API error ${response.status}: ${errText}`);
+          error.status = response.status;
+          const retryAfterMs =
+            parseRetryAfterHeaderMs(response.headers?.get('retry-after')) ||
+            parseRetryDelayMsFromText(errText);
+          if (retryAfterMs) error.retryAfterMs = retryAfterMs;
+          if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+            error.nonRetryable = true;
+          }
+          throw error;
         }
 
         let data;
@@ -268,9 +342,15 @@ Be specific. Cite sources. No fluff.`;
         if (!response.ok) {
           const errText = await response.text();
           if (response.status >= 500 || response.status === 429) {
-            throw new Error(
-              `Gemini Research HTTP ${response.status}: ${errText.substring(0, 100)}`
+            const error = new Error(
+              `Gemini Research HTTP ${response.status}: ${errText.substring(0, 200)}`
             );
+            error.status = response.status;
+            const retryAfterMs =
+              parseRetryAfterHeaderMs(response.headers?.get('retry-after')) ||
+              parseRetryDelayMsFromText(errText);
+            if (retryAfterMs) error.retryAfterMs = retryAfterMs;
+            throw error;
           }
           console.error(
             `[Gemini Research] HTTP error ${response.status}:`,
@@ -421,7 +501,16 @@ async function callGeminiPro(prompt, options = {}) {
 
         if (!response.ok) {
           const errText = await response.text();
-          throw new Error(`Gemini Pro API error ${response.status}: ${errText}`);
+          const error = new Error(`Gemini Pro API error ${response.status}: ${errText}`);
+          error.status = response.status;
+          const retryAfterMs =
+            parseRetryAfterHeaderMs(response.headers?.get('retry-after')) ||
+            parseRetryDelayMsFromText(errText);
+          if (retryAfterMs) error.retryAfterMs = retryAfterMs;
+          if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+            error.nonRetryable = true;
+          }
+          throw error;
         }
 
         let data;
