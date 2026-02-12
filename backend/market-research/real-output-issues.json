@@ -1,37 +1,54 @@
 {
-  "timestamp": "2026-02-12T01:26:55.157Z",
-  "file": "vietnam-output.pptx",
-  "valid": false,
+  "timestamp": "2026-02-12T01:31:52.523Z",
+  "file": "test-output.pptx",
+  "valid": true,
   "summary": {
-    "passed": 30,
-    "failed": 3,
-    "warnings": 0
+    "passed": 29,
+    "failed": 0,
+    "warnings": 2
   },
-  "failed": [
+  "failed": [],
+  "warnings": [
     {
-      "check": "Content types consistency",
-      "expected": "No dangling/missing overrides and all expected package parts have correct content types",
-      "actual": "dangling overrides: ppt/slideMasters/slideMaster2.xml, ppt/slideMasters/slideMaster3.xml, ppt/slideMasters/slideMaster4.xml, ppt/slideMasters/slideMaster5.xml, ppt/slideMasters/slideMaster6.xml"
+      "check": "Empty slides",
+      "message": "Slides with <50 chars: 5, 9, 16, 22, 28"
     },
     {
-      "check": "Slide 2 \"Table of Contents\"",
-      "expected": "Contains \"Table of Contents\"",
-      "actual": "Why Vietnam? Shizuoka Gas&apos;s strategic imperative for overseas expansion Pro"
-    },
-    {
-      "check": "Slide 3 tables",
-      "expected": ">= 1",
-      "actual": 0
+      "check": "Empty slides",
+      "message": "6 slides with <100 chars"
     }
   ],
-  "warnings": [],
   "structure": {
-    "slides": 38,
-    "charts": 17,
-    "tables": 90,
-    "text": 32398
+    "slides": 35,
+    "charts": 6,
+    "tables": 78,
+    "text": 29738
   },
   "sections": {
-    "specific con": 2
+    "Energy Services Foundational Acts Thail": 1,
+    "National Energy Policy Thailand targets": 1,
+    "Foreign Investment Rules Stable regulat": 1,
+    "Total Primary Energy Supply Source: YCP": 1,
+    "Final Energy Demand Source: YCP Analysi": 1,
+    "Electricity &amp; Power Source: YCP Ana": 1,
+    "Gas &amp; LNG Market Source: YCP Analys": 1,
+    "Energy Pricing Source: YCP Analysis Key": 1,
+    "ESCO Market Source: YCP Analysis Key In": 1,
+    "Japanese Energy Services Companies Japa": 1,
+    "Major Local Players Top": 1,
+    "Foreign Energy Services Companies Europ": 1,
+    "Market Entry Case Study: Veolia Demonst": 1,
+    "M&amp;A Activity": 1,
+    "ESCO Deal Economics Average deal size T": 1,
+    "Partner Assessment Bangchak Green Energ": 1,
+    "Entry Strategy Options Joint Venture wi": 1,
+    "Implementation Roadmap Total: USD": 1,
+    "Target Customer Segments Land-and-expan": 1,
+    "Go/No-Go Assessment CONDITIONAL GO Sour": 1,
+    "Opportunities &amp; Obstacles Proceed w": 1,
+    "Key Insights Strategic implications for": 1,
+    "Why Now? Critical": 1,
+    "Lessons from Market What previous entra": 1,
+    "Research Summary Analysis completed Feb": 1
   }
 }

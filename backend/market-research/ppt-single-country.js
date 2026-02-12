@@ -291,6 +291,18 @@ function normalizeMarketForRender(rawSection) {
     if (match.alias !== canonicalKey) consumed.add(canonicalKey);
   }
 
+  // Backward compatibility: preserve legacy market blocks when canonical sections
+  // are absent, so strict render normalization does not reject otherwise valid
+  // historical payloads used by local fixtures/replays.
+  if (Object.keys(output).length === 0) {
+    for (const key of MARKET_LEGACY_KEYS) {
+      const value = cleaned[key];
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+      output[key] = value;
+      consumed.add(key);
+    }
+  }
+
   if (Array.isArray(cleaned.sources) && cleaned.sources.length > 0) {
     output.sources = cleaned.sources;
     consumed.add('sources');
