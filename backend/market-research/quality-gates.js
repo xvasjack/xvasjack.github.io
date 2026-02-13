@@ -95,7 +95,13 @@ function hasSemanticContent(value, depth = 0) {
 function blockHasRenderableData(block) {
   if (!block || typeof block !== 'object') return false;
   if (String(block.type || '').toLowerCase() === 'unavailable') return false;
-  if (hasSemanticEmptyText(block.content) || hasTruncationArtifactText(block.content)) return false;
+  // Only treat content as invalid when the field is explicitly present.
+  // Many callers provide structured `data` without a top-level `content` string.
+  if (Object.prototype.hasOwnProperty.call(block, 'content')) {
+    const content = normalizeGateText(block.content);
+    if (!content) return false;
+    if (hasSemanticEmptyText(content) || hasTruncationArtifactText(content)) return false;
+  }
 
   const candidateFields = [
     block.data,
@@ -745,9 +751,15 @@ function validatePptData(blocks) {
     const sectionBlocks = blocks.filter((b) => b?.key === section);
     return sectionBlocks.some((b) => blockHasRenderableData(b));
   });
+  const nonRenderableGroups = sectionNames.filter((section) => !sectionsWithData.includes(section));
 
-  if (sectionsWithData.length < 2) {
-    emptyBlocks.push(`Only ${sectionsWithData.length}/5 sections have real data (need >= 2)`);
+  // This validator is used in both full-deck and section-level flows.
+  // For section-level validation, require at least one renderable block.
+  const requiredRenderableGroups = sectionNames.length >= 5 ? 2 : 1;
+  if (sectionsWithData.length < requiredRenderableGroups) {
+    emptyBlocks.push(
+      `Only ${sectionsWithData.length}/${Math.max(1, sectionNames.length)} groups have real data (need >= ${requiredRenderableGroups})`
+    );
   }
 
   // Check company descriptions
@@ -841,9 +853,20 @@ function validatePptData(blocks) {
       `${Math.round(semanticallyEmptyRatio * 100)}% of blocks are semantically empty/thin (threshold < 40%)`
     );
   }
+  const severeOverflowCount = overflowRisks.filter(
+    (risk) => Number(risk.charCount || 0) > 600
+  ).length;
+  if (severeOverflowCount > 0) {
+    emptyBlocks.push(
+      `${severeOverflowCount} field(s) exceed 600 chars and are likely to break template-constrained layouts`
+    );
+  }
 
   const pass =
-    sectionsWithData.length >= 2 && semanticallyEmptyRatio < 0.4 && chartIssues.length === 0;
+    sectionsWithData.length >= requiredRenderableGroups &&
+    semanticallyEmptyRatio < 0.4 &&
+    chartIssues.length === 0 &&
+    severeOverflowCount === 0;
 
   return {
     pass,
@@ -851,6 +874,12 @@ function validatePptData(blocks) {
     emptyBlocks,
     chartIssues,
     semanticallyEmptyRatio,
+    sectionGroupCount: sectionNames.length,
+    sectionsWithDataCount: sectionsWithData.length,
+    requiredRenderableGroups,
+    sectionsWithData,
+    nonRenderableGroups,
+    severeOverflowCount,
   };
 }
 
@@ -880,4 +909,5 @@ module.exports = {
   validateSynthesisQuality,
   validatePptData,
   detectMacroPadding,
+  blockHasRenderableData,
 };

@@ -91,6 +91,8 @@ function parseNonNegativeIntEnv(name, fallback) {
 
 const ALLOW_DRAFT_PPT_MODE = parseBooleanOption(process.env.ALLOW_DRAFT_PPT_MODE, false) === true;
 const SOFT_READINESS_GATE = parseBooleanOption(process.env.SOFT_READINESS_GATE, true) !== false;
+const DISABLE_PIPELINE_TIMEOUT =
+  parseBooleanOption(process.env.DISABLE_PIPELINE_TIMEOUT, true) !== false;
 const HARD_FAIL_MIN_EFFECTIVE_SCORE = parsePositiveIntEnv('HARD_FAIL_MIN_EFFECTIVE_SCORE', 70);
 const HARD_FAIL_MIN_COHERENCE_SCORE = parsePositiveIntEnv('HARD_FAIL_MIN_COHERENCE_SCORE', 70);
 const FINAL_REVIEW_MAX_CRITICAL_ISSUES = parseNonNegativeIntEnv(
@@ -99,7 +101,11 @@ const FINAL_REVIEW_MAX_CRITICAL_ISSUES = parseNonNegativeIntEnv(
 );
 const FINAL_REVIEW_MAX_MAJOR_ISSUES = parsePositiveIntEnv('FINAL_REVIEW_MAX_MAJOR_ISSUES', 3);
 const FINAL_REVIEW_MAX_OPEN_GAPS = parsePositiveIntEnv('FINAL_REVIEW_MAX_OPEN_GAPS', 3);
-const PIPELINE_TIMEOUT_MS = parsePositiveIntEnv('PIPELINE_TIMEOUT_SECONDS', 45 * 60) * 1000;
+// Timeout is disabled by default to avoid auto-closing long market-research runs.
+// Re-enable by setting DISABLE_PIPELINE_TIMEOUT=false and PIPELINE_TIMEOUT_SECONDS>0.
+const PIPELINE_TIMEOUT_MS = DISABLE_PIPELINE_TIMEOUT
+  ? 0
+  : parseNonNegativeIntEnv('PIPELINE_TIMEOUT_SECONDS', 45 * 60) * 1000;
 const CANONICAL_MARKET_SECTION_KEYS = [
   'marketSizeAndGrowth',
   'supplyAndDemandDynamics',
@@ -517,7 +523,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             ? reason
             : reason && typeof reason.message === 'string'
               ? reason.message
-              : 'Pipeline timeout after 45 minutes';
+              : 'Pipeline aborted';
         throw new Error(`Pipeline aborted${stage ? ` during ${stage}` : ''}: ${reasonText}`);
       };
 
@@ -833,7 +839,9 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         }
       }
 
-      // Quality Gate 3: Validate PPT data completeness before rendering
+      // Quality Gate 3: Validate PPT data completeness before rendering.
+      // In production mode this is a hard gate to prevent shipping thin/truncated decks.
+      const pptGateFailures = [];
       for (const ca of countryAnalyses) {
         const blocks = buildPptGateBlocks(ca);
         const pptGate = validatePptData(blocks);
@@ -844,14 +852,64 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             emptyBlocks: pptGate.emptyBlocks.length,
             chartIssues: pptGate.chartIssues.length,
             overflowRisks: pptGate.overflowRisks.length,
+            nonRenderableGroups: pptGate.nonRenderableGroups || [],
+            severeOverflowCount: pptGate.severeOverflowCount || 0,
           })
         );
         if (!pptGate.pass) {
           console.warn(
             `[Quality Gate] PPT data issues for ${ca.country}:`,
-            JSON.stringify({ emptyBlocks: pptGate.emptyBlocks, chartIssues: pptGate.chartIssues })
+            JSON.stringify({
+              emptyBlocks: pptGate.emptyBlocks,
+              chartIssues: pptGate.chartIssues,
+              nonRenderableGroups: pptGate.nonRenderableGroups || [],
+              severeOverflowCount: pptGate.severeOverflowCount || 0,
+            })
           );
+          pptGateFailures.push({
+            country: ca.country,
+            nonRenderableGroups: pptGate.nonRenderableGroups || [],
+            emptyBlocks: (pptGate.emptyBlocks || []).slice(0, 8),
+            chartIssues: (pptGate.chartIssues || []).slice(0, 8),
+            severeOverflowCount: Number(pptGate.severeOverflowCount || 0),
+            semanticallyEmptyRatio: Number(pptGate.semanticallyEmptyRatio || 0),
+          });
         }
+      }
+      if (pptGateFailures.length > 0 && !draftPptMode) {
+        const summary = pptGateFailures
+          .map((failure) => {
+            const groups = failure.nonRenderableGroups.length
+              ? `groups=${failure.nonRenderableGroups.join('|')}`
+              : 'groups=n/a';
+            const empties = failure.emptyBlocks.length
+              ? `empty=${failure.emptyBlocks.join(' ; ')}`
+              : '';
+            const charts = failure.chartIssues.length
+              ? `charts=${failure.chartIssues.join(' ; ')}`
+              : '';
+            const overflow =
+              failure.severeOverflowCount > 0
+                ? `severeOverflow=${failure.severeOverflowCount}`
+                : '';
+            const sparse =
+              failure.semanticallyEmptyRatio > 0
+                ? `emptyRatio=${Math.round(failure.semanticallyEmptyRatio * 100)}%`
+                : '';
+            return `${failure.country}[${groups}${empties ? `, ${empties}` : ''}${charts ? `, ${charts}` : ''}${overflow ? `, ${overflow}` : ''}${sparse ? `, ${sparse}` : ''}]`;
+          })
+          .join(' | ');
+        if (lastRunDiagnostics) {
+          lastRunDiagnostics.stage = 'ppt_data_gate_failed';
+          lastRunDiagnostics.pptDataGateFailures = pptGateFailures;
+          lastRunDiagnostics.error = `PPT data gate failed: ${summary}`;
+        }
+        throw new Error(`PPT data gate failed: ${summary}`);
+      }
+      if (pptGateFailures.length > 0 && draftPptMode) {
+        console.warn(
+          `[Quality Gate] Draft PPT mode bypassed ${pptGateFailures.length} PPT data gate failure(s)`
+        );
       }
 
       // Hard pre-render schema guard: block transient/malformed synthesis before PPT renderer sees it.
@@ -992,6 +1050,8 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           minTables: 3,
           requireInsights: true,
           noEmptySlides: true,
+          maxSuspiciousEllipsis: 0,
+          maxTotalEllipsis: 30,
           forbiddenText: [
             '[truncated]',
             'insufficient research data',
@@ -1201,11 +1261,16 @@ app.post('/api/market-research', async (req, res) => {
   });
 
   // Run research in background with a global pipeline timeout + abort signal
-  const timeoutMinutes = Math.max(1, Math.round(PIPELINE_TIMEOUT_MS / 60000));
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort(new Error(`Pipeline timeout after ${timeoutMinutes} minutes`));
-  }, PIPELINE_TIMEOUT_MS);
+  const timeoutMinutes = Math.max(1, Math.round(PIPELINE_TIMEOUT_MS / 60000));
+  let timeoutId = null;
+  if (PIPELINE_TIMEOUT_MS > 0) {
+    timeoutId = setTimeout(() => {
+      controller.abort(new Error(`Pipeline timeout after ${timeoutMinutes} minutes`));
+    }, PIPELINE_TIMEOUT_MS);
+  } else {
+    console.log('[API] Pipeline timeout disabled (PIPELINE_TIMEOUT_SECONDS=0)');
+  }
   const mergedOptions = { ...(options || {}) };
   if (templateSlideSelections && typeof templateSlideSelections === 'object') {
     mergedOptions.templateSlideSelections = templateSlideSelections;
@@ -1225,10 +1290,10 @@ app.post('/api/market-research', async (req, res) => {
   mergedOptions.abortSignal = controller.signal;
   runMarketResearch(prompt, email, mergedOptions)
     .then(() => {
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
     })
     .catch(async (error) => {
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
       console.error('Background research failed:', error);
       // Only send error email if runMarketResearch didn't already send one
       if (!error._errorEmailSent) {

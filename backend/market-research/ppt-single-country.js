@@ -68,13 +68,14 @@ const {
   TABLE_CELL_MARGIN,
 } = require('./ppt-utils');
 const { ensureString: _ensureString } = require('./shared/utils');
-const { validatePptData } = require('./quality-gates');
+const { validatePptData, blockHasRenderableData } = require('./quality-gates');
 const {
   scanRelationshipTargets,
   scanPackageConsistency,
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
 } = require('./pptx-validator');
+const { normalizeThemeToTemplate } = require('./theme-normalizer');
 
 const STRICT_TEMPLATE_FIDELITY = !/^(0|false|no|off)$/i.test(
   String(process.env.STRICT_TEMPLATE_FIDELITY || 'true').trim()
@@ -85,6 +86,25 @@ const STRICT_TEMPLATE_FIDELITY = !/^(0|false|no|off)$/i.test(
 // XML 1.0 and cause "PowerPoint can't read this file" errors.
 // eslint-disable-next-line no-control-regex
 const XML_INVALID_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+const PPT_TEXT_GLYPH_NORMALIZATIONS = [
+  [/\u2013|\u2014|\u2212/g, '-'],
+  [/\u2018|\u2019|\u2032/g, "'"],
+  [/\u201C|\u201D|\u2033/g, '"'],
+  [/\u2026/g, '...'],
+  [/\u00A0/g, ' '],
+  [/\u2192/g, '->'],
+  [/\u2190/g, '<-'],
+  [/\u2022/g, '- '],
+  [/\u200B/g, ''],
+  [/\u2028|\u2029/g, ' '],
+];
+function normalizePptTextGlyphs(value) {
+  let text = String(value || '');
+  for (const [pattern, replacement] of PPT_TEXT_GLYPH_NORMALIZATIONS) {
+    text = text.replace(pattern, replacement);
+  }
+  return text;
+}
 function stripInvalidSurrogates(value) {
   let out = '';
   for (let i = 0; i < value.length; i++) {
@@ -103,7 +123,8 @@ function stripInvalidSurrogates(value) {
   return out;
 }
 function ensureString(value, defaultValue) {
-  return stripInvalidSurrogates(_ensureString(value, defaultValue).replace(XML_INVALID_CHARS, ''));
+  const normalized = normalizePptTextGlyphs(_ensureString(value, defaultValue));
+  return stripInvalidSurrogates(normalized.replace(XML_INVALID_CHARS, ''));
 }
 
 // Safety wrapper: ensure any value going into a table cell is a plain, XML-safe string.
@@ -113,12 +134,31 @@ function safeCell(value, maxLen) {
   const str = ensureString(value).replace(/\s+/g, ' ').trim();
   if (!str) return '';
   const hardCap = 3000;
+  if (str.length > hardCap) {
+    if (STRICT_TEMPLATE_FIDELITY) {
+      throw new Error(
+        `[PPT] Cell text exceeds hard cap (${str.length} > ${hardCap}) and cannot be rendered safely`
+      );
+    }
+    return truncate(str, hardCap, true);
+  }
   const requestedLimit = Number(maxLen);
-  const effectiveLimit =
-    Number.isFinite(requestedLimit) && requestedLimit > 0
-      ? Math.max(16, Math.min(Math.round(requestedLimit), hardCap))
-      : hardCap;
+  let effectiveLimit = hardCap;
+  if (Number.isFinite(requestedLimit) && requestedLimit > 0) {
+    const rounded = Math.max(16, Math.min(Math.round(requestedLimit), hardCap));
+    // Treat tiny per-field caps as hints, not hard clipping limits. Hard clipping at 15-40 chars
+    // caused pervasive visible truncation ("...") in final decks.
+    if (rounded <= 40) effectiveLimit = 220;
+    else if (rounded <= 80) effectiveLimit = 300;
+    else if (rounded <= 120) effectiveLimit = 360;
+    else if (rounded <= 260) effectiveLimit = 600;
+    else effectiveLimit = rounded;
+  }
   if (str.length <= effectiveLimit) return str;
+  if (STRICT_TEMPLATE_FIDELITY) {
+    // Preserve full text in strict mode; downstream gates should block unrenderable layouts.
+    return str;
+  }
   return truncate(str, effectiveLimit, true);
 }
 
@@ -131,20 +171,20 @@ function limitWords(text, maxWords) {
 
 function getRenderTextLimit(pathKey) {
   const key = ensureString(pathKey).toLowerCase();
-  if (!key) return 420;
+  if (!key) return 900;
   if (key === 'url' || key === 'website') return 2048;
-  if (key.includes('slidetitle')) return 96;
-  if (key.includes('subtitle')) return 220;
-  if (key.includes('description') || key.includes('strategicassessment')) return 260;
+  if (key.includes('slidetitle')) return 180;
+  if (key.includes('subtitle')) return 420;
+  if (key.includes('description') || key.includes('strategicassessment')) return 520;
   if (key.includes('requirements') || key.includes('penalties') || key.includes('enforcement'))
-    return 220;
+    return 420;
   if (
     key.includes('overview') ||
     key.includes('narrative') ||
     key.includes('riskjustification') ||
     key.includes('windowofopportunity')
   ) {
-    return 320;
+    return 620;
   }
   if (
     key.includes('keyinsight') ||
@@ -153,7 +193,7 @@ function getRenderTextLimit(pathKey) {
     key.includes('gotomarketapproach') ||
     key.includes('keymessage')
   ) {
-    return 260;
+    return 900;
   }
   if (
     key.includes('details') ||
@@ -161,9 +201,9 @@ function getRenderTextLimit(pathKey) {
     key.includes('implication') ||
     key.includes('timing')
   ) {
-    return 200;
+    return 520;
   }
-  return 420;
+  return 900;
 }
 
 function getRenderArrayLimit(pathKey) {
@@ -1582,9 +1622,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const titleText = truncateTitle(title);
     const compactTitleBox = titleRect.h <= 1.0;
     const titleLen = ensureString(titleText).length;
-    let subtitleMaxLen = compactTitleBox ? 90 : 140;
-    if (titleLen > 95) subtitleMaxLen = Math.min(subtitleMaxLen, 70);
-    if (titleLen > 120) subtitleMaxLen = Math.min(subtitleMaxLen, 45);
+    let subtitleMaxLen = compactTitleBox ? 220 : 320;
+    if (titleLen > 95) subtitleMaxLen = Math.min(subtitleMaxLen, 180);
+    if (titleLen > 120) subtitleMaxLen = Math.min(subtitleMaxLen, 140);
     const subtitleText = truncateSubtitle(subtitle, subtitleMaxLen, true);
     const subtitleFontSize = compactTitleBox ? 14 : 16;
     const shouldRenderSubtitle =
@@ -1921,24 +1961,47 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   function compactTableRowsForDensity(
     rows,
-    { headerMaxChars = 100, bodyMaxChars = 160 } = {},
+    { headerMaxChars = 220, bodyMaxChars = 360 } = {},
     context = 'table'
   ) {
     if (!Array.isArray(rows) || rows.length === 0) return { rows, changed: 0 };
     let changed = 0;
+    const overflowSamples = [];
     const compactedRows = rows.map((row, rowIdx) => {
       if (!Array.isArray(row)) return row;
       const cap = rowIdx === 0 ? headerMaxChars : bodyMaxChars;
-      return row.map((cell) => {
+      return row.map((cell, colIdx) => {
         if (cell == null) return cell;
         if (typeof cell === 'string') {
           if (cell.length <= cap) return cell;
+          if (STRICT_TEMPLATE_FIDELITY) {
+            overflowSamples.push({
+              row: rowIdx,
+              col: colIdx,
+              cap,
+              len: cell.length,
+              severe: cell.length > Math.round(cap * 2.2),
+              sample: cell.substring(0, 120),
+            });
+            return cell;
+          }
           changed++;
           return truncate(cell, cap, true);
         }
         if (typeof cell === 'object' && !Array.isArray(cell)) {
           const text = ensureString(cell.text, '');
           if (!text || text.length <= cap) return cell;
+          if (STRICT_TEMPLATE_FIDELITY) {
+            overflowSamples.push({
+              row: rowIdx,
+              col: colIdx,
+              cap,
+              len: text.length,
+              severe: text.length > Math.round(cap * 2.2),
+              sample: text.substring(0, 120),
+            });
+            return cell;
+          }
           changed++;
           return {
             ...cell,
@@ -1947,24 +2010,53 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
         const asText = ensureString(cell, '');
         if (!asText || asText.length <= cap) return cell;
+        if (STRICT_TEMPLATE_FIDELITY) {
+          overflowSamples.push({
+            row: rowIdx,
+            col: colIdx,
+            cap,
+            len: asText.length,
+            severe: asText.length > Math.round(cap * 2.2),
+            sample: asText.substring(0, 120),
+          });
+          return cell;
+        }
         changed++;
         return truncate(asText, cap, true);
       });
     });
+    if (overflowSamples.length > 0) {
+      const preview = overflowSamples
+        .slice(0, 4)
+        .map(
+          (entry) => `r${entry.row}c${entry.col} len=${entry.len}>${entry.cap} "${entry.sample}"`
+        )
+        .join(' | ');
+      console.warn(
+        `[PPT] ${context}: ${overflowSamples.length} table cell(s) exceed density budget in strict mode (${preview})`
+      );
+    }
     if (changed > 0) {
       console.log(`[PPT] ${context}: compacted ${changed} dense table cell(s) for readability`);
     }
-    return { rows: compactedRows, changed };
+    return { rows: compactedRows, changed, overflowSamples };
   }
 
   function safeAddTable(slide, rows, options = {}, context = 'table') {
-    const normalizedRows = normalizeTableRows(rows, context);
+    let resolvedContext = ensureString(context, '').trim() || 'table';
+    if (resolvedContext === 'table') {
+      const activeBlockKey = ensureString(activeTemplateContext.blockKey, '').trim();
+      if (activeBlockKey && TABLE_TEMPLATE_CONTEXTS.has(activeBlockKey)) {
+        resolvedContext = activeBlockKey;
+      }
+    }
+    const normalizedRows = normalizeTableRows(rows, resolvedContext);
     if (!normalizedRows) return false;
     let addOptions = options && typeof options === 'object' ? { ...options } : options;
-    const compacted = compactTableColumns(normalizedRows, addOptions, context);
+    const compacted = compactTableColumns(normalizedRows, addOptions, resolvedContext);
     let tableRows = compacted.rows;
     addOptions = compacted.options;
-    tableRows = sanitizeTableCellMargins(tableRows, context);
+    tableRows = sanitizeTableCellMargins(tableRows, resolvedContext);
     const hadAutoPage =
       addOptions &&
       typeof addOptions === 'object' &&
@@ -1978,13 +2070,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       delete addOptions.autoPageRepeatHeader;
       delete addOptions.autoPageHeaderRows;
       if (hadAutoPage) {
-        console.log(`[PPT] ${context}: stripped autoPage flags for deterministic rendering`);
+        console.log(
+          `[PPT] ${resolvedContext}: stripped autoPage flags for deterministic rendering`
+        );
       }
       const normalizedMargin = normalizeTableMarginArray(addOptions.margin);
       if (normalizedMargin) addOptions.margin = normalizedMargin;
     }
     const templateStyleProfile =
-      TABLE_TEMPLATE_CONTEXTS.has(context) &&
+      TABLE_TEMPLATE_CONTEXTS.has(resolvedContext) &&
       Number.isFinite(Number(activeTemplateContext.slideNumber))
         ? getTemplateTableStyleProfile(activeTemplateContext.slideNumber)
         : null;
@@ -2020,7 +2114,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
     const shouldAlignToTemplate =
       typeof addOptions === 'object' &&
-      TABLE_TEMPLATE_CONTEXTS.has(context) &&
+      TABLE_TEMPLATE_CONTEXTS.has(resolvedContext) &&
       activeTemplateContext.layout;
     if (shouldAlignToTemplate) {
       const expectedTableRect = getActiveLayoutRect('table', null);
@@ -2035,7 +2129,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         addOptions.y = expectedTableRect.y;
         addOptions.w = expectedTableRect.w;
         addOptions.h = expectedTableRect.h;
-        recordGeometryCheck('table', context, expectedTableRect, {
+        recordGeometryCheck('table', resolvedContext, expectedTableRect, {
           x: addOptions.x,
           y: addOptions.y,
           w: addOptions.w,
@@ -2044,14 +2138,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         const preDelta = rectDelta(expectedTableRect, requestedRect);
         if (preDelta != null && preDelta > 0.05) {
           console.log(
-            `[PPT TEMPLATE] ${context}: aligned table geometry to slide ${activeTemplateContext.slideNumber} (delta=${preDelta.toFixed(3)}in)`
+            `[PPT TEMPLATE] ${resolvedContext}: aligned table geometry to slide ${activeTemplateContext.slideNumber} (delta=${preDelta.toFixed(3)}in)`
           );
         }
       } else {
-        noteMissingGeometry(
-          'table',
-          context,
-          `No table geometry for selected template slide ${activeTemplateContext.slideNumber}`
+        // Some template slides (e.g., chart-first layouts) do not expose explicit table
+        // geometry in extracted metadata. In that case keep renderer geometry without
+        // treating it as a hard-fidelity failure.
+        console.warn(
+          `[PPT TEMPLATE] ${resolvedContext}: no explicit table geometry for template slide ${activeTemplateContext.slideNumber}; using renderer geometry`
         );
       }
     }
@@ -2073,24 +2168,24 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const tableHeight = Number(addOptions.h);
       if (rowCount > 0 && Number.isFinite(tableHeight) && tableHeight > 0) {
         const rowHeight = tableHeight / Math.max(1, rowCount);
-        let headerMaxChars = 100;
-        let bodyMaxChars = 160;
+        let headerMaxChars = 220;
+        let bodyMaxChars = 360;
         let preferredFontSize = null;
         if (rowHeight < 0.18) {
-          headerMaxChars = 55;
-          bodyMaxChars = 70;
+          headerMaxChars = 180;
+          bodyMaxChars = 320;
           preferredFontSize = 9;
         } else if (rowHeight < 0.22) {
-          headerMaxChars = 70;
-          bodyMaxChars = 90;
+          headerMaxChars = 220;
+          bodyMaxChars = 380;
           preferredFontSize = 10;
         } else if (rowHeight < 0.26) {
-          headerMaxChars = 85;
-          bodyMaxChars = 110;
+          headerMaxChars = 260;
+          bodyMaxChars = 440;
           preferredFontSize = 11;
         } else if (rowHeight < 0.3) {
-          headerMaxChars = 95;
-          bodyMaxChars = 130;
+          headerMaxChars = 300;
+          bodyMaxChars = 520;
           preferredFontSize = 12;
         }
         if (preferredFontSize != null) {
@@ -2103,18 +2198,32 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         const compacted = compactTableRowsForDensity(
           tableRows,
           { headerMaxChars, bodyMaxChars },
-          context
+          resolvedContext
         );
         tableRows = compacted.rows;
+        if (STRICT_TEMPLATE_FIDELITY && Array.isArray(compacted.overflowSamples)) {
+          const severe = compacted.overflowSamples.filter((entry) => entry.severe);
+          if (severe.length > 0) {
+            const preview = severe
+              .slice(0, 4)
+              .map((entry) => `r${entry.row}c${entry.col}:${entry.len}>${entry.cap}`)
+              .join(', ');
+            throw new Error(
+              `[PPT] ${resolvedContext}: table density overflow (${severe.length} severe cell(s)); ${preview}`
+            );
+          }
+        }
       }
     }
     try {
       slide.addTable(tableRows, addOptions);
       return true;
     } catch (err) {
-      console.error(`[PPT] ${context} addTable failed: ${err.message} | rows=${tableRows.length}`);
+      console.error(
+        `[PPT] ${resolvedContext} addTable failed: ${err.message} | rows=${tableRows.length}`
+      );
       templateUsageStats.slideRenderFailures.push({
-        key: context,
+        key: resolvedContext,
         pattern: 'table',
         error: err.message,
       });
@@ -4305,11 +4414,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     // Use addCaseStudyRows pattern for rich rendering
     const caseRows = [
-      { label: 'Company', content: truncate(ensureString(data.company), 80, true) },
-      { label: 'Entry Year', content: truncate(ensureString(data.entryYear), 40, true) },
-      { label: 'Entry Mode', content: truncate(ensureString(data.entryMode), 80, true) },
-      { label: 'Investment', content: truncate(ensureString(data.investment), 90, true) },
-      { label: 'Outcome', content: truncate(ensureString(data.outcome), 150, true) },
+      { label: 'Company', content: safeCell(data.company, 220) },
+      { label: 'Entry Year', content: safeCell(data.entryYear, 120) },
+      { label: 'Entry Mode', content: safeCell(data.entryMode, 220) },
+      { label: 'Investment', content: safeCell(data.investment, 220) },
+      { label: 'Outcome', content: safeCell(data.outcome, 320) },
     ].filter((row) => row.content);
     const lessons = safeArray(data.keyLessons, 4);
     const hasRightLessons = lessons.length > 0;
@@ -4339,21 +4448,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (data.applicability) {
       const sourceRect = getActiveLayoutRect('source', tpSource);
       const sourceTop = Number(sourceRect?.y) || Number(tpSource.y) || 6.7;
-      const applicabilityText = truncate(
-        `Applicability: ${ensureString(data.applicability)}`,
-        220,
-        true
-      );
+      const applicabilityText = `Applicability: ${ensureString(data.applicability)}`;
 
       if (hasRightLessons) {
-        // Case-study slide uses right-side lesson panels; place applicability beneath them.
+        // Case-study slide uses right-side lesson panels; place applicability beneath them
+        // without hard character clipping.
         const boxX = 8.78;
         const boxW = 4.12;
-        const boxY = 5.98;
-        const boxH = Math.max(0.34, Math.min(0.62, sourceTop - boxY - 0.03));
+        const boxY = 5.84;
+        const boxH = Math.max(0.5, Math.min(0.86, sourceTop - boxY - 0.03));
         if (boxH >= 0.24) {
-          const shortApplicability = truncate(ensureString(data.applicability), 48, true);
-          addCalloutOverlay(slide, shortApplicability, { x: boxX, y: boxY, w: boxW, h: boxH });
+          addCalloutBox(slide, '', applicabilityText, {
+            x: boxX,
+            y: boxY,
+            w: boxW,
+            h: boxH,
+            type: 'insight',
+          });
         }
       } else {
         // No right panels: keep applicability at the bottom of the content lane.
@@ -4731,81 +4842,119 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   function renderImplementation(slide, data) {
     const phases = safeArray(data.phases, 3);
-    if (phases.length > 0) {
-      // Phases as table with distinct colors per phase
-      const phaseColors = [COLORS.accent1, COLORS.green, COLORS.orange];
-      const phaseRows = [
-        phases.map((phase, pi) => ({
-          text: phase.name || 'Phase',
-          options: {
-            bold: true,
-            color: COLORS.white,
-            fill: { color: phaseColors[pi % phaseColors.length] },
-            align: 'center',
-            fontSize: 12,
-          },
-        })),
-        phases.map((phase) => ({
-          text:
-            safeArray(phase.activities, 3)
-              .map((a) => `- ${ensureString(a)}`)
-              .join('\n') || '',
-          options: { fontSize: 14, valign: 'top' },
-        })),
-        phases.map((phase) => {
-          const parts = [];
-          const milestones = safeArray(phase.milestones, 2);
-          if (milestones.length > 0)
-            parts.push(`Milestones: ${milestones.map((m) => ensureString(m)).join(', ')}`);
-          if (phase.investment) parts.push(`Investment: ${phase.investment}`);
-          return {
-            text: parts.join('\n') || '',
-            options: { fontSize: 14, color: COLORS.footerText, bold: false },
-          };
-        }),
-      ];
-      const phaseColW = phases.map(() => CONTENT_WIDTH / phases.length);
-      const implTableH = safeTableHeight(phaseRows.length, { fontSize: 14, maxH: 4.0 });
-      applyAlternateRowFill(phaseRows);
-      safeAddTable(slide, phaseRows, {
+    if (phases.length === 0) {
+      addDataUnavailableMessage(slide, 'Implementation roadmap data not available');
+      return;
+    }
+
+    const totalInvestment = ensureString(data.totalInvestment || '').trim();
+    const breakeven = ensureString(data.breakeven || '').trim();
+    const summaryParts = [];
+    if (totalInvestment) summaryParts.push(`Total investment: ${totalInvestment}`);
+    if (breakeven) summaryParts.push(`Breakeven: ${breakeven}`);
+
+    let cardsTopY = CONTENT_Y + 0.08;
+    if (summaryParts.length > 0) {
+      addCalloutBox(slide, 'Roadmap Summary', summaryParts.join('\n'), {
         x: LEFT_MARGIN,
         y: CONTENT_Y,
         w: CONTENT_WIDTH,
-        h: implTableH,
-        fontSize: 14,
+        h: 0.62,
+        type: 'insight',
+      });
+      cardsTopY = CONTENT_Y + 0.77;
+    }
+
+    const gap = 0.12;
+    const phaseCount = Math.min(phases.length, 3);
+    const cardW = (CONTENT_WIDTH - gap * (phaseCount - 1)) / phaseCount;
+    const headerH = 0.28;
+    const cardH = Math.max(2.8, Math.min(3.6, CONTENT_BOTTOM - cardsTopY - 0.95));
+
+    for (let i = 0; i < phaseCount; i++) {
+      const phase = phases[i] || {};
+      const cardX = LEFT_MARGIN + i * (cardW + gap);
+      const phaseColor = i === 0 ? COLORS.accent1 : i === 1 ? COLORS.dk2 : COLORS.orange;
+
+      slide.addShape('roundRect', {
+        x: cardX,
+        y: cardsTopY,
+        w: cardW,
+        h: headerH,
+        fill: { color: phaseColor },
+        line: { color: phaseColor, pt: 0.5 },
+      });
+      const phaseTitle = fitTextToShape(
+        ensureString(phase.name || `Phase ${i + 1}`),
+        cardW - 0.14,
+        0.2,
+        11
+      );
+      slide.addText(phaseTitle.text, {
+        x: cardX + 0.07,
+        y: cardsTopY + 0.03,
+        w: cardW - 0.14,
+        h: headerH - 0.04,
+        fontSize: phaseTitle.fontSize,
+        bold: true,
+        color: COLORS.white,
         fontFace: FONT,
-        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
-        margin: TABLE_CELL_MARGIN,
-        colW: phaseColW,
-        valign: 'top',
+        align: 'center',
+        valign: 'middle',
+        fit: 'shrink',
       });
 
-      // Add chevron flow for phases below table
-      addChevronFlow(
-        slide,
-        phases.map((p) => p.name || 'Phase'),
-        null,
-        { y: CONTENT_Y + implTableH + 0.3 }
-      );
+      slide.addShape('rect', {
+        x: cardX,
+        y: cardsTopY + headerH + 0.03,
+        w: cardW,
+        h: cardH,
+        fill: { color: COLORS.white },
+        line: { color: COLORS.border, pt: TABLE_BORDER_WIDTH },
+      });
 
-      // Next steps from Stage 3
-      const nextSteps = enrichment.nextSteps || countryAnalysis?.summary?.nextSteps || null;
-      const chevronBottomY = CONTENT_Y + implTableH + 0.3 + 0.7;
-      if (nextSteps && chevronBottomY < CONTENT_BOTTOM - 0.7) {
-        addCalloutBox(
-          slide,
-          'Next Steps',
-          typeof nextSteps === 'string'
-            ? nextSteps
-            : Array.isArray(nextSteps)
-              ? nextSteps.join('; ')
-              : JSON.stringify(nextSteps),
-          { x: LEFT_MARGIN, y: chevronBottomY, w: CONTENT_WIDTH, h: 0.6, type: 'insight' }
-        );
-      }
-    } else {
-      addDataUnavailableMessage(slide, 'Implementation roadmap data not available');
-      return;
+      const phaseBodyParts = [];
+      const activities = safeArray(phase.activities, 4).map((a) => `- ${ensureString(a)}`);
+      if (activities.length > 0) phaseBodyParts.push(activities.join('\n'));
+      const milestones = safeArray(phase.milestones, 2).map((m) => ensureString(m));
+      if (milestones.length > 0) phaseBodyParts.push(`Milestones: ${milestones.join(', ')}`);
+      if (phase.investment) phaseBodyParts.push(`Investment: ${ensureString(phase.investment)}`);
+      if (phase.timeline) phaseBodyParts.push(`Timeline: ${ensureString(phase.timeline)}`);
+
+      const phaseBody = fitTextToShape(
+        ensureString(phaseBodyParts.join('\n')),
+        cardW - 0.18,
+        cardH - 0.12,
+        10
+      );
+      slide.addText(phaseBody.text, {
+        x: cardX + 0.09,
+        y: cardsTopY + headerH + 0.08,
+        w: cardW - 0.18,
+        h: cardH - 0.12,
+        fontSize: phaseBody.fontSize,
+        color: COLORS.black,
+        fontFace: FONT,
+        valign: 'top',
+        fit: 'shrink',
+      });
+    }
+
+    const nextSteps = enrichment.nextSteps || countryAnalysis?.summary?.nextSteps || null;
+    if (nextSteps) {
+      const nextStepsText =
+        typeof nextSteps === 'string'
+          ? nextSteps
+          : Array.isArray(nextSteps)
+            ? nextSteps.join('; ')
+            : JSON.stringify(nextSteps);
+      addCalloutBox(slide, 'Next Steps', nextStepsText, {
+        x: LEFT_MARGIN,
+        y: CONTENT_BOTTOM - 0.72,
+        w: CONTENT_WIDTH,
+        h: 0.62,
+        type: 'insight',
+      });
     }
   }
 
@@ -5069,14 +5218,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
       const rationale = [];
       if (ratings.attractivenessRationale) {
-        rationale.push(
-          `Attractiveness: ${truncate(ensureString(ratings.attractivenessRationale), 85, true)}`
-        );
+        rationale.push(`Attractiveness: ${safeCell(ratings.attractivenessRationale, 260)}`);
       }
       if (ratings.feasibilityRationale) {
-        rationale.push(
-          `Feasibility: ${truncate(ensureString(ratings.feasibilityRationale), 85, true)}`
-        );
+        rationale.push(`Feasibility: ${safeCell(ratings.feasibilityRationale, 260)}`);
       }
       if (rationale.length > 0) {
         ratingParts.push({
@@ -5100,10 +5245,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
     // Show recommendation only if real data exists
     if (data.recommendation) {
-      const recommendationText = truncate(
+      const recommendationText = safeCell(
         ensureString(data.recommendation).replace(/\s+/g, ' '),
-        210,
-        true
+        480
       );
       let recommendationY = CONTENT_BOTTOM - 0.75;
       if (Number.isFinite(ratingBottomY)) {
@@ -5140,7 +5284,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   function renderKeyInsights(slide, data) {
     const insights = safeArray(data.insights, 3);
-    let insightY = CONTENT_Y;
     // Prefer synthesis keyInsights over countryAnalysis insights (fallback chain)
     const synthesisInsights =
       enrichment.keyInsights || countryAnalysis?.summary?.keyInsights || null;
@@ -5151,9 +5294,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       addDataUnavailableMessage(slide, 'Key insights data not available');
       return;
     }
-    // Use resolvedInsights if we got synthesis data, otherwise use the original insights
     const finalInsights = resolvedInsights.length > 0 ? resolvedInsights : insights;
-    finalInsights.forEach((insight, idx) => {
+    const panelInsights = finalInsights.slice(0, 3);
+    const panelGap = 0.16;
+    const sourceRect = getActiveLayoutRect('source', tpSource);
+    const sourceTop = Number(sourceRect?.y) || Number(tpSource.y) || 6.7;
+    const hasRecommendation = !!ensureString(data.recommendation || '').trim();
+    const recommendationReserve = hasRecommendation ? 1.18 : 0.0;
+    const panelTop = CONTENT_Y;
+    const panelBottom = Math.max(panelTop + 0.9, sourceTop - 0.08 - recommendationReserve);
+    const panelCount = Math.max(1, panelInsights.length);
+    const totalGaps = panelGap * (panelCount - 1);
+    const panelH = Math.max(0.7, (panelBottom - panelTop - totalGaps) / panelCount);
+    let panelY = panelTop;
+
+    panelInsights.forEach((insight, idx) => {
       const rawTitle =
         typeof insight === 'string'
           ? `Insight ${idx + 1}`
@@ -5170,37 +5325,64 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         rawContent = parts.join('\n');
       }
 
-      const titleSized = dynamicText(rawTitle, 70, 14);
-      slide.addText(titleSized.text, {
+      slide.addShape('rect', {
         x: LEFT_MARGIN,
-        y: insightY,
+        y: panelY,
         w: CONTENT_WIDTH,
-        h: 0.35,
+        h: panelH,
+        fill: { color: COLORS.white },
+        line: { color: COLORS.border, pt: TABLE_BORDER_WIDTH },
+      });
+
+      const titleStripH = Math.min(0.34, Math.max(0.24, panelH * 0.25));
+      slide.addShape('rect', {
+        x: LEFT_MARGIN,
+        y: panelY,
+        w: CONTENT_WIDTH,
+        h: titleStripH,
+        fill: { color: COLORS.calloutFill || 'D9D9D9' },
+        line: { color: COLORS.border, pt: TABLE_BORDER_WIDTH },
+      });
+
+      const titleSized = fitTextToShape(rawTitle, CONTENT_WIDTH - 0.2, titleStripH - 0.06, 12);
+      slide.addText(titleSized.text, {
+        x: LEFT_MARGIN + 0.1,
+        y: panelY + 0.03,
+        w: CONTENT_WIDTH - 0.2,
+        h: titleStripH - 0.05,
         fontSize: titleSized.fontSize,
         bold: true,
         color: COLORS.dk2,
         fontFace: FONT,
+        fit: 'shrink',
       });
-      const contentSized = dynamicText(ensureString(rawContent), 200, 11, 7);
-      slide.addText(contentSized.text, {
-        x: LEFT_MARGIN,
-        y: insightY + 0.35,
-        w: CONTENT_WIDTH,
-        h: 0.9,
-        fontSize: contentSized.fontSize,
+
+      const bodyH = Math.max(0.18, panelH - titleStripH - 0.08);
+      const bodySized = fitTextToShape(ensureString(rawContent), CONTENT_WIDTH - 0.2, bodyH, 10);
+      slide.addText(bodySized.text, {
+        x: LEFT_MARGIN + 0.1,
+        y: panelY + titleStripH + 0.03,
+        w: CONTENT_WIDTH - 0.2,
+        h: bodyH,
+        fontSize: bodySized.fontSize,
         fontFace: FONT,
         color: COLORS.black,
         valign: 'top',
+        fit: 'shrink',
       });
-      insightY += 1.4; // step = 0.35 + 0.9 + 0.15
+
+      panelY += panelH + panelGap;
     });
 
-    // Show recommendation only if real data exists
-    if (data.recommendation) {
-      const recoY = Math.max(insightY + 0.1, 5.65);
-      addCalloutBox(slide, 'RECOMMENDATION', ensureString(data.recommendation), {
-        y: Math.min(recoY, 5.85),
-        h: 0.8,
+    if (hasRecommendation) {
+      const recommendationText = ensureString(data.recommendation);
+      const recommendationY = panelBottom + 0.06;
+      const recommendationH = Math.max(0.64, sourceTop - recommendationY - 0.04);
+      addCalloutBox(slide, 'RECOMMENDATION', recommendationText, {
+        x: LEFT_MARGIN,
+        y: recommendationY,
+        w: CONTENT_WIDTH,
+        h: recommendationH,
         type: 'recommendation',
       });
     }
@@ -5375,7 +5557,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Generate an entire section: TOC divider + content slides
   // Check if a section has any real content (not just empty objects or "Data unavailable" placeholders)
   function sectionHasContent(blocks) {
-    return blocks.some((b) => hasMeaningfulContent(b?.data));
+    return blocks.some((b) => blockHasRenderableData(b));
   }
 
   // Section names for TOC slides (Policy first, then Market — matches Escort template)
@@ -5487,14 +5669,25 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
     const pptGate = validatePptData(blocks);
     console.log('[Quality Gate] PPT data:', JSON.stringify(pptGate));
-    if (
-      pptGate.pass === false &&
-      pptGate.emptyBlocks &&
-      pptGate.emptyBlocks.length > blocks.length * 0.5
-    ) {
-      console.warn(
-        `[PPT] Data gate warning for "${sectionName}": ${pptGate.emptyBlocks.length}/${blocks.length} blocks empty. Falling through to content check.`
-      );
+    if (pptGate.pass === false) {
+      const groupSummary = Array.isArray(pptGate.nonRenderableGroups)
+        ? pptGate.nonRenderableGroups.join(', ')
+        : '';
+      const emptySummary = Array.isArray(pptGate.emptyBlocks)
+        ? pptGate.emptyBlocks.slice(0, 6).join(' ; ')
+        : '';
+      const chartSummary = Array.isArray(pptGate.chartIssues)
+        ? pptGate.chartIssues.slice(0, 4).join(' ; ')
+        : '';
+      const gateMessage =
+        `[PPT] Data gate failed for "${sectionName}"` +
+        `${groupSummary ? ` [non-renderable groups: ${groupSummary}]` : ''}` +
+        `${emptySummary ? ` [empty: ${emptySummary}]` : ''}` +
+        `${chartSummary ? ` [charts: ${chartSummary}]` : ''}`;
+      if (STRICT_TEMPLATE_FIDELITY) {
+        throw new Error(gateMessage);
+      }
+      console.warn(`${gateMessage}. Continuing because STRICT_TEMPLATE_FIDELITY is disabled.`);
     }
 
     if (!sectionHasContent(blocks)) {
@@ -5682,10 +5875,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const execText =
     execSentenceChunks.length > 1
       ? execSentenceChunks
-          .slice(0, 6)
-          .map((s) => `• ${limitWords(s, 20)}`)
+          .slice(0, 4)
+          .map((s) => `• ${ensureString(s)}`)
           .join('\n')
-      : limitWords(execTextRaw, 120);
+      : ensureString(execTextRaw);
   // Fix 9: overflow protection — shrink font to fit, never truncate
   const execFitted = fitTextToShape(execText, CONTENT_WIDTH, tpContent.h, 14);
   execSlide.addText(execFitted.text, {
@@ -5698,7 +5891,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     color: COLORS.black,
     lineSpacingMultiple: 1.3,
     valign: 'top',
-    fit: 'shrink',
   });
 
   // ===== SLIDE 4: OPPORTUNITIES & BARRIERS (after Exec Summary, matches template) =====
@@ -5977,6 +6169,22 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
+  pptxBuffer = await normalizeThemeToTemplate(pptxBuffer, {
+    colors: {
+      dk1: tpColors.dk1 || '000000',
+      lt1: tpColors.lt1 || 'FFFFFF',
+      dk2: tpColors.dk2 || '1F497D',
+      lt2: tpColors.lt2 || '1F497D',
+      accent1: tpColors.accent1 || '007FFF',
+      accent2: tpColors.accent2 || 'EDFDFF',
+      accent3: tpColors.accent3 || '011AB7',
+      accent4: tpColors.accent4 || '1524A9',
+      accent5: tpColors.accent5 || '001C44',
+      accent6: tpColors.accent6 || 'E46C0A',
+    },
+    majorFontFace: 'Segoe UI',
+    minorFontFace: 'Segoe UI',
+  });
   const nonVisualIdNormalize = await normalizeSlideNonVisualIds(pptxBuffer);
   pptxBuffer = nonVisualIdNormalize.buffer;
   if (nonVisualIdNormalize.changed) {
