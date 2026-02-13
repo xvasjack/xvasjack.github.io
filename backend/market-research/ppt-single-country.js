@@ -119,6 +119,21 @@ const TABLE_FLEX_MAX_COLS = envNumber('TABLE_FLEX_MAX_COLS', 9, {
   min: 3,
   max: 20,
 });
+const TABLE_VARIANT_MAX_WIDTH_DELTA = envNumber('TABLE_VARIANT_MAX_WIDTH_DELTA', 0.1, {
+  min: 0.05,
+  max: 0.3,
+});
+const TABLE_VARIANT_MAX_HEIGHT_DELTA = envNumber('TABLE_VARIANT_MAX_HEIGHT_DELTA', 0.12, {
+  min: 0.05,
+  max: 0.35,
+});
+
+// Typography standards requested by user.
+const TITLE_FONT_PT = 20;
+const MESSAGE_FONT_PT = 16;
+const CONTENT_FONT_PT = 14;
+const CONTENT_MIN_FONT_PT = 12;
+const FOOTNOTE_FONT_PT = 10;
 
 // PPTX-safe ensureString: strips XML-invalid control characters after conversion.
 // PPTX = ZIP of XML files. Characters \x00-\x08, \x0B, \x0C, \x0E-\x1F are invalid in
@@ -1599,7 +1614,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const tpSource = tpPos.sourceBar || { x: 0.3758, y: 6.6944, w: 12.5862, h: 0.25 };
   // Title font from template extraction
   const tpTitleFont = templatePatterns.style?.fonts?.title || {};
-  const tpTitleFontSize = tpTitleFont.size || 20;
+  const tpTitleFontSize = TITLE_FONT_PT;
   const tpTitleBold = tpTitleFont.bold !== undefined ? tpTitleFont.bold : false;
   const CONTENT_WIDTH = tpContent.w; // Full content width for 16:9 widescreen
   const LEFT_MARGIN = tpContent.x; // Left margin from template
@@ -1682,7 +1697,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (titleLen > 95) subtitleMaxLen = Math.min(subtitleMaxLen, 180);
     if (titleLen > 120) subtitleMaxLen = Math.min(subtitleMaxLen, 140);
     const subtitleText = truncateSubtitle(subtitle, subtitleMaxLen, true);
-    const subtitleFontSize = compactTitleBox ? 14 : 16;
+    const subtitleFontSize = MESSAGE_FONT_PT;
     const shouldRenderSubtitle =
       subtitleText &&
       subtitleText.length > (compactTitleBox ? 16 : 10) &&
@@ -1760,21 +1775,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           : '+ Limited data availability';
       footerParts.push({
         text: legend + (sourcesToRender && sourcesToRender.length > 0 ? '   |   ' : ''),
-        options: { fontSize: 8, italic: true, color: COLORS.black, fontFace: FONT },
+        options: { fontSize: FOOTNOTE_FONT_PT, italic: true, color: COLORS.black, fontFace: FONT },
       });
     }
 
     if (sourcesToRender && sourcesToRender.length > 0) {
       footerParts.push({
         text: 'Sources: ',
-        options: { fontSize: 10, fontFace: FONT, color: COLORS.muted },
+        options: { fontSize: FOOTNOTE_FONT_PT, fontFace: FONT, color: COLORS.muted },
       });
 
       sourcesToRender.slice(0, 3).forEach((source, idx) => {
         if (idx > 0)
           footerParts.push({
             text: ', ',
-            options: { fontSize: 10, fontFace: FONT, color: COLORS.muted },
+            options: { fontSize: FOOTNOTE_FONT_PT, fontFace: FONT, color: COLORS.muted },
           });
 
         const sourceUrl = sanitizeHyperlinkUrl(typeof source === 'object' ? source.url : source);
@@ -1791,7 +1806,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           footerParts.push({
             text: displayText,
             options: {
-              fontSize: 10,
+              fontSize: FOOTNOTE_FONT_PT,
               fontFace: FONT,
               color: COLORS.hyperlink,
               hyperlink: { url: sourceUrl },
@@ -1800,7 +1815,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         } else {
           footerParts.push({
             text: sourceTitle || String(source),
-            options: { fontSize: 10, fontFace: FONT, color: COLORS.muted },
+            options: { fontSize: FOOTNOTE_FONT_PT, fontFace: FONT, color: COLORS.muted },
           });
         }
       });
@@ -1808,7 +1823,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       // Default source when none provided
       footerParts.push({
         text: 'Source: YCP Analysis',
-        options: { fontSize: 10, fontFace: FONT, color: COLORS.muted },
+        options: { fontSize: FOOTNOTE_FONT_PT, fontFace: FONT, color: COLORS.muted },
       });
     }
 
@@ -2103,6 +2118,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return rows.reduce((max, row) => Math.max(max, Array.isArray(row) ? row.length : 0), 0);
   }
 
+  function pickTableVariant(rowPressure, colPressure) {
+    const rowBand = rowPressure >= 1.7 ? 'plus' : rowPressure >= 1.3 ? 'soft' : 'std';
+    const colBand = colPressure >= 1.7 ? 'plus' : colPressure >= 1.3 ? 'soft' : 'std';
+    const matrix = {
+      std_std: { name: 'standard', widthNudge: 0, heightNudge: 0 },
+      std_soft: { name: 'wide_soft', widthNudge: 0.04, heightNudge: 0 },
+      std_plus: { name: 'wide_plus', widthNudge: 0.08, heightNudge: 0 },
+      soft_std: { name: 'tall_soft', widthNudge: 0, heightNudge: 0.04 },
+      plus_std: { name: 'tall_plus', widthNudge: 0, heightNudge: 0.08 },
+      soft_soft: { name: 'balanced_soft', widthNudge: 0.04, heightNudge: 0.04 },
+      soft_plus: { name: 'balanced_wide_plus', widthNudge: 0.08, heightNudge: 0.05 },
+      plus_soft: { name: 'balanced_tall_plus', widthNudge: 0.05, heightNudge: 0.08 },
+      plus_plus: { name: 'balanced_plus', widthNudge: 0.08, heightNudge: 0.08 },
+    };
+    return matrix[`${rowBand}_${colBand}`] || matrix.std_std;
+  }
+
   function applyBoundedTemplateTableFlex(
     tableRows,
     addOptions,
@@ -2122,6 +2154,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const baselineCols = Math.max(1, Number(templateStyleProfile?.baselineCols) || colCount || 1);
     const rowPressure = rowCount > 0 ? rowCount / baselineRows : 1;
     const colPressure = colCount > 0 ? colCount / baselineCols : 1;
+    const variant = pickTableVariant(rowPressure, colPressure);
     const sourceRect = getActiveLayoutRect('source', tpSource) || tpSource;
     const contentRect = getActiveLayoutRect('content', tpContent) || tpContent;
     const anchorX = Number(expectedTableRect.x);
@@ -2132,10 +2165,34 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const maxH = Math.max(0.6, Number(sourceRect.y) - 0.02 - anchorY);
     const allowFlex = TABLE_FLEX_MODE === 'bounded';
     const enforceBudget = TABLE_FLEX_MODE !== 'off';
-    const widthScale =
+    const pressureWidthScale =
       allowFlex && colPressure > 1 ? Math.min(TABLE_FLEX_MAX_WIDTH_SCALE, colPressure) : 1;
-    const heightScale =
+    const pressureHeightScale =
       allowFlex && rowPressure > 1 ? Math.min(TABLE_FLEX_MAX_HEIGHT_SCALE, rowPressure) : 1;
+    const requestedWidthScale = allowFlex
+      ? Math.min(TABLE_FLEX_MAX_WIDTH_SCALE, pressureWidthScale + variant.widthNudge)
+      : 1;
+    const requestedHeightScale = allowFlex
+      ? Math.min(TABLE_FLEX_MAX_HEIGHT_SCALE, pressureHeightScale + variant.heightNudge)
+      : 1;
+    let widthScale = requestedWidthScale;
+    let heightScale = requestedHeightScale;
+    const widthVariantDelta = Math.max(0, requestedWidthScale - pressureWidthScale);
+    const heightVariantDelta = Math.max(0, requestedHeightScale - pressureHeightScale);
+    const widthDeltaTooMuch = widthVariantDelta > TABLE_VARIANT_MAX_WIDTH_DELTA + 0.001;
+    const heightDeltaTooMuch = heightVariantDelta > TABLE_VARIANT_MAX_HEIGHT_DELTA + 0.001;
+    if (widthDeltaTooMuch) {
+      widthScale = Math.min(
+        TABLE_FLEX_MAX_WIDTH_SCALE,
+        pressureWidthScale + TABLE_VARIANT_MAX_WIDTH_DELTA
+      );
+    }
+    if (heightDeltaTooMuch) {
+      heightScale = Math.min(
+        TABLE_FLEX_MAX_HEIGHT_SCALE,
+        pressureHeightScale + TABLE_VARIANT_MAX_HEIGHT_DELTA
+      );
+    }
     const targetW = Math.max(0.6, Math.min(maxW, baseW * widthScale));
     const targetH = Math.max(0.6, Math.min(maxH, baseH * heightScale));
     const nextOptions = {
@@ -2150,6 +2207,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     if (STRICT_TEMPLATE_FIDELITY && enforceBudget) {
       const violations = [];
+      if (widthDeltaTooMuch) {
+        violations.push(
+          `variant width nudge ${(widthVariantDelta * 100).toFixed(1)}% exceeds max ${(TABLE_VARIANT_MAX_WIDTH_DELTA * 100).toFixed(1)}%`
+        );
+      }
+      if (heightDeltaTooMuch) {
+        violations.push(
+          `variant height nudge ${(heightVariantDelta * 100).toFixed(1)}% exceeds max ${(TABLE_VARIANT_MAX_HEIGHT_DELTA * 100).toFixed(1)}%`
+        );
+      }
       if (rowCount > TABLE_FLEX_MAX_ROWS) {
         violations.push(`rows=${rowCount} exceed maxRows=${TABLE_FLEX_MAX_ROWS}`);
       }
@@ -2184,6 +2251,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         colPressure,
         rowHeight,
         colWidth,
+        variant: variant.name,
+        pressureWidthScale,
+        pressureHeightScale,
+        requestedWidthScale,
+        requestedHeightScale,
         widthScale,
         heightScale,
       },
@@ -2298,7 +2370,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           (aligned.metrics.widthScale > 1.01 || aligned.metrics.heightScale > 1.01)
         ) {
           console.log(
-            `[PPT TEMPLATE] ${resolvedContext}: applied bounded table flex (rows=${aligned.metrics.rowCount}/${aligned.metrics.baselineRows}, cols=${aligned.metrics.colCount}/${aligned.metrics.baselineCols}, widthScale=${aligned.metrics.widthScale.toFixed(2)}, heightScale=${aligned.metrics.heightScale.toFixed(2)})`
+            `[PPT TEMPLATE] ${resolvedContext}: applied bounded table flex variant=${aligned.metrics.variant || 'standard'} (rows=${aligned.metrics.rowCount}/${aligned.metrics.baselineRows}, cols=${aligned.metrics.colCount}/${aligned.metrics.baselineCols}, widthScale=${aligned.metrics.widthScale.toFixed(2)}, heightScale=${aligned.metrics.heightScale.toFixed(2)})`
           );
         }
       } else {
@@ -2324,6 +2396,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       }
     }
     if (addOptions && typeof addOptions === 'object') {
+      const configuredFontSize = Number(addOptions.fontSize);
+      if (Number.isFinite(configuredFontSize) && configuredFontSize > 0) {
+        addOptions.fontSize = Math.max(
+          CONTENT_MIN_FONT_PT,
+          Math.min(CONTENT_FONT_PT, configuredFontSize)
+        );
+      } else {
+        addOptions.fontSize = CONTENT_FONT_PT;
+      }
       const rowCount = Array.isArray(tableRows) ? tableRows.length : 0;
       const tableHeight = Number(addOptions.h);
       if (rowCount > 0 && Number.isFinite(tableHeight) && tableHeight > 0) {
@@ -2334,26 +2415,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         if (rowHeight < 0.18) {
           headerMaxChars = 180;
           bodyMaxChars = 320;
-          preferredFontSize = 9;
+          preferredFontSize = 12;
         } else if (rowHeight < 0.22) {
           headerMaxChars = 220;
           bodyMaxChars = 380;
-          preferredFontSize = 10;
+          preferredFontSize = 12;
         } else if (rowHeight < 0.26) {
           headerMaxChars = 260;
           bodyMaxChars = 440;
-          preferredFontSize = 11;
+          preferredFontSize = 13;
         } else if (rowHeight < 0.3) {
           headerMaxChars = 300;
           bodyMaxChars = 520;
-          preferredFontSize = 12;
+          preferredFontSize = 14;
         }
         if (preferredFontSize != null) {
           const current = Number(addOptions.fontSize);
-          addOptions.fontSize =
+          const candidate =
             Number.isFinite(current) && current > 0
               ? Math.min(current, preferredFontSize)
               : preferredFontSize;
+          addOptions.fontSize = Math.max(CONTENT_MIN_FONT_PT, Math.min(CONTENT_FONT_PT, candidate));
         }
         const compacted = compactTableRowsForDensity(
           tableRows,
@@ -3455,7 +3537,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             y: CONTENT_Y,
             w: CONTENT_WIDTH,
             h: 4.5,
-            fontSize: 11,
+            fontSize: CONTENT_MIN_FONT_PT,
             fontFace: FONT,
             color: COLORS.darkGray,
             valign: 'top',
@@ -3885,16 +3967,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         if (idx > 0) {
           assessmentParts.push({
             text: '\n',
-            options: { fontSize: 11, color: COLORS.darkGray, fontFace: FONT },
+            options: { fontSize: CONTENT_MIN_FONT_PT, color: COLORS.darkGray, fontFace: FONT },
           });
         }
         assessmentParts.push({
           text: ensureString(p.name) + ': ',
-          options: { fontSize: 11, bold: true, color: COLORS.darkGray, fontFace: FONT },
+          options: {
+            fontSize: CONTENT_MIN_FONT_PT,
+            bold: true,
+            color: COLORS.darkGray,
+            fontFace: FONT,
+          },
         });
         assessmentParts.push({
           text: ensureString(p.strategicAssessment),
-          options: { fontSize: 11, color: COLORS.darkGray, fontFace: FONT },
+          options: { fontSize: CONTENT_MIN_FONT_PT, color: COLORS.darkGray, fontFace: FONT },
         });
       });
       const assessH = Math.min(clampH(compRecoY, 1.2), 0.3 + playersWithAssessment.length * 0.3);
@@ -4228,7 +4315,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           y: CONTENT_Y,
           w: CONTENT_WIDTH,
           h: Math.min(4.5, CONTENT_BOTTOM - CONTENT_Y),
-          fontSize: 11,
+          fontSize: CONTENT_MIN_FONT_PT,
           fontFace: FONT,
           color: COLORS.darkGray,
           valign: 'top',
@@ -4289,7 +4376,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           y: actsNextY,
           w: CONTENT_WIDTH,
           h: 0.35,
-          fontSize: 11,
+          fontSize: CONTENT_MIN_FONT_PT,
           italic: true,
           color: COLORS.secondary,
           fontFace: FONT,
@@ -4495,7 +4582,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           y: investNextY,
           w: CONTENT_WIDTH,
           h: 0.35,
-          fontSize: 11,
+          fontSize: CONTENT_MIN_FONT_PT,
           color: COLORS.secondary,
           fontFace: FONT,
         });
@@ -5304,7 +5391,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           y: goNoGoNextY,
           w: CONTENT_WIDTH,
           h: 0.45,
-          fontSize: 10,
+          fontSize: CONTENT_MIN_FONT_PT,
           fontFace: FONT,
           color: COLORS.black,
           valign: 'top',
@@ -5386,7 +5473,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       if (rationale.length > 0) {
         ratingParts.push({
           text: '\n' + rationale.join(' | '),
-          options: { fontSize: 11, color: COLORS.secondary, fontFace: FONT },
+          options: { fontSize: CONTENT_MIN_FONT_PT, color: COLORS.secondary, fontFace: FONT },
         });
       }
       const ratingH = rationale.length > 0 ? 0.62 : 0.25;
@@ -5430,7 +5517,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Dynamic text sizing: reduce font size to fit, never truncate content
   function dynamicText(text, maxChars, baseFontPt, floorPt) {
-    const minPt = floorPt || 10;
+    const minPt = Math.max(CONTENT_MIN_FONT_PT, floorPt || CONTENT_MIN_FONT_PT);
     if (!text) return { text: '', fontSize: baseFontPt };
     if (text.length <= maxChars) return { text, fontSize: baseFontPt };
     for (let fs = baseFontPt - 1; fs >= minPt; fs--) {
@@ -5669,7 +5756,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             y: lessonsNextY + 0.35,
             w: CONTENT_WIDTH,
             h: sfH,
-            fontSize: 10,
+            fontSize: CONTENT_MIN_FONT_PT,
             fontFace: FONT,
             color: COLORS.black,
             valign: 'top',
@@ -5704,7 +5791,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             y: lessonsNextY,
             w: CONTENT_WIDTH,
             h: warningBulletsH,
-            fontSize: 10,
+            fontSize: CONTENT_MIN_FONT_PT,
             fontFace: FONT,
             color: COLORS.black,
             valign: 'top',
@@ -5884,7 +5971,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             y: CONTENT_Y,
             w: CONTENT_WIDTH,
             h: 5.0,
-            fontSize: 11,
+            fontSize: CONTENT_MIN_FONT_PT,
             color: COLORS.black,
             fontFace: FONT,
             valign: 'top',

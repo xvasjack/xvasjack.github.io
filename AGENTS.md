@@ -28,3 +28,15 @@ These rules are mandatory for work in this repository.
 - Prefer deterministic code fixes over repeated blind reruns.
 - Normalize reviewer scores before loop/gate comparisons (avoid string-score loop bugs).
 - Reject speculative legal/decree research gaps unless grounded in synthesized evidence.
+
+## 6) Execution Discipline (Ultra Important)
+- Fix exactly one issue at a time.
+- Do not batch-fix multiple root causes in a single iteration.
+- Each iteration must follow: one issue -> one fix -> validation -> report.
+- If additional issues are discovered, queue them for the next iteration instead of changing scope.
+
+## 7) Communication Clarity (Ultra Important)
+- Always explain in high-school-level plain English.
+- Avoid jargon whenever possible.
+- If a technical term must be used, define it in one short sentence.
+- Prefer short examples/analogies over abstract wording.

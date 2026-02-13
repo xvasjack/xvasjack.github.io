@@ -104,8 +104,11 @@ const C_LIGHT_BLUE = 'D6E4F0'; // Matrix quadrant / section overview
 
 // Template font specs
 const TP_FONTS = templatePatterns.style?.fonts || {};
-const TITLE_FONT_SIZE = TP_FONTS.title?.size || 20;
+const TITLE_FONT_SIZE = 20;
 const TITLE_BOLD = TP_FONTS.title?.bold !== undefined ? TP_FONTS.title.bold : false;
+const CONTENT_FONT_SIZE = 14;
+const CONTENT_MIN_FONT_PT = 12;
+const FOOTNOTE_FONT_PT = 10;
 
 // Shared chart axis/grid defaults (identical across all chart types)
 const CHART_AXIS_DEFAULTS = {
@@ -680,7 +683,7 @@ function enrichCompanyDesc(company, countryStr, industryStr) {
 }
 
 // Helper: dynamically size text to fit within a shape
-const MIN_READABLE_FONT_PT = 9;
+const MIN_READABLE_FONT_PT = CONTENT_MIN_FONT_PT;
 
 function truncateToApproxChars(text, maxChars) {
   const clean = ensureString(text).replace(/\s+/g, ' ').trim();
@@ -807,14 +810,17 @@ function calculateColumnWidths(data, totalWidth = 12.6, options = {}) {
 function createTableRowOptions(isHeader = false, isAlternate = false, COLORS = {}) {
   const options = {
     fontFace: 'Segoe UI',
-    fontSize: TP_FONTS.tableBody?.size || 14,
+    fontSize: Math.max(CONTENT_MIN_FONT_PT, TP_FONTS.tableBody?.size || CONTENT_FONT_SIZE),
     valign: 'top',
     margin: TABLE_CELL_MARGIN,
   };
 
   if (isHeader) {
     options.bold = TP_FONTS.tableHeader?.bold !== undefined ? TP_FONTS.tableHeader.bold : false;
-    options.fontSize = TP_FONTS.tableHeader?.size || 14;
+    options.fontSize = Math.max(
+      CONTENT_MIN_FONT_PT,
+      TP_FONTS.tableHeader?.size || CONTENT_FONT_SIZE
+    );
     options.fill = { color: 'FFFFFF' };
     options.color = '000000';
   } else {
@@ -830,7 +836,7 @@ function createTableRowOptions(isHeader = false, isAlternate = false, COLORS = {
 function addSourceFootnote(slide, sources, COLORS, FONT) {
   if (!sources || (Array.isArray(sources) && sources.length === 0)) return;
 
-  const fontSize = templatePatterns.style?.fonts?.source?.size || 10;
+  const fontSize = FOOTNOTE_FONT_PT;
   const fontColor = COLORS?.footerText || C_MUTED;
   const hlinkColor = TP_COLORS.hlink || '0563C1';
   const footerY = Math.max(0, (Number(TEMPLATE.sourceBar.y) || 6.69) - 0.03);
@@ -1124,7 +1130,7 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
   const oppBullets = (opportunities || []).slice(0, 4).map((opp) => ({
     text: String(opp),
     options: {
-      fontSize: 10,
+      fontSize: CONTENT_MIN_FONT_PT,
       color: C_BLACK,
       fontFace: FONT,
       bullet: { type: 'bullet', code: '2714', color: COLORS.green },
@@ -1136,7 +1142,7 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
   const obsBullets = (obstacles || []).slice(0, 4).map((obs) => ({
     text: String(obs),
     options: {
-      fontSize: 10,
+      fontSize: CONTENT_MIN_FONT_PT,
       color: C_BLACK,
       fontFace: FONT,
       bullet: { type: 'bullet', code: '26A0', color: COLORS.orange },
@@ -2490,7 +2496,11 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
     fontSize: 12,
     bold: true,
   };
-  const contentStyle = p.contentStyle || { fill: C_WHITE, color: C_BLACK, fontSize: 11 };
+  const contentStyle = p.contentStyle || {
+    fill: C_WHITE,
+    color: C_BLACK,
+    fontSize: CONTENT_MIN_FONT_PT,
+  };
   const labelX = Number.isFinite(Number(p.labelX)) ? Number(p.labelX) : TEMPLATE.contentArea.x;
   const labelW = Number.isFinite(Number(p.labelW)) ? Number(p.labelW) : 2.0;
   const contentX = Number.isFinite(Number(p.contentX))
