@@ -265,6 +265,67 @@ function runPptGateUnitChecks() {
   );
 }
 
+function runPreRenderStructureUnitChecks() {
+  const base = {
+    country: 'Vietnam',
+    policy: {
+      foundationalActs: { overview: 'ok' },
+      nationalPolicy: { overview: 'ok' },
+      investmentRestrictions: { overview: 'ok' },
+      regulatorySummary: { overview: 'ok' },
+      keyIncentives: { overview: 'ok' },
+      sources: [],
+    },
+    market: {
+      marketSizeAndGrowth: { overview: 'ok' },
+      supplyAndDemandDynamics: { overview: 'ok' },
+      pricingAndTariffStructures: { overview: 'ok' },
+    },
+    competitors: {
+      localMajor: { players: [{ name: 'A' }] },
+      foreignPlayers: { players: [{ name: 'B' }] },
+      // intentionally missing japanesePlayers
+      caseStudy: { company: 'X' },
+    },
+    depth: {
+      dealEconomics: { overview: 'ok' },
+      partnerAssessment: { overview: 'ok' },
+      entryStrategy: { overview: 'ok' },
+      implementation: { overview: 'ok' },
+      targetSegments: { overview: 'ok' },
+    },
+    summary: {
+      timingIntelligence: { overview: 'ok' },
+      lessonsLearned: { overview: 'ok' },
+      keyInsights: [],
+      recommendation: 'ok',
+      goNoGo: { overallVerdict: 'GO' },
+      opportunities: [],
+      obstacles: [],
+      ratings: {},
+    },
+  };
+
+  const issuesNoJapan = serverTest.collectPreRenderStructureIssues([base]);
+  assert.strictEqual(
+    issuesNoJapan.length,
+    0,
+    `Missing japanesePlayers should not hard-fail pre-render structure gate: ${issuesNoJapan.join(' | ')}`
+  );
+
+  const missingCore = {
+    ...base,
+    competitors: {
+      foreignPlayers: { players: [{ name: 'B' }] },
+    },
+  };
+  const issuesMissingCore = serverTest.collectPreRenderStructureIssues([missingCore]);
+  assert(
+    issuesMissingCore.some((x) => /competitors missing required sections: localMajor/i.test(x)),
+    `Missing localMajor should still fail pre-render structure gate; got: ${issuesMissingCore.join(' | ')}`
+  );
+}
+
 async function validateDeck(pptxPath, country, industry) {
   const result = await runValidation(pptxPath, getExpectations(country, industry));
   if (!result.valid) {
@@ -288,6 +349,8 @@ async function runRound(round, total) {
   console.log('[Regression] Unit checks PASS (template-clone filter behavior)');
   runPptGateUnitChecks();
   console.log('[Regression] Unit checks PASS (pre-render PPT gate block shaping)');
+  runPreRenderStructureUnitChecks();
+  console.log('[Regression] Unit checks PASS (pre-render structure gating)');
 
   await runNodeScript(VIETNAM_SCRIPT);
   await runNodeScript(THAILAND_SCRIPT);

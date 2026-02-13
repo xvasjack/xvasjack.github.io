@@ -151,7 +151,9 @@ const CANONICAL_COMPETITOR_SECTION_KEYS = [
   'caseStudy',
   'maActivity',
 ];
-const REQUIRED_COMPETITOR_SECTION_KEYS = ['japanesePlayers', 'localMajor', 'foreignPlayers'];
+// Japanese competitor coverage is desirable but may be legitimately unavailable in some markets.
+// Hard-gating on it causes expensive false negatives despite otherwise complete competitor analysis.
+const REQUIRED_COMPETITOR_SECTION_KEYS = ['localMajor', 'foreignPlayers'];
 const CANONICAL_SUMMARY_SECTION_KEYS = [
   'timingIntelligence',
   'lessonsLearned',
@@ -1476,5 +1478,6 @@ module.exports = {
     buildPptGateBlocks,
     normalizeGateChartData,
     buildGateContent,
+    collectPreRenderStructureIssues,
   },
 };

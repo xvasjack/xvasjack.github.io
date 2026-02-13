@@ -52,7 +52,7 @@ const CFG_DYNAMIC_AGENT_BATCH_DELAY_MS = parseBoundedIntEnv(
 );
 const CFG_DYNAMIC_RESEARCH_TIMEOUT_MS = parseBoundedIntEnv(
   'DYNAMIC_RESEARCH_TIMEOUT_MS',
-  20 * 60 * 1000,
+  30 * 60 * 1000,
   45 * 60 * 1000
 );
 const CFG_DYNAMIC_RESEARCH_TIMEOUT_PER_TOPIC_MS = parseBoundedIntEnv(
