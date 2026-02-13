@@ -30,6 +30,7 @@ const { __test: cloneTest } = require('./template-clone-postprocess');
 const { validatePptData } = require('./quality-gates');
 const { __test: serverTest } = require('./server');
 const { __test: orchestratorTest } = require('./research-orchestrator');
+const { __test: singlePptTest } = require('./ppt-single-country');
 
 const ROOT = __dirname;
 const VIETNAM_SCRIPT = path.join(ROOT, 'test-vietnam-research.js');
@@ -266,6 +267,57 @@ function runPptGateUnitChecks() {
   );
 }
 
+function runCompetitiveGateUnitChecks() {
+  assert(
+    singlePptTest && typeof singlePptTest.shouldAllowCompetitiveOptionalGroupGap === 'function',
+    'ppt-single-country __test helper missing: shouldAllowCompetitiveOptionalGroupGap'
+  );
+
+  const coreContent =
+    'Strong execution footprint with quantified contracts, recurring revenues, and industrial customer concentration across multiple regions.';
+  const blocks = [
+    { key: 'localMajor', type: 'section', title: 'localMajor', content: coreContent },
+    { key: 'foreignPlayers', type: 'section', title: 'foreignPlayers', content: coreContent },
+    {
+      key: 'japanesePlayers',
+      type: 'section',
+      title: 'japanesePlayers',
+      content: 'Data unavailable',
+    },
+    { key: 'maActivity', type: 'section', title: 'maActivity', content: 'Data unavailable' },
+  ];
+
+  const gate = validatePptData(blocks);
+  assert.strictEqual(
+    gate.pass,
+    false,
+    `Expected generic gate to flag optional-gap competitor blocks before section-aware override; got ${JSON.stringify(gate)}`
+  );
+  const allowOverride = singlePptTest.shouldAllowCompetitiveOptionalGroupGap(
+    'Competitive Landscape',
+    gate,
+    blocks
+  );
+  assert.strictEqual(
+    allowOverride,
+    true,
+    'Expected section-aware competitor gate override when only optional groups are missing'
+  );
+
+  const blocksMissingCore = blocks.filter((b) => b.key !== 'foreignPlayers');
+  const gateMissingCore = validatePptData(blocksMissingCore);
+  const denyOverride = singlePptTest.shouldAllowCompetitiveOptionalGroupGap(
+    'Competitive Landscape',
+    gateMissingCore,
+    blocksMissingCore
+  );
+  assert.strictEqual(
+    denyOverride,
+    false,
+    'Override must not apply when core competitor groups are missing'
+  );
+}
+
 async function runDynamicTimeoutUnitChecks() {
   assert(
     orchestratorTest && typeof orchestratorTest.runInBatchesUntilDeadline === 'function',
@@ -430,6 +482,8 @@ async function runRound(round, total) {
   console.log('[Regression] Unit checks PASS (template-clone filter behavior)');
   runPptGateUnitChecks();
   console.log('[Regression] Unit checks PASS (pre-render PPT gate block shaping)');
+  runCompetitiveGateUnitChecks();
+  console.log('[Regression] Unit checks PASS (competitive optional-group gate override)');
   await runDynamicTimeoutUnitChecks();
   console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
   runPreRenderStructureUnitChecks();
