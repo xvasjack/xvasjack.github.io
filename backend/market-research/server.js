@@ -201,6 +201,20 @@ function isTransientSectionKey(key) {
   return TRANSIENT_SECTION_KEY_PATTERNS.some((re) => re.test(normalized));
 }
 
+function isTransientTopLevelKey(key) {
+  const normalized = String(key || '').trim();
+  if (!normalized) return false;
+  const compact = normalized.replace(/\s+/g, '').toLowerCase();
+  // `finalReview` is stable metadata emitted by review stages and must not trip transient-key guard.
+  if (compact === 'finalreview') return false;
+  if (compact === '_wasarray') return true;
+  if (/^section[_-]?\d+$/i.test(normalized)) return true;
+  if (/deepen/i.test(normalized)) return true;
+  if (/^final[_-]?review(?:[_-]?(?:gap|issue))?\d+$/i.test(normalized)) return true;
+  if (/^finalreview(?:gap|issue)\d+$/i.test(compact)) return true;
+  return false;
+}
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -374,13 +388,7 @@ function collectPreRenderStructureIssues(countryAnalyses) {
 
     if (isPlainObject(ca)) {
       for (const key of Object.keys(ca)) {
-        const normalized = String(key).toLowerCase();
-        if (
-          normalized.startsWith('section_') ||
-          normalized.includes('deepen') ||
-          normalized.includes('finalreview') ||
-          normalized === '_wasarray'
-        ) {
+        if (isTransientTopLevelKey(key)) {
           issues.push(`${countryPrefix} transient top-level key "${key}" is not allowed`);
         }
       }

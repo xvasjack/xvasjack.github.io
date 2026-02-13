@@ -363,6 +363,37 @@ function runPreRenderStructureUnitChecks() {
     `Missing japanesePlayers should not hard-fail pre-render structure gate: ${issuesNoJapan.join(' | ')}`
   );
 
+  const withFinalReviewMeta = {
+    ...base,
+    finalReview: {
+      overallGrade: 'A',
+      coherenceScore: 90,
+      issues: [],
+    },
+  };
+  const issuesWithFinalReviewMeta = serverTest.collectPreRenderStructureIssues([
+    withFinalReviewMeta,
+  ]);
+  assert.strictEqual(
+    issuesWithFinalReviewMeta.length,
+    0,
+    `Stable finalReview metadata should not hard-fail pre-render structure gate: ${issuesWithFinalReviewMeta.join(' | ')}`
+  );
+
+  const withTransientFinalReviewGap = {
+    ...base,
+    finalReviewGap1: { section: 'market', issue: 'transient' },
+  };
+  const issuesWithTransientFinalReviewGap = serverTest.collectPreRenderStructureIssues([
+    withTransientFinalReviewGap,
+  ]);
+  assert(
+    issuesWithTransientFinalReviewGap.some((x) =>
+      /transient top-level key "finalReviewGap1" is not allowed/i.test(x)
+    ),
+    `Transient finalReviewGap top-level key should still fail gate; got: ${issuesWithTransientFinalReviewGap.join(' | ')}`
+  );
+
   const missingCore = {
     ...base,
     competitors: {
