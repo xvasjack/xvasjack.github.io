@@ -80,6 +80,45 @@ const { normalizeThemeToTemplate } = require('./theme-normalizer');
 const STRICT_TEMPLATE_FIDELITY = !/^(0|false|no|off)$/i.test(
   String(process.env.STRICT_TEMPLATE_FIDELITY || 'true').trim()
 );
+const RENDER_COMPACTION_MODE = String(process.env.RENDER_COMPACTION_MODE || 'bounded')
+  .trim()
+  .toLowerCase();
+const TABLE_FLEX_MODE = String(process.env.TABLE_FLEX_MODE || 'bounded')
+  .trim()
+  .toLowerCase();
+
+function envNumber(name, fallback, { min = null, max = null } = {}) {
+  const raw = Number(process.env[name]);
+  let value = Number.isFinite(raw) ? raw : fallback;
+  if (Number.isFinite(min)) value = Math.max(min, value);
+  if (Number.isFinite(max)) value = Math.min(max, value);
+  return value;
+}
+
+const TABLE_FLEX_MAX_WIDTH_SCALE = envNumber('TABLE_FLEX_MAX_WIDTH_SCALE', 1.55, {
+  min: 1,
+  max: 1.6,
+});
+const TABLE_FLEX_MAX_HEIGHT_SCALE = envNumber('TABLE_FLEX_MAX_HEIGHT_SCALE', 1.5, {
+  min: 1,
+  max: 1.8,
+});
+const TABLE_FLEX_MIN_ROW_HEIGHT = envNumber('TABLE_FLEX_MIN_ROW_HEIGHT', 0.16, {
+  min: 0.1,
+  max: 0.28,
+});
+const TABLE_FLEX_MIN_COL_WIDTH = envNumber('TABLE_FLEX_MIN_COL_WIDTH', 0.58, {
+  min: 0.35,
+  max: 1.0,
+});
+const TABLE_FLEX_MAX_ROWS = envNumber('TABLE_FLEX_MAX_ROWS', 16, {
+  min: 4,
+  max: 40,
+});
+const TABLE_FLEX_MAX_COLS = envNumber('TABLE_FLEX_MAX_COLS', 9, {
+  min: 3,
+  max: 20,
+});
 
 // PPTX-safe ensureString: strips XML-invalid control characters after conversion.
 // PPTX = ZIP of XML files. Characters \x00-\x08, \x0B, \x0C, \x0E-\x1F are invalid in
@@ -170,21 +209,23 @@ function limitWords(text, maxWords) {
 }
 
 function getRenderTextLimit(pathKey) {
+  if (RENDER_COMPACTION_MODE === 'off') return Number.POSITIVE_INFINITY;
   const key = ensureString(pathKey).toLowerCase();
-  if (!key) return 900;
+  if (!key) return RENDER_COMPACTION_MODE === 'legacy' ? 900 : 1400;
   if (key === 'url' || key === 'website') return 2048;
-  if (key.includes('slidetitle')) return 180;
-  if (key.includes('subtitle')) return 420;
-  if (key.includes('description') || key.includes('strategicassessment')) return 520;
+  if (key.includes('slidetitle')) return RENDER_COMPACTION_MODE === 'legacy' ? 180 : 320;
+  if (key.includes('subtitle')) return RENDER_COMPACTION_MODE === 'legacy' ? 420 : 700;
+  if (key.includes('description') || key.includes('strategicassessment'))
+    return RENDER_COMPACTION_MODE === 'legacy' ? 520 : 900;
   if (key.includes('requirements') || key.includes('penalties') || key.includes('enforcement'))
-    return 420;
+    return RENDER_COMPACTION_MODE === 'legacy' ? 420 : 720;
   if (
     key.includes('overview') ||
     key.includes('narrative') ||
     key.includes('riskjustification') ||
     key.includes('windowofopportunity')
   ) {
-    return 620;
+    return RENDER_COMPACTION_MODE === 'legacy' ? 620 : 1200;
   }
   if (
     key.includes('keyinsight') ||
@@ -193,7 +234,7 @@ function getRenderTextLimit(pathKey) {
     key.includes('gotomarketapproach') ||
     key.includes('keymessage')
   ) {
-    return 900;
+    return RENDER_COMPACTION_MODE === 'legacy' ? 900 : 1500;
   }
   if (
     key.includes('details') ||
@@ -201,16 +242,18 @@ function getRenderTextLimit(pathKey) {
     key.includes('implication') ||
     key.includes('timing')
   ) {
-    return 520;
+    return RENDER_COMPACTION_MODE === 'legacy' ? 520 : 1000;
   }
-  return 900;
+  return RENDER_COMPACTION_MODE === 'legacy' ? 900 : 1400;
 }
 
 function getRenderArrayLimit(pathKey) {
+  if (RENDER_COMPACTION_MODE === 'off') return Number.POSITIVE_INFINITY;
   const key = ensureString(pathKey).toLowerCase();
-  if (!key) return 8;
-  if (key === 'sources') return 8;
-  if (key === 'keymetrics') return 8;
+  const isLegacy = RENDER_COMPACTION_MODE === 'legacy';
+  if (!key) return isLegacy ? 8 : 14;
+  if (key === 'sources') return isLegacy ? 8 : 12;
+  if (key === 'keymetrics') return isLegacy ? 8 : 12;
   if (
     [
       'players',
@@ -232,9 +275,9 @@ function getRenderArrayLimit(pathKey) {
       'warningsignstowatch',
     ].includes(key)
   ) {
-    return 5;
+    return isLegacy ? 5 : 10;
   }
-  return 8;
+  return isLegacy ? 8 : 14;
 }
 
 function compactRenderString(pathKey, value) {
@@ -257,6 +300,9 @@ function compactRenderPayload(node, path = []) {
     // Preserve chart series/categories payload exactly; trimming those distorts charts.
     if (path.includes('chartData')) return node;
     const maxItems = getRenderArrayLimit(pathKey);
+    if (!Number.isFinite(maxItems) || maxItems >= node.length) {
+      return node.map((item, idx) => compactRenderPayload(item, [...path, idx]));
+    }
     return node.slice(0, maxItems).map((item, idx) => compactRenderPayload(item, [...path, idx]));
   }
 
@@ -1333,12 +1379,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         ? Number(marginSource.marginRight)
         : TABLE_CELL_MARGIN[3],
     ];
+    const baselineCols = rows.reduce(
+      (max, row) => Math.max(max, Array.isArray(row?.cells) ? row.cells.length : 0),
+      0
+    );
 
     const profile = {
       margin,
       valign: marginSource.anchor === 'ctr' ? 'mid' : 'top',
       innerBorder,
       outerBorder,
+      baselineRows: rows.length,
+      baselineCols: baselineCols || 1,
     };
     templateTableStyleCache.set(numeric, profile);
     return profile;
@@ -1576,7 +1628,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     layoutFidelityStats.checks += 1;
     if (delta <= 0.01) layoutFidelityStats.aligned += 1;
     layoutFidelityStats.maxDelta = Math.max(layoutFidelityStats.maxDelta, delta);
-    if (delta > 0.05) {
+    const allowedDelta = kind === 'table' && TABLE_FLEX_MODE === 'bounded' ? 0.12 : 0.05;
+    if (delta > allowedDelta) {
       layoutFidelityStats.missingGeometry.push({
         kind,
         context,
@@ -2045,6 +2098,98 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return { rows: compactedRows, changed, overflowSamples };
   }
 
+  function countTableColumns(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) return 0;
+    return rows.reduce((max, row) => Math.max(max, Array.isArray(row) ? row.length : 0), 0);
+  }
+
+  function applyBoundedTemplateTableFlex(
+    tableRows,
+    addOptions,
+    expectedTableRect,
+    templateStyleProfile,
+    context = 'table'
+  ) {
+    if (!addOptions || typeof addOptions !== 'object' || !expectedTableRect) {
+      return {
+        options: addOptions,
+        metrics: null,
+      };
+    }
+    const rowCount = Array.isArray(tableRows) ? tableRows.length : 0;
+    const colCount = countTableColumns(tableRows);
+    const baselineRows = Math.max(1, Number(templateStyleProfile?.baselineRows) || rowCount || 1);
+    const baselineCols = Math.max(1, Number(templateStyleProfile?.baselineCols) || colCount || 1);
+    const rowPressure = rowCount > 0 ? rowCount / baselineRows : 1;
+    const colPressure = colCount > 0 ? colCount / baselineCols : 1;
+    const sourceRect = getActiveLayoutRect('source', tpSource) || tpSource;
+    const contentRect = getActiveLayoutRect('content', tpContent) || tpContent;
+    const anchorX = Number(expectedTableRect.x);
+    const anchorY = Number(expectedTableRect.y);
+    const baseW = Number(expectedTableRect.w);
+    const baseH = Number(expectedTableRect.h);
+    const maxW = Math.max(0.6, Number(contentRect.x) + Number(contentRect.w) - anchorX);
+    const maxH = Math.max(0.6, Number(sourceRect.y) - 0.02 - anchorY);
+    const allowFlex = TABLE_FLEX_MODE === 'bounded';
+    const enforceBudget = TABLE_FLEX_MODE !== 'off';
+    const widthScale =
+      allowFlex && colPressure > 1 ? Math.min(TABLE_FLEX_MAX_WIDTH_SCALE, colPressure) : 1;
+    const heightScale =
+      allowFlex && rowPressure > 1 ? Math.min(TABLE_FLEX_MAX_HEIGHT_SCALE, rowPressure) : 1;
+    const targetW = Math.max(0.6, Math.min(maxW, baseW * widthScale));
+    const targetH = Math.max(0.6, Math.min(maxH, baseH * heightScale));
+    const nextOptions = {
+      ...addOptions,
+      x: anchorX,
+      y: anchorY,
+      w: Number(targetW.toFixed(3)),
+      h: Number(targetH.toFixed(3)),
+    };
+    const rowHeight = rowCount > 0 ? targetH / rowCount : targetH;
+    const colWidth = colCount > 0 ? targetW / colCount : targetW;
+
+    if (STRICT_TEMPLATE_FIDELITY && enforceBudget) {
+      const violations = [];
+      if (rowCount > TABLE_FLEX_MAX_ROWS) {
+        violations.push(`rows=${rowCount} exceed maxRows=${TABLE_FLEX_MAX_ROWS}`);
+      }
+      if (colCount > TABLE_FLEX_MAX_COLS) {
+        violations.push(`cols=${colCount} exceed maxCols=${TABLE_FLEX_MAX_COLS}`);
+      }
+      if (rowHeight < TABLE_FLEX_MIN_ROW_HEIGHT - 0.005) {
+        violations.push(
+          `rowHeight=${rowHeight.toFixed(3)}in below minimum=${TABLE_FLEX_MIN_ROW_HEIGHT.toFixed(3)}in`
+        );
+      }
+      if (colWidth < TABLE_FLEX_MIN_COL_WIDTH - 0.01) {
+        violations.push(
+          `colWidth=${colWidth.toFixed(3)}in below minimum=${TABLE_FLEX_MIN_COL_WIDTH.toFixed(3)}in`
+        );
+      }
+      if (violations.length > 0) {
+        throw new Error(
+          `[PPT TEMPLATE] ${context}: bounded table flexibility exceeded (${violations.join('; ')})`
+        );
+      }
+    }
+
+    return {
+      options: nextOptions,
+      metrics: {
+        rowCount,
+        colCount,
+        baselineRows,
+        baselineCols,
+        rowPressure,
+        colPressure,
+        rowHeight,
+        colWidth,
+        widthScale,
+        heightScale,
+      },
+    };
+  }
+
   function safeAddTable(slide, rows, options = {}, context = 'table') {
     let resolvedContext = ensureString(context, '').trim() || 'table';
     if (resolvedContext === 'table') {
@@ -2128,10 +2273,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           w: addOptions.w,
           h: addOptions.h,
         };
-        addOptions.x = expectedTableRect.x;
-        addOptions.y = expectedTableRect.y;
-        addOptions.w = expectedTableRect.w;
-        addOptions.h = expectedTableRect.h;
+        const aligned = applyBoundedTemplateTableFlex(
+          tableRows,
+          addOptions,
+          expectedTableRect,
+          templateStyleProfile,
+          resolvedContext
+        );
+        addOptions = aligned.options;
         recordGeometryCheck('table', resolvedContext, expectedTableRect, {
           x: addOptions.x,
           y: addOptions.y,
@@ -2142,6 +2291,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         if (preDelta != null && preDelta > 0.05) {
           console.log(
             `[PPT TEMPLATE] ${resolvedContext}: aligned table geometry to slide ${activeTemplateContext.slideNumber} (delta=${preDelta.toFixed(3)}in)`
+          );
+        }
+        if (
+          aligned.metrics &&
+          (aligned.metrics.widthScale > 1.01 || aligned.metrics.heightScale > 1.01)
+        ) {
+          console.log(
+            `[PPT TEMPLATE] ${resolvedContext}: applied bounded table flex (rows=${aligned.metrics.rowCount}/${aligned.metrics.baselineRows}, cols=${aligned.metrics.colCount}/${aligned.metrics.baselineCols}, widthScale=${aligned.metrics.widthScale.toFixed(2)}, heightScale=${aligned.metrics.heightScale.toFixed(2)})`
           );
         }
       } else {
@@ -5280,7 +5437,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const scaledMax = Math.floor(maxChars * (baseFontPt / fs));
       if (text.length <= scaledMax) return { text, fontSize: fs };
     }
-    // If content still exceeds floor-size capacity, trim to avoid unreadable overflow.
+    // Keep full text in strict mode and let fidelity gates fail loudly if layout cannot hold it.
+    if (STRICT_TEMPLATE_FIDELITY) return { text: ensureString(text), fontSize: minPt };
     const floorScaledMax = Math.max(maxChars, Math.floor(maxChars * (baseFontPt / minPt)));
     return { text: truncate(ensureString(text), floorScaledMax, true), fontSize: minPt };
   }

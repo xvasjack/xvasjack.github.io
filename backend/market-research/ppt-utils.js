@@ -685,6 +685,7 @@ const MIN_READABLE_FONT_PT = 9;
 function truncateToApproxChars(text, maxChars) {
   const clean = ensureString(text).replace(/\s+/g, ' ').trim();
   if (!clean) return '';
+  if (DISABLE_TEXT_TRUNCATION) return clean;
   if (!Number.isFinite(maxChars) || maxChars <= 0 || clean.length <= maxChars) return clean;
   const sliced = clean.slice(0, Math.max(12, Math.floor(maxChars)));
   const cut = sliced.lastIndexOf(' ');
@@ -748,6 +749,9 @@ function fitTextToShape(text, maxW, maxH, baseFontPt) {
   const minCpl = Math.max(10, Math.floor(maxW / (MIN_READABLE_FONT_PT * 0.006)));
   const minLines = Math.max(1, Math.floor(maxH / (MIN_READABLE_FONT_PT * 0.017)));
   const approxMaxChars = Math.max(24, minCpl * minLines);
+  if (DISABLE_TEXT_TRUNCATION) {
+    return { text: textValue, fontSize: MIN_READABLE_FONT_PT };
+  }
   return {
     text: truncateToApproxChars(textValue, approxMaxChars),
     fontSize: MIN_READABLE_FONT_PT,
