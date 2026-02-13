@@ -36,6 +36,21 @@ setupGlobalErrorHandlers({
 
 // ============ EXPRESS SETUP ============
 const app = express();
+const BUILD_COMMIT =
+  process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT || process.env.GITHUB_SHA;
+
+// Health check must stay middleware-light so platform probes never depend on
+// rate limits, auth headers, or request-body parsing.
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'market-research',
+    timestamp: new Date().toISOString(),
+    costToday: costTracker.totalCost,
+    commit: BUILD_COMMIT || null,
+  });
+});
+
 app.set('trust proxy', 1); // Trust Railway's reverse proxy for rate limiting
 app.use(securityHeaders);
 app.use(rateLimiter);
@@ -1265,16 +1280,6 @@ async function runMarketResearch(userPrompt, email, options = {}) {
 }
 
 // ============ API ENDPOINTS ============
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'market-research',
-    timestamp: new Date().toISOString(),
-    costToday: costTracker.totalCost,
-  });
-});
 
 // Main research endpoint
 app.post('/api/market-research', async (req, res) => {
