@@ -22,12 +22,17 @@ const {
   readPPTX,
   scanRelationshipTargets,
   scanPackageConsistency,
+  normalizeAbsoluteRelationshipTargets,
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
 } = require('./pptx-validator');
 
 // Setup global error handlers to prevent crashes
-setupGlobalErrorHandlers({ logMemory: false });
+setupGlobalErrorHandlers({
+  logMemory: false,
+  // Fail fast on uncaught exceptions so Railway does not keep an unhealthy idle process.
+  exitOnUncaughtException: true,
+});
 
 // ============ EXPRESS SETUP ============
 const app = express();
@@ -557,6 +562,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       console.log(`Researching ${scope.targetMarkets.length} countries...`);
 
       const countryAnalyses = [];
+      const countryResearchFailures = [];
 
       // Process countries in batches of 2 to manage API rate limits
       for (let i = 0; i < scope.targetMarkets.length; i += 2) {
@@ -574,7 +580,30 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           .filter((r) => r.status === 'rejected')
           .map((r, i) => ({ country: batch[i], error: r.reason.message }));
         if (failedCountries.length) console.error('Failed countries:', failedCountries);
+        if (failedCountries.length) {
+          countryResearchFailures.push(...failedCountries);
+        }
+        for (const result of successResults) {
+          if (result?.error) {
+            countryResearchFailures.push({
+              country: result.country || '(unknown)',
+              error: result.error,
+              detail: result.message || null,
+            });
+          }
+        }
         countryAnalyses.push(...successResults);
+      }
+      if (countryResearchFailures.length > 0) {
+        const summary = countryResearchFailures
+          .map((item) => `${item.country}: ${item.error}${item.detail ? ` (${item.detail})` : ''}`)
+          .join(' | ');
+        if (lastRunDiagnostics) {
+          lastRunDiagnostics.stage = 'country_research_failed';
+          lastRunDiagnostics.countryResearchFailures = countryResearchFailures.slice(0, 20);
+          lastRunDiagnostics.error = `Country research failed: ${summary}`;
+        }
+        throw new Error(`Country research failed: ${summary}`);
       }
 
       // Quality Gate 1: Validate research quality per country and retry weak topics
@@ -931,6 +960,13 @@ async function runMarketResearch(userPrompt, email, options = {}) {
 
       // Final server-side package hardening (defense-in-depth): normalize IDs and content-types
       // again before any validation/delivery so no generator path can bypass structural safety.
+      const serverRelNormalize = await normalizeAbsoluteRelationshipTargets(pptBuffer);
+      pptBuffer = serverRelNormalize.buffer;
+      if (serverRelNormalize.changed) {
+        console.log(
+          `[Server PPT] Normalized absolute relationship targets (${serverRelNormalize.stats.normalizedTargets} target(s) in ${serverRelNormalize.stats.filesChanged} rels file(s))`
+        );
+      }
       const serverIdNormalize = await normalizeSlideNonVisualIds(pptBuffer);
       pptBuffer = serverIdNormalize.buffer;
       if (serverIdNormalize.changed) {
@@ -1347,10 +1383,15 @@ app.get('/api/latest-ppt', (req, res) => {
 // ============ START SERVER ============
 
 const PORT = process.env.PORT || 3010;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Market Research server running on port ${PORT}`);
   console.log('Environment check:');
   console.log('  - GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'Set' : 'MISSING');
   console.log('  - SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? 'Set' : 'MISSING');
   console.log('  - SENDER_EMAIL:', process.env.SENDER_EMAIL || 'MISSING');
+});
+server.on('error', (error) => {
+  console.error('[Startup] HTTP listen failed:', error?.message || error);
+  // Exit so Railway marks the deploy unhealthy immediately with a clear reason.
+  process.exit(1);
 });

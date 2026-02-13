@@ -22,9 +22,15 @@ function logMemoryUsage(label = '') {
  * Catches unhandled promise rejections and uncaught exceptions
  * @param {Object} options - Configuration options
  * @param {boolean} options.logMemory - Whether to log memory on errors (default: true)
+ * @param {boolean} options.exitOnUnhandledRejection - Exit process after unhandled rejection
+ * @param {boolean} options.exitOnUncaughtException - Exit process after uncaught exception
  */
 function setupGlobalErrorHandlers(options = {}) {
-  const { logMemory = true } = options;
+  const {
+    logMemory = true,
+    exitOnUnhandledRejection = false,
+    exitOnUncaughtException = false,
+  } = options;
 
   process.on('unhandledRejection', (reason, promise) => {
     console.error('=== UNHANDLED PROMISE REJECTION ===');
@@ -34,7 +40,10 @@ function setupGlobalErrorHandlers(options = {}) {
     if (logMemory) {
       logMemoryUsage('at rejection');
     }
-    // Don't exit - keep the server running
+    if (exitOnUnhandledRejection) {
+      console.error('[Fatal] Exiting due to unhandled promise rejection');
+      process.exit(1);
+    }
   });
 
   process.on('uncaughtException', (error) => {
@@ -44,7 +53,10 @@ function setupGlobalErrorHandlers(options = {}) {
     if (logMemory) {
       logMemoryUsage('at exception');
     }
-    // Don't exit - keep the server running
+    if (exitOnUncaughtException) {
+      console.error('[Fatal] Exiting due to uncaught exception');
+      process.exit(1);
+    }
   });
 }
 

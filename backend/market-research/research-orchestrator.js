@@ -50,6 +50,16 @@ const CFG_DYNAMIC_AGENT_BATCH_DELAY_MS = parseBoundedIntEnv(
   3000,
   15000
 );
+const CFG_DYNAMIC_RESEARCH_TIMEOUT_MS = parseBoundedIntEnv(
+  'DYNAMIC_RESEARCH_TIMEOUT_MS',
+  20 * 60 * 1000,
+  45 * 60 * 1000
+);
+const CFG_DYNAMIC_RESEARCH_TIMEOUT_PER_TOPIC_MS = parseBoundedIntEnv(
+  'DYNAMIC_RESEARCH_TIMEOUT_PER_TOPIC_MS',
+  25000,
+  120000
+);
 const CFG_DEEPEN_QUERY_CONCURRENCY = parseBoundedIntEnv('DEEPEN_QUERY_CONCURRENCY', 1, 2);
 const CFG_DEEPEN_BATCH_DELAY_MS = parseBoundedIntEnv('DEEPEN_BATCH_DELAY_MS', 3000, 15000);
 const CFG_REVIEW_DEEPEN_MAX_QUERIES = parseBoundedIntEnv('REVIEW_DEEPEN_MAX_QUERIES', 5, 10);
@@ -102,6 +112,12 @@ async function runInBatches(items, batchSize, handler, delayMs = 0) {
     }
   }
   return results;
+}
+
+function computeDynamicResearchTimeoutMs(topicCount) {
+  const topics = Number.isFinite(topicCount) ? Math.max(0, topicCount) : 0;
+  const topicScaledTimeout = topics * CFG_DYNAMIC_RESEARCH_TIMEOUT_PER_TOPIC_MS;
+  return Math.max(CFG_DYNAMIC_RESEARCH_TIMEOUT_MS, topicScaledTimeout);
 }
 
 const PLACEHOLDER_PATTERNS = [
@@ -5806,9 +5822,15 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     // Run category agents in small batches to avoid quota spikes.
     const categoryEntries = Object.entries(dynamicFramework);
 
-    // Timeout wrapper: abort if research takes >5 minutes total
+    // Timeout wrapper: budget scales with topic count and is configurable.
     let categoryResults;
+    const dynamicResearchTimeoutMs = computeDynamicResearchTimeoutMs(totalTopics);
+    const dynamicTimeoutMinutes = Math.max(1, Math.ceil(dynamicResearchTimeoutMs / 60000));
+    let dynamicTimeoutId = null;
     try {
+      console.log(
+        `  [DYNAMIC FRAMEWORK] Timeout budget: ${dynamicTimeoutMinutes}min for ${totalTopics} topics`
+      );
       categoryResults = await Promise.race([
         runInBatches(
           categoryEntries,
@@ -5825,14 +5847,22 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             ),
           CFG_DYNAMIC_AGENT_BATCH_DELAY_MS
         ),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Research timed out after 5min')), 300000)
+        new Promise(
+          (_, reject) =>
+            (dynamicTimeoutId = setTimeout(
+              () => reject(new Error(`Research timed out after ${dynamicTimeoutMinutes}min`)),
+              dynamicResearchTimeoutMs
+            ))
         ),
       ]);
     } catch (err) {
       console.error(`  [ERROR] Research phase failed: ${err.message}`);
       pipelineController.abort();
       categoryResults = [];
+    } finally {
+      if (dynamicTimeoutId) {
+        clearTimeout(dynamicTimeoutId);
+      }
     }
 
     // Merge all results
