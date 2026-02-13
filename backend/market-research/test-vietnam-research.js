@@ -18,6 +18,21 @@ const {
   scanSlideNonVisualIdIntegrity,
   scanPackageConsistency,
 } = require('./pptx-validator');
+const { runVisualFidelityCheck } = require('./visual-fidelity-runner');
+const { normalizeThemeToTemplate } = require('./theme-normalizer');
+
+const COVER_BG_B64 = fs
+  .readFileSync(path.join(__dirname, 'assets/cover-bg.png'))
+  .toString('base64');
+const DIVIDER_BG_B64 = fs
+  .readFileSync(path.join(__dirname, 'assets/divider-bg.png'))
+  .toString('base64');
+const LOGO_DARK_B64 = fs
+  .readFileSync(path.join(__dirname, 'assets/logo-dark.png'))
+  .toString('base64');
+const LOGO_WHITE_B64 = fs
+  .readFileSync(path.join(__dirname, 'assets/logo-white.png'))
+  .toString('base64');
 
 // ============ STYLING CONSTANTS ============
 const COLORS = {
@@ -50,12 +65,51 @@ const CHART_COLORS = [
 const FONT = 'Segoe UI';
 const LEFT_MARGIN = 0.35;
 const CONTENT_WIDTH = 12.5;
+const TITLE_Y = 0.05;
+const TITLE_H = 0.91;
+const SUBTITLE_Y = 1.1;
+const SUBTITLE_H = 0.28;
 
 // ============ HELPER FUNCTIONS ============
-function truncate(text, maxLen = 150) {
+function normalizePptText(text) {
+  return String(text || '')
+    .replace(/\u2013|\u2014|\u2212/g, '-')
+    .replace(/\u2018|\u2019|\u2032/g, "'")
+    .replace(/\u201C|\u201D|\u2033/g, '"')
+    .replace(/\u2026/g, '...')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\u2192/g, '->')
+    .replace(/\u2190/g, '<-')
+    .replace(/\u2022/g, '- ')
+    .replace(/\u200B/g, '')
+    .replace(/\u2028|\u2029/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function truncate(text) {
   if (!text) return '';
-  const str = String(text).trim();
-  return str.length <= maxLen ? str : str.substring(0, maxLen).trim() + '...';
+  const str = normalizePptText(text);
+  if (str.length > 15000) {
+    throw new Error(
+      `[PPT] Text payload exceeds hard cap (${str.length} > 15000) in test-vietnam generator`
+    );
+  }
+  return str;
+}
+
+function fitTextToBox(text, maxW, maxH, baseFont = 10, minFont = 9) {
+  const clean = normalizePptText(text);
+  if (!clean) return { text: '', fontSize: baseFont };
+  for (let fs = baseFont; fs >= minFont; fs--) {
+    const charsPerLine = Math.max(10, Math.floor(maxW / (fs * 0.006)));
+    const maxLines = Math.max(1, Math.floor(maxH / (fs * 0.017)));
+    if (Math.ceil(clean.length / charsPerLine) <= maxLines) {
+      return { text: clean, fontSize: fs };
+    }
+  }
+  // Do not truncate in fallback path; keep full content and fail at validator layer if needed.
+  return { text: clean, fontSize: minFont };
 }
 
 function tableHeader(headers) {
@@ -162,13 +216,13 @@ function addCalloutBox(slide, title, content, options = {}) {
     color: colors.titleColor,
     fontFace: FONT,
   });
-  // Increased max length from 300 to 800 to prevent truncation
-  slide.addText(truncate(content, 800), {
+  const fitted = fitTextToBox(content, boxW - 0.3, Math.max(0.3, boxH - 0.55), 10, 9);
+  slide.addText(fitted.text, {
     x: boxX + 0.15,
     y: boxY + 0.45,
     w: boxW - 0.3,
     h: boxH - 0.55,
-    fontSize: 10,
+    fontSize: fitted.fontSize,
     fontFace: FONT,
     color: COLORS.black,
     valign: 'top',
@@ -520,46 +574,127 @@ async function generateVietnamPPT() {
   console.log('Creating Vietnam Energy Services Market Research PPT...\n');
 
   const pptx = new PptxGenJS();
-  pptx.layout = 'LAYOUT_WIDE';
+  pptx.defineLayout({ name: 'YCP', width: 13.3333, height: 7.5 });
+  pptx.layout = 'YCP';
+  pptx.theme = { headFontFace: FONT, bodyFontFace: FONT };
+
+  pptx.defineSlideMaster({
+    title: 'NO_BAR',
+    background: { data: `image/png;base64,${COVER_BG_B64}` },
+    objects: [],
+  });
+  pptx.defineSlideMaster({
+    title: 'YCP_MAIN',
+    background: { color: COLORS.white },
+    objects: [
+      {
+        line: {
+          x: 0,
+          y: 1.0208,
+          w: 13.3333,
+          h: 0,
+          line: { color: '293F55', width: 4.5 },
+        },
+      },
+      {
+        line: {
+          x: 0,
+          y: 1.0972,
+          w: 13.3333,
+          h: 0,
+          line: { color: '293F55', width: 2.25 },
+        },
+      },
+      {
+        line: {
+          x: 0,
+          y: 7.2361,
+          w: 13.3333,
+          h: 0,
+          line: { color: '293F55', width: 2.25 },
+        },
+      },
+      {
+        text: {
+          text: '(C) YCP 2026',
+          options: {
+            x: 4.11,
+            y: 7.26,
+            w: 5.12,
+            h: 0.24,
+            fontSize: 8,
+            fontFace: FONT,
+            color: '808080',
+            align: 'center',
+          },
+        },
+      },
+      {
+        image: {
+          data: `image/png;base64,${LOGO_DARK_B64}`,
+          x: 0.38,
+          y: 7.3,
+          w: 0.47,
+          h: 0.17,
+        },
+      },
+    ],
+  });
+  pptx.defineSlideMaster({
+    title: 'DIVIDER_NAVY',
+    background: { data: `image/png;base64,${DIVIDER_BG_B64}` },
+    objects: [
+      {
+        image: {
+          data: `image/png;base64,${LOGO_WHITE_B64}`,
+          x: 0.6322,
+          y: 0.5847,
+          w: 2.4367,
+          h: 0.8692,
+        },
+      },
+    ],
+  });
   pptx.title = `Market Research - ${mockData.country} ${mockData.industry}`;
   pptx.author = 'YCP Market Research';
   pptx.subject = `${mockData.client} Project`;
 
   function addSlideWithTitle(title, subtitle = '') {
-    const slide = pptx.addSlide();
-    slide.addText(title, {
+    const slide = pptx.addSlide('YCP_MAIN');
+    slide.addText(normalizePptText(title), {
       x: LEFT_MARGIN,
-      y: 0.24,
+      y: TITLE_Y,
       w: CONTENT_WIDTH,
-      h: 0.64,
-      fontSize: 19,
+      h: TITLE_H,
+      fontSize: 20,
       bold: true,
       color: COLORS.dk2,
       fontFace: FONT,
       fit: 'shrink',
     });
-    if (subtitle)
-      slide.addText(subtitle, {
+    if (subtitle) {
+      slide.addText(normalizePptText(subtitle), {
         x: LEFT_MARGIN,
-        y: 0.9,
+        y: SUBTITLE_Y,
         w: CONTENT_WIDTH,
-        h: 0.36,
+        h: SUBTITLE_H,
         fontSize: 9,
         color: COLORS.gray,
         fontFace: FONT,
         fit: 'shrink',
       });
+    }
     return slide;
   }
 
   function addTOCSlide(activeSection = 0, transitionStatement = '') {
-    const slide = pptx.addSlide();
+    const slide = pptx.addSlide('YCP_MAIN');
     slide.addText('Table of Contents', {
       x: LEFT_MARGIN,
-      y: 0.24,
+      y: TITLE_Y,
       w: CONTENT_WIDTH,
-      h: 0.64,
-      fontSize: 19,
+      h: TITLE_H,
+      fontSize: 20,
       bold: true,
       color: COLORS.dk2,
       fontFace: FONT,
@@ -567,13 +702,14 @@ async function generateVietnamPPT() {
     });
     slide.addText(`${mockData.country}`, {
       x: LEFT_MARGIN,
-      y: 0.9,
+      y: SUBTITLE_Y,
       w: CONTENT_WIDTH,
-      h: 0.36,
-      fontSize: 13,
+      h: SUBTITLE_H,
+      fontSize: 9,
       color: COLORS.gray,
       fontFace: FONT,
     });
+
     // Dynamic section names based on mockData
     const competitorSection = mockData.focus || `${mockData.industry} Competitors`;
     const sections = [
@@ -584,9 +720,9 @@ async function generateVietnamPPT() {
     ];
     sections.forEach((sec, idx) => {
       const isActive = idx + 1 === activeSection;
-      slide.addText(sec, {
+      slide.addText(normalizePptText(sec), {
         x: LEFT_MARGIN,
-        y: 1.5 + idx * 0.5,
+        y: 1.55 + idx * 0.5,
         w: 6,
         h: 0.4,
         fontSize: 16,
@@ -595,6 +731,7 @@ async function generateVietnamPPT() {
         fontFace: FONT,
       });
     });
+
     // Round 2: Add transition statement if provided
     if (transitionStatement) {
       addCalloutBox(slide, 'Section Transition', transitionStatement, {
@@ -609,7 +746,7 @@ async function generateVietnamPPT() {
   }
 
   // SLIDE 1: Title
-  const titleSlide = pptx.addSlide();
+  const titleSlide = pptx.addSlide('NO_BAR');
   titleSlide.addText(`${mockData.client} Project`, {
     x: 0,
     y: 1.8,
@@ -2627,6 +2764,10 @@ async function generateVietnamPPT() {
   // Save PPT with post-write package normalization (same integrity safeguards as production path)
   const outputPath = path.join(__dirname, 'vietnam-output.pptx');
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+  pptxBuffer = await normalizeThemeToTemplate(pptxBuffer, {
+    majorFontFace: FONT,
+    minorFontFace: FONT,
+  });
 
   const idNormalize = await normalizeSlideNonVisualIds(pptxBuffer);
   if (idNormalize.changed) {
@@ -2667,6 +2808,21 @@ async function generateVietnamPPT() {
   if (hasShapeIdIssues || hasPackageIssues) {
     console.warn(
       `  [PostWrite] Structural warnings remain: shapeIds=${hasShapeIdIssues}, package=${hasPackageIssues}`
+    );
+  }
+
+  // Visual fidelity hard gate so this harness cannot silently ship ugly decks.
+  const visual = await runVisualFidelityCheck(outputPath);
+  console.log(
+    `  [Visual] ${visual.valid ? 'PASS' : 'FAIL'} | score=${visual.score || 0} | failed=${visual.summary?.failed || 0}`
+  );
+  if (!visual.valid) {
+    const failed = (visual.checks || []).filter((c) => !c.passed).slice(0, 8);
+    failed.forEach((c) => {
+      console.warn(`    [Visual FAIL] ${c.name}: expected ${c.expected}, actual ${c.actual}`);
+    });
+    throw new Error(
+      `Visual fidelity gate failed (score ${visual.score || 0}, highFailures=${visual.summary?.highFailures || 0})`
     );
   }
 

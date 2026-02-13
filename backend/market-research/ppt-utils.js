@@ -4,6 +4,25 @@ const { ensureString: _ensureString } = require('./shared/utils');
 // PPTX-safe ensureString: strips XML-invalid control characters.
 // eslint-disable-next-line no-control-regex
 const XML_INVALID_CHARS_UTILS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+const PPT_TEXT_GLYPH_NORMALIZATIONS = [
+  [/\u2013|\u2014|\u2212/g, '-'],
+  [/\u2018|\u2019|\u2032/g, "'"],
+  [/\u201C|\u201D|\u2033/g, '"'],
+  [/\u2026/g, '...'],
+  [/\u00A0/g, ' '],
+  [/\u2192/g, '->'],
+  [/\u2190/g, '<-'],
+  [/\u2022/g, '- '],
+  [/\u200B/g, ''],
+  [/\u2028|\u2029/g, ' '],
+];
+function normalizePptTextGlyphs(value) {
+  let text = String(value || '');
+  for (const [pattern, replacement] of PPT_TEXT_GLYPH_NORMALIZATIONS) {
+    text = text.replace(pattern, replacement);
+  }
+  return text;
+}
 function stripInvalidSurrogates(value) {
   let out = '';
   for (let i = 0; i < value.length; i++) {
@@ -22,10 +41,13 @@ function stripInvalidSurrogates(value) {
   return out;
 }
 function ensureString(value, defaultValue) {
-  return stripInvalidSurrogates(
-    _ensureString(value, defaultValue).replace(XML_INVALID_CHARS_UTILS, '')
-  );
+  const normalized = normalizePptTextGlyphs(_ensureString(value, defaultValue));
+  return stripInvalidSurrogates(normalized.replace(XML_INVALID_CHARS_UTILS, ''));
 }
+const DISABLE_TEXT_TRUNCATION = !/^(0|false|no|off)$/i.test(
+  String(process.env.DISABLE_TEXT_TRUNCATION || 'true').trim()
+);
+const HARD_TEXT_CAP = 15000;
 
 // Load template patterns for smart layout engine
 let templatePatterns = {};
@@ -104,7 +126,13 @@ const CHART_AXIS_DEFAULTS = {
 function truncate(text, maxLen = 600, addEllipsis = true) {
   if (!text) return '';
   const str = String(text).trim().replace(XML_INVALID_CHARS_UTILS, '');
+  if (str.length > HARD_TEXT_CAP) {
+    throw new Error(
+      `[PPT] Text payload exceeds hard cap (${str.length} > ${HARD_TEXT_CAP}) and cannot be rendered safely`
+    );
+  }
   if (str.length <= maxLen) return str;
+  if (DISABLE_TEXT_TRUNCATION) return str;
 
   // Find the last sentence boundary before maxLen
   const truncated = str.substring(0, maxLen);
@@ -209,7 +237,13 @@ function truncate(text, maxLen = 600, addEllipsis = true) {
 function truncateSubtitle(text, maxLen = 180, addEllipsis = true) {
   if (!text) return '';
   const str = String(text).trim().replace(XML_INVALID_CHARS_UTILS, '');
+  if (str.length > HARD_TEXT_CAP) {
+    throw new Error(
+      `[PPT] Subtitle payload exceeds hard cap (${str.length} > ${HARD_TEXT_CAP}) and cannot be rendered safely`
+    );
+  }
   if (str.length <= maxLen) return str;
+  if (DISABLE_TEXT_TRUNCATION) return str;
 
   // For subtitles, prefer ending at sentence boundary
   const truncated = str.substring(0, maxLen);
@@ -646,27 +680,78 @@ function enrichCompanyDesc(company, countryStr, industryStr) {
 }
 
 // Helper: dynamically size text to fit within a shape
+const MIN_READABLE_FONT_PT = 9;
+
+function truncateToApproxChars(text, maxChars) {
+  const clean = ensureString(text).replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  if (!Number.isFinite(maxChars) || maxChars <= 0 || clean.length <= maxChars) return clean;
+  const sliced = clean.slice(0, Math.max(12, Math.floor(maxChars)));
+  const cut = sliced.lastIndexOf(' ');
+  const base = cut > 0 ? sliced.slice(0, cut) : sliced;
+  return `${base.trim()}...`;
+}
+
+function estimateWrappedLines(text, charsPerLine) {
+  const normalized = ensureString(text);
+  if (!normalized) return 1;
+  const cpl = Math.max(1, charsPerLine);
+  const paragraphs = normalized.split(/\n+/);
+  let lines = 0;
+  paragraphs.forEach((paragraph) => {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      lines += 1;
+      return;
+    }
+    let currentLen = 0;
+    words.forEach((word) => {
+      if (currentLen === 0) {
+        currentLen = word.length;
+        return;
+      }
+      if (currentLen + 1 + word.length <= cpl) {
+        currentLen += 1 + word.length;
+      } else {
+        lines += 1;
+        currentLen = word.length;
+      }
+    });
+    lines += 1;
+  });
+  return Math.max(1, lines);
+}
+
 function fitTextToShape(text, maxW, maxH, baseFontPt) {
-  const avgCharWidth = baseFontPt * 0.006; // inches per char
-  const lineHeight = baseFontPt * 0.017; // inches per line
+  const textValue = ensureString(text);
+  const startingFont = Math.max(MIN_READABLE_FONT_PT, Number(baseFontPt) || 11);
+  const avgCharWidth = startingFont * 0.006; // inches per char
+  const lineHeight = startingFont * 0.017; // inches per line
   const charsPerLine = Math.floor(maxW / avgCharWidth);
   const maxLines = Math.floor(maxH / lineHeight);
-  const textLines = Math.ceil(text.length / charsPerLine);
+  const textLines = estimateWrappedLines(textValue, charsPerLine);
 
-  if (textLines <= maxLines) return { text, fontSize: baseFontPt };
+  if (textLines <= maxLines) return { text: textValue, fontSize: startingFont };
 
-  // Try reducing font size
-  for (let fs = baseFontPt - 1; fs >= 7; fs--) {
+  // Try reducing font size, but preserve readability (>=9pt).
+  for (let fs = startingFont - 1; fs >= MIN_READABLE_FONT_PT; fs--) {
     const cw = fs * 0.006;
     const lh = fs * 0.017;
     const cpl = Math.floor(maxW / cw);
     const ml = Math.floor(maxH / lh);
-    if (Math.ceil(text.length / cpl) <= ml) return { text, fontSize: fs };
+    if (estimateWrappedLines(textValue, cpl) <= Math.max(1, ml)) {
+      return { text: textValue, fontSize: fs };
+    }
   }
 
-  // Still doesn't fit at 7pt — return full text at 7pt, let pptxgenjs handle overflow
-  // Never truncate paid-for AI content with "..."
-  return { text, fontSize: 7 };
+  // Still doesn't fit at readable size; truncate softly at word boundary.
+  const minCpl = Math.max(10, Math.floor(maxW / (MIN_READABLE_FONT_PT * 0.006)));
+  const minLines = Math.max(1, Math.floor(maxH / (MIN_READABLE_FONT_PT * 0.017)));
+  const approxMaxChars = Math.max(24, minCpl * minLines);
+  return {
+    text: truncateToApproxChars(textValue, approxMaxChars),
+    fontSize: MIN_READABLE_FONT_PT,
+  };
 }
 
 // Helper: calculate dynamic column widths based on content length
@@ -744,6 +829,8 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
   const fontSize = templatePatterns.style?.fonts?.source?.size || 10;
   const fontColor = COLORS?.footerText || C_MUTED;
   const hlinkColor = TP_COLORS.hlink || '0563C1';
+  const footerY = Math.max(0, (Number(TEMPLATE.sourceBar.y) || 6.69) - 0.03);
+  const footerH = 0.24;
 
   // Build rich text parts with hyperlinks
   if (Array.isArray(sources)) {
@@ -751,7 +838,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
       { text: 'Sources: ', options: { fontSize, fontFace: FONT, color: fontColor } },
     ];
 
-    sources.slice(0, 3).forEach((source, idx) => {
+    sources.slice(0, 2).forEach((source, idx) => {
       if (idx > 0) {
         footerParts.push({
           text: ', ',
@@ -772,6 +859,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
         } catch {
           displayText = sourceTitle || sourceUrl.substring(0, 30);
         }
+        displayText = truncate(displayText, 34, true);
         footerParts.push({
           text: displayText,
           options: {
@@ -783,7 +871,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
         });
       } else {
         footerParts.push({
-          text: sourceTitle || String(source),
+          text: truncate(sourceTitle || String(source), 34, true),
           options: { fontSize, fontFace: FONT, color: fontColor },
         });
       }
@@ -791,21 +879,25 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
 
     slide.addText(footerParts, {
       x: TEMPLATE.sourceBar.x,
-      y: TEMPLATE.sourceBar.y,
+      y: footerY,
       w: TEMPLATE.sourceBar.w,
-      h: TEMPLATE.sourceBar.h || 0.27,
+      h: footerH,
+      margin: 0,
       valign: 'top',
+      fit: 'shrink',
     });
   } else if (typeof sources === 'string') {
-    slide.addText(`Source: ${sources}`, {
+    slide.addText(`Source: ${truncate(sources, 80, true)}`, {
       x: TEMPLATE.sourceBar.x,
-      y: TEMPLATE.sourceBar.y,
+      y: footerY,
       w: TEMPLATE.sourceBar.w,
-      h: TEMPLATE.sourceBar.h || 0.27,
+      h: footerH,
       fontSize,
       fontFace: FONT,
       color: fontColor,
+      margin: 0,
       valign: 'top',
+      fit: 'shrink',
     });
   }
 }
@@ -849,10 +941,11 @@ function addCalloutBox(slide, title, content, options = {}) {
 
   // Use single addText shape with fill+border to avoid shape overlap
   const textParts = [];
-  const contentStr = String(content || '');
-  if (title) {
+  const titleStr = ensureString(title).trim();
+  const contentStr = ensureString(content).trim();
+  if (titleStr) {
     textParts.push({
-      text: (title || '') + '\n',
+      text: `${titleStr}\n`,
       options: { fontSize: 12, bold: true, color: colors.titleColor, fontFace: FONT },
     });
   }
@@ -861,36 +954,20 @@ function addCalloutBox(slide, title, content, options = {}) {
   // margins = 5pt top + 5pt bottom = ~0.14 inches
   // title line = ~0.22 inches (12pt bold + newline)
   const marginInches = 0.14;
-  const titleInches = title ? 0.22 : 0;
+  const titleInches = titleStr ? 0.22 : 0;
   const maxBottom = TEMPLATE.sourceBar.y;
   const availableBottom = Math.min(boxY + boxH, maxBottom);
   const totalBoxH = Math.max(0.3, availableBottom - boxY);
   const contentMaxH = Math.max(0.1, totalBoxH - marginInches - titleInches);
 
   if (contentStr) {
-    // Fit content by shrinking font (min 7pt), never truncate to "..."
+    // Keep callout text readable (>=9pt) and trim when panel area is insufficient.
     const contentMaxW = boxW - 0.24; // 8pt left + 8pt right margins
-    const finalText = contentStr;
-    let finalFontSize = 11;
-
-    // Try font sizes from 11 down to 7
-    let fits = false;
-    for (let fs = 11; fs >= 7; fs--) {
-      const cw = fs * 0.006;
-      const lh = fs * 0.017;
-      const cpl = Math.max(1, Math.floor(contentMaxW / cw));
-      const ml = Math.max(1, Math.floor(contentMaxH / lh));
-      if (Math.ceil(contentStr.length / cpl) <= ml) {
-        finalFontSize = fs;
-        fits = true;
-        break;
-      }
-    }
-    if (!fits) finalFontSize = 7;
+    const fitted = fitTextToShape(contentStr, contentMaxW, contentMaxH, 11);
 
     textParts.push({
-      text: finalText,
-      options: { fontSize: finalFontSize, color: C_BLACK, fontFace: FONT },
+      text: fitted.text,
+      options: { fontSize: fitted.fontSize, color: C_BLACK, fontFace: FONT },
     });
   }
   if (textParts.length > 0 && boxY < maxBottom) {
@@ -2182,27 +2259,44 @@ function addChevronFlow(slide, phases, patternDef, opts = {}) {
   const count = Math.min(phases.length, maxPhases);
   const chevronW = (totalW - spacing * (count - 1)) / count;
 
-  const chevronShape = p.shape || 'homePlate';
+  const requestedShape = String(p.shape || '').trim();
+  // homePlate rendering is inconsistent across clients and has caused visual/recovery issues.
+  // Use chevron as the stable default for roadmap bars.
+  const chevronShape =
+    requestedShape.toLowerCase() === 'homeplate' || !requestedShape ? 'chevron' : requestedShape;
+  const lineColor = p.lineColor || C_WHITE;
+  const lineWidth = Number.isFinite(Number(p.lineWidth)) ? Number(p.lineWidth) : 0;
 
   phases.slice(0, count).forEach((phase, idx) => {
     const x = baseX + idx * (chevronW + spacing);
-    slide.addShape(chevronShape, {
+    const label = ensureString(
+      typeof phase === 'string' ? phase : phase?.name || phase?.label || ''
+    );
+    const shapeOptions = {
       x,
       y: baseY,
       w: chevronW,
       h,
-      fill: { color: colors[idx % colors.length] },
-    });
-    slide.addText(typeof phase === 'string' ? phase : phase.name || phase.label || '', {
+      fill: { color: colors[idx % colors.length] || C_ACCENT1 },
+      line: lineWidth > 0 ? { color: lineColor, pt: lineWidth } : undefined,
+    };
+    try {
+      slide.addShape(chevronShape, shapeOptions);
+    } catch {
+      slide.addShape('roundRect', shapeOptions);
+    }
+    slide.addText(label, {
       x: x + 0.1,
-      y: baseY + 0.1,
+      y: baseY + 0.08,
       w: chevronW - 0.2,
-      h: h - 0.2,
-      fontSize: p.fontSize || 8,
-      color: p.textColor || 'FFFFFF',
+      h: h - 0.16,
+      fontSize: p.fontSize || 11,
+      bold: true,
+      color: p.textColor || C_WHITE,
       fontFace: 'Segoe UI',
       align: 'center',
       valign: 'middle',
+      fit: 'shrink',
     });
   });
 }
@@ -2278,7 +2372,6 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       color: C_TRUE_BLACK,
       fontFace: 'Segoe UI',
       valign: 'top',
-      fit: 'shrink',
     });
   });
 }
@@ -2302,7 +2395,7 @@ function addCalloutOverlay(slide, text, pos) {
     line: { color: p.border || C_CALLOUT_BORDER, width: p.borderWidth || 0.75 },
     rectRadius: p.cornerRadius || 0,
   });
-  const fitted = fitTextToShape(String(text || ''), w - 0.2, h - 0.2, 9);
+  const fitted = fitTextToShape(ensureString(text), w - 0.2, h - 0.2, 9);
   slide.addText(fitted.text, {
     x: x + 0.1,
     y: y + 0.1,
@@ -2405,8 +2498,8 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
 
   rows.slice(0, rowDefs.length).forEach((row, idx) => {
     const def = rowDefs[idx];
-    const label = row.label || def.label;
-    const content = row.content || row.text || row.value || '';
+    const label = ensureString(row.label || def.label || '');
+    const content = ensureString(row.content || row.text || row.value || '');
 
     // Label cell
     slide.addShape('rect', {
@@ -2426,6 +2519,7 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
       color: labelStyle.color,
       fontFace: 'Segoe UI',
       valign: 'middle',
+      fit: 'shrink',
     });
 
     // Content cell

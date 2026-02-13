@@ -2,7 +2,6 @@ const pptxgen = require('pptxgenjs');
 const JSZip = require('jszip');
 const path = require('path');
 const {
-  truncate,
   truncateSubtitle,
   safeArray,
   ensureWebsite,
@@ -21,6 +20,7 @@ const {
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
 } = require('./pptx-validator');
+const { normalizeThemeToTemplate } = require('./theme-normalizer');
 
 // PPTX-safe string: strips XML-invalid control characters that corrupt PPTX files.
 // eslint-disable-next-line no-control-regex
@@ -898,10 +898,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       const website = sanitizeHyperlinkUrl(p.website);
       const nameCell = website
         ? {
-            text: truncate(name, 30),
+            text: safeText(name),
             options: { hyperlink: { url: website }, color: '0066CC' },
           }
-        : { text: truncate(name, 30) };
+        : { text: safeText(name) };
       compRows.push([nameCell, { text: 'Local' }, { text: desc, options: { fontSize: 9 } }]);
     });
 
@@ -918,10 +918,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       const website = sanitizeHyperlinkUrl(p.website);
       const nameCell = website
         ? {
-            text: truncate(name, 30),
+            text: safeText(name),
             options: { hyperlink: { url: website }, color: '0066CC' },
           }
-        : { text: truncate(name, 30) };
+        : { text: safeText(name) };
       compRows.push([nameCell, { text: 'Foreign' }, { text: desc, options: { fontSize: 9 } }]);
     });
 
@@ -980,6 +980,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
+  pptxBuffer = await normalizeThemeToTemplate(pptxBuffer, {
+    majorFontFace: 'Segoe UI',
+    minorFontFace: 'Segoe UI',
+  });
   const nonVisualIdNormalize = await normalizeSlideNonVisualIds(pptxBuffer);
   pptxBuffer = nonVisualIdNormalize.buffer;
   if (nonVisualIdNormalize.changed) {
