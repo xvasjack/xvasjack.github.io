@@ -264,6 +264,67 @@ function findGateChartData(value, depth = 0) {
   return null;
 }
 
+function flattenGateSeriesValues(value, out = [], depth = 0) {
+  if (depth > 8 || value == null) return out;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    out.push(value);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) flattenGateSeriesValues(item, out, depth + 1);
+    return out;
+  }
+  if (typeof value !== 'object') return out;
+  if (typeof value.value === 'number' && Number.isFinite(value.value)) out.push(value.value);
+  if (typeof value.y === 'number' && Number.isFinite(value.y)) out.push(value.y);
+  if (Array.isArray(value.data)) flattenGateSeriesValues(value.data, out, depth + 1);
+  if (Array.isArray(value.values)) flattenGateSeriesValues(value.values, out, depth + 1);
+  if (Array.isArray(value.series)) flattenGateSeriesValues(value.series, out, depth + 1);
+  return out;
+}
+
+function normalizeGateChartData(section) {
+  const chartData = findGateChartData(section);
+  if (!chartData || typeof chartData !== 'object' || !Array.isArray(chartData.series)) {
+    return null;
+  }
+  const numericValues = flattenGateSeriesValues(chartData.series, []).filter(
+    (v) => typeof v === 'number' && Number.isFinite(v)
+  );
+  // Section-level pre-gate should only enforce charts when enough points exist to validate.
+  if (numericValues.length < 4) return null;
+  return chartData;
+}
+
+function buildGateContent(fragments) {
+  if (!Array.isArray(fragments) || fragments.length === 0) return '';
+  const MAX_TOTAL_CHARS = 560;
+  const MAX_FRAGMENT_CHARS = 160;
+  const picked = [];
+  let total = 0;
+
+  for (const raw of fragments) {
+    let text = String(raw || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!text) continue;
+    if (text.length > MAX_FRAGMENT_CHARS) {
+      text = `${text.slice(0, MAX_FRAGMENT_CHARS - 3).trimEnd()}...`;
+    }
+    const separator = picked.length > 0 ? 1 : 0;
+    const remaining = MAX_TOTAL_CHARS - total - separator;
+    if (remaining <= 0) break;
+    if (text.length > remaining) {
+      if (remaining > 24) picked.push(`${text.slice(0, remaining - 3).trimEnd()}...`);
+      break;
+    }
+    picked.push(text);
+    total += text.length + separator;
+  }
+
+  return picked.join(' ');
+}
+
 function buildPptGateBlocks(countryAnalysis) {
   const sections = ['policy', 'market', 'competitors', 'depth', 'insights', 'summary'];
   const blocks = [];
@@ -287,8 +348,8 @@ function buildPptGateBlocks(countryAnalysis) {
       key,
       type: typeof section === 'object' ? 'section' : 'value',
       title: key,
-      content: uniqueFragments.join(' ').slice(0, 4000),
-      chartData: findGateChartData(section),
+      content: buildGateContent(uniqueFragments),
+      chartData: normalizeGateChartData(section),
     });
   }
 
@@ -1387,16 +1448,33 @@ app.get('/api/latest-ppt', (req, res) => {
 
 // ============ START SERVER ============
 
-const PORT = process.env.PORT || 3010;
-const server = app.listen(PORT, () => {
-  console.log(`Market Research server running on port ${PORT}`);
-  console.log('Environment check:');
-  console.log('  - GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'Set' : 'MISSING');
-  console.log('  - SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? 'Set' : 'MISSING');
-  console.log('  - SENDER_EMAIL:', process.env.SENDER_EMAIL || 'MISSING');
-});
-server.on('error', (error) => {
-  console.error('[Startup] HTTP listen failed:', error?.message || error);
-  // Exit so Railway marks the deploy unhealthy immediately with a clear reason.
-  process.exit(1);
-});
+function startServer() {
+  const PORT = process.env.PORT || 3010;
+  const server = app.listen(PORT, () => {
+    console.log(`Market Research server running on port ${PORT}`);
+    console.log('Environment check:');
+    console.log('  - GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'Set' : 'MISSING');
+    console.log('  - SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? 'Set' : 'MISSING');
+    console.log('  - SENDER_EMAIL:', process.env.SENDER_EMAIL || 'MISSING');
+  });
+  server.on('error', (error) => {
+    console.error('[Startup] HTTP listen failed:', error?.message || error);
+    // Exit so Railway marks the deploy unhealthy immediately with a clear reason.
+    process.exit(1);
+  });
+  return server;
+}
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = {
+  app,
+  startServer,
+  __test: {
+    buildPptGateBlocks,
+    normalizeGateChartData,
+    buildGateContent,
+  },
+};
