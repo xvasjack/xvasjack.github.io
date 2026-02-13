@@ -5872,26 +5872,81 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const execText =
+  let execLines =
     execSentenceChunks.length > 1
       ? execSentenceChunks
-          .slice(0, 4)
+          .slice(0, 6)
           .map((s) => `• ${ensureString(s)}`)
-          .join('\n')
-      : ensureString(execTextRaw);
-  // Fix 9: overflow protection — shrink font to fit, never truncate
-  const execFitted = fitTextToShape(execText, CONTENT_WIDTH, tpContent.h, 14);
-  execSlide.addText(execFitted.text, {
-    x: LEFT_MARGIN,
-    y: tpContent.y,
-    w: CONTENT_WIDTH,
-    h: tpContent.h,
-    fontSize: execFitted.fontSize,
-    fontFace: FONT,
-    color: COLORS.black,
-    lineSpacingMultiple: 1.3,
-    valign: 'top',
-  });
+          .filter(Boolean)
+      : [ensureString(execTextRaw)].filter(Boolean);
+  if (execLines.length === 1 && execLines[0].length > 640) {
+    const words = execLines[0].split(/\s+/).filter(Boolean);
+    const midpoint = Math.ceil(words.length / 2);
+    const firstHalf = words.slice(0, midpoint).join(' ').trim();
+    const secondHalf = words.slice(midpoint).join(' ').trim();
+    execLines = [firstHalf, secondHalf].filter(Boolean);
+  }
+  const maxExecShapeChars = 560;
+  const expandedExecLines = [];
+  for (const line of execLines) {
+    if (!line) continue;
+    if (line.length <= maxExecShapeChars) {
+      expandedExecLines.push(line);
+      continue;
+    }
+    const words = line.split(/\s+/).filter(Boolean);
+    let current = '';
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (candidate.length > maxExecShapeChars && current) {
+        expandedExecLines.push(current);
+        current = word;
+      } else {
+        current = candidate;
+      }
+    }
+    if (current) expandedExecLines.push(current);
+  }
+  const execShapeTexts = [];
+  let shapeText = '';
+  for (const line of expandedExecLines) {
+    const candidate = shapeText ? `${shapeText}\n${line}` : line;
+    if (candidate.length > maxExecShapeChars && shapeText) {
+      execShapeTexts.push(shapeText);
+      shapeText = line;
+    } else {
+      shapeText = candidate;
+    }
+  }
+  if (shapeText) execShapeTexts.push(shapeText);
+  const shapesToRender =
+    execShapeTexts.length > 0
+      ? execShapeTexts
+      : [expandedExecLines.join('\n') || ensureString(execTextRaw)];
+  const totalShapes = Math.max(1, Math.min(4, shapesToRender.length));
+  const boxGap = 0.12;
+  const boxHeight = Math.max(0.45, (tpContent.h - boxGap * (totalShapes - 1)) / totalShapes);
+  for (let i = 0; i < totalShapes; i++) {
+    const start = i * Math.ceil(shapesToRender.length / totalShapes);
+    const end = Math.min(
+      shapesToRender.length,
+      (i + 1) * Math.ceil(shapesToRender.length / totalShapes)
+    );
+    const mergedText = shapesToRender.slice(start, end).join('\n').trim();
+    if (!mergedText) continue;
+    const fitted = fitTextToShape(mergedText, CONTENT_WIDTH, boxHeight, 14);
+    execSlide.addText(fitted.text, {
+      x: LEFT_MARGIN,
+      y: tpContent.y + i * (boxHeight + boxGap),
+      w: CONTENT_WIDTH,
+      h: boxHeight,
+      fontSize: fitted.fontSize,
+      fontFace: FONT,
+      color: COLORS.black,
+      lineSpacingMultiple: 1.3,
+      valign: 'top',
+    });
+  }
 
   // ===== SLIDE 4: OPPORTUNITIES & BARRIERS (after Exec Summary, matches template) =====
   const oppData = {
