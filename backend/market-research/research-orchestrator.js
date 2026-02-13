@@ -114,6 +114,87 @@ async function runInBatches(items, batchSize, handler, delayMs = 0) {
   return results;
 }
 
+async function runInBatchesUntilDeadline(
+  items,
+  batchSize,
+  handler,
+  { delayMs = 0, deadlineMs = null, abortController = null } = {}
+) {
+  const results = [];
+  const size = Math.max(1, Number.isFinite(batchSize) ? batchSize : 1);
+  const hasDeadline = Number.isFinite(deadlineMs);
+  let timedOut = false;
+  let processedBatches = 0;
+  let timeoutAtBatch = -1;
+
+  for (let i = 0; i < items.length; i += size) {
+    if (hasDeadline && Date.now() >= deadlineMs) {
+      timedOut = true;
+      timeoutAtBatch = processedBatches + 1;
+      break;
+    }
+
+    const batch = items.slice(i, i + size);
+    let timeoutId = null;
+    const timeoutErr = new Error('Dynamic research batch deadline exceeded');
+    timeoutErr.code = 'DYNAMIC_BATCH_TIMEOUT';
+    try {
+      if (hasDeadline) {
+        const remainingMs = deadlineMs - Date.now();
+        if (remainingMs <= 0) {
+          timedOut = true;
+          timeoutAtBatch = processedBatches + 1;
+          break;
+        }
+        const batchPromise = Promise.all(batch.map((item, idx) => handler(item, i + idx)));
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(timeoutErr), remainingMs);
+        });
+        const batchResults = await Promise.race([batchPromise, timeoutPromise]);
+        results.push(...batchResults);
+      } else {
+        const batchResults = await Promise.all(batch.map((item, idx) => handler(item, i + idx)));
+        results.push(...batchResults);
+      }
+      processedBatches += 1;
+    } catch (err) {
+      if (err && err.code === 'DYNAMIC_BATCH_TIMEOUT') {
+        timedOut = true;
+        timeoutAtBatch = processedBatches + 1;
+        if (abortController && typeof abortController.abort === 'function') {
+          abortController.abort();
+        }
+        break;
+      }
+      throw err;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+
+    if (delayMs > 0 && i + size < items.length) {
+      if (hasDeadline) {
+        const remainingMs = deadlineMs - Date.now();
+        if (remainingMs <= 0) {
+          timedOut = true;
+          timeoutAtBatch = processedBatches + 1;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.min(delayMs, remainingMs)));
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  return {
+    results,
+    timedOut,
+    processedBatches,
+    totalBatches: Math.ceil(items.length / size),
+    timeoutAtBatch,
+  };
+}
+
 function computeDynamicResearchTimeoutMs(topicCount) {
   const topics = Number.isFinite(topicCount) ? Math.max(0, topicCount) : 0;
   const topicScaledTimeout = topics * CFG_DYNAMIC_RESEARCH_TIMEOUT_PER_TOPIC_MS;
@@ -5823,46 +5904,49 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     const categoryEntries = Object.entries(dynamicFramework);
 
     // Timeout wrapper: budget scales with topic count and is configurable.
-    let categoryResults;
+    let categoryResults = [];
     const dynamicResearchTimeoutMs = computeDynamicResearchTimeoutMs(totalTopics);
     const dynamicTimeoutMinutes = Math.max(1, Math.ceil(dynamicResearchTimeoutMs / 60000));
-    let dynamicTimeoutId = null;
+    const deadlineMs = Date.now() + dynamicResearchTimeoutMs;
+    let dynamicBatchOutcome = {
+      results: [],
+      timedOut: false,
+      processedBatches: 0,
+      totalBatches: Math.ceil(categoryEntries.length / Math.max(1, CFG_DYNAMIC_AGENT_CONCURRENCY)),
+    };
     try {
       console.log(
         `  [DYNAMIC FRAMEWORK] Timeout budget: ${dynamicTimeoutMinutes}min for ${totalTopics} topics`
       );
-      categoryResults = await Promise.race([
-        runInBatches(
-          categoryEntries,
-          CFG_DYNAMIC_AGENT_CONCURRENCY,
-          async ([category, data]) =>
-            universalResearchAgent(
-              category,
-              data.topics || [],
-              country,
-              industry,
-              clientContext,
-              scope.projectType,
-              pipelineSignal
-            ),
-          CFG_DYNAMIC_AGENT_BATCH_DELAY_MS
-        ),
-        new Promise(
-          (_, reject) =>
-            (dynamicTimeoutId = setTimeout(
-              () => reject(new Error(`Research timed out after ${dynamicTimeoutMinutes}min`)),
-              dynamicResearchTimeoutMs
-            ))
-        ),
-      ]);
+      dynamicBatchOutcome = await runInBatchesUntilDeadline(
+        categoryEntries,
+        CFG_DYNAMIC_AGENT_CONCURRENCY,
+        async ([category, data]) =>
+          universalResearchAgent(
+            category,
+            data.topics || [],
+            country,
+            industry,
+            clientContext,
+            scope.projectType,
+            pipelineSignal
+          ),
+        {
+          delayMs: CFG_DYNAMIC_AGENT_BATCH_DELAY_MS,
+          deadlineMs,
+          abortController: pipelineController,
+        }
+      );
+      categoryResults = dynamicBatchOutcome.results;
+      if (dynamicBatchOutcome.timedOut) {
+        console.error(
+          `  [ERROR] Dynamic framework timed out after ${dynamicTimeoutMinutes}min; continuing with partial results (${dynamicBatchOutcome.processedBatches}/${dynamicBatchOutcome.totalBatches} category batches completed)`
+        );
+      }
     } catch (err) {
       console.error(`  [ERROR] Research phase failed: ${err.message}`);
       pipelineController.abort();
-      categoryResults = [];
-    } finally {
-      if (dynamicTimeoutId) {
-        clearTimeout(dynamicTimeoutId);
-      }
+      categoryResults = dynamicBatchOutcome.results || [];
     }
 
     // Merge all results
@@ -5878,6 +5962,9 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     // Validate: did we actually get useful research data?
     const actualTopics = Object.keys(researchData).length;
     if (actualTopics < 3) {
+      const timeoutHint = dynamicBatchOutcome.timedOut
+        ? ` Timeout budget (${dynamicTimeoutMinutes}min) was reached before all category agents completed.`
+        : '';
       console.error(
         `  [ERROR] Dynamic framework returned only ${actualTopics} topics with data (minimum 3 required)`
       );
@@ -5885,7 +5972,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       return {
         country,
         error: 'Insufficient research data',
-        message: `Only ${actualTopics} topics returned data from dynamic framework. APIs may have failed.`,
+        message: `Only ${actualTopics} topics returned data from dynamic framework.${timeoutHint} APIs may have failed.`,
         topicsFound: actualTopics,
         researchTimeMs: Date.now() - startTime,
       };
@@ -7316,4 +7403,8 @@ module.exports = {
   finalReviewSynthesis,
   applyFinalReviewFixes,
   TEMPLATE_NARRATIVE_PATTERN,
+  __test: {
+    runInBatchesUntilDeadline,
+    computeDynamicResearchTimeoutMs,
+  },
 };

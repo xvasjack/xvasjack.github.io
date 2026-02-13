@@ -29,6 +29,7 @@ const { getExpectations, runValidation } = require('./validate-output');
 const { __test: cloneTest } = require('./template-clone-postprocess');
 const { validatePptData } = require('./quality-gates');
 const { __test: serverTest } = require('./server');
+const { __test: orchestratorTest } = require('./research-orchestrator');
 
 const ROOT = __dirname;
 const VIETNAM_SCRIPT = path.join(ROOT, 'test-vietnam-research.js');
@@ -265,6 +266,55 @@ function runPptGateUnitChecks() {
   );
 }
 
+async function runDynamicTimeoutUnitChecks() {
+  assert(
+    orchestratorTest && typeof orchestratorTest.runInBatchesUntilDeadline === 'function',
+    'research-orchestrator __test helper missing: runInBatchesUntilDeadline'
+  );
+  assert(
+    orchestratorTest && typeof orchestratorTest.computeDynamicResearchTimeoutMs === 'function',
+    'research-orchestrator __test helper missing: computeDynamicResearchTimeoutMs'
+  );
+
+  const fullOutcome = await orchestratorTest.runInBatchesUntilDeadline(
+    [1, 2, 3],
+    1,
+    async (item) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return item;
+    },
+    { deadlineMs: null, delayMs: 0 }
+  );
+  assert.strictEqual(fullOutcome.timedOut, false, 'No-deadline batch runner should not timeout');
+  assert.strictEqual(
+    fullOutcome.results.length,
+    3,
+    `Expected all items without timeout; got ${fullOutcome.results.length}`
+  );
+
+  const timeoutOutcome = await orchestratorTest.runInBatchesUntilDeadline(
+    [1, 2, 3, 4],
+    1,
+    async (item) => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return item;
+    },
+    { deadlineMs: Date.now() + 180, delayMs: 0 }
+  );
+  assert.strictEqual(timeoutOutcome.timedOut, true, 'Expected timeout under tight deadline');
+  assert(
+    timeoutOutcome.results.length >= 1 && timeoutOutcome.results.length < 4,
+    `Timeout path should retain partial completed batches; got ${timeoutOutcome.results.length}`
+  );
+
+  const tinyTimeout = orchestratorTest.computeDynamicResearchTimeoutMs(1);
+  const largerTimeout = orchestratorTest.computeDynamicResearchTimeoutMs(25);
+  assert(
+    largerTimeout >= tinyTimeout,
+    `Timeout should be non-decreasing with topic count (${tinyTimeout} -> ${largerTimeout})`
+  );
+}
+
 function runPreRenderStructureUnitChecks() {
   const base = {
     country: 'Vietnam',
@@ -349,6 +399,8 @@ async function runRound(round, total) {
   console.log('[Regression] Unit checks PASS (template-clone filter behavior)');
   runPptGateUnitChecks();
   console.log('[Regression] Unit checks PASS (pre-render PPT gate block shaping)');
+  await runDynamicTimeoutUnitChecks();
+  console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
   runPreRenderStructureUnitChecks();
   console.log('[Regression] Unit checks PASS (pre-render structure gating)');
 
