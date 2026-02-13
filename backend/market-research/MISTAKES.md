@@ -5,6 +5,7 @@ Purpose: record concrete mistakes, why they hurt, and how to prevent repeats.
 ## Hard Rules (Do Not Break)
 
 1. Gemini `gemini-3-flash` rate-limit protection is mandatory: keep retries simple (`base >= 10s`) and reduce parallel fan-out for heavy synthesis calls; avoid retry storms.
+2. `ULTRA HIGH PRIORITY`: Before any paid implementation/run, perform a triple-check root-cause proof (3 independent checks: logs + code-path trace + artifact/XML/visual evidence). If root cause is not proven, do **not** spend model tokens on fixes.
 
 ## 2026-02-11
 
@@ -72,6 +73,17 @@ Purpose: record concrete mistakes, why they hurt, and how to prevent repeats.
 | 60 | `safeText` returned raw strings for `addText` paths instead of XML-safe normalization. | Unpaired surrogates/control chars could leak into slide XML and trigger PowerPoint repair dialogs on open. | Route all text writes through XML-safe `ensureString` (including plain strings), with control-char and surrogate stripping. |
 | 61 | Package consistency scanner treated missing `<Override>` as failure even when valid `<Default Extension=...>` existed. | Created false “missing expected overrides” signals and noisy reconciliation loops that masked real package issues. | Parse default content-types and consider extension-level defaults when evaluating expected part coverage. |
 | 62 | Package issue logging joined object arrays directly (`.join`) in renderer diagnostics. | Logs emitted `[object Object]`, obscuring the exact broken part/content type and slowing root-cause analysis. | Always format structured issue arrays with explicit field mapping (`part->expectedContentType`). |
+
+## 2026-02-13
+
+| # | Mistake | Why it was wrong | Prevention rule |
+|---|---------|------------------|-----------------|
+| 63 | Declared root-cause fixes as “done” before validating the exact artifact path the user was opening. | A stale broken file could still be in use, making my status claims look false even when code changed. | Before claiming a fix, verify the exact user-visible output path and run integrity checks on that specific file. |
+| 64 | Assumed runtime/deploy state instead of proving what build the live service was serving. | User could run against an older/stale deployment and see no behavior change. | Always verify live runtime state first (diagnostics/status/logs), then tie conclusions to a concrete deployed build. |
+| 65 | Focused validation on local `test-output.pptx` without immediately scanning recent user download artifacts. | Missed an obvious explanation for continued repair errors: old broken files in `Downloads/` were still being opened. | Include a “recent artifact sweep” step that checks newest `.pptx` files by mtime and reports broken ones explicitly. |
+| 66 | Failed to surface that `/home/xvasjack/Downloads/Market_Research_Vietnam_DRAFT_2026-02-11_latest.pptx` had structural defects (`danglingOverrides=30`, `duplicateNonVisualShapeIds=1`) until late. | This delayed the concrete proof of why user still saw repair errors. | When user reports “still broken,” prioritize file-level package diagnostics before any additional code edits. |
+| 67 | Did not immediately provide explicit “open this file, not that one” guidance. | User experience remained confusing despite valid new outputs existing on disk. | Always provide exact replacement path(s) and mark stale/broken file paths when reporting fixes. |
+| 68 | Railway CLI token failure was discovered late in debugging. | Slowed down verification of deployed status and increased back-and-forth. | If CLI auth fails, immediately switch to direct health/diagnostic endpoints and continue evidence collection. |
 
 ## Mandatory Pre-Run QA Checklist (Before Any Paid Run)
 
