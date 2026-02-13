@@ -11,6 +11,7 @@ const {
   enrichCompanyDesc,
   safeTableHeight,
   flattenPlayerProfile,
+  TABLE_CELL_MARGIN,
 } = require('./ppt-utils');
 const { generateSingleCountryPPT } = require('./ppt-single-country');
 const { ensureString: _ensureStringRaw } = require('./shared/utils');
@@ -367,6 +368,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     border: { pt: 0.5, color: 'cccccc' },
     colW: [2.69, 3.36, 3.36, 3.09],
     valign: 'top',
+    margin: TABLE_CELL_MARGIN,
   });
 
   // ============ SLIDE 3: EXECUTIVE SUMMARY ============
@@ -670,6 +672,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     border: { pt: 0.5, color: 'cccccc' },
     colW: [2.42, 1.75, 3.36, 4.97],
     valign: 'top',
+    margin: TABLE_CELL_MARGIN,
   });
   // Next steps
   recSlide.addText('Recommended Next Steps:', {
@@ -774,6 +777,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.69, 9.81],
       valign: 'top',
+      margin: TABLE_CELL_MARGIN,
     });
 
     // ---------- SLIDE: {Country} - Market ----------
@@ -836,6 +840,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.69, 9.81],
       valign: 'top',
+      margin: TABLE_CELL_MARGIN,
     });
 
     // ---------- SLIDE: {Country} - Competitor Overview ----------
@@ -936,6 +941,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       border: { pt: 0.5, color: 'cccccc' },
       colW: [3.36, 1.34, 7.8],
       valign: 'top',
+      margin: TABLE_CELL_MARGIN,
     });
 
     // Entry barriers section — dynamic y based on table

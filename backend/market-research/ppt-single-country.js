@@ -1380,20 +1380,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       }
     );
 
-    const margin = [
-      Number.isFinite(Number(marginSource.marginTop))
-        ? Number(marginSource.marginTop)
-        : TABLE_CELL_MARGIN[0],
-      Number.isFinite(Number(marginSource.marginLeft))
-        ? Number(marginSource.marginLeft)
-        : TABLE_CELL_MARGIN[1],
-      Number.isFinite(Number(marginSource.marginBottom))
-        ? Number(marginSource.marginBottom)
-        : TABLE_CELL_MARGIN[2],
-      Number.isFinite(Number(marginSource.marginRight))
-        ? Number(marginSource.marginRight)
-        : TABLE_CELL_MARGIN[3],
-    ];
+    const margin = [...TABLE_CELL_MARGIN];
     const baselineCols = rows.reduce(
       (max, row) => Math.max(max, Array.isArray(row?.cells) ? row.cells.length : 0),
       0

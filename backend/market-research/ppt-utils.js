@@ -88,15 +88,9 @@ const C_AXIS_GRAY = TP_COLORS.gridLine || 'D6D7D9'; // Chart axis/grid lines
 const C_CALLOUT_FILL = TP_COLORS.calloutFill || 'D9D9D9'; // Callout bg (bg1 lumMod 85%)
 const C_CALLOUT_BORDER = TP_COLORS.calloutBorder || 'BFBFBF'; // Callout border (bg1 lumMod 75%)
 // Cell margins in inches (pptxgenjs table margin is inch-based).
-// NOTE: Converting to points here caused 3in cell padding in output XML
-// (e.g., marL/marR=2743200 EMU). Keep raw inch values from template metadata.
-// Template baseline: LR=0.04in, TB=0
-const TABLE_CELL_MARGIN = [
-  Number(templatePatterns.style?.table?.cellMarginTB || 0),
-  Number(templatePatterns.style?.table?.cellMarginLR || 0.04),
-  Number(templatePatterns.style?.table?.cellMarginTB || 0),
-  Number(templatePatterns.style?.table?.cellMarginLR || 0.04),
-];
+// Hard rule: all table cells use 0.1cm left/right and 0cm top/bottom.
+const TABLE_MARGIN_LR_IN = Number((0.1 / 2.54).toFixed(6)); // 0.1cm -> inches
+const TABLE_CELL_MARGIN = [0, TABLE_MARGIN_LR_IN, 0, TABLE_MARGIN_LR_IN];
 const C_LIGHT_GRAY = 'F5F5F5'; // Panel/callout backgrounds
 const C_GRAY_BG = 'F2F2F2'; // Alternate row/content backgrounds
 const C_SECONDARY = '666666'; // Secondary text
@@ -434,13 +428,26 @@ function safeAddTable(slide, rows, options = {}, context = 'table') {
   let tableRows = compacted.rows;
   addOptions = compacted.options;
   tableRows = sanitizeTableCellMargins(tableRows, context);
+  tableRows = tableRows.map((row) => {
+    if (!Array.isArray(row)) return row;
+    return row.map((cell) => {
+      if (!cell || typeof cell !== 'object' || Array.isArray(cell)) return cell;
+      return {
+        ...cell,
+        options: {
+          ...(cell.options || {}),
+          margin: [...TABLE_CELL_MARGIN],
+        },
+      };
+    });
+  });
   if (addOptions && typeof addOptions === 'object') {
     // Keep table layout deterministic across runs and template-conformant.
     delete addOptions.autoPage;
     delete addOptions.autoPageRepeatHeader;
     delete addOptions.autoPageHeaderRows;
     const normalizedMargin = normalizeTableMarginArray(addOptions.margin);
-    if (normalizedMargin) addOptions.margin = normalizedMargin;
+    addOptions.margin = normalizedMargin || [...TABLE_CELL_MARGIN];
   }
   try {
     slide.addTable(tableRows, addOptions);
@@ -2645,11 +2652,6 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
     color: C_BORDER,
   };
   const tocBorderNone = { pt: 0, color: 'FFFFFF' };
-  const tocSectionIndentPt = Number(templatePatterns.style?.toc?.sectionIndentPt || 35);
-  const tocSectionIndent = Number.isFinite(tocSectionIndentPt)
-    ? Number((Math.max(0, tocSectionIndentPt) / 72).toFixed(4))
-    : Number((35 / 72).toFixed(4));
-
   // Fix 4: TOC active section fill from JSON
   const tocActiveFill = TP_COLORS.tocActiveSectionFill || 'CCE5FF';
   // Fix 5: TOC country row fill from JSON
@@ -2687,12 +2689,6 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
           fill: isActive ? { color: tocActiveFill } : undefined,
           border: [tocBorderTB, tocBorderNone, tocBorderTB, tocBorderNone],
           valign: 'middle',
-          margin: [
-            TABLE_CELL_MARGIN[0],
-            TABLE_CELL_MARGIN[1],
-            TABLE_CELL_MARGIN[2],
-            Number((TABLE_CELL_MARGIN[3] + tocSectionIndent).toFixed(4)),
-          ],
         },
       },
     ]);
