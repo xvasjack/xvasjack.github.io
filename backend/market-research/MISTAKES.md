@@ -6,6 +6,8 @@ Purpose: record concrete mistakes, why they hurt, and how to prevent repeats.
 
 1. Gemini `gemini-3-flash` rate-limit protection is mandatory: keep retries simple (`base >= 10s`) and reduce parallel fan-out for heavy synthesis calls; avoid retry storms.
 2. `ULTRA HIGH PRIORITY`: Before any paid implementation/run, perform a triple-check root-cause proof (3 independent checks: logs + code-path trace + artifact/XML/visual evidence). If root cause is not proven, do **not** spend model tokens on fixes.
+3. Fix one issue at a time: one root cause -> one code change -> validation -> report. Queue follow-up issues for the next iteration.
+4. Explain status in high-school-level plain English. If technical terms are unavoidable, define them in one short sentence.
 
 ## 2026-02-11
 
@@ -90,6 +92,7 @@ Purpose: record concrete mistakes, why they hurt, and how to prevent repeats.
 | 72 | Stayed too long in incremental patch mode instead of escalating to architecture redesign when repeated attempts failed. | Burned time/tokens while preserving the same root rendering model that causes format drift. | If two consecutive fix rounds fail user acceptance, stop and move to workflow redesign (template-clone mapping only, no ad-hoc layout synthesis). |
 | 73 | Did not enforce identical quality gates across all generation entrypoints. | Some paths were hardened while others still emitted truncated/approximate output. | Centralize render and validation contracts so every generator path must pass the same strict template/truncation gates. |
 | 74 | Reported improvements before proving the exact file the user reviewed had improved truncation metrics. | Communication and user-visible reality diverged, further eroding trust. | Every success report must include metrics for the exact user-facing file path plus prior-vs-current comparison. |
+| 75 | Kept a separate Vietnam test renderer (`test-vietnam-research.js`) with custom slide code after production renderer hardening. | User-visible Vietnam output kept bypassing core fixes, so changes appeared to do nothing. | Route Vietnam test generation through the production `generateSingleCountryPPT` path only; never keep a parallel custom renderer for acceptance outputs. |
 
 ## Mandatory Pre-Run QA Checklist (Before Any Paid Run)
 

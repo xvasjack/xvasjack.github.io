@@ -134,6 +134,10 @@ const MESSAGE_FONT_PT = 16;
 const CONTENT_FONT_PT = 14;
 const CONTENT_MIN_FONT_PT = 12;
 const FOOTNOTE_FONT_PT = 10;
+const TABLE_RETHINK_MAX_PASSES = envNumber('TABLE_RETHINK_MAX_PASSES', 2, {
+  min: 1,
+  max: 4,
+});
 
 // PPTX-safe ensureString: strips XML-invalid control characters after conversion.
 // PPTX = ZIP of XML files. Characters \x00-\x08, \x0B, \x0C, \x0E-\x1F are invalid in
@@ -2019,7 +2023,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   function compactTableRowsForDensity(
     rows,
-    { headerMaxChars = 220, bodyMaxChars = 360 } = {},
+    { headerMaxChars = 220, bodyMaxChars = 360, strictMode = STRICT_TEMPLATE_FIDELITY } = {},
     context = 'table'
   ) {
     if (!Array.isArray(rows) || rows.length === 0) return { rows, changed: 0 };
@@ -2032,7 +2036,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         if (cell == null) return cell;
         if (typeof cell === 'string') {
           if (cell.length <= cap) return cell;
-          if (STRICT_TEMPLATE_FIDELITY) {
+          if (strictMode) {
             overflowSamples.push({
               row: rowIdx,
               col: colIdx,
@@ -2049,7 +2053,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         if (typeof cell === 'object' && !Array.isArray(cell)) {
           const text = ensureString(cell.text, '');
           if (!text || text.length <= cap) return cell;
-          if (STRICT_TEMPLATE_FIDELITY) {
+          if (strictMode) {
             overflowSamples.push({
               row: rowIdx,
               col: colIdx,
@@ -2068,7 +2072,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
         const asText = ensureString(cell, '');
         if (!asText || asText.length <= cap) return cell;
-        if (STRICT_TEMPLATE_FIDELITY) {
+        if (strictMode) {
           overflowSamples.push({
             row: rowIdx,
             col: colIdx,
@@ -2100,24 +2104,204 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return { rows: compactedRows, changed, overflowSamples };
   }
 
+  const TABLE_RETHINK_FILLER_PATTERNS = [
+    /\bit is important to note that\b/gi,
+    /\bit should be noted that\b/gi,
+    /\bin order to\b/gi,
+    /\bfor the purpose of\b/gi,
+    /\bfrom the perspective of\b/gi,
+    /\bin terms of\b/gi,
+    /\bas part of\b/gi,
+    /\bdue to the fact that\b/gi,
+  ];
+
+  function normalizeTableCellToText(cell) {
+    if (cell == null) return '';
+    if (typeof cell === 'string') return ensureString(cell);
+    if (typeof cell === 'object' && !Array.isArray(cell)) return ensureString(cell.text, '');
+    return ensureString(cell, '');
+  }
+
+  function compressTableCellNarrative(value, cap) {
+    const raw = ensureString(value).replace(/\s+/g, ' ').trim();
+    if (!raw || !Number.isFinite(cap) || cap <= 0 || raw.length <= cap) return raw;
+
+    let text = raw;
+    for (const re of TABLE_RETHINK_FILLER_PATTERNS) {
+      text = text.replace(re, ' ');
+    }
+    text = text.replace(/\s+/g, ' ').trim();
+    if (text.length <= cap) return text;
+
+    const chunks = text
+      .split(/(?<=[.!?;:])\s+/)
+      .map((chunk, idx) => ({ idx, chunk: chunk.trim() }))
+      .filter((entry) => entry.chunk.length > 0);
+
+    if (chunks.length > 1) {
+      const scored = chunks
+        .map((entry) => {
+          const chunkText = entry.chunk;
+          const hasNumber = /\d/.test(chunkText) ? 3 : 0;
+          const hasPercentOrCurrency = /[%$€¥]/.test(chunkText) ? 2 : 0;
+          const hasAllCaps = /\b[A-Z]{2,}\b/.test(chunkText) ? 1 : 0;
+          const keywordBoost = /\b(cagr|target|deadline|risk|cost|investment|revenue)\b/i.test(
+            chunkText
+          )
+            ? 2
+            : 0;
+          const lengthPenalty = chunkText.length > 220 ? -1 : 0;
+          return {
+            ...entry,
+            score: hasNumber + hasPercentOrCurrency + hasAllCaps + keywordBoost + lengthPenalty,
+          };
+        })
+        .sort((a, b) => b.score - a.score || a.idx - b.idx);
+      let used = 0;
+      const selected = [];
+      for (const item of scored) {
+        const candidateLength = used === 0 ? item.chunk.length : used + 1 + item.chunk.length;
+        if (candidateLength > cap && selected.length > 0) continue;
+        selected.push(item);
+        used = candidateLength;
+        if (used >= Math.floor(cap * 0.9)) break;
+      }
+      if (selected.length > 0) {
+        text = selected
+          .sort((a, b) => a.idx - b.idx)
+          .map((x) => x.chunk)
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+    }
+
+    if (text.length <= cap) return text;
+    const words = text.split(/\s+/).filter(Boolean);
+    const out = [];
+    let used = 0;
+    for (const word of words) {
+      const extra = out.length === 0 ? word.length : word.length + 1;
+      if (used + extra > cap) break;
+      out.push(word);
+      used += extra;
+    }
+    if (out.length === 0) return text.slice(0, cap);
+    return out
+      .join(' ')
+      .replace(/[,:;]$/, '')
+      .trim();
+  }
+
+  function patchTableCellText(cell, nextText) {
+    if (typeof cell === 'string') return nextText;
+    if (cell && typeof cell === 'object' && !Array.isArray(cell)) {
+      return {
+        ...cell,
+        text: nextText,
+      };
+    }
+    return nextText;
+  }
+
+  function rethinkDenseTableRows(
+    rows,
+    { headerMaxChars = 220, bodyMaxChars = 360, maxPasses = TABLE_RETHINK_MAX_PASSES } = {},
+    context = 'table'
+  ) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return { rows, rewritten: 0, overflowSamples: [] };
+    }
+    let workingRows = rows;
+    let rewritten = 0;
+    let latestOverflow = [];
+    const maxIterations = Math.max(1, Math.min(6, Number(maxPasses) || 1));
+
+    for (let pass = 1; pass <= maxIterations; pass++) {
+      const probe = compactTableRowsForDensity(
+        workingRows,
+        { headerMaxChars, bodyMaxChars, strictMode: true },
+        `${context}:rethink-probe`
+      );
+      latestOverflow = Array.isArray(probe.overflowSamples) ? probe.overflowSamples : [];
+      const severe = latestOverflow.filter((entry) => entry.severe);
+      if (severe.length === 0) break;
+
+      let passRewriteCount = 0;
+      const severeIndex = new Set(severe.map((entry) => `${entry.row}:${entry.col}`));
+      const nextRows = workingRows.map((row, rowIdx) => {
+        if (!Array.isArray(row)) return row;
+        const cap = rowIdx === 0 ? headerMaxChars : bodyMaxChars;
+        return row.map((cell, colIdx) => {
+          if (!severeIndex.has(`${rowIdx}:${colIdx}`)) return cell;
+          const raw = normalizeTableCellToText(cell);
+          if (!raw) return cell;
+          const compacted = compressTableCellNarrative(raw, cap);
+          if (!compacted || compacted === raw) return cell;
+          passRewriteCount++;
+          return patchTableCellText(cell, compacted);
+        });
+      });
+
+      if (passRewriteCount === 0) break;
+      rewritten += passRewriteCount;
+      workingRows = nextRows;
+      console.warn(
+        `[PPT] ${context}: dynamic-fit rethink pass ${pass} rewrote ${passRewriteCount} severe table cell(s)`
+      );
+    }
+
+    const finalProbe = compactTableRowsForDensity(
+      workingRows,
+      { headerMaxChars, bodyMaxChars, strictMode: true },
+      `${context}:rethink-final`
+    );
+    latestOverflow = Array.isArray(finalProbe.overflowSamples) ? finalProbe.overflowSamples : [];
+    return {
+      rows: workingRows,
+      rewritten,
+      overflowSamples: latestOverflow,
+    };
+  }
+
   function countTableColumns(rows) {
     if (!Array.isArray(rows) || rows.length === 0) return 0;
     return rows.reduce((max, row) => Math.max(max, Array.isArray(row) ? row.length : 0), 0);
   }
 
+  function tablePressureBand(pressure) {
+    if (pressure >= 1.95) return 'max';
+    if (pressure >= 1.55) return 'plus';
+    if (pressure >= 1.22) return 'soft';
+    if (pressure >= 1.08) return 'mini';
+    return 'std';
+  }
+
   function pickTableVariant(rowPressure, colPressure) {
-    const rowBand = rowPressure >= 1.7 ? 'plus' : rowPressure >= 1.3 ? 'soft' : 'std';
-    const colBand = colPressure >= 1.7 ? 'plus' : colPressure >= 1.3 ? 'soft' : 'std';
+    const rowBand = tablePressureBand(rowPressure);
+    const colBand = tablePressureBand(colPressure);
     const matrix = {
       std_std: { name: 'standard', widthNudge: 0, heightNudge: 0 },
+      std_mini: { name: 'wide_micro', widthNudge: 0.02, heightNudge: 0 },
       std_soft: { name: 'wide_soft', widthNudge: 0.04, heightNudge: 0 },
       std_plus: { name: 'wide_plus', widthNudge: 0.08, heightNudge: 0 },
+      std_max: { name: 'wide_max', widthNudge: 0.1, heightNudge: 0 },
+      mini_std: { name: 'tall_micro', widthNudge: 0, heightNudge: 0.02 },
+      mini_mini: { name: 'balanced_micro', widthNudge: 0.02, heightNudge: 0.02 },
+      mini_soft: { name: 'balanced_micro_soft', widthNudge: 0.03, heightNudge: 0.03 },
       soft_std: { name: 'tall_soft', widthNudge: 0, heightNudge: 0.04 },
+      soft_mini: { name: 'balanced_tall_micro', widthNudge: 0.02, heightNudge: 0.04 },
       plus_std: { name: 'tall_plus', widthNudge: 0, heightNudge: 0.08 },
+      max_std: { name: 'tall_max', widthNudge: 0, heightNudge: 0.1 },
       soft_soft: { name: 'balanced_soft', widthNudge: 0.04, heightNudge: 0.04 },
       soft_plus: { name: 'balanced_wide_plus', widthNudge: 0.08, heightNudge: 0.05 },
+      soft_max: { name: 'balanced_wide_max', widthNudge: 0.1, heightNudge: 0.06 },
       plus_soft: { name: 'balanced_tall_plus', widthNudge: 0.05, heightNudge: 0.08 },
       plus_plus: { name: 'balanced_plus', widthNudge: 0.08, heightNudge: 0.08 },
+      plus_max: { name: 'balanced_plus_max', widthNudge: 0.1, heightNudge: 0.1 },
+      max_soft: { name: 'balanced_max_soft', widthNudge: 0.06, heightNudge: 0.1 },
+      max_plus: { name: 'balanced_max_plus', widthNudge: 0.1, heightNudge: 0.1 },
+      max_max: { name: 'balanced_max', widthNudge: 0.1, heightNudge: 0.1 },
     };
     return matrix[`${rowBand}_${colBand}`] || matrix.std_std;
   }
@@ -2426,12 +2610,30 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
         const compacted = compactTableRowsForDensity(
           tableRows,
-          { headerMaxChars, bodyMaxChars },
+          { headerMaxChars, bodyMaxChars, strictMode: STRICT_TEMPLATE_FIDELITY },
           resolvedContext
         );
         tableRows = compacted.rows;
         if (STRICT_TEMPLATE_FIDELITY && Array.isArray(compacted.overflowSamples)) {
-          const severe = compacted.overflowSamples.filter((entry) => entry.severe);
+          let severe = compacted.overflowSamples.filter((entry) => entry.severe);
+          if (severe.length > 0) {
+            const rethink = rethinkDenseTableRows(
+              tableRows,
+              {
+                headerMaxChars,
+                bodyMaxChars,
+                maxPasses: TABLE_RETHINK_MAX_PASSES,
+              },
+              resolvedContext
+            );
+            if (rethink.rewritten > 0) {
+              tableRows = rethink.rows;
+              severe = (rethink.overflowSamples || []).filter((entry) => entry.severe);
+              console.warn(
+                `[PPT] ${resolvedContext}: dynamic-fit rethink rewritten=${rethink.rewritten}, severeRemaining=${severe.length}`
+              );
+            }
+          }
           if (severe.length > 0) {
             const preview = severe
               .slice(0, 4)
