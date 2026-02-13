@@ -780,6 +780,9 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
     const borderWidths = [];
     const longTextRuns = [];
     const longTableCells = [];
+    const LONG_TEXT_RUN_WARNING_LEN = 900;
+    // Calibrated against Escort template baseline where valid table cells can exceed 500 chars.
+    const LONG_TABLE_CELL_WARNING_LEN = 620;
 
     for (const name of slideXmlEntries) {
       const xml = await zip.file(name)?.async('string');
@@ -789,7 +792,7 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
       // unreadable slides and visible corruption after PowerPoint auto-repair.
       for (const tm of xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)) {
         const text = ensureString(tm[1] || '');
-        if (text.length > 900) {
+        if (text.length > LONG_TEXT_RUN_WARNING_LEN) {
           longTextRuns.push({
             slide: name.replace(/^ppt\/slides\//, ''),
             length: text.length,
@@ -804,7 +807,7 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
           .join(' ')
           .replace(/\s+/g, ' ')
           .trim();
-        if (cellText.length > 320) {
+        if (cellText.length > LONG_TABLE_CELL_WARNING_LEN) {
           longTableCells.push({
             slide: name.replace(/^ppt\/slides\//, ''),
             length: cellText.length,
@@ -922,7 +925,7 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
       issues.push({
         severity: 'warning',
         code: 'long_text_run_density',
-        message: `Very long text runs detected (len>900 chars), e.g. ${examples}`,
+        message: `Very long text runs detected (len>${LONG_TEXT_RUN_WARNING_LEN} chars), e.g. ${examples}`,
       });
     }
     if (longTableCells.length > 0) {
@@ -933,7 +936,7 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
       issues.push({
         severity: 'warning',
         code: 'long_table_cell_density',
-        message: `Overly long table cells detected (len>320 chars), e.g. ${examples}`,
+        message: `Overly long table cells detected (len>${LONG_TABLE_CELL_WARNING_LEN} chars), e.g. ${examples}`,
       });
     }
   } catch (err) {
