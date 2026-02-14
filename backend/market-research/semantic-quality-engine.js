@@ -43,7 +43,9 @@ function normalizeCurrency(raw) {
   }
 
   // Detect trailing currency code (e.g., "100M USD")
-  const trailingCode = cleaned.match(/\s+(USD|EUR|GBP|JPY|INR|CNY|KRW|THB|VND|IDR|MYR|SGD|PHP|AUD|CAD)$/i);
+  const trailingCode = cleaned.match(
+    /\s+(USD|EUR|GBP|JPY|INR|CNY|KRW|THB|VND|IDR|MYR|SGD|PHP|AUD|CAD)$/i
+  );
   if (trailingCode) {
     currency = trailingCode[1].toUpperCase();
     cleaned = cleaned.slice(0, trailingCode.index).trim();
@@ -61,9 +63,7 @@ function normalizeCurrency(raw) {
   }
 
   // Try word form: "5 million", "2.3 billion"
-  const wordMatch = cleaned.match(
-    /^(-?\d+(?:\.\d+)?)\s*(thousand|million|billion|trillion)$/i
-  );
+  const wordMatch = cleaned.match(/^(-?\d+(?:\.\d+)?)\s*(thousand|million|billion|trillion)$/i);
   if (wordMatch) {
     const num = parseFloat(wordMatch[1]);
     const wordMult = {
@@ -219,6 +219,338 @@ function parseDealEconomics(dealEcon) {
   };
 }
 
+// ============ ENTRY STRATEGY SEMANTIC PARSER ============
+
+/**
+ * Parse an entryStrategy object into a structured semantic model.
+ * Similar rigor to parseDealEconomics.
+ */
+function parseEntryStrategy(entryStrategy) {
+  if (!entryStrategy || typeof entryStrategy !== 'object') {
+    return { valid: false, fields: {}, confidence: 0, issues: ['No entry strategy data provided'] };
+  }
+
+  const fields = {};
+  const issues = [];
+
+  // Mode of entry (JV, acquisition, greenfield, partnership, etc.)
+  if (entryStrategy.mode || entryStrategy.entryMode || entryStrategy.approach) {
+    const mode = entryStrategy.mode || entryStrategy.entryMode || entryStrategy.approach;
+    fields.entryMode = typeof mode === 'string' ? mode.trim() : String(mode);
+    if (fields.entryMode.length < 3) {
+      issues.push('Entry mode description too brief');
+    }
+  } else {
+    issues.push('entryMode missing');
+  }
+
+  // Timeline / phases
+  if (entryStrategy.timeline || entryStrategy.phases || entryStrategy.implementationTimeline) {
+    const timeline =
+      entryStrategy.timeline || entryStrategy.phases || entryStrategy.implementationTimeline;
+    if (typeof timeline === 'string') {
+      fields.timelineMonths = normalizeTimePeriod(timeline);
+      fields.timelineRaw = timeline;
+    } else if (Array.isArray(timeline)) {
+      fields.phases = timeline.filter((p) => p && (typeof p === 'string' || typeof p === 'object'));
+      fields.phaseCount = fields.phases.length;
+    } else if (typeof timeline === 'object') {
+      fields.phases = Object.entries(timeline).map(([k, v]) => ({ phase: k, detail: v }));
+      fields.phaseCount = fields.phases.length;
+    }
+    if (!fields.timelineMonths && (!fields.phases || fields.phases.length === 0)) {
+      issues.push('Timeline could not be parsed into phases or duration');
+    }
+  } else {
+    issues.push('timeline/phases missing');
+  }
+
+  // Investment required
+  if (
+    entryStrategy.investmentRequired ||
+    entryStrategy.initialInvestment ||
+    entryStrategy.capitalRequired
+  ) {
+    const inv =
+      entryStrategy.investmentRequired ||
+      entryStrategy.initialInvestment ||
+      entryStrategy.capitalRequired;
+    fields.investmentRequired = normalizeCurrency(typeof inv === 'string' ? inv : String(inv));
+    if (!fields.investmentRequired) {
+      issues.push('Investment amount could not be parsed');
+    }
+  } else {
+    issues.push('investmentRequired missing');
+  }
+
+  // Risk factors
+  if (entryStrategy.risks || entryStrategy.riskFactors || entryStrategy.keyRisks) {
+    const risks = entryStrategy.risks || entryStrategy.riskFactors || entryStrategy.keyRisks;
+    if (Array.isArray(risks)) {
+      fields.risks = risks.filter((r) => typeof r === 'string' && r.trim().length > 0);
+    } else if (typeof risks === 'string') {
+      fields.risks = [risks];
+    }
+  }
+
+  // Success criteria / milestones
+  if (entryStrategy.successCriteria || entryStrategy.milestones || entryStrategy.kpis) {
+    const criteria =
+      entryStrategy.successCriteria || entryStrategy.milestones || entryStrategy.kpis;
+    if (Array.isArray(criteria)) {
+      fields.successCriteria = criteria.filter((c) => typeof c === 'string' && c.trim().length > 0);
+    } else if (typeof criteria === 'string') {
+      fields.successCriteria = [criteria];
+    }
+  }
+
+  // Calculate confidence
+  const expectedFields = ['entryMode', 'timelineMonths', 'investmentRequired', 'risks'];
+  let filledCount = 0;
+  if (fields.entryMode) filledCount++;
+  if (fields.timelineMonths || (fields.phases && fields.phases.length > 0)) filledCount++;
+  if (fields.investmentRequired) filledCount++;
+  if (fields.risks && fields.risks.length > 0) filledCount++;
+
+  const confidence = Math.round((filledCount / expectedFields.length) * 100);
+
+  return {
+    valid: filledCount >= 2,
+    fields,
+    confidence,
+    issues,
+  };
+}
+
+// ============ PARTNER ASSESSMENT SEMANTIC PARSER ============
+
+/**
+ * Parse a partnerAssessment object into a structured semantic model.
+ * Similar rigor to parseDealEconomics.
+ */
+function parsePartnerAssessment(partnerAssessment) {
+  if (!partnerAssessment || typeof partnerAssessment !== 'object') {
+    return {
+      valid: false,
+      fields: {},
+      confidence: 0,
+      issues: ['No partner assessment data provided'],
+    };
+  }
+
+  const fields = {};
+  const issues = [];
+
+  // Partner candidates list
+  if (
+    partnerAssessment.candidates ||
+    partnerAssessment.potentialPartners ||
+    partnerAssessment.partners
+  ) {
+    const partners =
+      partnerAssessment.candidates ||
+      partnerAssessment.potentialPartners ||
+      partnerAssessment.partners;
+    if (Array.isArray(partners)) {
+      fields.partners = partners
+        .map((p) => {
+          if (typeof p === 'string') return { name: p };
+          if (typeof p === 'object' && p !== null) {
+            return {
+              name: p.name || p.company || p.partnerName || 'Unknown',
+              strengths: p.strengths || p.advantages || null,
+              weaknesses: p.weaknesses || p.disadvantages || p.risks || null,
+              fitScore: p.fitScore || p.score || null,
+              rationale: p.rationale || p.reason || p.description || null,
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+    } else if (typeof partners === 'object') {
+      fields.partners = Object.entries(partners).map(([name, detail]) => ({
+        name,
+        rationale: typeof detail === 'string' ? detail : JSON.stringify(detail),
+      }));
+    }
+    if (!fields.partners || fields.partners.length === 0) {
+      issues.push('No valid partner candidates found');
+    }
+  } else {
+    issues.push('partner candidates missing');
+  }
+
+  // Selection criteria
+  if (
+    partnerAssessment.selectionCriteria ||
+    partnerAssessment.criteria ||
+    partnerAssessment.evaluationCriteria
+  ) {
+    const criteria =
+      partnerAssessment.selectionCriteria ||
+      partnerAssessment.criteria ||
+      partnerAssessment.evaluationCriteria;
+    if (Array.isArray(criteria)) {
+      fields.selectionCriteria = criteria.filter(
+        (c) => typeof c === 'string' && c.trim().length > 0
+      );
+    } else if (typeof criteria === 'string') {
+      fields.selectionCriteria = [criteria];
+    }
+  } else {
+    issues.push('selectionCriteria missing');
+  }
+
+  // Partnership model / structure
+  if (partnerAssessment.model || partnerAssessment.structure || partnerAssessment.partnershipType) {
+    const model =
+      partnerAssessment.model || partnerAssessment.structure || partnerAssessment.partnershipType;
+    fields.partnershipModel = typeof model === 'string' ? model.trim() : String(model);
+  } else {
+    issues.push('partnership model/structure missing');
+  }
+
+  // Due diligence / assessment notes
+  if (partnerAssessment.dueDiligence || partnerAssessment.assessment || partnerAssessment.notes) {
+    const dd =
+      partnerAssessment.dueDiligence || partnerAssessment.assessment || partnerAssessment.notes;
+    fields.dueDiligence = typeof dd === 'string' ? dd : JSON.stringify(dd);
+  }
+
+  // Key insight
+  if (partnerAssessment.keyInsight && typeof partnerAssessment.keyInsight === 'string') {
+    fields.keyInsight = partnerAssessment.keyInsight;
+  }
+
+  // Calculate confidence
+  const expectedFields = ['partners', 'selectionCriteria', 'partnershipModel', 'dueDiligence'];
+  let filledCount = 0;
+  if (fields.partners && fields.partners.length > 0) filledCount++;
+  if (fields.selectionCriteria && fields.selectionCriteria.length > 0) filledCount++;
+  if (fields.partnershipModel) filledCount++;
+  if (fields.dueDiligence) filledCount++;
+
+  const confidence = Math.round((filledCount / expectedFields.length) * 100);
+
+  return {
+    valid: filledCount >= 2,
+    fields,
+    confidence,
+    issues,
+  };
+}
+
+// ============ INSIGHT STRUCTURE VALIDATION ============
+
+/**
+ * Validate that an insight has the required structure:
+ * finding + implication + action + risk/caveat.
+ * Returns { valid, missing[], score }
+ */
+function validateInsightStructure(insight) {
+  if (!insight || typeof insight !== 'object') {
+    return { valid: false, missing: ['finding', 'implication', 'action', 'risk'], score: 0 };
+  }
+
+  const missing = [];
+  let score = 0;
+
+  // Finding: the factual observation
+  const findingFields = ['finding', 'data', 'observation', 'title', 'fact'];
+  const hasFinding = findingFields.some((f) => {
+    const val = insight[f];
+    return val && typeof val === 'string' && val.trim().length >= 10;
+  });
+  if (hasFinding) {
+    score += 25;
+  } else {
+    missing.push('finding');
+  }
+
+  // Implication: what the finding means
+  const implicationFields = ['implication', 'impact', 'meaning', 'significance', 'pattern'];
+  const hasImplication = implicationFields.some((f) => {
+    const val = insight[f];
+    return val && typeof val === 'string' && val.trim().length >= 10;
+  });
+  if (hasImplication) {
+    score += 25;
+  } else {
+    // Check if the finding text itself contains implication language
+    const findingText = findingFields
+      .map((f) => insight[f])
+      .filter(Boolean)
+      .join(' ');
+    const hasImplicitImplication =
+      /\b(this means|which implies|suggesting|indicating|therefore|consequently)\b/i.test(
+        findingText
+      );
+    if (hasImplicitImplication) {
+      score += 15; // partial credit
+    } else {
+      missing.push('implication');
+    }
+  }
+
+  // Action: recommended next step
+  const actionFields = ['action', 'recommendation', 'nextStep', 'timing', 'strategy'];
+  const hasAction = actionFields.some((f) => {
+    const val = insight[f];
+    return val && typeof val === 'string' && val.trim().length >= 5;
+  });
+  if (hasAction) {
+    score += 25;
+  } else {
+    // Check if any text contains action language
+    const allText = Object.values(insight)
+      .filter((v) => typeof v === 'string')
+      .join(' ');
+    const hasImplicitAction =
+      /\b(should|recommend|target|pursue|consider|focus|prioritize|by Q[1-4]|by 20\d{2})\b/i.test(
+        allText
+      );
+    if (hasImplicitAction) {
+      score += 15; // partial credit
+    } else {
+      missing.push('action');
+    }
+  }
+
+  // Risk / caveat: what could go wrong
+  const riskFields = ['risk', 'caveat', 'warning', 'limitation', 'downside', 'risks'];
+  const hasRisk = riskFields.some((f) => {
+    const val = insight[f];
+    return (
+      val &&
+      ((typeof val === 'string' && val.trim().length >= 5) ||
+        (Array.isArray(val) && val.length > 0))
+    );
+  });
+  if (hasRisk) {
+    score += 25;
+  } else {
+    // Check for implicit risk language
+    const allText = Object.values(insight)
+      .filter((v) => typeof v === 'string')
+      .join(' ');
+    const hasImplicitRisk =
+      /\b(however|but|risk|caveat|unless|except|downside|challenge|barrier|threat)\b/i.test(
+        allText
+      );
+    if (hasImplicitRisk) {
+      score += 15; // partial credit
+    } else {
+      missing.push('risk');
+    }
+  }
+
+  return {
+    valid: missing.length === 0,
+    missing,
+    score,
+  };
+}
+
 // ============ PLAUSIBILITY CONSTRAINTS ============
 
 const PLAUSIBILITY_RANGES = {
@@ -350,7 +682,8 @@ function extractClaims(text) {
   const sentences = text.split(/[.!?;]+/).filter((s) => s.trim().length > 10);
 
   const upVerbs = /\b(growing|grew|increased|rising|expanding|booming|surging|accelerating)\b/i;
-  const downVerbs = /\b(declining|decreased|falling|shrinking|contracting|weakening|stagnant|depressed)\b/i;
+  const downVerbs =
+    /\b(declining|decreased|falling|shrinking|contracting|weakening|stagnant|depressed)\b/i;
   const strongDemand = /\b(strong|robust|booming|high)\s+(demand|growth)\b/i;
   const weakDemand = /\b(weak|low|declining|stagnant)\s+(demand|growth)\b/i;
 
@@ -391,7 +724,7 @@ function extractClaims(text) {
  */
 function extractSubjectPhrase(sentence) {
   // Remove JSON artifacts
-  let s = sentence.replace(/["{},:\[\]]/g, ' ').trim();
+  const s = sentence.replace(/["{},:[\]]/g, ' ').trim();
   // Take the first clause (before "is", "are", "has", etc.)
   const verbSplit = s.split(/\b(?:is|are|was|were|has|have)\b/i);
   let subject = (verbSplit[0] || s).trim();
@@ -405,39 +738,165 @@ function extractSubjectPhrase(sentence) {
 }
 
 /**
+ * Recursively extract all string values from an object, joining them with periods.
+ * This avoids JSON key names polluting subject extraction.
+ */
+function extractTextValues(obj) {
+  if (!obj) return '';
+  if (typeof obj === 'string') return obj;
+  if (Array.isArray(obj)) return obj.map(extractTextValues).filter(Boolean).join('. ');
+  if (typeof obj === 'object')
+    return Object.values(obj).map(extractTextValues).filter(Boolean).join('. ');
+  return String(obj);
+}
+
+/**
  * Check for contradictions within a synthesis object.
- * Looks for opposing directional claims about the same subject.
+ * Looks for opposing directional claims about the same subject,
+ * including cross-section contradictions (economics vs strategy vs timeline).
  */
 function checkContradictions(synthesis) {
   if (!synthesis || typeof synthesis !== 'object') return [];
 
   const contradictions = [];
-  const text = JSON.stringify(synthesis);
 
-  const claims = extractClaims(text);
+  // Extract claims per section for cross-section attribution
+  const sectionTexts = {};
+  const sections = [
+    'executiveSummary',
+    'marketOpportunityAssessment',
+    'competitivePositioning',
+    'regulatoryPathway',
+    'keyInsights',
+  ];
+
+  for (const section of sections) {
+    const val = synthesis[section];
+    if (!val) continue;
+    // Use extractTextValues to get clean text without JSON keys
+    sectionTexts[section] = extractTextValues(val);
+  }
+
+  // Also include depth sections
+  if (synthesis.depth && typeof synthesis.depth === 'object') {
+    for (const [key, val] of Object.entries(synthesis.depth)) {
+      if (!val) continue;
+      sectionTexts[`depth.${key}`] = extractTextValues(val);
+    }
+  }
+
+  // Extract claims per section
+  const sectionClaims = {};
+  for (const [section, text] of Object.entries(sectionTexts)) {
+    sectionClaims[section] = extractClaims(text).map((c) => ({ ...c, section }));
+  }
+
+  // Flatten all claims
+  const allClaims = Object.values(sectionClaims).flat();
 
   // Group claims by subject
   const grouped = {};
-  for (const claim of claims) {
-    // Fuzzy match: normalize subject
+  for (const claim of allClaims) {
     const key = claim.subject.replace(/\b(the|a|an|is|are|was|were|has|have)\b/g, '').trim();
     if (!key) continue;
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(claim);
   }
 
+  // Also try fuzzy matching: if two subjects share 2+ significant words, group them
+  const keys = Object.keys(grouped);
+  const mergedGroups = {};
+  const keyMapping = {};
+
+  for (const key of keys) {
+    let merged = false;
+    for (const existingKey of Object.keys(mergedGroups)) {
+      if (fuzzySubjectMatch(key, existingKey)) {
+        mergedGroups[existingKey].push(...grouped[key]);
+        keyMapping[key] = existingKey;
+        merged = true;
+        break;
+      }
+    }
+    if (!merged) {
+      mergedGroups[key] = [...grouped[key]];
+      keyMapping[key] = key;
+    }
+  }
+
   // Detect opposing directions
-  for (const [subject, subjectClaims] of Object.entries(grouped)) {
+  for (const [subject, subjectClaims] of Object.entries(mergedGroups)) {
     const ups = subjectClaims.filter((c) => c.direction === 'up');
     const downs = subjectClaims.filter((c) => c.direction === 'down');
     if (ups.length > 0 && downs.length > 0) {
+      const upSections = [...new Set(ups.map((c) => c.section).filter(Boolean))];
+      const downSections = [...new Set(downs.map((c) => c.section).filter(Boolean))];
+      const isCrossSection =
+        upSections.length > 0 &&
+        downSections.length > 0 &&
+        !upSections.every((s) => downSections.includes(s));
+
       contradictions.push({
         subject,
         claimA: ups[0].raw,
         claimB: downs[0].raw,
-        severity: 'warning',
-        message: `Contradictory claims about "${subject}": one says increasing, another says decreasing`,
+        sectionA: ups[0].section || 'unknown',
+        sectionB: downs[0].section || 'unknown',
+        crossSection: isCrossSection,
+        severity: isCrossSection ? 'error' : 'warning',
+        message: isCrossSection
+          ? `Cross-section contradiction about "${subject}": ${ups[0].section || 'unknown'} says increasing, ${downs[0].section || 'unknown'} says decreasing`
+          : `Contradictory claims about "${subject}": one says increasing, another says decreasing`,
       });
+    }
+  }
+
+  return contradictions;
+}
+
+/**
+ * Fuzzy match two subject strings: returns true if they share 2+ significant words
+ * (words with 4+ chars, excluding stopwords).
+ */
+function fuzzySubjectMatch(a, b) {
+  const wordsA = a.split(/\s+/).filter((w) => w.length >= 4);
+  const wordsB = b.split(/\s+/).filter((w) => w.length >= 4);
+  let shared = 0;
+  for (const w of wordsA) {
+    if (wordsB.includes(w)) shared++;
+  }
+  return shared >= 2;
+}
+
+/**
+ * Enhanced cross-section contradiction detection for specific section pairs.
+ * Checks economics vs strategy vs timeline coherence.
+ */
+function checkCrossSectionContradictions(synthesis) {
+  if (!synthesis || typeof synthesis !== 'object') return [];
+  const contradictions = [];
+
+  // Check: high-growth market claim vs conservative deal economics
+  const marketText = synthesis.marketOpportunityAssessment
+    ? typeof synthesis.marketOpportunityAssessment === 'string'
+      ? synthesis.marketOpportunityAssessment
+      : JSON.stringify(synthesis.marketOpportunityAssessment)
+    : '';
+
+  const dealEcon = synthesis.depth?.dealEconomics;
+  if (marketText && dealEcon) {
+    const growthMatch = marketText.match(/(\d+(?:\.\d+)?)\s*%\s*(?:CAGR|growth|annually)/i);
+    const parsed = parseDealEconomics(dealEcon);
+    if (growthMatch && parsed.fields.irr != null) {
+      const growthRate = parseFloat(growthMatch[1]);
+      // If market growth is > 15% but IRR is < 10%, flag inconsistency
+      if (growthRate > 15 && parsed.fields.irr < 10) {
+        contradictions.push({
+          type: 'economics-vs-market',
+          message: `High market growth (${growthRate}% CAGR) but low deal IRR (${parsed.fields.irr}%) — typically high-growth markets offer higher returns`,
+          severity: 'warning',
+        });
+      }
     }
   }
 
@@ -464,13 +923,15 @@ function scoreDecisionUsefulness(text) {
   const factors = {};
 
   // Factor 1: Specificity — named entities (30 pts)
-  const companyPattern = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Corp|Ltd|Inc|Co|Group|GmbH|SA|AG|PLC|LLC|Sdn\s+Bhd)/g;
+  const companyPattern =
+    /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Corp|Ltd|Inc|Co|Group|GmbH|SA|AG|PLC|LLC|Sdn\s+Bhd)/g;
   const companyMatches = text.match(companyPattern) || [];
   factors.namedCompanies = companyMatches.length;
   const companyScore = Math.min(15, companyMatches.length * 5);
 
   // Specific numbers (not just years)
-  const numberPattern = /(?:\$|€|£|¥)?\d[\d,.]*(?:\s*(?:million|billion|M|B|K|%|GW|MW|kW|TWh|GWh))/gi;
+  const numberPattern =
+    /(?:\$|€|£|¥)?\d[\d,.]*(?:\s*(?:million|billion|M|B|K|%|GW|MW|kW|TWh|GWh))/gi;
   const numberMatches = text.match(numberPattern) || [];
   factors.specificNumbers = numberMatches.length;
   const numberScore = Math.min(15, numberMatches.length * 3);
@@ -490,7 +951,8 @@ function scoreDecisionUsefulness(text) {
 
   // Factor 3: Evidence chains (20 pts)
   // Look for "because", "which means", "resulting in", "driven by"
-  const causalPatterns = /\b(because|which means|resulting in|driven by|due to|leading to|this implies|therefore|consequently)\b/gi;
+  const causalPatterns =
+    /\b(because|which means|resulting in|driven by|due to|leading to|this implies|therefore|consequently)\b/gi;
   const causalMatches = text.match(causalPatterns) || [];
   factors.causalLinks = causalMatches.length;
   const causalScore = Math.min(20, causalMatches.length * 5);
@@ -518,7 +980,7 @@ function getDecisionScore(synthesis) {
 
   const sectionScores = {};
   const flagged = [];
-  const THRESHOLD = 40;
+  const THRESHOLD = 50;
 
   // Score each top-level section
   const sections = [
@@ -562,7 +1024,8 @@ function getDecisionScore(synthesis) {
   }
 
   const scores = Object.values(sectionScores);
-  const overall = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+  const overall =
+    scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
 
   return { sectionScores, overall, flagged };
 }
@@ -690,12 +1153,76 @@ function detectEmptyCalories(text) {
 }
 
 /**
+ * Detect generic consultant filler phrases that add no substance.
+ * Returns { hasFiller, phrases[], count, density }
+ */
+function detectConsultantFiller(text) {
+  if (!text || typeof text !== 'string')
+    return { hasFiller: false, phrases: [], count: 0, density: 0 };
+
+  const words = countWords(text);
+  if (words < 20) return { hasFiller: false, phrases: [], count: 0, density: 0 };
+
+  const fillerPhrases = [
+    /\bleverage synergies\b/gi,
+    /\bstrategic value creation\b/gi,
+    /\bholistic approach\b/gi,
+    /\bparadigm shift\b/gi,
+    /\bbest[- ]in[- ]class\b/gi,
+    /\bworld[- ]class\b/gi,
+    /\bcutting[- ]edge\b/gi,
+    /\bnext[- ]generation\b/gi,
+    /\bgame[- ]chang(?:er|ing)\b/gi,
+    /\bmove the needle\b/gi,
+    /\blow[- ]hanging fruit\b/gi,
+    /\bvalue[- ]added\b/gi,
+    /\bvalue proposition\b/gi,
+    /\bthought leader(?:ship)?\b/gi,
+    /\bcore competenc(?:y|ies)\b/gi,
+    /\bscalable solution\b/gi,
+    /\brobust framework\b/gi,
+    /\bstakeholder alignment\b/gi,
+    /\bactionable insights\b/gi,
+    /\bgo[- ]to[- ]market\b/gi,
+    /\bdeep dive\b/gi,
+    /\bsynerg(?:y|ies|istic)\b/gi,
+    /\btransformative\b/gi,
+    /\bdisruptive innovation\b/gi,
+    /\becosystem play\b/gi,
+    /\bstrategic alignment\b/gi,
+    /\bunlock(?:ing)? value\b/gi,
+    /\boptimize\b/gi,
+    /\bstreamline\b/gi,
+    /\bempower(?:ing|ment)?\b/gi,
+    /\bimpactful\b/gi,
+  ];
+
+  const found = [];
+  for (const pattern of fillerPhrases) {
+    pattern.lastIndex = 0;
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      found.push(match[0].toLowerCase());
+    }
+  }
+
+  const density = found.length / (words / 100);
+  return {
+    hasFiller: found.length >= 3,
+    phrases: [...new Set(found)],
+    count: found.length,
+    density: Math.round(density * 100) / 100,
+  };
+}
+
+/**
  * Run all anti-shallow checks on a synthesis section.
  */
 function antiShallow(text, industry) {
   const factDump = detectFactDump(text);
   const macroPad = detectMacroPadding(text, industry);
   const emptyCalories = detectEmptyCalories(text);
+  const consultantFiller = detectConsultantFiller(text);
 
   const issues = [];
   if (factDump.isFactDump) {
@@ -713,11 +1240,63 @@ function antiShallow(text, industry) {
       `Empty calories: high filler density (${emptyCalories.fillerDensity}) with low specifics (${emptyCalories.specificDensity})`
     );
   }
+  if (consultantFiller.hasFiller) {
+    issues.push(
+      `Consultant filler detected: ${consultantFiller.count} generic phrases (${consultantFiller.phrases.slice(0, 3).join(', ')})`
+    );
+  }
 
   return {
     pass: issues.length === 0,
     issues,
-    details: { factDump, macroPadding: macroPad, emptyCalories },
+    details: { factDump, macroPadding: macroPad, emptyCalories, consultantFiller },
+  };
+}
+
+// ============ DECISION GATE ============
+
+/**
+ * Run a minimum decision-usefulness gate on a synthesis.
+ * Returns structured pass/fail with per-section details.
+ * @param {object} synthesis - The synthesis object
+ * @param {object} [options] - Options: { minScore: number }
+ * @returns {{ pass, overallScore, minScore, sectionResults: { section, score, pass, factors }[], failedSections: string[] }}
+ */
+function runDecisionGate(synthesis, options = {}) {
+  const minScore = options.minScore || 50;
+
+  if (!synthesis || typeof synthesis !== 'object') {
+    return {
+      pass: false,
+      overallScore: 0,
+      minScore,
+      sectionResults: [],
+      failedSections: ['No synthesis provided'],
+    };
+  }
+
+  const decision = getDecisionScore(synthesis);
+  const sectionResults = [];
+  const failedSections = [];
+
+  for (const [section, score] of Object.entries(decision.sectionScores)) {
+    const sectionPass = score >= minScore;
+    sectionResults.push({
+      section,
+      score,
+      pass: sectionPass,
+    });
+    if (!sectionPass) {
+      failedSections.push(`${section}: ${score}/${minScore}`);
+    }
+  }
+
+  return {
+    pass: decision.overall >= minScore,
+    overallScore: decision.overall,
+    minScore,
+    sectionResults,
+    failedSections,
   };
 }
 
@@ -804,7 +1383,8 @@ function generateDealEconomicsRenderBlocks(parsedDealEcon) {
 function formatCurrency(normalized) {
   if (!normalized) return 'N/A';
   const { value, currency } = normalized;
-  const sym = Object.entries(CURRENCY_SYMBOLS).find(([, code]) => code === currency)?.[0] || currency + ' ';
+  const sym =
+    Object.entries(CURRENCY_SYMBOLS).find(([, code]) => code === currency)?.[0] || currency + ' ';
   if (value >= 1e9) return `${sym}${(value / 1e9).toFixed(1)}B`;
   if (value >= 1e6) return `${sym}${(value / 1e6).toFixed(1)}M`;
   if (value >= 1e3) return `${sym}${(value / 1e3).toFixed(0)}K`;
@@ -910,7 +1490,7 @@ function analyze(synthesis, industry) {
     plausibility,
     antiShallowResults,
     suggestions,
-    pass: overallScore >= 40,
+    pass: overallScore >= 50,
   };
 }
 
@@ -921,12 +1501,19 @@ module.exports = {
   analyze,
   getDecisionScore,
   checkContradictions,
+  checkCrossSectionContradictions,
   antiShallow,
+  runDecisionGate,
 
-  // Deal economics
+  // Semantic parsers
   parseDealEconomics,
+  parseEntryStrategy,
+  parsePartnerAssessment,
   checkPlausibility,
   generateDealEconomicsRenderBlocks,
+
+  // Insight validation
+  validateInsightStructure,
 
   // Normalization helpers
   normalizeCurrency,
@@ -937,6 +1524,7 @@ module.exports = {
   detectFactDump,
   detectMacroPadding,
   detectEmptyCalories,
+  detectConsultantFiller,
   scoreDecisionUsefulness,
   extractClaims,
 };
