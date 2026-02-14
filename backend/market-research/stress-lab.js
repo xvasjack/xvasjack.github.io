@@ -761,9 +761,7 @@ function applyGeometryOverrideMutations(payload, rng) {
     if (section && typeof section === 'object') {
       section.chartData = {
         categories: ['2020', '2021', '2022', '2023', '2024'],
-        series: [
-          { name: 'Injected Series', values: [10, 20, 30, 40, 50] },
-        ],
+        series: [{ name: 'Injected Series', values: [10, 20, 30, 40, 50] }],
         unit: 'Injected',
       };
       section._forceChartLayout = true;
@@ -915,9 +913,7 @@ function applyChartAnomalyMutations(payload, rng) {
       // Non-numeric values
       for (const s of Array.isArray(section.chartData.series) ? section.chartData.series : []) {
         if (Array.isArray(s.values)) {
-          s.values = s.values.map((v) =>
-            rng() > 0.4 ? (rng() > 0.5 ? 'NaN' : null) : v
-          );
+          s.values = s.values.map((v) => (rng() > 0.4 ? (rng() > 0.5 ? 'NaN' : null) : v));
         }
       }
     } else if (anomalyType === 3) {
@@ -1090,6 +1086,7 @@ async function runSeed(seed) {
   const startTime = Date.now();
   const mutationClasses = selectMutationsForSeed(seed);
   const telemetry = {
+    version: TELEMETRY_VERSION,
     seed,
     mutationClasses,
     phases: {},
@@ -1216,6 +1213,10 @@ async function runSeed(seed) {
   return telemetry;
 }
 
+// ============ TELEMETRY SCHEMA VERSION ============
+
+const TELEMETRY_VERSION = '2.0.0';
+
 // ============ AGGREGATE STATS ============
 
 function computePercentile(sorted, p) {
@@ -1226,6 +1227,7 @@ function computePercentile(sorted, p) {
 
 function computeAggregateStats(telemetryResults) {
   const stats = {
+    version: TELEMETRY_VERSION,
     total: telemetryResults.length,
     passed: 0,
     failed: 0,
@@ -1282,6 +1284,95 @@ function computeAggregateStats(telemetryResults) {
   return stats;
 }
 
+// ============ DETERMINISM CHECK ============
+
+/**
+ * Check determinism by running the same seed N times and comparing results.
+ * Returns { deterministic: boolean, seed, runs, mismatches }
+ */
+async function checkDeterminism(seed, runs = 3) {
+  const results = [];
+  for (let i = 0; i < runs; i++) {
+    const telemetry = await runSeed(seed);
+    results.push(telemetry);
+  }
+
+  const mismatches = [];
+  const baseline = results[0];
+  for (let i = 1; i < results.length; i++) {
+    const current = results[i];
+    if (baseline.status !== current.status) {
+      mismatches.push({ run: i, field: 'status', expected: baseline.status, got: current.status });
+    }
+    if (baseline.error !== current.error) {
+      mismatches.push({ run: i, field: 'error', expected: baseline.error, got: current.error });
+    }
+    if (baseline.failedPhase !== current.failedPhase) {
+      mismatches.push({
+        run: i,
+        field: 'failedPhase',
+        expected: baseline.failedPhase,
+        got: current.failedPhase,
+      });
+    }
+    if (baseline.errorClass !== current.errorClass) {
+      mismatches.push({
+        run: i,
+        field: 'errorClass',
+        expected: baseline.errorClass,
+        got: current.errorClass,
+      });
+    }
+    // Check mutation classes are identical
+    const baseClasses = (baseline.mutationClasses || []).join(',');
+    const curClasses = (current.mutationClasses || []).join(',');
+    if (baseClasses !== curClasses) {
+      mismatches.push({
+        run: i,
+        field: 'mutationClasses',
+        expected: baseClasses,
+        got: curClasses,
+      });
+    }
+  }
+
+  return {
+    deterministic: mismatches.length === 0,
+    seed,
+    runs,
+    mismatches,
+  };
+}
+
+// ============ TELEMETRY EXPORT ============
+
+/**
+ * Export telemetry results as machine-readable JSON.
+ */
+function exportTelemetryJSON(results) {
+  const stats = computeAggregateStats(results);
+  return JSON.stringify(
+    {
+      version: TELEMETRY_VERSION,
+      generatedAt: new Date().toISOString(),
+      stats,
+      results: results.map((t) => ({
+        version: TELEMETRY_VERSION,
+        seed: t.seed,
+        status: t.status,
+        error: t.error,
+        errorClass: t.errorClass,
+        failedPhase: t.failedPhase,
+        mutationClasses: t.mutationClasses,
+        durationMs: t.durationMs,
+        phases: t.phases,
+      })),
+    },
+    null,
+    2
+  );
+}
+
 // ============ REPORT ============
 
 function buildReport(telemetryResults, stats) {
@@ -1289,9 +1380,7 @@ function buildReport(telemetryResults, stats) {
   lines.push('# Stress Lab Report');
   lines.push(`- Date: ${new Date().toISOString()}`);
   lines.push(`- Seeds: 1-${stats.total}`);
-  lines.push(
-    `- Total: ${stats.total} | Passed: ${stats.passed} | Failed: ${stats.failed}`
-  );
+  lines.push(`- Total: ${stats.total} | Passed: ${stats.passed} | Failed: ${stats.failed}`);
   lines.push(`- Runtime crashes (bugs): ${stats.runtimeCrashes}`);
   lines.push(`- Data-gate rejections (expected): ${stats.dataGateRejections}`);
   lines.push(`- Duration p50: ${stats.p50Duration}ms | p95: ${stats.p95Duration}ms`);
@@ -1303,9 +1392,7 @@ function buildReport(telemetryResults, stats) {
   lines.push('|-------|----------|----------|----------|');
   for (const phase of PHASES) {
     const ps = stats.phaseDurationStats[phase];
-    lines.push(
-      `| ${phase} | ${stats.failuresByPhase[phase]} | ${ps.p50} | ${ps.p95} |`
-    );
+    lines.push(`| ${phase} | ${stats.failuresByPhase[phase]} | ${ps.p50} | ${ps.p95} |`);
   }
   lines.push('');
 
@@ -1395,6 +1482,9 @@ module.exports = {
   runStressLab,
   replaySeed,
   getMutationClasses,
+  checkDeterminism,
+  exportTelemetryJSON,
+  TELEMETRY_VERSION,
   // Internals for testing
   __test: {
     mulberry32,
