@@ -3,7 +3,7 @@
 
 'use strict';
 
-const { metricsStore, getStageMetrics, budgetGateTelemetry } = require('./perf-profiler');
+const { metricsStore, budgetGateTelemetry } = require('./perf-profiler');
 
 // ============ HEALTH THRESHOLDS ============
 
@@ -455,10 +455,114 @@ function formatSummary(summary) {
   return lines.join('\n');
 }
 
+// ============ TIMING REPORT ============
+
+/**
+ * Returns per-stage timing with bottleneck identification.
+ * Output is CI-artifact friendly (valid JSON, no ANSI codes).
+ * @param {object} summary - Output of generateSummary()
+ * @returns {object} Timing report
+ */
+function getTimingReport(summary) {
+  if (!summary || !summary.duration) {
+    return {
+      totalMs: 0,
+      totalSec: 0,
+      stages: [],
+      bottleneck: null,
+      bottleneckPercent: 0,
+    };
+  }
+
+  const { totalMs, totalSec, stages, slowestStage, slowestStageMs } = summary.duration;
+  const stageList = Object.entries(stages || {})
+    .map(([name, data]) => ({
+      name,
+      durationMs: data.durationMs || 0,
+      durationSec: data.durationSec || 0,
+      percentOfTotal: totalMs > 0 ? Number(((data.durationMs || 0) / totalMs * 100).toFixed(1)) : 0,
+      failed: data.failed || false,
+    }))
+    .sort((a, b) => b.durationMs - a.durationMs);
+
+  return {
+    totalMs: totalMs || 0,
+    totalSec: totalSec || 0,
+    stages: stageList,
+    bottleneck: slowestStage || null,
+    bottleneckMs: slowestStageMs || 0,
+    bottleneckPercent: totalMs > 0 && slowestStageMs ? Number((slowestStageMs / totalMs * 100).toFixed(1)) : 0,
+  };
+}
+
+// ============ MEMORY REPORT ============
+
+/**
+ * Returns peak memory, growth rate, and GC pressure indicators.
+ * Output is CI-artifact friendly (valid JSON, no ANSI codes).
+ * @param {object} summary - Output of generateSummary()
+ * @returns {object} Memory report
+ */
+function getMemoryReport(summary) {
+  if (!summary || !summary.memory) {
+    return {
+      peakHeapMB: 0,
+      peakRssMB: 0,
+      peakStage: null,
+      headroomMB: 450,
+      utilizationPercent: 0,
+      gcPressure: 'none',
+      growthRate: null,
+    };
+  }
+
+  const mem = summary.memory;
+
+  // GC pressure estimation based on utilization
+  let gcPressure = 'none';
+  if (mem.utilizationPercent > 90) {
+    gcPressure = 'critical';
+  } else if (mem.utilizationPercent > 75) {
+    gcPressure = 'high';
+  } else if (mem.utilizationPercent > 50) {
+    gcPressure = 'moderate';
+  } else {
+    gcPressure = 'low';
+  }
+
+  // Estimate growth rate from stage data
+  let growthRate = null;
+  const stages = summary.duration?.stages;
+  if (stages) {
+    const stageNames = Object.keys(stages);
+    if (stageNames.length >= 2) {
+      const totalDuration = summary.duration.totalMs || 1;
+      const heapGrowth = (mem.peakHeapMB || 0) - (mem.current?.heapUsed || 0);
+      growthRate = {
+        mbPerMinute: totalDuration > 0 ? Number((Math.abs(heapGrowth) / (totalDuration / 60000)).toFixed(1)) : 0,
+        direction: heapGrowth >= 0 ? 'growing' : 'shrinking',
+      };
+    }
+  }
+
+  return {
+    peakHeapMB: mem.peakHeapMB || 0,
+    peakRssMB: mem.peakRssMB || 0,
+    peakStage: mem.peakStage || null,
+    headroomMB: mem.headroomMB || 0,
+    memoryLimitMB: mem.memoryLimitMB || 450,
+    utilizationPercent: mem.utilizationPercent || 0,
+    gcPressure,
+    growthRate,
+  };
+}
+
 // ============ EXPORTS ============
 
 module.exports = {
   generateSummary,
   formatSummary,
+  getTimingReport,
+  getMemoryReport,
   HEALTH_THRESHOLDS,
 };

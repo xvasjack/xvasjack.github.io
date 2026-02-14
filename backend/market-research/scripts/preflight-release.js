@@ -270,10 +270,14 @@ function parseArgs(argv) {
   let stressSeeds = null;
   let reportDir = path.join(PROJECT_ROOT, 'preflight-reports');
   let help = false;
+  let strict = false;
+  let gateMode = 'dev';
 
   for (const arg of argv) {
     if (arg === '--help' || arg === '-h') {
       help = true;
+    } else if (arg === '--strict') {
+      strict = true;
     } else if (arg.startsWith('--stress-seeds=')) {
       const val = parseInt(arg.split('=')[1], 10);
       if (Number.isFinite(val) && val > 0) {
@@ -281,10 +285,15 @@ function parseArgs(argv) {
       }
     } else if (arg.startsWith('--report-dir=')) {
       reportDir = arg.split('=')[1];
+    } else if (arg.startsWith('--mode=')) {
+      const val = arg.split('=')[1];
+      if (val === 'dev' || val === 'test' || val === 'release') {
+        gateMode = val;
+      }
     }
   }
 
-  return { stressSeeds, reportDir, help };
+  return { stressSeeds, reportDir, help, strict, gateMode };
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +307,8 @@ function generateJsonReport(checkResults, metadata) {
     node: metadata.nodeVersion,
     gitBranch: metadata.gitBranch,
     stressSeeds: metadata.stressSeeds,
+    strict: metadata.strict || false,
+    gateMode: metadata.gateMode || 'dev',
     overallPass: checkResults.every((r) => r.pass || r.status === 'SKIP' || r.status === 'WARN'),
     checks: checkResults.map((r) => ({
       name: r.name,
@@ -317,12 +328,20 @@ function generateMarkdownReport(checkResults, metadata) {
   lines.push(`- **Timestamp**: ${metadata.timestamp}`);
   lines.push(`- **Node**: ${metadata.nodeVersion}`);
   lines.push(`- **Branch**: ${metadata.gitBranch}`);
+  if (metadata.gateMode) {
+    lines.push(`- **Gate Mode**: ${metadata.gateMode}`);
+  }
+  if (metadata.strict) {
+    lines.push('- **Strict**: YES');
+  }
   if (metadata.stressSeeds) {
     lines.push(`- **Stress seeds**: ${metadata.stressSeeds}`);
   }
   lines.push('');
 
-  const overall = checkResults.every((r) => r.pass || r.status === 'SKIP' || r.status === 'WARN');
+  const overall = checkResults.every(
+    (r) => r.pass || r.status === 'SKIP' || (!metadata.strict && r.status === 'WARN')
+  );
   lines.push(`## Result: ${overall ? 'PASS' : 'FAIL'}`);
   lines.push('');
 
@@ -392,20 +411,25 @@ function main() {
 Usage: node scripts/preflight-release.js [options]
 
 Options:
-  --stress-seeds=N    Run stress test with N seeds (1-100, default: skip)
-  --report-dir=PATH   Output directory for reports (default: preflight-reports/)
-  --help              Show this help
+  --strict              Treat any non-pass (including WARN) as failure
+  --mode=dev|test|release  Gate severity mode (default: dev)
+  --stress-seeds=N      Run stress test with N seeds (1-100, default: skip)
+  --report-dir=PATH     Output directory for reports (default: preflight-reports/)
+  --help                Show this help
 
 Examples:
-  npm run preflight:release              # standard checks only
-  npm run preflight:stress               # checks + 30-seed stress test
+  npm run preflight:release                         # standard checks only
+  npm run preflight:stress                          # checks + 30-seed stress test
+  node scripts/preflight-release.js --strict        # strict mode (no warnings allowed)
+  node scripts/preflight-release.js --mode=release --strict  # release hard gates
   node scripts/preflight-release.js --stress-seeds=50
 `);
     process.exit(0);
   }
 
+  const modeLabel = args.gateMode.toUpperCase() + (args.strict ? ' / STRICT' : '');
   console.log('');
-  console.log('=== PREFLIGHT RELEASE CHECK ===');
+  console.log(`=== PREFLIGHT RELEASE CHECK (${modeLabel}) ===`);
   if (args.stressSeeds) {
     console.log(`  (stress test enabled: ${args.stressSeeds} seeds)`);
   }
@@ -423,15 +447,30 @@ Examples:
     const msg = dirty.restricted
       ? dirty.warning
       : 'Clean working tree (no uncommitted .js/.json changes)';
-    checkResults.push({
-      name: 'Clean tree',
-      pass: true,
-      status,
-      durationMs: d1,
-      warning: dirty.warning,
-      details: null,
-    });
-    console.log(`[${status}] ${msg}`);
+
+    // In strict mode, WARN is treated as failure
+    if (args.strict && status === 'WARN') {
+      anyFail = true;
+      checkResults.push({
+        name: 'Clean tree',
+        pass: false,
+        status: 'FAIL',
+        durationMs: d1,
+        warning: dirty.warning,
+        details: 'Strict mode: degraded git check treated as failure',
+      });
+      console.log(`[FAIL] ${msg} (strict mode rejects warnings)`);
+    } else {
+      checkResults.push({
+        name: 'Clean tree',
+        pass: true,
+        status,
+        durationMs: d1,
+        warning: dirty.warning,
+        details: null,
+      });
+      console.log(`[${status}] ${msg}`);
+    }
   } else {
     anyFail = true;
     checkResults.push({
@@ -451,19 +490,32 @@ Examples:
   const d2 = Date.now() - t2;
   if (head.pass) {
     const status = head.degradedMode ? 'WARN' : 'PASS';
-    checkResults.push({
-      name: 'HEAD content',
-      pass: true,
-      status,
-      durationMs: d2,
-      warning: head.degradedMode ? 'Ran in degraded mode (local files, not git HEAD)' : null,
-      details: null,
-    });
-    console.log(
-      `[${status}] HEAD content verified (${head.passedPatterns}/${head.totalPatterns} patterns)`
-    );
-    if (head.degradedMode) {
-      console.log('  [WARN] git execution blocked — validated local files instead of HEAD');
+
+    if (args.strict && status === 'WARN') {
+      anyFail = true;
+      checkResults.push({
+        name: 'HEAD content',
+        pass: false,
+        status: 'FAIL',
+        durationMs: d2,
+        details: 'Strict mode: degraded HEAD check treated as failure',
+      });
+      console.log(`[FAIL] HEAD content verified in degraded mode (strict mode rejects warnings)`);
+    } else {
+      checkResults.push({
+        name: 'HEAD content',
+        pass: true,
+        status,
+        durationMs: d2,
+        warning: head.degradedMode ? 'Ran in degraded mode (local files, not git HEAD)' : null,
+        details: null,
+      });
+      console.log(
+        `[${status}] HEAD content verified (${head.passedPatterns}/${head.totalPatterns} patterns)`
+      );
+      if (head.degradedMode) {
+        console.log('  [WARN] git execution blocked — validated local files instead of HEAD');
+      }
     }
   } else {
     anyFail = true;
@@ -609,6 +661,8 @@ Examples:
     nodeVersion: process.version,
     gitBranch: getGitBranch(),
     stressSeeds: args.stressSeeds,
+    strict: args.strict,
+    gateMode: args.gateMode,
   };
 
   const jsonReport = generateJsonReport(checkResults, metadata);
@@ -637,7 +691,12 @@ Examples:
     process.exit(1);
   } else {
     const hasWarns = checkResults.some((r) => r.status === 'WARN');
-    if (hasWarns) {
+    if (args.strict && hasWarns) {
+      // Strict mode: warnings are failures (should already be caught above, but safety net)
+      console.log('=== PREFLIGHT FAILED — strict mode rejects warnings ===');
+      console.log('');
+      process.exit(1);
+    } else if (hasWarns) {
       console.log('=== PREFLIGHT PASSED WITH WARNINGS — review warnings above ===');
     } else {
       console.log('=== ALL CHECKS PASSED — safe to deploy ===');

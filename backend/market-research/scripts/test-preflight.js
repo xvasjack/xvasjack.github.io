@@ -133,6 +133,8 @@ function main() {
     const result = parseArgs([]);
     assert.strictEqual(result.stressSeeds, null, 'stressSeeds should be null');
     assert.strictEqual(result.help, false, 'help should be false');
+    assert.strictEqual(result.strict, false, 'strict should be false');
+    assert.strictEqual(result.gateMode, 'dev', 'gateMode should be dev');
     assert.ok(result.reportDir, 'reportDir should be set');
   });
 
@@ -162,6 +164,27 @@ function main() {
     assert.strictEqual(result.reportDir, '/tmp/x');
   });
 
+  test('parseArgs: --strict flag', () => {
+    const result = parseArgs(['--strict']);
+    assert.strictEqual(result.strict, true, 'strict should be true');
+  });
+
+  test('parseArgs: --mode=release flag', () => {
+    const result = parseArgs(['--mode=release']);
+    assert.strictEqual(result.gateMode, 'release', 'gateMode should be release');
+  });
+
+  test('parseArgs: --mode=test flag', () => {
+    const result = parseArgs(['--mode=test']);
+    assert.strictEqual(result.gateMode, 'test', 'gateMode should be test');
+  });
+
+  test('parseArgs: combined --strict --mode=release', () => {
+    const result = parseArgs(['--strict', '--mode=release']);
+    assert.strictEqual(result.strict, true);
+    assert.strictEqual(result.gateMode, 'release');
+  });
+
   // -----------------------------------------------------------------------
   // generateJsonReport
   // -----------------------------------------------------------------------
@@ -175,6 +198,8 @@ function main() {
       nodeVersion: 'v20.0.0',
       gitBranch: 'main',
       stressSeeds: null,
+      strict: false,
+      gateMode: 'dev',
     };
     const report = generateJsonReport(checks, meta);
     assert.strictEqual(report.preflight, true, 'should have preflight flag');
@@ -184,6 +209,8 @@ function main() {
     assert.strictEqual(report.checks.length, 2, 'should have 2 checks');
     assert.strictEqual(report.checks[0].pass, true);
     assert.strictEqual(report.checks[1].pass, false);
+    assert.strictEqual(report.strict, false, 'should include strict field');
+    assert.strictEqual(report.gateMode, 'dev', 'should include gateMode field');
   });
 
   test('generateJsonReport: overallPass true when all pass', () => {
@@ -236,6 +263,20 @@ function main() {
     const meta = { timestamp: 'now', nodeVersion: 'v20', gitBranch: 'main', stressSeeds: 30 };
     const md = generateMarkdownReport(checks, meta);
     assert.ok(md.includes('30'), 'should mention stress seed count');
+  });
+
+  test('generateMarkdownReport: includes strict indicator', () => {
+    const checks = [{ name: 'A', pass: true, status: 'PASS', durationMs: 1 }];
+    const meta = { timestamp: 'now', nodeVersion: 'v20', gitBranch: 'main', strict: true };
+    const md = generateMarkdownReport(checks, meta);
+    assert.ok(md.includes('Strict'), 'should mention strict mode');
+  });
+
+  test('generateMarkdownReport: includes gate mode', () => {
+    const checks = [{ name: 'A', pass: true, status: 'PASS', durationMs: 1 }];
+    const meta = { timestamp: 'now', nodeVersion: 'v20', gitBranch: 'main', gateMode: 'release' };
+    const md = generateMarkdownReport(checks, meta);
+    assert.ok(md.includes('release'), 'should mention gate mode');
   });
 
   // -----------------------------------------------------------------------
