@@ -114,6 +114,70 @@ function cluster(telemetryResults) {
   return { clusters, bySignature, byPhase, byMutationClass };
 }
 
+// ============ PHASE CONFIDENCE ============
+
+/**
+ * Get confidence probability that the cluster's root cause is in a specific phase.
+ * Returns an object mapping each phase to a probability (0-1).
+ *
+ * @param {Object} clusterEntry - A cluster entry from cluster()
+ * @returns {Object} Phase confidence probabilities
+ */
+function getPhaseConfidence(clusterEntry) {
+  const confidence = {
+    'build-payload': 0,
+    'budget-gate': 0,
+    'render-ppt': 0,
+    'validate-pptx': 0,
+  };
+
+  if (!clusterEntry || !clusterEntry.phases || clusterEntry.phases.length === 0) {
+    return confidence;
+  }
+
+  const phases = clusterEntry.phases;
+  const seeds = clusterEntry.seeds || [];
+  const totalInCluster = clusterEntry.count || seeds.length || 1;
+
+  // If only one phase appears, high confidence it's the root cause
+  if (phases.length === 1) {
+    confidence[phases[0]] = 0.95;
+    // Small probability it's upstream
+    const phaseOrder = ['build-payload', 'budget-gate', 'render-ppt', 'validate-pptx'];
+    const idx = phaseOrder.indexOf(phases[0]);
+    if (idx > 0) {
+      confidence[phaseOrder[idx - 1]] = 0.05;
+      confidence[phases[0]] = 0.9;
+    }
+    return confidence;
+  }
+
+  // Multiple phases: distribute proportionally
+  // Earlier phases get slightly higher weight as they're more likely to be root cause
+  const phaseWeights = {
+    'build-payload': 1.5,
+    'budget-gate': 1.3,
+    'render-ppt': 1.1,
+    'validate-pptx': 1.0,
+  };
+
+  let totalWeight = 0;
+  for (const phase of phases) {
+    totalWeight += phaseWeights[phase] || 1.0;
+  }
+
+  for (const phase of phases) {
+    confidence[phase] = totalWeight > 0 ? (phaseWeights[phase] || 1.0) / totalWeight : 0;
+  }
+
+  // Round to 2 decimal places
+  for (const key of Object.keys(confidence)) {
+    confidence[key] = Math.round(confidence[key] * 100) / 100;
+  }
+
+  return confidence;
+}
+
 // ============ RISK SCORING ============
 
 /**
@@ -121,10 +185,11 @@ function cluster(telemetryResults) {
  * Higher = more likely to hit in production.
  *
  * Factors:
- * - Frequency: how many seeds trigger it
- * - Error class: runtime-crash = higher risk than data-gate
- * - Mutation breadth: if many mutation classes trigger it, the root cause is fragile
- * - Phase: earlier phases = wider blast radius
+ * - Frequency weight: how many seeds trigger it (0-40 pts)
+ * - Severity weight: runtime-crash vs data-gate (0-30 pts)
+ * - Paid-run risk multiplier: runtime crashes in render/validate get 1.5x
+ * - Mutation breadth: if many mutation classes trigger it, the root cause is fragile (0-15 pts)
+ * - Phase: earlier phases = wider blast radius (0-15 pts)
  */
 function getRiskScore(clusterEntry, totalSeeds) {
   if (!clusterEntry || totalSeeds <= 0) return 0;
@@ -132,11 +197,11 @@ function getRiskScore(clusterEntry, totalSeeds) {
   let score = 0;
   const count = clusterEntry.count || 0;
 
-  // Frequency factor (0-40 pts)
+  // Frequency weight (0-40 pts)
   const frequencyRatio = count / totalSeeds;
   score += Math.min(40, Math.round(frequencyRatio * 400));
 
-  // Error class factor (0-30 pts)
+  // Severity weight: runtime-crash vs data-gate (0-30 pts)
   const hasRuntimeCrash = (clusterEntry.errorClasses || []).includes('runtime-crash');
   score += hasRuntimeCrash ? 30 : 5;
 
@@ -157,6 +222,16 @@ function getRiskScore(clusterEntry, totalSeeds) {
     maxPhaseWeight = Math.max(maxPhaseWeight, phaseWeights[phase] || 5);
   }
   score += maxPhaseWeight;
+
+  // Paid-run risk multiplier: runtime crashes in render/validate phases
+  // are especially dangerous because they happen after expensive API calls
+  if (hasRuntimeCrash) {
+    const paidPhases = ['render-ppt', 'validate-pptx'];
+    const hitsPaidPhase = phases.some((p) => paidPhases.includes(p));
+    if (hitsPaidPhase) {
+      score = Math.round(score * 1.5);
+    }
+  }
 
   return Math.min(100, score);
 }
@@ -231,10 +306,8 @@ function trackCrashTrend(runSummaries) {
   // Determine direction
   const firstHalf = runs.slice(0, Math.floor(runs.length / 2));
   const secondHalf = runs.slice(Math.floor(runs.length / 2));
-  const avgFirst =
-    firstHalf.reduce((sum, r) => sum + r.crashRate, 0) / firstHalf.length;
-  const avgSecond =
-    secondHalf.reduce((sum, r) => sum + r.crashRate, 0) / secondHalf.length;
+  const avgFirst = firstHalf.reduce((sum, r) => sum + r.crashRate, 0) / firstHalf.length;
+  const avgSecond = secondHalf.reduce((sum, r) => sum + r.crashRate, 0) / secondHalf.length;
 
   let direction = 'flat';
   if (avgSecond < avgFirst * 0.8) direction = 'improving';
@@ -289,14 +362,43 @@ function formatBlockersReport(blockers) {
   return lines.join('\n');
 }
 
+// ============ REPLAY ARTIFACT ============
+
+/**
+ * Generate a deterministic replay artifact for a failure cluster.
+ * Returns an object with all info needed to reproduce the failure.
+ *
+ * @param {Object} clusterEntry - A cluster entry from cluster()
+ * @returns {Object} Replay artifact
+ */
+function generateReplayArtifact(clusterEntry) {
+  if (!clusterEntry) {
+    return { seed: null, mutationClasses: [], command: '', expectedError: null };
+  }
+
+  const seed = clusterEntry.seeds && clusterEntry.seeds.length > 0 ? clusterEntry.seeds[0] : null;
+  const mutationClasses = clusterEntry.mutationClasses || [];
+  const command = seed !== null ? `node stress-lab.js --seed=${seed}` : '';
+  const expectedError = clusterEntry.sampleError || null;
+
+  return {
+    seed,
+    mutationClasses,
+    command,
+    expectedError,
+  };
+}
+
 // ============ EXPORTS ============
 
 module.exports = {
   cluster,
   getTopBlockers,
   getRiskScore,
+  getPhaseConfidence,
   trackCrashTrend,
   formatBlockersReport,
+  generateReplayArtifact,
   __test: {
     extractErrorSignature,
   },
