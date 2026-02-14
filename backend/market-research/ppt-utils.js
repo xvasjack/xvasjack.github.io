@@ -124,9 +124,13 @@ function truncate(text, maxLen = 600, addEllipsis = true) {
   if (!text) return '';
   const str = String(text).trim().replace(XML_INVALID_CHARS_UTILS, '');
   if (str.length > HARD_TEXT_CAP) {
-    throw new Error(
-      `[PPT] Text payload exceeds hard cap (${str.length} > ${HARD_TEXT_CAP}) and cannot be rendered safely`
+    console.warn(
+      `[PPT-SIZE-OVERFLOW] Text payload exceeds hard cap (${str.length} > ${HARD_TEXT_CAP}). Force-truncating to ${HARD_TEXT_CAP} chars.`
     );
+    const forceCut = str.substring(0, HARD_TEXT_CAP);
+    const ls = forceCut.lastIndexOf(' ');
+    const safeStr = (ls > HARD_TEXT_CAP * 0.8 ? forceCut.substring(0, ls) : forceCut).trim();
+    return addEllipsis ? safeStr + '...' : safeStr;
   }
   if (str.length <= maxLen) return str;
   if (DISABLE_TEXT_TRUNCATION) return str;
@@ -235,9 +239,13 @@ function truncateSubtitle(text, maxLen = 180, addEllipsis = true) {
   if (!text) return '';
   const str = String(text).trim().replace(XML_INVALID_CHARS_UTILS, '');
   if (str.length > HARD_TEXT_CAP) {
-    throw new Error(
-      `[PPT] Subtitle payload exceeds hard cap (${str.length} > ${HARD_TEXT_CAP}) and cannot be rendered safely`
+    console.warn(
+      `[PPT-SIZE-OVERFLOW] Subtitle payload exceeds hard cap (${str.length} > ${HARD_TEXT_CAP}). Force-truncating to ${HARD_TEXT_CAP} chars.`
     );
+    const forceCut = str.substring(0, HARD_TEXT_CAP);
+    const ls = forceCut.lastIndexOf(' ');
+    const safeStr = (ls > HARD_TEXT_CAP * 0.8 ? forceCut.substring(0, ls) : forceCut).trim();
+    return addEllipsis ? safeStr + '...' : safeStr;
   }
   if (str.length <= maxLen) return str;
   if (DISABLE_TEXT_TRUNCATION) return str;
