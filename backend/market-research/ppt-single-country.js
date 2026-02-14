@@ -312,6 +312,35 @@ function resolveTemplateRouteWithGeometryGuard({
     };
   }
 
+  // Cross-pattern geometry recovery: when the block's own pattern and default route both
+  // lack required geometry, try well-known content slides (skipping structural/divider slides).
+  if (requiredGeometry) {
+    const GEOMETRY_FALLBACK_SLIDES = {
+      table: [12, 6, 7, 8, 9, 10, 21],
+      chart: [13, 14, 16],
+    };
+    const fallbackSlides = GEOMETRY_FALLBACK_SLIDES[requiredGeometry] || [];
+    const triedSlides = new Set(queue.map((c) => c.route.selectedSlide));
+    for (const fallbackSlide of fallbackSlides) {
+      if (triedSlides.has(fallbackSlide)) continue;
+      const fallbackLayout = getTemplateSlideLayout(fallbackSlide);
+      if (!layoutHasRequiredTemplateGeometry(fallbackLayout, requiredGeometry)) continue;
+      return {
+        resolved: {
+          ...primaryResolved,
+          selectedSlide: fallbackSlide,
+          source: 'crossPatternGeometryRecovery',
+        },
+        layout: fallbackLayout,
+        requiredGeometry,
+        recovered: true,
+        fromSlide: primarySlide,
+        toSlide: fallbackSlide,
+        reason: 'cross-pattern-fallback',
+      };
+    }
+  }
+
   return {
     resolved: primaryResolved,
     layout: primaryLayout,

@@ -379,6 +379,41 @@ function runTemplateRouteRecoveryUnitChecks() {
   );
 }
 
+function runCrossPatternGeometryRecoveryChecks() {
+  // Regression: resolveTemplateRouteWithGeometryGuard must recover via cross-pattern fallback
+  // when the block's OWN pattern has zero slides with required geometry.
+  // e.g., dealEconomics is in TABLE_TEMPLATE_CONTEXTS but its pattern (dual_chart_financial)
+  // only has chart-only slides (26, 29). Recovery must find a table slide from another pattern.
+  const crossPatternRoute = singlePptTest.resolveTemplateRouteWithGeometryGuard({
+    blockKey: 'dealEconomics',
+    dataType: 'financial_performance',
+    data: { overview: 'Financial structure overview' },
+    templateSelection: null, // no override — default route also lacks table geometry
+    tableContextKeys: ['dealEconomics'],
+    chartContextKeys: ['marketSizeAndGrowth'],
+  });
+  assert.strictEqual(
+    crossPatternRoute.recovered,
+    true,
+    'Cross-pattern recovery must activate when default route lacks required geometry'
+  );
+  assert.strictEqual(
+    crossPatternRoute.resolved?.source,
+    'crossPatternGeometryRecovery',
+    'Recovery source must be crossPatternGeometryRecovery, not same-pattern recovery'
+  );
+  assert.strictEqual(
+    Boolean(crossPatternRoute.layout && crossPatternRoute.layout.table),
+    true,
+    'Cross-pattern recovered slide must have table geometry'
+  );
+  assert.strictEqual(
+    crossPatternRoute.reason,
+    'cross-pattern-fallback',
+    'Recovery reason must be cross-pattern-fallback'
+  );
+}
+
 async function runDynamicTimeoutUnitChecks() {
   assert(
     orchestratorTest && typeof orchestratorTest.runInBatchesUntilDeadline === 'function',
@@ -547,6 +582,8 @@ async function runRound(round, total) {
   console.log('[Regression] Unit checks PASS (competitive optional-group gate override)');
   runTemplateRouteRecoveryUnitChecks();
   console.log('[Regression] Unit checks PASS (template route geometry recovery)');
+  runCrossPatternGeometryRecoveryChecks();
+  console.log('[Regression] Unit checks PASS (cross-pattern geometry fallback recovery)');
   await runDynamicTimeoutUnitChecks();
   console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
   runPreRenderStructureUnitChecks();
