@@ -421,6 +421,115 @@ function budgetGateTelemetry(budgetResult, country) {
   };
 }
 
+// ============ PERFORMANCE SUMMARY ============
+
+/**
+ * Consolidated performance view: total time, per-stage breakdown,
+ * memory peaks, parallelism utilization.
+ * @returns {object} Performance summary
+ */
+function getPerformanceSummary() {
+  const runs = metricsStore.getRuns();
+  const currentRun = metricsStore.getCurrentRun();
+  const latestRun = currentRun || (runs.length > 0 ? runs[runs.length - 1] : null);
+
+  if (!latestRun) {
+    return {
+      hasData: false,
+      totalRuns: runs.length,
+      latest: null,
+    };
+  }
+
+  // Total time
+  let totalMs = 0;
+  if (latestRun.completedAt && latestRun.startedAt) {
+    totalMs = latestRun.completedAt - latestRun.startedAt;
+  } else {
+    for (const data of Object.values(latestRun.stages || {})) {
+      totalMs += data.durationMs || 0;
+    }
+  }
+
+  // Per-stage breakdown
+  const stageBreakdown = [];
+  let peakHeapMB = 0;
+  let peakRssMB = 0;
+  let peakStage = null;
+  let parallelStageCount = 0;
+  let totalParallelMs = 0;
+  let totalSequentialMs = 0;
+
+  for (const [name, data] of Object.entries(latestRun.stages || {})) {
+    const isParallel = PARALLELIZABLE_STAGES.has(name);
+
+    stageBreakdown.push({
+      name,
+      durationMs: data.durationMs || 0,
+      durationSec: data.durationMs ? Number((data.durationMs / 1000).toFixed(1)) : 0,
+      percentOfTotal: totalMs > 0 ? Number(((data.durationMs || 0) / totalMs * 100).toFixed(1)) : 0,
+      failed: data.failed || false,
+      memoryStartMB: data.memoryAtStart?.heapUsedMB || 0,
+      memoryEndMB: data.memoryAtEnd?.heapUsedMB || 0,
+      memoryDeltaMB: (data.memoryAtEnd?.heapUsedMB || 0) - (data.memoryAtStart?.heapUsedMB || 0),
+      payloadSizeBytes: data.payloadSizeBytes || 0,
+      isParallelizable: isParallel,
+    });
+
+    if (isParallel) {
+      parallelStageCount++;
+      totalParallelMs += data.durationMs || 0;
+    } else {
+      totalSequentialMs += data.durationMs || 0;
+    }
+
+    const endHeap = data.memoryAtEnd?.heapUsedMB || 0;
+    const endRss = data.memoryAtEnd?.rssMB || 0;
+    if (endHeap > peakHeapMB) {
+      peakHeapMB = endHeap;
+      peakStage = name;
+    }
+    if (endRss > peakRssMB) {
+      peakRssMB = endRss;
+    }
+  }
+
+  // Sort by duration descending
+  stageBreakdown.sort((a, b) => b.durationMs - a.durationMs);
+
+  // Parallelism utilization: ratio of parallel-eligible time to total
+  const parallelismUtilization = totalMs > 0
+    ? Number((totalParallelMs / totalMs * 100).toFixed(1))
+    : 0;
+
+  return {
+    hasData: true,
+    totalRuns: runs.length,
+    latest: {
+      runId: latestRun.runId,
+      success: latestRun.success,
+      totalMs,
+      totalSec: Number((totalMs / 1000).toFixed(1)),
+      totalMin: Number((totalMs / 60000).toFixed(1)),
+      stageCount: Object.keys(latestRun.stages || {}).length,
+      stages: stageBreakdown,
+      memory: {
+        peakHeapMB,
+        peakRssMB,
+        peakStage,
+        headroomMB: MEMORY_LIMIT_MB - peakRssMB,
+        utilizationPercent: Math.round((peakRssMB / MEMORY_LIMIT_MB) * 100),
+      },
+      parallelism: {
+        parallelStageCount,
+        totalParallelMs,
+        totalSequentialMs,
+        parallelismUtilization,
+      },
+    },
+  };
+}
+
 // ============ EXPORTS ============
 
 module.exports = {
@@ -434,4 +543,5 @@ module.exports = {
   getParallelismRecommendations,
   budgetGateTelemetry,
   estimatePayloadSize,
+  getPerformanceSummary,
 };

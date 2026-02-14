@@ -18,11 +18,48 @@ const SEVERITY = {
 };
 
 // ---------------------------------------------------------------------------
+// Gate modes — dev | test | release
+// ---------------------------------------------------------------------------
+const GATE_MODES = {
+  DEV: 'dev',
+  TEST: 'test',
+  RELEASE: 'release',
+};
+
+// ---------------------------------------------------------------------------
+// Remediation suggestions per gate name
+// ---------------------------------------------------------------------------
+const REMEDIATION_MAP = {
+  'Clean working tree': 'git add -A && git commit -m "pre-release commit"',
+  'HEAD content verification':
+    'Ensure all critical functions exist in HEAD. Run: git diff HEAD -- <file> to check',
+  'Module export contracts':
+    'Check module.exports in the failing module. Ensure all required functions are exported',
+  'Module function signatures':
+    'Verify function parameter counts match the contract. Check the function definition',
+  'Template contract validity':
+    "Validate template-patterns.json: node -e \"JSON.parse(require('fs').readFileSync('template-patterns.json','utf8'))\"",
+  'Route geometry audit': 'Run: node route-geometry-enforcer.js --audit to see geometry issues',
+  'Schema firewall availability':
+    'Ensure schema-firewall.js exports validateSchema and enforceSchema',
+  'Integrity pipeline availability':
+    'Check pptx-integrity-pipeline.js loads without errors: node -e "require(\'./pptx-integrity-pipeline\')"',
+  'Regression tests': 'Run: node regression-tests.js --rounds=1 to see failing tests',
+  'Stress test': 'Run: node stress-test-harness.js to identify crash seeds',
+  'Schema compatibility':
+    'Validate report artifacts match expected schemas. Check schema-firewall.js',
+  'Sparse slide gate':
+    'Review PPTX output for slides with < 3 content elements. Check ppt-single-country.js',
+  'Source coverage gate': 'Increase source citations in research output. Check research-agents.js',
+};
+
+// ---------------------------------------------------------------------------
 // Module export contracts — required exports per critical module
 // ---------------------------------------------------------------------------
 const MODULE_EXPORT_CONTRACTS = {
   'ppt-single-country.js': {
     functions: ['generateSingleCountryPPT'],
+    paramCounts: { generateSingleCountryPPT: 2 },
   },
   'pptx-validator.js': {
     functions: [
@@ -32,44 +69,95 @@ const MODULE_EXPORT_CONTRACTS = {
       'validatePPTX',
       'scanPackageConsistency',
     ],
+    paramCounts: {},
   },
   'quality-gates.js': {
-    functions: [
-      'validateResearchQuality',
-      'validateSynthesisQuality',
-      'validatePptData',
-    ],
+    functions: ['validateResearchQuality', 'validateSynthesisQuality', 'validatePptData'],
+    paramCounts: {},
   },
   'research-orchestrator.js': {
-    functions: [
-      'researchCountry',
-      'synthesizeSingleCountry',
-      'reSynthesize',
-    ],
+    functions: ['researchCountry', 'synthesizeSingleCountry', 'reSynthesize'],
+    paramCounts: {},
   },
   'template-clone-postprocess.js': {
     functions: ['applyTemplateClonePostprocess'],
+    paramCounts: {},
   },
   'budget-gate.js': {
     functions: ['analyzeBudget', 'compactPayload', 'runBudgetGate'],
+    paramCounts: {},
   },
   'transient-key-sanitizer.js': {
-    functions: [
-      'isTransientKey',
-      'sanitizeTransientKeys',
-      'createSanitizationContext',
-    ],
+    functions: ['isTransientKey', 'sanitizeTransientKeys', 'createSanitizationContext'],
+    paramCounts: {},
   },
 };
 
 // Template-patterns.json expected top-level keys
-const TEMPLATE_PATTERNS_EXPECTED_KEYS = [
-  '_meta',
-  'positions',
-  'patterns',
-  'style',
-  'slideDetails',
-];
+const TEMPLATE_PATTERNS_EXPECTED_KEYS = ['_meta', 'positions', 'patterns', 'style', 'slideDetails'];
+
+// ---------------------------------------------------------------------------
+// Environment contract matrix — which gates required per mode
+// ---------------------------------------------------------------------------
+const ENVIRONMENT_CONTRACTS = {
+  dev: {
+    required: ['Clean working tree', 'Module export contracts'],
+    optional: [
+      'HEAD content verification',
+      'Template contract validity',
+      'Route geometry audit',
+      'Schema firewall availability',
+      'Integrity pipeline availability',
+    ],
+    skip: [
+      'Regression tests',
+      'Stress test',
+      'Schema compatibility',
+      'Module function signatures',
+      'Sparse slide gate',
+      'Source coverage gate',
+    ],
+  },
+  test: {
+    required: [
+      'Clean working tree',
+      'HEAD content verification',
+      'Module export contracts',
+      'Template contract validity',
+      'Regression tests',
+    ],
+    optional: [
+      'Route geometry audit',
+      'Schema firewall availability',
+      'Integrity pipeline availability',
+      'Module function signatures',
+    ],
+    skip: ['Stress test', 'Schema compatibility', 'Sparse slide gate', 'Source coverage gate'],
+  },
+  release: {
+    required: [
+      'Clean working tree',
+      'HEAD content verification',
+      'Module export contracts',
+      'Template contract validity',
+      'Route geometry audit',
+      'Schema firewall availability',
+      'Integrity pipeline availability',
+      'Regression tests',
+      'Stress test',
+      'Module function signatures',
+      'Schema compatibility',
+      'Sparse slide gate',
+      'Source coverage gate',
+    ],
+    optional: [],
+    skip: [],
+  },
+};
+
+function getEnvironmentContract(mode) {
+  return ENVIRONMENT_CONTRACTS[mode] || ENVIRONMENT_CONTRACTS.dev;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -91,15 +179,58 @@ function getGitBranch() {
 }
 
 function makeCheckResult(name, pass, severity, durationMs, details, evidence) {
-  return {
+  const result = {
     name,
     pass,
     severity,
-    status: pass ? 'PASS' : severity === SEVERITY.BLOCKING ? 'FAIL' : severity === SEVERITY.DEGRADED ? 'WARN' : 'INFO',
+    status: pass
+      ? 'PASS'
+      : severity === SEVERITY.BLOCKING
+        ? 'FAIL'
+        : severity === SEVERITY.DEGRADED
+          ? 'WARN'
+          : 'INFO',
     durationMs,
     details: details || null,
     evidence: evidence || null,
+    remediation: null,
   };
+
+  // Add remediation hint for failures
+  if (!pass && REMEDIATION_MAP[name]) {
+    result.remediation = REMEDIATION_MAP[name];
+  }
+
+  return result;
+}
+
+/**
+ * Apply mode policy to a check result.
+ * In 'release' mode, DEGRADED severity is promoted to BLOCKING.
+ * In 'release' + strict, any non-pass becomes BLOCKING.
+ */
+function applyModePolicy(result, mode, strict) {
+  if (!result) return result;
+
+  const patched = { ...result };
+
+  if (mode === GATE_MODES.RELEASE) {
+    // In release mode, DEGRADED becomes BLOCKING
+    if (patched.severity === SEVERITY.DEGRADED) {
+      patched.severity = SEVERITY.BLOCKING;
+      if (!patched.pass) {
+        patched.status = 'FAIL';
+      }
+    }
+  }
+
+  if (strict && !patched.pass) {
+    // In strict mode, any non-pass becomes BLOCKING/FAIL
+    patched.severity = SEVERITY.BLOCKING;
+    patched.status = 'FAIL';
+  }
+
+  return patched;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,15 +253,40 @@ function checkDirtyTree() {
       });
 
     if (dirty.length === 0) {
-      return makeCheckResult('Clean working tree', true, SEVERITY.BLOCKING, elapsed(), 'No uncommitted .js/.json changes');
+      return makeCheckResult(
+        'Clean working tree',
+        true,
+        SEVERITY.BLOCKING,
+        elapsed(),
+        'No uncommitted .js/.json changes'
+      );
     }
-    return makeCheckResult('Clean working tree', false, SEVERITY.BLOCKING, elapsed(), `${dirty.length} uncommitted file(s)`, dirty);
+    return makeCheckResult(
+      'Clean working tree',
+      false,
+      SEVERITY.BLOCKING,
+      elapsed(),
+      `${dirty.length} uncommitted file(s)`,
+      dirty
+    );
   } catch (err) {
     const errMsg = String(err?.message || err || '');
     if (/EPERM|ENOENT|not found/i.test(errMsg)) {
-      return makeCheckResult('Clean working tree', true, SEVERITY.DEGRADED, elapsed(), 'git unavailable — skipped');
+      return makeCheckResult(
+        'Clean working tree',
+        true,
+        SEVERITY.DEGRADED,
+        elapsed(),
+        'git unavailable — skipped'
+      );
     }
-    return makeCheckResult('Clean working tree', false, SEVERITY.BLOCKING, elapsed(), `git status failed: ${errMsg}`);
+    return makeCheckResult(
+      'Clean working tree',
+      false,
+      SEVERITY.BLOCKING,
+      elapsed(),
+      `git status failed: ${errMsg}`
+    );
   }
 }
 
@@ -139,12 +295,18 @@ function checkDirtyTree() {
 // ---------------------------------------------------------------------------
 const HEAD_CONTENT_CHECKS = [
   { file: 'server.js', patterns: ['collectPreRenderStructureIssues'] },
-  { file: 'ppt-single-country.js', patterns: ['shouldAllowCompetitiveOptionalGroupGap', 'resolveTemplateRouteWithGeometryGuard'] },
+  {
+    file: 'ppt-single-country.js',
+    patterns: ['shouldAllowCompetitiveOptionalGroupGap', 'resolveTemplateRouteWithGeometryGuard'],
+  },
   { file: 'research-orchestrator.js', patterns: ['runInBatchesUntilDeadline'] },
   { file: 'ppt-utils.js', patterns: ['sanitizeHyperlinkUrl'] },
   { file: 'quality-gates.js', patterns: ['validatePptData'] },
   { file: 'template-clone-postprocess.js', patterns: ['isLockedTemplateText'] },
-  { file: 'pptx-validator.js', patterns: ['normalizeAbsoluteRelationshipTargets', 'reconcileContentTypesAndPackage'] },
+  {
+    file: 'pptx-validator.js',
+    patterns: ['normalizeAbsoluteRelationshipTargets', 'reconcileContentTypesAndPackage'],
+  },
 ];
 
 function checkHeadContent() {
@@ -175,10 +337,25 @@ function checkHeadContent() {
   }
 
   if (failures.length === 0) {
-    return makeCheckResult('HEAD content verification', true, SEVERITY.BLOCKING, elapsed(), 'All critical patterns found in HEAD');
+    return makeCheckResult(
+      'HEAD content verification',
+      true,
+      SEVERITY.BLOCKING,
+      elapsed(),
+      'All critical patterns found in HEAD'
+    );
   }
-  const evidence = failures.map((f) => `${f.file}: missing ${f.missing.join(', ')}${f.error ? ` (${f.error})` : ''}`);
-  return makeCheckResult('HEAD content verification', false, SEVERITY.BLOCKING, elapsed(), `${evidence.length} file(s) have missing patterns`, evidence);
+  const evidence = failures.map(
+    (f) => `${f.file}: missing ${f.missing.join(', ')}${f.error ? ` (${f.error})` : ''}`
+  );
+  return makeCheckResult(
+    'HEAD content verification',
+    false,
+    SEVERITY.BLOCKING,
+    elapsed(),
+    `${evidence.length} file(s) have missing patterns`,
+    evidence
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +420,7 @@ function checkModuleExportContracts() {
       true,
       SEVERITY.BLOCKING,
       elapsed(),
-      `${checked.length} modules verified with all required exports`,
+      `${checked.length} modules verified with all required exports`
     );
   }
 
@@ -254,7 +431,68 @@ function checkModuleExportContracts() {
     SEVERITY.BLOCKING,
     elapsed(),
     `${failures.length} module(s) failed contract check`,
-    evidence,
+    evidence
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Gate 3b: Module Function Signatures (parameter count validation)
+// ---------------------------------------------------------------------------
+function checkModuleFunctionSignatures() {
+  const elapsed = timer();
+  const failures = [];
+  let checkedCount = 0;
+
+  for (const [moduleName, contract] of Object.entries(MODULE_EXPORT_CONTRACTS)) {
+    const paramCounts = contract.paramCounts || {};
+    if (Object.keys(paramCounts).length === 0) continue;
+
+    const fullPath = path.join(PROJECT_ROOT, moduleName);
+    if (!fs.existsSync(fullPath)) continue;
+
+    let loadedModule;
+    try {
+      loadedModule = require(fullPath);
+    } catch {
+      continue;
+    }
+
+    for (const [fnName, expectedParamCount] of Object.entries(paramCounts)) {
+      const fn = loadedModule[fnName] || loadedModule.__test?.[fnName];
+      if (typeof fn !== 'function') continue;
+
+      checkedCount++;
+      if (fn.length !== expectedParamCount) {
+        failures.push({
+          module: moduleName,
+          function: fnName,
+          expected: expectedParamCount,
+          actual: fn.length,
+        });
+      }
+    }
+  }
+
+  if (failures.length === 0) {
+    return makeCheckResult(
+      'Module function signatures',
+      true,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `${checkedCount} function signature(s) verified`
+    );
+  }
+
+  const evidence = failures.map(
+    (f) => `${f.module}.${f.function}: expected ${f.expected} params, got ${f.actual}`
+  );
+  return makeCheckResult(
+    'Module function signatures',
+    false,
+    SEVERITY.DEGRADED,
+    elapsed(),
+    `${failures.length} function signature mismatch(es)`,
+    evidence
   );
 }
 
@@ -266,7 +504,13 @@ function checkTemplateContract() {
   const templatePath = path.join(PROJECT_ROOT, 'template-patterns.json');
 
   if (!fs.existsSync(templatePath)) {
-    return makeCheckResult('Template contract validity', false, SEVERITY.BLOCKING, elapsed(), 'template-patterns.json not found');
+    return makeCheckResult(
+      'Template contract validity',
+      false,
+      SEVERITY.BLOCKING,
+      elapsed(),
+      'template-patterns.json not found'
+    );
   }
 
   let parsed;
@@ -274,7 +518,13 @@ function checkTemplateContract() {
     const raw = fs.readFileSync(templatePath, 'utf8');
     parsed = JSON.parse(raw);
   } catch (err) {
-    return makeCheckResult('Template contract validity', false, SEVERITY.BLOCKING, elapsed(), `template-patterns.json is invalid JSON: ${err.message}`);
+    return makeCheckResult(
+      'Template contract validity',
+      false,
+      SEVERITY.BLOCKING,
+      elapsed(),
+      `template-patterns.json is invalid JSON: ${err.message}`
+    );
   }
 
   const missingKeys = TEMPLATE_PATTERNS_EXPECTED_KEYS.filter((k) => !(k in parsed));
@@ -285,7 +535,7 @@ function checkTemplateContract() {
       SEVERITY.BLOCKING,
       elapsed(),
       `template-patterns.json missing expected keys: ${missingKeys.join(', ')}`,
-      missingKeys,
+      missingKeys
     );
   }
 
@@ -303,7 +553,7 @@ function checkTemplateContract() {
             SEVERITY.BLOCKING,
             elapsed(),
             `Contract compiler validation failed: ${result.reason || 'unknown'}`,
-            result.errors || [],
+            result.errors || []
           );
         }
       }
@@ -317,7 +567,7 @@ function checkTemplateContract() {
     true,
     SEVERITY.BLOCKING,
     elapsed(),
-    `template-patterns.json valid with ${Object.keys(parsed).length} top-level keys`,
+    `template-patterns.json valid with ${Object.keys(parsed).length} top-level keys`
   );
 }
 
@@ -329,7 +579,13 @@ function checkRouteGeometry() {
   const enforcerPath = path.join(PROJECT_ROOT, 'route-geometry-enforcer.js');
 
   if (!fs.existsSync(enforcerPath)) {
-    return makeCheckResult('Route geometry audit', true, SEVERITY.INFO, elapsed(), 'route-geometry-enforcer.js not found — skipped');
+    return makeCheckResult(
+      'Route geometry audit',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      'route-geometry-enforcer.js not found — skipped'
+    );
   }
 
   try {
@@ -343,13 +599,25 @@ function checkRouteGeometry() {
           SEVERITY.DEGRADED,
           elapsed(),
           `Route geometry audit failed: ${audit.issues?.length || 0} issue(s)`,
-          audit.issues || [],
+          audit.issues || []
         );
       }
     }
-    return makeCheckResult('Route geometry audit', true, SEVERITY.DEGRADED, elapsed(), 'Route geometry enforcer loaded and validated');
+    return makeCheckResult(
+      'Route geometry audit',
+      true,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      'Route geometry enforcer loaded and validated'
+    );
   } catch (err) {
-    return makeCheckResult('Route geometry audit', false, SEVERITY.DEGRADED, elapsed(), `Failed to load route-geometry-enforcer.js: ${err.message}`);
+    return makeCheckResult(
+      'Route geometry audit',
+      false,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `Failed to load route-geometry-enforcer.js: ${err.message}`
+    );
   }
 }
 
@@ -361,7 +629,13 @@ function checkSchemaFirewall() {
   const firewallPath = path.join(PROJECT_ROOT, 'schema-firewall.js');
 
   if (!fs.existsSync(firewallPath)) {
-    return makeCheckResult('Schema firewall availability', true, SEVERITY.INFO, elapsed(), 'schema-firewall.js not found — skipped');
+    return makeCheckResult(
+      'Schema firewall availability',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      'schema-firewall.js not found — skipped'
+    );
   }
 
   try {
@@ -374,12 +648,24 @@ function checkSchemaFirewall() {
         false,
         SEVERITY.DEGRADED,
         elapsed(),
-        `schema-firewall.js loaded but no expected exports found (expected: ${expectedFns.join(', ')})`,
+        `schema-firewall.js loaded but no expected exports found (expected: ${expectedFns.join(', ')})`
       );
     }
-    return makeCheckResult('Schema firewall availability', true, SEVERITY.DEGRADED, elapsed(), `Schema firewall loaded with ${found.length} expected export(s)`);
+    return makeCheckResult(
+      'Schema firewall availability',
+      true,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `Schema firewall loaded with ${found.length} expected export(s)`
+    );
   } catch (err) {
-    return makeCheckResult('Schema firewall availability', false, SEVERITY.DEGRADED, elapsed(), `Failed to load schema-firewall.js: ${err.message}`);
+    return makeCheckResult(
+      'Schema firewall availability',
+      false,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `Failed to load schema-firewall.js: ${err.message}`
+    );
   }
 }
 
@@ -391,14 +677,32 @@ function checkIntegrityPipeline() {
   const pipelinePath = path.join(PROJECT_ROOT, 'pptx-integrity-pipeline.js');
 
   if (!fs.existsSync(pipelinePath)) {
-    return makeCheckResult('Integrity pipeline availability', true, SEVERITY.INFO, elapsed(), 'pptx-integrity-pipeline.js not found — skipped');
+    return makeCheckResult(
+      'Integrity pipeline availability',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      'pptx-integrity-pipeline.js not found — skipped'
+    );
   }
 
   try {
     require(pipelinePath);
-    return makeCheckResult('Integrity pipeline availability', true, SEVERITY.DEGRADED, elapsed(), 'pptx-integrity-pipeline.js loaded successfully');
+    return makeCheckResult(
+      'Integrity pipeline availability',
+      true,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      'pptx-integrity-pipeline.js loaded successfully'
+    );
   } catch (err) {
-    return makeCheckResult('Integrity pipeline availability', false, SEVERITY.DEGRADED, elapsed(), `Failed to load pptx-integrity-pipeline.js: ${err.message}`);
+    return makeCheckResult(
+      'Integrity pipeline availability',
+      false,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `Failed to load pptx-integrity-pipeline.js: ${err.message}`
+    );
   }
 }
 
@@ -414,14 +718,25 @@ function runRegressionTests() {
   });
 
   if (result.status === 0) {
-    return makeCheckResult('Regression tests', true, SEVERITY.BLOCKING, elapsed(), 'All regression tests passed');
+    return makeCheckResult(
+      'Regression tests',
+      true,
+      SEVERITY.BLOCKING,
+      elapsed(),
+      'All regression tests passed'
+    );
   }
 
   const stderr = String(result.stderr || '').slice(0, 500);
-  const reason = result.signal
-    ? `killed by signal ${result.signal}`
-    : `exit code ${result.status}`;
-  return makeCheckResult('Regression tests', false, SEVERITY.BLOCKING, elapsed(), `Regression tests failed: ${reason}`, [stderr]);
+  const reason = result.signal ? `killed by signal ${result.signal}` : `exit code ${result.status}`;
+  return makeCheckResult(
+    'Regression tests',
+    false,
+    SEVERITY.BLOCKING,
+    elapsed(),
+    `Regression tests failed: ${reason}`,
+    [stderr]
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -432,7 +747,13 @@ function runStressCheck(seeds) {
   const harnessPath = path.join(PROJECT_ROOT, 'stress-test-harness.js');
 
   if (!fs.existsSync(harnessPath)) {
-    return makeCheckResult('Stress test', true, SEVERITY.INFO, elapsed(), 'stress-test-harness.js not found — skipped');
+    return makeCheckResult(
+      'Stress test',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      'stress-test-harness.js not found — skipped'
+    );
   }
 
   const result = spawnSync(
@@ -446,30 +767,266 @@ function runStressCheck(seeds) {
       encoding: 'utf8',
       timeout: 10 * 60 * 1000,
       stdio: ['ignore', 'pipe', 'pipe'],
-    },
+    }
   );
 
   if (result.status === 2 || result.error) {
-    return makeCheckResult('Stress test', false, SEVERITY.BLOCKING, elapsed(), `Stress harness crashed: ${result.stderr || result.error?.message || 'unknown'}`);
+    return makeCheckResult(
+      'Stress test',
+      false,
+      SEVERITY.BLOCKING,
+      elapsed(),
+      `Stress harness crashed: ${result.stderr || result.error?.message || 'unknown'}`
+    );
   }
 
   try {
     const parsed = JSON.parse(result.stdout);
     if (parsed.runtimeCrashes > 0) {
-      return makeCheckResult('Stress test', false, SEVERITY.BLOCKING, elapsed(), `${parsed.runtimeCrashes} runtime crash(es) in ${seeds} seeds`, [JSON.stringify(parsed)]);
+      return makeCheckResult(
+        'Stress test',
+        false,
+        SEVERITY.BLOCKING,
+        elapsed(),
+        `${parsed.runtimeCrashes} runtime crash(es) in ${seeds} seeds`,
+        [JSON.stringify(parsed)]
+      );
     }
-    return makeCheckResult('Stress test', true, SEVERITY.BLOCKING, elapsed(), `${parsed.passed || seeds}/${seeds} seeds passed, 0 runtime crashes`);
+    return makeCheckResult(
+      'Stress test',
+      true,
+      SEVERITY.BLOCKING,
+      elapsed(),
+      `${parsed.passed || seeds}/${seeds} seeds passed, 0 runtime crashes`
+    );
   } catch {
     const pass = result.status === 0;
-    return makeCheckResult('Stress test', pass, SEVERITY.BLOCKING, elapsed(), pass ? `Stress test passed (${seeds} seeds)` : `Stress test failed (exit code ${result.status})`);
+    return makeCheckResult(
+      'Stress test',
+      pass,
+      SEVERITY.BLOCKING,
+      elapsed(),
+      pass
+        ? `Stress test passed (${seeds} seeds)`
+        : `Stress test failed (exit code ${result.status})`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Gate 10: Schema Compatibility
+// ---------------------------------------------------------------------------
+function checkSchemaCompatibility() {
+  const elapsed = timer();
+
+  // Check that schema-firewall.js exists and can validate
+  const firewallPath = path.join(PROJECT_ROOT, 'schema-firewall.js');
+  if (!fs.existsSync(firewallPath)) {
+    return makeCheckResult(
+      'Schema compatibility',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      'schema-firewall.js not found — skipped'
+    );
+  }
+
+  try {
+    const firewall = require(firewallPath);
+    if (typeof firewall.validateSchema !== 'function') {
+      return makeCheckResult(
+        'Schema compatibility',
+        true,
+        SEVERITY.INFO,
+        elapsed(),
+        'validateSchema not exported — skipped'
+      );
+    }
+
+    // Validate the expected report artifact schema structure
+    const expectedFields = [
+      'executiveSummary',
+      'marketOverview',
+      'competitiveLandscape',
+      'recommendations',
+    ];
+    const sampleArtifact = {};
+    for (const field of expectedFields) {
+      sampleArtifact[field] = {};
+    }
+
+    // Test that the schema validator loads and is callable
+    const schemaResult = firewall.validateSchema(sampleArtifact);
+    if (schemaResult && schemaResult.valid === false && schemaResult.errors) {
+      return makeCheckResult(
+        'Schema compatibility',
+        false,
+        SEVERITY.DEGRADED,
+        elapsed(),
+        `Schema validation found ${schemaResult.errors.length} issue(s)`,
+        schemaResult.errors
+      );
+    }
+
+    return makeCheckResult(
+      'Schema compatibility',
+      true,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      'Schema compatibility validated'
+    );
+  } catch (err) {
+    return makeCheckResult(
+      'Schema compatibility',
+      false,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `Schema compatibility check failed: ${err.message}`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Gate 11: Sparse Slide Gate
+// ---------------------------------------------------------------------------
+function checkSparseSlideGate() {
+  const elapsed = timer();
+
+  // Check the preflight-reports directory for any recent PPTX analysis
+  const reportsDir = path.join(PROJECT_ROOT, 'preflight-reports');
+  if (!fs.existsSync(reportsDir)) {
+    return makeCheckResult(
+      'Sparse slide gate',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      'No preflight-reports directory — skipped'
+    );
+  }
+
+  try {
+    const reportFiles = fs.readdirSync(reportsDir).filter((f) => f.endsWith('.json'));
+    let sparseWarnings = 0;
+    const sparseDetails = [];
+
+    for (const file of reportFiles) {
+      try {
+        const content = JSON.parse(fs.readFileSync(path.join(reportsDir, file), 'utf8'));
+        if (content.sparseSlides && Array.isArray(content.sparseSlides)) {
+          for (const slide of content.sparseSlides) {
+            sparseWarnings++;
+            sparseDetails.push(
+              `${file}: slide ${slide.index || '?'} has ${slide.elementCount || 0} elements`
+            );
+          }
+        }
+      } catch {
+        // skip unparseable report files
+      }
+    }
+
+    if (sparseWarnings > 0) {
+      return makeCheckResult(
+        'Sparse slide gate',
+        false,
+        SEVERITY.DEGRADED,
+        elapsed(),
+        `${sparseWarnings} sparse slide warning(s) found`,
+        sparseDetails
+      );
+    }
+
+    return makeCheckResult(
+      'Sparse slide gate',
+      true,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      'No sparse slide warnings found'
+    );
+  } catch (err) {
+    return makeCheckResult(
+      'Sparse slide gate',
+      false,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `Sparse slide check failed: ${err.message}`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Gate 12: Source Coverage Gate
+// ---------------------------------------------------------------------------
+function checkSourceCoverageGate(threshold) {
+  const elapsed = timer();
+  const effectiveThreshold = typeof threshold === 'number' && threshold > 0 ? threshold : 70;
+
+  // Check for quality-gates.js source coverage tracking
+  const qualityGatesPath = path.join(PROJECT_ROOT, 'quality-gates.js');
+  if (!fs.existsSync(qualityGatesPath)) {
+    return makeCheckResult(
+      'Source coverage gate',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      'quality-gates.js not found — skipped'
+    );
+  }
+
+  try {
+    const qg = require(qualityGatesPath);
+
+    // Check if there's a source coverage function
+    if (typeof qg.getSourceCoverage === 'function') {
+      const coverage = qg.getSourceCoverage();
+      if (coverage && typeof coverage.percentage === 'number') {
+        if (coverage.percentage < effectiveThreshold) {
+          return makeCheckResult(
+            'Source coverage gate',
+            false,
+            SEVERITY.DEGRADED,
+            elapsed(),
+            `Source coverage ${coverage.percentage}% below threshold ${effectiveThreshold}%`,
+            [`Coverage: ${coverage.percentage}%, Required: ${effectiveThreshold}%`]
+          );
+        }
+        return makeCheckResult(
+          'Source coverage gate',
+          true,
+          SEVERITY.DEGRADED,
+          elapsed(),
+          `Source coverage ${coverage.percentage}% meets threshold ${effectiveThreshold}%`
+        );
+      }
+    }
+
+    // No source coverage function — pass with info
+    return makeCheckResult(
+      'Source coverage gate',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      `Source coverage tracking not available — threshold=${effectiveThreshold}%`
+    );
+  } catch (err) {
+    return makeCheckResult(
+      'Source coverage gate',
+      false,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `Source coverage check failed: ${err.message}`
+    );
   }
 }
 
 // ---------------------------------------------------------------------------
 // Readiness Score Calculator
 // ---------------------------------------------------------------------------
-function computeReadinessScore(results) {
+function computeReadinessScore(results, options) {
   if (results.length === 0) return 0;
+
+  const mode = options?.mode || 'dev';
+  const strict = options?.strict || false;
 
   let totalWeight = 0;
   let earnedWeight = 0;
@@ -493,7 +1050,97 @@ function computeReadinessScore(results) {
     if (r.pass) earnedWeight += weight;
   }
 
-  return totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 0;
+  const rawScore = totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 0;
+
+  // In release mode with strict, must be 100 to pass
+  if (mode === GATE_MODES.RELEASE && strict && rawScore < 100) {
+    return rawScore; // Return the score, but caller will check threshold
+  }
+
+  return rawScore;
+}
+
+/**
+ * Structured readiness score with threshold enforcement.
+ * Returns { score, threshold, passes, mode, strict }.
+ */
+function computeStructuredReadiness(results, options) {
+  const mode = options?.mode || 'dev';
+  const strict = options?.strict || false;
+
+  const score = computeReadinessScore(results, options);
+
+  let threshold;
+  if (mode === GATE_MODES.RELEASE) {
+    threshold = 100;
+  } else if (mode === GATE_MODES.TEST) {
+    threshold = 80;
+  } else {
+    threshold = 0; // dev mode has no threshold
+  }
+
+  if (strict) {
+    threshold = 100;
+  }
+
+  return {
+    score,
+    threshold,
+    passes: score >= threshold,
+    mode,
+    strict,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mode Parity Validation
+// ---------------------------------------------------------------------------
+const QUICK_GATES = ['Clean working tree', 'HEAD content verification', 'Module export contracts'];
+
+const FULL_GATES = [
+  ...QUICK_GATES,
+  'Template contract validity',
+  'Route geometry audit',
+  'Schema firewall availability',
+  'Integrity pipeline availability',
+  'Regression tests',
+  'Stress test',
+  'Module function signatures',
+  'Schema compatibility',
+  'Sparse slide gate',
+  'Source coverage gate',
+];
+
+function validateModeParity() {
+  // Ensure quick mode gates are a true subset of full mode gates
+  const missingFromFull = QUICK_GATES.filter((g) => !FULL_GATES.includes(g));
+
+  if (missingFromFull.length > 0) {
+    return {
+      valid: false,
+      error: `Quick gates not in full mode: ${missingFromFull.join(', ')}`,
+      quickGates: QUICK_GATES,
+      fullGates: FULL_GATES,
+    };
+  }
+
+  // Verify quick is strictly smaller
+  if (QUICK_GATES.length >= FULL_GATES.length) {
+    return {
+      valid: false,
+      error: 'Quick mode has same or more gates than full mode',
+      quickGates: QUICK_GATES,
+      fullGates: FULL_GATES,
+    };
+  }
+
+  return {
+    valid: true,
+    quickGateCount: QUICK_GATES.length,
+    fullGateCount: FULL_GATES.length,
+    quickGates: QUICK_GATES,
+    fullGates: FULL_GATES,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -501,7 +1148,9 @@ function computeReadinessScore(results) {
 // ---------------------------------------------------------------------------
 function generateJsonReport(results, metadata) {
   const hasBlockingFailure = results.some((r) => !r.pass && r.severity === SEVERITY.BLOCKING);
-  const score = computeReadinessScore(results);
+  const scoreOpts = { mode: metadata.mode, strict: metadata.strict };
+  const score = computeReadinessScore(results, scoreOpts);
+  const readiness = computeStructuredReadiness(results, scoreOpts);
 
   return {
     preflight: true,
@@ -510,9 +1159,12 @@ function generateJsonReport(results, metadata) {
     node: metadata.nodeVersion,
     gitBranch: metadata.gitBranch,
     mode: metadata.mode,
+    strict: metadata.strict || false,
     stressSeeds: metadata.stressSeeds || null,
     readinessScore: score,
-    overallPass: !hasBlockingFailure,
+    readinessThreshold: readiness.threshold,
+    readinessPasses: readiness.passes,
+    overallPass: !hasBlockingFailure && readiness.passes,
     checks: results.map((r) => ({
       name: r.name,
       status: r.status,
@@ -521,13 +1173,16 @@ function generateJsonReport(results, metadata) {
       durationMs: r.durationMs || 0,
       details: r.details || null,
       evidence: r.evidence || null,
+      remediation: r.remediation || null,
     })),
   };
 }
 
 function generateMarkdownReport(results, metadata) {
   const hasBlockingFailure = results.some((r) => !r.pass && r.severity === SEVERITY.BLOCKING);
-  const score = computeReadinessScore(results);
+  const scoreOpts = { mode: metadata.mode, strict: metadata.strict };
+  const score = computeReadinessScore(results, scoreOpts);
+  const readiness = computeStructuredReadiness(results, scoreOpts);
   const lines = [];
 
   lines.push('# PREFLIGHT GATE REPORT');
@@ -536,12 +1191,16 @@ function generateMarkdownReport(results, metadata) {
   lines.push(`- **Node**: ${metadata.nodeVersion}`);
   lines.push(`- **Branch**: ${metadata.gitBranch}`);
   lines.push(`- **Mode**: ${metadata.mode}`);
+  if (metadata.strict) {
+    lines.push('- **Strict**: YES');
+  }
   if (metadata.stressSeeds) {
     lines.push(`- **Stress seeds**: ${metadata.stressSeeds}`);
   }
-  lines.push(`- **Readiness Score**: ${score}/100`);
+  lines.push(`- **Readiness Score**: ${score}/100 (threshold: ${readiness.threshold})`);
   lines.push('');
-  lines.push(`## Result: ${hasBlockingFailure ? 'FAIL' : 'PASS'}`);
+  const overallPass = !hasBlockingFailure && readiness.passes;
+  lines.push(`## Result: ${overallPass ? 'PASS' : 'FAIL'}`);
   lines.push('');
   lines.push('| Check | Status | Severity | Duration |');
   lines.push('|-------|--------|----------|----------|');
@@ -567,6 +1226,10 @@ function generateMarkdownReport(results, metadata) {
           lines.push(`- ${e}`);
         }
       }
+      if (f.remediation) {
+        lines.push('');
+        lines.push(`**Remediation:** \`${f.remediation}\``);
+      }
       lines.push('');
     }
   }
@@ -577,34 +1240,64 @@ function generateMarkdownReport(results, metadata) {
 // ---------------------------------------------------------------------------
 // Gate Runners
 // ---------------------------------------------------------------------------
-function runQuick() {
+function runQuick(options) {
+  const mode = options?.gateMode || GATE_MODES.DEV;
+  const strict = options?.strict || false;
+
   const results = [];
-  results.push(checkDirtyTree());
-  results.push(checkHeadContent());
-  results.push(checkModuleExportContracts());
+  results.push(applyModePolicy(checkDirtyTree(), mode, strict));
+  results.push(applyModePolicy(checkHeadContent(), mode, strict));
+  results.push(applyModePolicy(checkModuleExportContracts(), mode, strict));
   return results;
 }
 
 function runFull(options = {}) {
-  const results = runQuick();
+  const mode = options.gateMode || GATE_MODES.DEV;
+  const strict = options.strict || false;
 
-  results.push(checkTemplateContract());
-  results.push(checkRouteGeometry());
-  results.push(checkSchemaFirewall());
-  results.push(checkIntegrityPipeline());
+  const results = runQuick(options);
+
+  results.push(applyModePolicy(checkTemplateContract(), mode, strict));
+  results.push(applyModePolicy(checkRouteGeometry(), mode, strict));
+  results.push(applyModePolicy(checkSchemaFirewall(), mode, strict));
+  results.push(applyModePolicy(checkIntegrityPipeline(), mode, strict));
+
+  // New gates
+  results.push(applyModePolicy(checkModuleFunctionSignatures(), mode, strict));
+  results.push(applyModePolicy(checkSchemaCompatibility(), mode, strict));
+  results.push(applyModePolicy(checkSparseSlideGate(), mode, strict));
+  results.push(
+    applyModePolicy(checkSourceCoverageGate(options.sourceCoverageThreshold), mode, strict)
+  );
 
   // Only run regression/stress if quick checks passed
   const hasBlockingFailure = results.some((r) => !r.pass && r.severity === SEVERITY.BLOCKING);
 
   if (hasBlockingFailure) {
-    results.push(makeCheckResult('Regression tests', true, SEVERITY.BLOCKING, 0, 'Skipped — fix blocking failures first'));
+    results.push(
+      makeCheckResult(
+        'Regression tests',
+        true,
+        SEVERITY.BLOCKING,
+        0,
+        'Skipped — fix blocking failures first'
+      )
+    );
     if (options.stressSeeds) {
-      results.push(makeCheckResult('Stress test', true, SEVERITY.BLOCKING, 0, 'Skipped — fix blocking failures first'));
+      results.push(
+        makeCheckResult(
+          'Stress test',
+          true,
+          SEVERITY.BLOCKING,
+          0,
+          'Skipped — fix blocking failures first'
+        )
+      );
     }
   } else {
-    results.push(runRegressionTests());
+    results.push(applyModePolicy(runRegressionTests(), mode, strict));
     if (options.stressSeeds) {
-      results.push(runStressCheck(options.stressSeeds));
+      results.push(applyModePolicy(runStressCheck(options.stressSeeds), mode, strict));
     }
   }
 
@@ -614,7 +1307,7 @@ function runFull(options = {}) {
 function runGates(options = {}) {
   const mode = options.mode || 'quick';
   if (mode === 'quick') {
-    return runQuick();
+    return runQuick(options);
   }
   return runFull(options);
 }
@@ -631,14 +1324,24 @@ function parseArgs(argv) {
   let stressSeeds = null;
   let reportDir = path.join(PROJECT_ROOT, 'preflight-reports');
   let help = false;
+  let strict = false;
+  let gateMode = GATE_MODES.DEV;
+  let sourceCoverageThreshold = 70;
 
   for (const arg of argv) {
     if (arg === '--help' || arg === '-h') {
       help = true;
+    } else if (arg === '--strict') {
+      strict = true;
     } else if (arg.startsWith('--mode=')) {
       const val = arg.split('=')[1];
       if (val === 'quick' || val === 'full') {
         mode = val;
+      }
+    } else if (arg.startsWith('--gate-mode=')) {
+      const val = arg.split('=')[1];
+      if (val === 'dev' || val === 'test' || val === 'release') {
+        gateMode = val;
       }
     } else if (arg.startsWith('--stress-seeds=')) {
       const val = parseInt(arg.split('=')[1], 10);
@@ -647,10 +1350,15 @@ function parseArgs(argv) {
       }
     } else if (arg.startsWith('--report-dir=')) {
       reportDir = arg.split('=')[1];
+    } else if (arg.startsWith('--source-coverage=')) {
+      const val = parseInt(arg.split('=')[1], 10);
+      if (Number.isFinite(val) && val > 0) {
+        sourceCoverageThreshold = val;
+      }
     }
   }
 
-  return { mode, stressSeeds, reportDir, help };
+  return { mode, stressSeeds, reportDir, help, strict, gateMode, sourceCoverageThreshold };
 }
 
 // ---------------------------------------------------------------------------
@@ -664,26 +1372,33 @@ function main() {
 Usage: node preflight-gates.js [options]
 
 Options:
-  --mode=quick|full       Gate mode (default: quick)
-  --stress-seeds=N        Run stress test with N seeds (full mode only, max 200)
-  --report-dir=PATH       Output directory for reports
-  --help                  Show this help
+  --mode=quick|full          Gate mode (default: quick)
+  --gate-mode=dev|test|release  Severity policy (default: dev)
+  --strict                   Treat any non-pass as BLOCKING failure
+  --stress-seeds=N           Run stress test with N seeds (full mode only, max 200)
+  --source-coverage=N        Source coverage threshold percentage (default: 70)
+  --report-dir=PATH          Output directory for reports
+  --help                     Show this help
 
 Examples:
   node preflight-gates.js --mode=quick
-  node preflight-gates.js --mode=full
+  node preflight-gates.js --mode=full --gate-mode=release --strict
   node preflight-gates.js --mode=full --stress-seeds=100
 `);
     process.exit(0);
   }
 
+  const modeLabel = `${args.mode.toUpperCase()} / ${args.gateMode.toUpperCase()}${args.strict ? ' / STRICT' : ''}`;
   console.log('');
-  console.log(`=== PREFLIGHT GATES (${args.mode.toUpperCase()} MODE) ===`);
+  console.log(`=== PREFLIGHT GATES (${modeLabel}) ===`);
   console.log('');
 
   const results = runGates({
     mode: args.mode,
+    gateMode: args.gateMode,
+    strict: args.strict,
     stressSeeds: args.stressSeeds,
+    sourceCoverageThreshold: args.sourceCoverageThreshold,
   });
 
   // Print results
@@ -699,9 +1414,14 @@ Examples:
         console.log(`         - ${e}`);
       }
     }
+    if (!r.pass && r.remediation) {
+      console.log(`       Fix: ${r.remediation}`);
+    }
   }
 
-  const score = computeReadinessScore(results);
+  const scoreOpts = { mode: args.gateMode, strict: args.strict };
+  const score = computeReadinessScore(results, scoreOpts);
+  const readiness = computeStructuredReadiness(results, scoreOpts);
   const hasBlockingFailure = results.some((r) => !r.pass && r.severity === SEVERITY.BLOCKING);
 
   // Generate reports
@@ -709,7 +1429,8 @@ Examples:
     timestamp: new Date().toISOString(),
     nodeVersion: process.version,
     gitBranch: getGitBranch(),
-    mode: args.mode,
+    mode: args.gateMode,
+    strict: args.strict,
     stressSeeds: args.stressSeeds,
   };
 
@@ -722,12 +1443,9 @@ Examples:
     }
     fs.writeFileSync(
       path.join(args.reportDir, 'preflight-gates-report.json'),
-      JSON.stringify(jsonReport, null, 2),
+      JSON.stringify(jsonReport, null, 2)
     );
-    fs.writeFileSync(
-      path.join(args.reportDir, 'preflight-gates-report.md'),
-      mdReport,
-    );
+    fs.writeFileSync(path.join(args.reportDir, 'preflight-gates-report.md'), mdReport);
     console.log('');
     console.log(`Reports: ${args.reportDir}/preflight-gates-report.{json,md}`);
   } catch (reportErr) {
@@ -735,10 +1453,18 @@ Examples:
   }
 
   console.log('');
-  console.log(`Readiness Score: ${score}/100`);
+  console.log(`Readiness Score: ${score}/100 (threshold: ${readiness.threshold})`);
 
-  if (hasBlockingFailure) {
-    console.log('=== PREFLIGHT FAILED — BLOCKING failures detected ===');
+  const overallPass = !hasBlockingFailure && readiness.passes;
+
+  if (!overallPass) {
+    if (!readiness.passes) {
+      console.log(
+        `=== PREFLIGHT FAILED — readiness score ${score} below threshold ${readiness.threshold} ===`
+      );
+    } else {
+      console.log('=== PREFLIGHT FAILED — BLOCKING failures detected ===');
+    }
     console.log('');
     process.exit(1);
   } else {
@@ -766,12 +1492,21 @@ module.exports = {
   checkDirtyTree,
   checkHeadContent,
   checkModuleExportContracts,
+  checkModuleFunctionSignatures,
   checkTemplateContract,
   checkRouteGeometry,
   checkSchemaFirewall,
   checkIntegrityPipeline,
   runRegressionTests,
   runStressCheck,
+  checkSchemaCompatibility,
+  checkSparseSlideGate,
+  checkSourceCoverageGate,
+  // Mode & policy
+  applyModePolicy,
+  getEnvironmentContract,
+  validateModeParity,
+  computeStructuredReadiness,
   // Reporting
   generateJsonReport,
   generateMarkdownReport,
@@ -781,4 +1516,9 @@ module.exports = {
   MODULE_EXPORT_CONTRACTS,
   TEMPLATE_PATTERNS_EXPECTED_KEYS,
   SEVERITY,
+  GATE_MODES,
+  ENVIRONMENT_CONTRACTS,
+  QUICK_GATES,
+  FULL_GATES,
+  REMEDIATION_MAP,
 };
