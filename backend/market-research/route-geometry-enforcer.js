@@ -218,7 +218,9 @@ function resolveTemplatePattern({ blockKey, dataType, data, templateSelection } 
 
   if (!isTemplateBacked && patternKey !== defaultPattern) {
     const defaultDef = patterns[defaultPattern];
-    const defaultSlides = Array.isArray(defaultDef?.templateSlides) ? defaultDef.templateSlides : [];
+    const defaultSlides = Array.isArray(defaultDef?.templateSlides)
+      ? defaultDef.templateSlides
+      : [];
     if (defaultDef && defaultSlides.length > 0) {
       patternKey = defaultPattern;
       patternDef = defaultDef;
@@ -283,7 +285,8 @@ const GEOMETRY_TEXT = 'text';
 function inferPatternGeometry(patternKey) {
   if (!patternKey || typeof patternKey !== 'string') return GEOMETRY_TEXT;
   const k = patternKey.toLowerCase();
-  if (k.includes('table') || k.includes('company') || k.includes('case_study')) return GEOMETRY_TABLE;
+  if (k.includes('table') || k.includes('company') || k.includes('case_study'))
+    return GEOMETRY_TABLE;
   if (k.includes('chart')) return GEOMETRY_CHART;
   return GEOMETRY_TEXT;
 }
@@ -307,8 +310,10 @@ function layoutSatisfiesGeometry(layout, requiredGeometry) {
 
 function buildRouteGeometryRegistry(tableContextKeys, chartContextKeys) {
   const registry = {};
-  const tableSet = tableContextKeys instanceof Set ? tableContextKeys : new Set(tableContextKeys || []);
-  const chartSet = chartContextKeys instanceof Set ? chartContextKeys : new Set(chartContextKeys || []);
+  const tableSet =
+    tableContextKeys instanceof Set ? tableContextKeys : new Set(tableContextKeys || []);
+  const chartSet =
+    chartContextKeys instanceof Set ? chartContextKeys : new Set(chartContextKeys || []);
 
   const allBlockKeys = new Set([
     ...Object.keys(BLOCK_TEMPLATE_PATTERN_MAP),
@@ -336,9 +341,14 @@ function buildRouteGeometryRegistry(tableContextKeys, chartContextKeys) {
 }
 
 // ---------------------------------------------------------------------------
-// Fallback chain builder
+// Fallback chain builder — Task 2: deterministic ordering by slideNumber
 // ---------------------------------------------------------------------------
 
+/**
+ * Build a deterministic fallback chain for a block.
+ * Cross-pattern slides are sorted by slideNumber to eliminate
+ * nondeterminism from object key iteration order.
+ */
 function buildFallbackChain(blockKey, requiredGeometry) {
   const chain = [];
   const seen = new Set();
@@ -355,26 +365,79 @@ function buildFallbackChain(blockKey, requiredGeometry) {
   const primarySlide = BLOCK_TEMPLATE_SLIDE_MAP[blockKey];
   if (primarySlide) addSlide(primarySlide, 'block-default-slide');
 
-  // 2. Pattern's templateSlides
+  // 2. Pattern's templateSlides (sorted for determinism)
   const patternKey = BLOCK_TEMPLATE_PATTERN_MAP[blockKey];
   if (patternKey) {
     const patternDef = (templatePatterns.patterns || {})[patternKey];
-    const slides = Array.isArray(patternDef?.templateSlides) ? patternDef.templateSlides : [];
+    const slides = Array.isArray(patternDef?.templateSlides)
+      ? [...patternDef.templateSlides].sort((a, b) => a - b)
+      : [];
     for (const s of slides) addSlide(s, `pattern:${patternKey}`);
   }
 
   // 3. Scan all patterns for matching geometry slides
+  //    Sort pattern keys alphabetically for deterministic iteration,
+  //    then sort each pattern's slides by slideNumber.
   const patterns = templatePatterns.patterns || {};
-  for (const [pk, pDef] of Object.entries(patterns)) {
+  const sortedPatternKeys = Object.keys(patterns).sort();
+  const crossPatternCandidates = [];
+
+  for (const pk of sortedPatternKeys) {
     if (pk === patternKey) continue;
+    const pDef = patterns[pk];
     const slides = Array.isArray(pDef?.templateSlides) ? pDef.templateSlides : [];
     const patternGeo = inferPatternGeometry(pk);
     if (requiredGeometry === GEOMETRY_TEXT || patternGeo === requiredGeometry) {
-      for (const s of slides) addSlide(s, `cross-pattern:${pk}`);
+      for (const s of slides) {
+        crossPatternCandidates.push({ slideNumber: Number(s), source: `cross-pattern:${pk}` });
+      }
     }
   }
 
+  // Sort cross-pattern candidates by slideNumber for deterministic ordering
+  crossPatternCandidates.sort((a, b) => a.slideNumber - b.slideNumber);
+  for (const candidate of crossPatternCandidates) {
+    addSlide(candidate.slideNumber, candidate.source);
+  }
+
   return chain;
+}
+
+// ---------------------------------------------------------------------------
+// Task 3: getDeterministicFallback — single deterministic fallback per block
+// ---------------------------------------------------------------------------
+
+/**
+ * Get a single deterministic fallback slide for a block context.
+ * Returns the first geometry-compatible slide in the deterministic fallback chain,
+ * or null if no fallback exists.
+ *
+ * @param {string} blockKey
+ * @returns {{ slideNumber: number, source: string, layout: object } | null}
+ */
+function getDeterministicFallback(blockKey) {
+  if (!blockKey || typeof blockKey !== 'string') return null;
+
+  const patternKey = BLOCK_TEMPLATE_PATTERN_MAP[blockKey];
+  let requiredGeometry = GEOMETRY_TEXT;
+  if (patternKey) requiredGeometry = inferPatternGeometry(patternKey);
+
+  const primarySlide = BLOCK_TEMPLATE_SLIDE_MAP[blockKey];
+  const chain = buildFallbackChain(blockKey, requiredGeometry);
+
+  // Skip the primary slide — we want the fallback, not the primary
+  for (const candidate of chain) {
+    if (candidate.slideNumber === primarySlide) continue;
+    const layout = getTemplateSlideLayout(candidate.slideNumber);
+    if (layoutSatisfiesGeometry(layout, requiredGeometry)) {
+      return {
+        slideNumber: candidate.slideNumber,
+        source: candidate.source,
+        layout,
+      };
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -406,19 +469,50 @@ function resetMetrics() {
 }
 
 // ---------------------------------------------------------------------------
-// Hard fail error
+// Task 6: Structured error codes for RouteGeometryError
+// ---------------------------------------------------------------------------
+
+const ERROR_CODES = Object.freeze({
+  RGE001_NO_TABLE_GEOMETRY: 'RGE001_NO_TABLE_GEOMETRY',
+  RGE002_NO_CHART_GEOMETRY: 'RGE002_NO_CHART_GEOMETRY',
+  RGE003_FALLBACK_EXHAUSTED: 'RGE003_FALLBACK_EXHAUSTED',
+  RGE004_STRICT_MODE_MISMATCH: 'RGE004_STRICT_MODE_MISMATCH',
+  RGE005_UNKNOWN_BLOCK: 'RGE005_UNKNOWN_BLOCK',
+  RGE006_NO_SLIDE_LAYOUT: 'RGE006_NO_SLIDE_LAYOUT',
+});
+
+function _resolveErrorCode(expectedGeometry, actualGeometry, fallbackExhausted) {
+  if (fallbackExhausted) return ERROR_CODES.RGE003_FALLBACK_EXHAUSTED;
+  if (expectedGeometry === GEOMETRY_TABLE) return ERROR_CODES.RGE001_NO_TABLE_GEOMETRY;
+  if (expectedGeometry === GEOMETRY_CHART) return ERROR_CODES.RGE002_NO_CHART_GEOMETRY;
+  return ERROR_CODES.RGE003_FALLBACK_EXHAUSTED;
+}
+
+// ---------------------------------------------------------------------------
+// Hard fail error — enhanced with error codes (Task 6)
 // ---------------------------------------------------------------------------
 
 class RouteGeometryError extends Error {
-  constructor({ blockKey, targetSlide, expectedGeometry, actualGeometry, evidence }) {
-    const msg = `[ROUTE GEOMETRY] Hard fail: block "${blockKey}" targeting slide ${targetSlide} requires ${expectedGeometry} geometry but slide has ${actualGeometry}. ${evidence || ''}`;
+  constructor({
+    blockKey,
+    targetSlide,
+    expectedGeometry,
+    actualGeometry,
+    evidence,
+    errorCode,
+    provenance,
+  }) {
+    const code = errorCode || _resolveErrorCode(expectedGeometry, actualGeometry, true);
+    const msg = `[ROUTE GEOMETRY] [${code}] Hard fail: block "${blockKey}" targeting slide ${targetSlide} requires ${expectedGeometry} geometry but slide has ${actualGeometry}. ${evidence || ''}`;
     super(msg);
     this.name = 'RouteGeometryError';
+    this.code = code;
     this.blockKey = blockKey;
     this.targetSlide = targetSlide;
     this.expectedGeometry = expectedGeometry;
     this.actualGeometry = actualGeometry;
     this.evidence = evidence || '';
+    this.provenance = provenance || [];
   }
 }
 
@@ -432,7 +526,7 @@ function describeActualGeometry(layout) {
 }
 
 // ---------------------------------------------------------------------------
-// Core enforcement
+// Core enforcement — Task 4: enhanced provenance logging
 // ---------------------------------------------------------------------------
 
 /**
@@ -441,6 +535,12 @@ function describeActualGeometry(layout) {
  * Call before rendering each block. Validates that the resolved route targets
  * a slide whose geometry is compatible with the content being rendered.
  *
+ * Task 4: Always includes full structured provenance:
+ *   - requestedSlide: the originally requested slide
+ *   - recoveredSlide: the slide actually used (same if no recovery)
+ *   - reasonCode: null | 'geometry_recovery' | 'fallback_exhausted'
+ *   - provenanceChain: array of { step, slideNumber, source, result }
+ *
  * @param {Object} opts
  * @param {string} opts.blockKey
  * @param {string} opts.dataType
@@ -448,7 +548,7 @@ function describeActualGeometry(layout) {
  * @param {*}      [opts.templateSelection]
  * @param {Set|Array} opts.tableContextKeys
  * @param {Set|Array} opts.chartContextKeys
- * @returns {Object} { resolved, layout, requiredGeometry, recovered, fromSlide, toSlide, reason, fallbackDepth, provenance }
+ * @returns {Object} Full enforcement result with structured provenance
  * @throws {RouteGeometryError} if no valid route found
  */
 function enforce({
@@ -461,8 +561,10 @@ function enforce({
 } = {}) {
   _metrics.totalChecks++;
 
-  const tableSet = tableContextKeys instanceof Set ? tableContextKeys : new Set(tableContextKeys || []);
-  const chartSet = chartContextKeys instanceof Set ? chartContextKeys : new Set(chartContextKeys || []);
+  const tableSet =
+    tableContextKeys instanceof Set ? tableContextKeys : new Set(tableContextKeys || []);
+  const chartSet =
+    chartContextKeys instanceof Set ? chartContextKeys : new Set(chartContextKeys || []);
 
   // Determine required geometry
   let requiredGeometry = GEOMETRY_TEXT;
@@ -485,13 +587,20 @@ function enforce({
 
   const primarySlide = Number(primaryResolved?.selectedSlide);
   const primaryLayout =
-    Number.isFinite(primarySlide) && primarySlide > 0
-      ? getTemplateSlideLayout(primarySlide)
-      : null;
+    Number.isFinite(primarySlide) && primarySlide > 0 ? getTemplateSlideLayout(primarySlide) : null;
+
+  // Build structured provenance chain (Task 4)
+  const provenanceChain = [];
 
   // Fast path: primary is fine
   if (layoutSatisfiesGeometry(primaryLayout, requiredGeometry)) {
     _metrics.passed++;
+    provenanceChain.push({
+      step: 0,
+      slideNumber: primarySlide,
+      source: primaryResolved.source,
+      result: 'OK',
+    });
     return {
       resolved: primaryResolved,
       layout: primaryLayout,
@@ -500,12 +609,25 @@ function enforce({
       fromSlide: primarySlide,
       toSlide: primarySlide,
       reason: null,
+      reasonCode: null,
       fallbackDepth: 0,
       provenance: ['primary'],
+      provenanceChain,
+      requestedSlide: primarySlide,
+      recoveredSlide: primarySlide,
     };
   }
 
   // Primary failed geometry check -> walk fallback chain
+  provenanceChain.push({
+    step: 0,
+    slideNumber: primarySlide,
+    source: primaryResolved.source,
+    result: 'FAIL',
+    actualGeometry: describeActualGeometry(primaryLayout),
+    requiredGeometry,
+  });
+
   const fallbackChain = buildFallbackChain(blockKey, requiredGeometry);
   const provenance = ['primary:FAIL'];
 
@@ -515,6 +637,13 @@ function enforce({
 
     if (!layoutSatisfiesGeometry(layout, requiredGeometry)) {
       provenance.push(`${candidate.source}:slide${candidate.slideNumber}:FAIL`);
+      provenanceChain.push({
+        step: depth + 1,
+        slideNumber: candidate.slideNumber,
+        source: candidate.source,
+        result: 'FAIL',
+        actualGeometry: describeActualGeometry(layout),
+      });
       continue;
     }
 
@@ -527,6 +656,12 @@ function enforce({
     }
 
     provenance.push(`${candidate.source}:slide${candidate.slideNumber}:OK`);
+    provenanceChain.push({
+      step: depth + 1,
+      slideNumber: candidate.slideNumber,
+      source: candidate.source,
+      result: 'OK',
+    });
 
     const fallbackResolved = {
       ...primaryResolved,
@@ -542,8 +677,12 @@ function enforce({
       fromSlide: primarySlide,
       toSlide: candidate.slideNumber,
       reason: `geometry mismatch: needed ${requiredGeometry}, recovered via ${candidate.source}`,
+      reasonCode: 'geometry_recovery',
       fallbackDepth,
       provenance,
+      provenanceChain,
+      requestedSlide: primarySlide,
+      recoveredSlide: candidate.slideNumber,
     };
   }
 
@@ -551,6 +690,14 @@ function enforce({
   _metrics.hardFailCount++;
   const actualGeometry = describeActualGeometry(primaryLayout);
   const evidence = `Fallback chain exhausted (${fallbackChain.length} candidates). Block pattern: ${primaryResolved?.patternKey || 'none'}, primary slide: ${primarySlide || 'none'}`;
+  const errorCode = _resolveErrorCode(requiredGeometry, actualGeometry, true);
+
+  provenanceChain.push({
+    step: fallbackChain.length + 1,
+    slideNumber: null,
+    source: 'exhausted',
+    result: 'HARD_FAIL',
+  });
 
   const failure = {
     blockKey,
@@ -558,8 +705,112 @@ function enforce({
     expectedGeometry: requiredGeometry,
     actualGeometry,
     evidence,
+    errorCode,
     fallbackChainLength: fallbackChain.length,
     provenance,
+    provenanceChain,
+  };
+  _failures.push(failure);
+
+  throw new RouteGeometryError(failure);
+}
+
+// ---------------------------------------------------------------------------
+// Task 10: enforceStrict() — no fallback, throws immediately on mismatch
+// ---------------------------------------------------------------------------
+
+/**
+ * Strict mode enforcement: throws immediately if the primary slide's geometry
+ * does not match. No fallback chain is walked.
+ *
+ * @param {Object} opts - Same parameters as enforce()
+ * @returns {Object} Same shape as enforce() return (never recovered)
+ * @throws {RouteGeometryError} with code RGE004_STRICT_MODE_MISMATCH on any mismatch
+ */
+function enforceStrict({
+  blockKey,
+  dataType,
+  data,
+  templateSelection = null,
+  tableContextKeys = [],
+  chartContextKeys = [],
+} = {}) {
+  _metrics.totalChecks++;
+
+  const tableSet =
+    tableContextKeys instanceof Set ? tableContextKeys : new Set(tableContextKeys || []);
+  const chartSet =
+    chartContextKeys instanceof Set ? chartContextKeys : new Set(chartContextKeys || []);
+
+  // Determine required geometry
+  let requiredGeometry = GEOMETRY_TEXT;
+  if (tableSet.has(blockKey)) {
+    requiredGeometry = GEOMETRY_TABLE;
+  } else if (chartSet.has(blockKey)) {
+    requiredGeometry = GEOMETRY_CHART;
+  } else {
+    const patternKey = BLOCK_TEMPLATE_PATTERN_MAP[blockKey];
+    if (patternKey) requiredGeometry = inferPatternGeometry(patternKey);
+  }
+
+  // Resolve the primary route
+  const primaryResolved = resolveTemplatePattern({
+    blockKey,
+    dataType,
+    data,
+    templateSelection,
+  });
+
+  const primarySlide = Number(primaryResolved?.selectedSlide);
+  const primaryLayout =
+    Number.isFinite(primarySlide) && primarySlide > 0 ? getTemplateSlideLayout(primarySlide) : null;
+
+  const provenanceChain = [
+    {
+      step: 0,
+      slideNumber: primarySlide,
+      source: primaryResolved.source,
+      result: layoutSatisfiesGeometry(primaryLayout, requiredGeometry) ? 'OK' : 'FAIL',
+      mode: 'strict',
+    },
+  ];
+
+  if (layoutSatisfiesGeometry(primaryLayout, requiredGeometry)) {
+    _metrics.passed++;
+    return {
+      resolved: primaryResolved,
+      layout: primaryLayout,
+      requiredGeometry,
+      recovered: false,
+      fromSlide: primarySlide,
+      toSlide: primarySlide,
+      reason: null,
+      reasonCode: null,
+      fallbackDepth: 0,
+      provenance: ['primary:strict'],
+      provenanceChain,
+      requestedSlide: primarySlide,
+      recoveredSlide: primarySlide,
+      strictMode: true,
+    };
+  }
+
+  // Strict mode: hard fail immediately, no fallback
+  _metrics.hardFailCount++;
+  const actualGeometry = describeActualGeometry(primaryLayout);
+  const errorCode = ERROR_CODES.RGE004_STRICT_MODE_MISMATCH;
+  const evidence = `Strict mode: no fallback allowed. Block "${blockKey}" requires ${requiredGeometry} on slide ${primarySlide} but slide has ${actualGeometry}.`;
+
+  const failure = {
+    blockKey,
+    targetSlide: primarySlide || null,
+    expectedGeometry: requiredGeometry,
+    actualGeometry,
+    evidence,
+    errorCode,
+    fallbackChainLength: 0,
+    provenance: ['primary:strict:FAIL'],
+    provenanceChain,
   };
   _failures.push(failure);
 
@@ -626,11 +877,14 @@ function getFailures() {
 
 module.exports = {
   enforce,
+  enforceStrict,
+  getDeterministicFallback,
   getMetrics,
   getFailures,
   resetMetrics,
   auditAllRoutes,
   RouteGeometryError,
+  ERROR_CODES,
   // Internal maps re-exported for ppt-single-country.js integration
   BLOCK_TEMPLATE_PATTERN_MAP,
   BLOCK_TEMPLATE_SLIDE_MAP,
