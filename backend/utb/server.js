@@ -40,7 +40,7 @@ if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
 if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4.1 fallback');
+  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
@@ -117,13 +117,13 @@ async function callPerplexity(prompt) {
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4.1',
+        'gpt-4o',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -142,14 +142,14 @@ async function callChatGPT(prompt) {
 async function callChatGPTJSON(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4.1',
+        'gpt-4o',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -177,10 +177,10 @@ async function validateSynthesisOutput(sectionName, jsonOutput) {
     }
   }
 
-  // GPT-4.1-nano validation for substance
+  // GPT-4o-mini validation for substance
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'user',
@@ -204,7 +204,7 @@ If no issues found, return { "valid": true, "issues": [] }`,
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4.1-nano',
+        'gpt-4o-mini',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );

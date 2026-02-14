@@ -312,52 +312,6 @@ function resolveTemplateRouteWithGeometryGuard({
     };
   }
 
-  // Cross-pattern recovery: if the block's own pattern cannot satisfy required geometry,
-  // scan trusted template content slides and then all known template slides.
-  if (requiredGeometry) {
-    const preferredSlidesByGeometry = {
-      table: [12, 6, 7, 8, 9, 10, 21],
-      chart: [13, 14, 16, 15, 17, 18, 26, 29],
-    };
-    const preferredSlides = preferredSlidesByGeometry[requiredGeometry] || [];
-    const triedSlides = new Set(queue.map((candidate) => Number(candidate.route.selectedSlide)));
-    const fallbackSlides = [];
-    const seenFallback = new Set();
-    const addFallbackSlide = (slide) => {
-      const numeric = Number(slide);
-      if (!Number.isFinite(numeric) || numeric <= 0) return;
-      if (triedSlides.has(numeric) || seenFallback.has(numeric)) return;
-      seenFallback.add(numeric);
-      fallbackSlides.push(numeric);
-    };
-
-    for (const slide of preferredSlides) addFallbackSlide(slide);
-
-    const patterns = templatePatterns?.patterns || {};
-    for (const patternDef of Object.values(patterns)) {
-      const slides = Array.isArray(patternDef?.templateSlides) ? patternDef.templateSlides : [];
-      for (const slide of slides) addFallbackSlide(slide);
-    }
-
-    for (const fallbackSlide of fallbackSlides) {
-      const fallbackLayout = getTemplateSlideLayout(fallbackSlide);
-      if (!layoutHasRequiredTemplateGeometry(fallbackLayout, requiredGeometry)) continue;
-      return {
-        resolved: {
-          ...primaryResolved,
-          selectedSlide: fallbackSlide,
-          source: 'crossPatternGeometryRecovery',
-        },
-        layout: fallbackLayout,
-        requiredGeometry,
-        recovered: true,
-        fromSlide: primarySlide,
-        toSlide: fallbackSlide,
-        reason: 'cross-pattern-fallback',
-      };
-    }
-  }
-
   return {
     resolved: primaryResolved,
     layout: primaryLayout,
@@ -7400,9 +7354,5 @@ module.exports = {
   __test: {
     shouldAllowCompetitiveOptionalGroupGap,
     resolveTemplateRouteWithGeometryGuard,
-    computeTableFitScore,
-    isTransientRenderKey,
-    sanitizeRenderPayload,
-    safeCell,
   },
 };

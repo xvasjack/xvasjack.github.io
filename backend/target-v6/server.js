@@ -36,7 +36,7 @@ if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
 if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4.1 fallback');
+  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
@@ -51,7 +51,7 @@ const openai = new OpenAI({
 // ============ AI TOOLS ============
 
 // Gemini 2.5 Flash - stable model for validation tasks (upgraded from gemini-3-flash-preview which was unstable)
-// With GPT-4.1 fallback when Gemini fails or times out
+// With GPT-4o fallback when Gemini fails or times out
 async function callGemini3Flash(prompt, jsonMode = false) {
   try {
     const requestBody = {
@@ -73,15 +73,15 @@ async function callGemini3Flash(prompt, jsonMode = false) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
-        timeout: 30000, // Reduced from 120s to 30s - fail fast and use GPT-4.1 fallback
+        timeout: 30000, // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Gemini 3 Flash HTTP error ${response.status}:`, errorText.substring(0, 200));
-      // Fallback to GPT-4.1 on HTTP errors
-      return await callGPT41Fallback(prompt, jsonMode, `Gemini HTTP ${response.status}`);
+      // Fallback to GPT-4o on HTTP errors
+      return await callGPT4oFallback(prompt, jsonMode, `Gemini HTTP ${response.status}`);
     }
 
     const data = await response.json();
@@ -97,30 +97,30 @@ async function callGemini3Flash(prompt, jsonMode = false) {
 
     if (data.error) {
       console.error('Gemini 3 Flash API error:', data.error.message);
-      // Fallback to GPT-4.1
-      return await callGPT41Fallback(prompt, jsonMode, 'Gemini 3 Flash API error');
+      // Fallback to GPT-4o
+      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash API error');
     }
 
     const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     if (!result) {
       // Empty response, try fallback
-      return await callGPT41Fallback(prompt, jsonMode, 'Gemini 3 Flash empty response');
+      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash empty response');
     }
     return result;
   } catch (error) {
     console.error('Gemini 3 Flash error:', error.message);
-    // Fallback to GPT-4.1 on network timeout or other errors
-    return await callGPT41Fallback(prompt, jsonMode, `Gemini error: ${error.message}`);
+    // Fallback to GPT-4o on network timeout or other errors
+    return await callGPT4oFallback(prompt, jsonMode, `Gemini error: ${error.message}`);
   }
 }
 
-// GPT-4.1 fallback function for when Gemini fails
-async function callGPT41Fallback(prompt, jsonMode = false, reason = '') {
+// GPT-4o fallback function for when Gemini fails
+async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
   try {
-    console.log(`  Falling back to GPT-4.1 (reason: ${reason})...`);
+    console.log(`  Falling back to GPT-4o (reason: ${reason})...`);
 
     const requestOptions = {
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
     };
@@ -133,7 +133,7 @@ async function callGPT41Fallback(prompt, jsonMode = false, reason = '') {
     const response = await openai.chat.completions.create(requestOptions, { timeout: 60000 });
     if (response.usage) {
       recordTokens(
-        'gpt-4.1',
+        'gpt-4o',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -141,11 +141,11 @@ async function callGPT41Fallback(prompt, jsonMode = false, reason = '') {
     const result = response.choices?.[0]?.message?.content || '';
 
     if (result) {
-      console.log('  GPT-4.1 fallback successful');
+      console.log('  GPT-4o fallback successful');
     }
     return result;
   } catch (fallbackError) {
-    console.error('GPT-4.1 fallback error:', fallbackError.message);
+    console.error('GPT-4o fallback error:', fallbackError.message);
     return ''; // Return empty if both fail
   }
 }
@@ -197,7 +197,7 @@ async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create(
       {
-        model: 'gpt-4.1',
+        model: 'gpt-4o',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.2,
       },
@@ -205,7 +205,7 @@ async function callChatGPT(prompt) {
     );
     if (response.usage) {
       recordTokens(
-        'gpt-4.1',
+        'gpt-4o',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -222,19 +222,19 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Updated to use gpt-5-search-api (more stable than mini version)
+// Updated to use gpt-4o-search-preview (more stable than mini version)
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create(
       {
-        model: 'gpt-5-search-api',
+        model: 'gpt-4o-search-preview',
         messages: [{ role: 'user', content: prompt }],
       },
       { timeout: 90000 }
     );
     if (response.usage) {
       recordTokens(
-        'gpt-5-search-api',
+        'gpt-4o-search-preview',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -247,7 +247,7 @@ async function callOpenAISearch(prompt) {
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4.1 if search model not available
+    // Fallback to regular gpt-4o if search model not available
     return callChatGPT(prompt);
   }
 }
@@ -381,14 +381,14 @@ function buildOutputFormat() {
 Be thorough - include all companies you find. We will verify them later.`;
 }
 
-// ============ EXTRACTION WITH GPT-4.1-nano ============
+// ============ EXTRACTION WITH GPT-4o-mini ============
 
 async function extractCompanies(text, country) {
   if (!text || text.length < 50) return [];
   try {
     const extraction = await openai.chat.completions.create(
       {
-        model: 'gpt-4.1-nano',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -410,7 +410,7 @@ RULES:
     );
     if (extraction.usage) {
       recordTokens(
-        'gpt-4.1-nano',
+        'gpt-4o-mini',
         extraction.usage.prompt_tokens || 0,
         extraction.usage.completion_tokens || 0
       );
@@ -811,7 +811,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
   return rules;
 }
 
-// ============ VALIDATION (v24 - GPT-4.1 with LENIENT filtering) ============
+// ============ VALIDATION (v24 - GPT-4o with LENIENT filtering) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
@@ -824,7 +824,7 @@ async function validateCompanyStrict(company, business, country, exclusion, page
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4.1', // Use smarter model for better validation
+      model: 'gpt-4o', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -873,7 +873,7 @@ ${contentToValidate.substring(0, 10000)}`,
 
     if (validation.usage) {
       recordTokens(
-        'gpt-4.1',
+        'gpt-4o',
         validation.usage.prompt_tokens || 0,
         validation.usage.completion_tokens || 0
       );
@@ -973,7 +973,7 @@ async function validateCompany(company, business, country, exclusion, pageText) 
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -1018,7 +1018,7 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
 
     if (validation.usage) {
       recordTokens(
-        'gpt-4.1-nano',
+        'gpt-4o-mini',
         validation.usage.prompt_tokens || 0,
         validation.usage.completion_tokens || 0
       );
@@ -1266,7 +1266,7 @@ async function runAgenticSearchTask(taskPrompt, country, searchLog) {
   return companies;
 }
 
-// Run a ChatGPT-powered search task (GPT-4.1 Search with web grounding)
+// Run a ChatGPT-powered search task (GPT-4o Search with web grounding)
 async function runChatGPTSearchTask(searchQuery, reasoningTask, country, searchLog) {
   const startTime = Date.now();
   console.log(`  Executing ChatGPT Search task...`);
@@ -1443,9 +1443,9 @@ Variations for "${business}":`;
   return []; // Return empty array if generation fails
 }
 
-// V6 Smart Planning with GPT-4.1 - generates comprehensive search strategy
+// V6 Smart Planning with GPT-4o - generates comprehensive search strategy
 async function generateSmartSearchPlanV6(business, countries, exclusion) {
-  console.log(`  GPT-4.1 generating smart search plan...`);
+  console.log(`  GPT-4o generating smart search plan...`);
 
   const prompt = `You are an expert M&A researcher. Generate a comprehensive search plan to find ALL companies matching this criteria:
 
@@ -1478,7 +1478,7 @@ Return ONLY valid JSON, no explanation:
   try {
     const response = await openai.chat.completions.create(
       {
-        model: 'gpt-4.1',
+        model: 'gpt-4o',
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.3,
@@ -1488,7 +1488,7 @@ Return ONLY valid JSON, no explanation:
 
     if (response.usage) {
       recordTokens(
-        'gpt-4.1',
+        'gpt-4o',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -1505,7 +1505,7 @@ Return ONLY valid JSON, no explanation:
 
     return plan;
   } catch (e) {
-    console.error(`  GPT-4.1 planning failed: ${e.message}`);
+    console.error(`  GPT-4o planning failed: ${e.message}`);
     return {
       english_variations: [],
       local_language_terms: {},
@@ -1544,12 +1544,12 @@ async function runPerplexitySearchTask(searchPrompt, country, searchLog) {
   return companies;
 }
 
-// V6 VALIDATION: GPT-4.1 parallel validation (best reasoning for judgment tasks)
+// V6 VALIDATION: GPT-4o parallel validation (best reasoning for judgment tasks)
 async function validateCompaniesV6(companies, business, country, exclusion) {
-  console.log(`\nV6 GPT-4.1 Validation: ${companies.length} companies...`);
+  console.log(`\nV6 GPT-4o Validation: ${companies.length} companies...`);
   const startTime = Date.now();
 
-  const validated = []; // GPT-4.1 says valid
+  const validated = []; // GPT-4o says valid
   const flagged = []; // Security blocked - needs human review
   let rejectedCount = 0; // Count only — don't store rejected objects (memory)
   const rejectedWebsites = new Set(); // Track websites for dedup
@@ -1598,7 +1598,7 @@ async function validateCompaniesV6(companies, business, country, exclusion) {
 
               pageContent = fetchResult.content;
 
-              // GPT-4.1 validation
+              // GPT-4o validation
               const validationPrompt = `Validate if this company matches the search criteria.
 
 COMPANY: ${company.company_name}
@@ -1623,7 +1623,7 @@ Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "c
 
               const response = await openai.chat.completions.create(
                 {
-                  model: 'gpt-4.1',
+                  model: 'gpt-4o',
                   messages: [{ role: 'user', content: validationPrompt }],
                   response_format: { type: 'json_object' },
                   temperature: 0.1,
@@ -1633,7 +1633,7 @@ Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "c
 
               if (response.usage) {
                 recordTokens(
-                  'gpt-4.1',
+                  'gpt-4o',
                   response.usage.prompt_tokens || 0,
                   response.usage.completion_tokens || 0
                 );
@@ -1698,7 +1698,7 @@ Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "c
   }
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`\nV6 GPT-4.1 Validation done in ${duration}s`);
+  console.log(`\nV6 GPT-4o Validation done in ${duration}s`);
   console.log(`  Valid: ${validated.length}`);
   console.log(`  Flagged (security): ${flagged.length}`);
   console.log(`  Rejected: ${rejectedCount}`);
@@ -1946,9 +1946,9 @@ app.post('/api/find-target-v6', async (req, res) => {
       const totalStart = Date.now();
       const searchLog = [];
 
-      // ========== STEP 1: Smart Planning with GPT-4.1 ==========
+      // ========== STEP 1: Smart Planning with GPT-4o ==========
       console.log('\n' + '='.repeat(50));
-      console.log('STEP 1: GPT-4.1 SMART PLANNING');
+      console.log('STEP 1: GPT-4o SMART PLANNING');
       console.log('='.repeat(50));
 
       // Expand region to countries first
@@ -1956,7 +1956,7 @@ app.post('/api/find-target-v6', async (req, res) => {
       const expandedCountry = countries.join(', ');
       console.log(`  Country input: "${Country}" → "${expandedCountry}"`);
 
-      // Generate smart search plan with GPT-4.1
+      // Generate smart search plan with GPT-4o
       const smartPlan = await generateSmartSearchPlanV6(Business, countries, Exclusion);
 
       // Build comprehensive search terms from the plan
@@ -1980,7 +1980,7 @@ app.post('/api/find-target-v6', async (req, res) => {
       const allCompanies = [];
       const seenWebsites = new Set();
 
-      // Smart search prompts that USE the GPT-4.1 generated plan
+      // Smart search prompts that USE the GPT-4o generated plan
       const getSearchPrompt = (round, business, country, exclusion, alreadyFoundList, plan) => {
         const findMoreClause = alreadyFoundList
           ? `\nALREADY FOUND (do NOT repeat these): ${alreadyFoundList}\nFind MORE companies not in this list.`
@@ -2052,7 +2052,7 @@ app.post('/api/find-target-v6', async (req, res) => {
 
         console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} (${roundDescriptions[round]}) ---`);
 
-        // Generate prompt for this round (using GPT-4.1 smart plan)
+        // Generate prompt for this round (using GPT-4o smart plan)
         const prompt = getSearchPrompt(
           round,
           Business,
@@ -2130,9 +2130,9 @@ app.post('/api/find-target-v6', async (req, res) => {
 
       console.log(`\n  Search complete. Total unique companies: ${allCompanies.length}`);
 
-      // ========== STEP 3: GPT-4.1 Validation ==========
+      // ========== STEP 3: GPT-4o Validation ==========
       console.log('\n' + '='.repeat(50));
-      console.log('STEP 3: GPT-4.1 VALIDATION');
+      console.log('STEP 3: GPT-4o VALIDATION');
       console.log('='.repeat(50));
 
       const validationResults = await validateCompaniesV6(

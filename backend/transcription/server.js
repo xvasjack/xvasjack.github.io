@@ -38,7 +38,7 @@ if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
 if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4.1 fallback');
+  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
@@ -195,7 +195,7 @@ function getDomainInstructions(domain) {
   return instructions[domain] || instructions.general;
 }
 
-// Translate text using GPT-4.1 with context awareness
+// Translate text using GPT-4o with context awareness
 async function translateText(text, targetLang = 'en', options = {}) {
   const { previousSegments = [], domain = null } = options;
 
@@ -221,7 +221,7 @@ Now translate the following new segment, maintaining consistency with the contex
     }
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1', // Use GPT-4.1 for better translation quality
+      model: 'gpt-4o', // Use GPT-4o for better translation quality
       messages: [
         {
           role: 'system',
@@ -244,7 +244,7 @@ Output only the translation, nothing else.`,
       temperature: 0.3, // Balanced temperature for fluency while maintaining consistency
     });
     if (response.usage) {
-      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     return response.choices[0].message.content || text;
   } catch (error) {
@@ -253,7 +253,7 @@ Output only the translation, nothing else.`,
   }
 }
 
-// ============ EXTRACTION WITH GPT-4.1-nano ============
+// ============ EXTRACTION WITH GPT-4o-mini ============
 
 // ============ DEDUPLICATION (Enhanced for v20) ============
 
@@ -267,7 +267,7 @@ Output only the translation, nothing else.`,
 
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
-// ============ VALIDATION (v24 - GPT-4.1 with LENIENT filtering) ============
+// ============ VALIDATION (v24 - GPT-4o with LENIENT filtering) ============
 
 // ============ VALIDATION FOR SLOW MODE (v23 - n8n style) ============
 

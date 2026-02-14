@@ -248,7 +248,7 @@ function filterGarbageNames(names, companyName = '') {
 
 // ===== TOKEN ESTIMATION =====
 // Rough estimate: 1 token ≈ 4 characters for English text
-// GPT-4.1 limit: 128K tokens ≈ 512K chars, but leave margin for response
+// GPT-4o limit: 128K tokens ≈ 512K chars, but leave margin for response
 const MAX_INPUT_CHARS = 100000; // ~25K tokens, safe margin for 128K limit
 
 function estimateTokens(text) {
@@ -683,7 +683,7 @@ if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
 if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4.1 fallback');
+  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
@@ -1136,7 +1136,7 @@ async function callGemini(prompt) {
 }
 
 // Gemini 2.5 Flash - stable model for validation tasks (upgraded from gemini-3-flash-preview which was unstable)
-// With GPT-4.1 fallback when Gemini fails or times out
+// With GPT-4o fallback when Gemini fails or times out
 async function callGemini3Flash(prompt, jsonMode = false) {
   try {
     const requestBody = {
@@ -1156,14 +1156,14 @@ async function callGemini3Flash(prompt, jsonMode = false) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
-      timeout: 30000  // Reduced from 120s to 30s - fail fast and use GPT-4.1 fallback
+      timeout: 30000  // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Gemini 3 Flash HTTP error ${response.status}:`, errorText.substring(0, 200));
-      // Fallback to GPT-4.1 on HTTP errors
-      return await callGPT41Fallback(prompt, jsonMode, `Gemini HTTP ${response.status}`);
+      // Fallback to GPT-4o on HTTP errors
+      return await callGPT4oFallback(prompt, jsonMode, `Gemini HTTP ${response.status}`);
     }
 
     const data = await response.json();
@@ -1175,30 +1175,30 @@ async function callGemini3Flash(prompt, jsonMode = false) {
 
     if (data.error) {
       console.error('Gemini 3 Flash API error:', data.error.message);
-      // Fallback to GPT-4.1
-      return await callGPT41Fallback(prompt, jsonMode, 'Gemini 3 Flash API error');
+      // Fallback to GPT-4o
+      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash API error');
     }
 
     const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     if (!result) {
       // Empty response, try fallback
-      return await callGPT41Fallback(prompt, jsonMode, 'Gemini 3 Flash empty response');
+      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash empty response');
     }
     return result;
   } catch (error) {
     console.error('Gemini 3 Flash error:', error.message);
-    // Fallback to GPT-4.1 on network timeout or other errors
-    return await callGPT41Fallback(prompt, jsonMode, `Gemini error: ${error.message}`);
+    // Fallback to GPT-4o on network timeout or other errors
+    return await callGPT4oFallback(prompt, jsonMode, `Gemini error: ${error.message}`);
   }
 }
 
-// GPT-4.1 fallback function for when Gemini fails
-async function callGPT41Fallback(prompt, jsonMode = false, reason = '') {
+// GPT-4o fallback function for when Gemini fails
+async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
   try {
-    console.log(`  Falling back to GPT-4.1 (reason: ${reason})...`);
+    console.log(`  Falling back to GPT-4o (reason: ${reason})...`);
 
     const requestOptions = {
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1
     };
@@ -1210,16 +1210,16 @@ async function callGPT41Fallback(prompt, jsonMode = false, reason = '') {
 
     const response = await openai.chat.completions.create(requestOptions);
     if (response.usage) {
-      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices?.[0]?.message?.content || '';
 
     if (result) {
-      console.log('  GPT-4.1 fallback successful');
+      console.log('  GPT-4o fallback successful');
     }
     return result;
   } catch (fallbackError) {
-    console.error('GPT-4.1 fallback error:', fallbackError.message);
+    console.error('GPT-4o fallback error:', fallbackError.message);
     return ''; // Return empty if both fail
   }
 }
@@ -1343,12 +1343,12 @@ async function callPerplexity(prompt) {
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2
     });
     if (response.usage) {
-      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -1362,15 +1362,15 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Updated to use gpt-5-search-api (more stable than mini version)
+// Updated to use gpt-4o-search-preview (more stable than mini version)
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-5-search-api',
+      model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }]
     });
     if (response.usage) {
-      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -1380,7 +1380,7 @@ async function callOpenAISearch(prompt) {
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4.1 if search model not available
+    // Fallback to regular gpt-4o if search model not available
     return callChatGPT(prompt);
   }
 }
@@ -1421,10 +1421,10 @@ async function callSerpAPI(query) {
   }
 }
 
-// DeepSeek V3.2 - Cost-effective alternative to GPT-4.1
+// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
 async function callDeepSeek(prompt, maxTokens = 4000) {
   if (!process.env.DEEPSEEK_API_KEY) {
-    console.warn('DeepSeek API key not set, falling back to GPT-4.1');
+    console.warn('DeepSeek API key not set, falling back to GPT-4o');
     return null; // Caller should handle fallback
   }
   try {
@@ -1790,13 +1790,13 @@ function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
   return queries;
 }
 
-// ============ EXTRACTION WITH GPT-4.1-nano ============
+// ============ EXTRACTION WITH GPT-4o-mini ============
 
 async function extractCompanies(text, country) {
   if (!text || text.length < 50) return [];
   try {
     const extraction = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -1815,7 +1815,7 @@ RULES:
       response_format: { type: 'json_object' }
     });
     if (extraction.usage) {
-      recordTokens('gpt-4.1-nano', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-mini', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
     }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
@@ -2164,7 +2164,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
   return rules;
 }
 
-// ============ VALIDATION (v24 - GPT-4.1 with LENIENT filtering) ============
+// ============ VALIDATION (v24 - GPT-4o with LENIENT filtering) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
@@ -2174,7 +2174,7 @@ async function validateCompanyStrict(company, business, country, exclusion, page
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4.1',  // Use smarter model for better validation
+      model: 'gpt-4o',  // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -2222,7 +2222,7 @@ ${contentToValidate.substring(0, 10000)}`
     });
 
     if (validation.usage) {
-      recordTokens('gpt-4.1', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
     }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -2308,7 +2308,7 @@ async function validateCompany(company, business, country, exclusion, pageText) 
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -2352,7 +2352,7 @@ ${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Co
     });
 
     if (validation.usage) {
-      recordTokens('gpt-4.1-nano', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-mini', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
     }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -5719,7 +5719,7 @@ async function extractFullAddress(scrapedContent, websiteUrl, currentLocation) {
     const contentToSearch = contactSection || scrapedContent;
 
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -5759,7 +5759,7 @@ If you cannot find more details, return: { "location": "" }`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = JSON.parse(response.choices[0].message.content);
     if (result.location && result.location !== currentLocation) {
@@ -5845,7 +5845,7 @@ function extractProductProjectImages(rawHtml, businessType, websiteUrl) {
   return images.slice(0, 6); // Max 6 images for slide layout (images-6 option)
 }
 
-// Verify and label product/project images using GPT-4.1 Vision
+// Verify and label product/project images using GPT-4o Vision
 // Similar approach to partner logo extraction - let AI see the actual images
 async function verifyProductImagesWithVision(images, businessType, openai) {
   if (!images || images.length === 0) return [];
@@ -5925,7 +5925,7 @@ Rules:
 
     const visionResponse = await withRetry(async () => {
       return await openai.chat.completions.create({
-        model: 'gpt-4.1',
+        model: 'gpt-4o',
         messages: [{ role: 'user', content: visionContent }],
         max_tokens: 800,
         temperature: 0.1
@@ -5933,7 +5933,7 @@ Rules:
     }, 2, 3000);
 
     if (visionResponse.usage) {
-      recordTokens('gpt-4.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
     }
     const responseText = visionResponse.choices[0]?.message?.content || '[]';
 
@@ -6326,8 +6326,8 @@ function extractCustomersFromSections(rawHtml) {
   ])].slice(0, 30);
 }
 
-// ===== GPT-4.1 Vision-based Logo Reading =====
-// Extracts company/brand names by actually reading logo images with GPT-4.1 vision
+// ===== GPT-4o Vision-based Logo Reading =====
+// Extracts company/brand names by actually reading logo images with GPT-4o vision
 async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
   if (!rawHtml) return { customers: [], brands: [], principals: [] };
 
@@ -6437,7 +6437,7 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
       // Skip tiny images, icons, data URIs, and SVG (not supported by Vision API)
       if (imgUrl.startsWith('data:')) continue;
       if (/icon|favicon|pixel|spacer|1x1|loading|placeholder/i.test(imgUrl)) continue;
-      if (/\.svg(\?|$)/i.test(imgUrl)) continue;  // SVG not supported by GPT-4.1 Vision
+      if (/\.svg(\?|$)/i.test(imgUrl)) continue;  // SVG not supported by GPT-4o Vision
 
       // Convert relative URLs to absolute
       if (!imgUrl.startsWith('http')) {
@@ -6502,9 +6502,9 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
       return { customers: [], brands: [], principals: [] };
     }
 
-    console.log(`    Vision: Successfully fetched ${validImages.length} images, sending to GPT-4.1...`);
+    console.log(`    Vision: Successfully fetched ${validImages.length} images, sending to GPT-4o...`);
 
-    // Step 4: Send to GPT-4.1 Vision (single API call with all images)
+    // Step 4: Send to GPT-4o Vision (single API call with all images)
     const visionContent = [
       {
         type: 'text',
@@ -6540,7 +6540,7 @@ Rules:
 
     const visionResponse = await withRetry(async () => {
       return await openai.chat.completions.create({
-        model: 'gpt-4.1',
+        model: 'gpt-4o',
         messages: [{ role: 'user', content: visionContent }],
         max_tokens: 1200,  // Increased for exhaustive extraction (30+ logos)
         temperature: 0.1
@@ -6548,7 +6548,7 @@ Rules:
     }, 2, 3000); // 2 retries, 3s base delay for rate limits
 
     if (visionResponse.usage) {
-      recordTokens('gpt-4.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
     }
     const responseText = visionResponse.choices[0]?.message?.content || '{}';
 
@@ -6589,7 +6589,7 @@ Rules:
 }
 
 // ===== Full-Page Screenshot + Vision Analysis =====
-// Takes a screenshot of the entire page and uses GPT-4.1 Vision to identify partner/customer logos
+// Takes a screenshot of the entire page and uses GPT-4o Vision to identify partner/customer logos
 // This bypasses all HTML parsing issues - sees what humans see
 async function extractPartnersFromScreenshot(websiteUrl) {
   if (!websiteUrl) return { customers: [], brands: [], principals: [] };
@@ -6647,10 +6647,10 @@ async function extractPartnersFromScreenshot(websiteUrl) {
     const base64Image = imageBuffer.toString('base64');
     console.log(`    Screenshot: Got ${Math.round(imageBuffer.length / 1024)}KB image, analyzing with Vision...`);
 
-    // Send to GPT-4.1 Vision
+    // Send to GPT-4o Vision
     const visionResponse = await withRetry(async () => {
       return await openai.chat.completions.create({
-        model: 'gpt-4.1',
+        model: 'gpt-4o',
         messages: [{
           role: 'user',
           content: [
@@ -6702,7 +6702,7 @@ Rules:
     }, 2, 3000);
 
     if (visionResponse.usage) {
-      recordTokens('gpt-4.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
     }
     const responseText = visionResponse.choices[0]?.message?.content || '{}';
 
@@ -6749,7 +6749,7 @@ async function segmentCustomersByIndustry(customers, openai) {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [{
         role: 'user',
         content: `Group these company names by industry. Use SHORT industry labels (1-2 words max).
@@ -6770,7 +6770,7 @@ Rules:
     });
 
     if (response.usage) {
-      recordTokens('gpt-4.1-nano', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const responseText = response.choices[0]?.message?.content || '{}';
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -7051,14 +7051,14 @@ function cleanCustomerName(text) {
 }
 
 // AI Agent 1: Extract company name, established year, location
-// Using GPT-4.1 (not mini) because location extraction is CRITICAL and needs:
+// Using GPT-4o (not mini) because location extraction is CRITICAL and needs:
 // - Accurate non-English parsing (Thai, Vietnamese addresses)
 // - Simple 2-level format (State/Province, Country)
 // - This is the most important extraction - wrong HQ ruins the profile
 async function extractBasicInfo(scrapedContent, websiteUrl) {
   try {
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -7116,7 +7116,7 @@ Content: ${scrapedContent.substring(0, 25000)}`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -7217,7 +7217,7 @@ function validateAndFixHQFormat(location, websiteUrl) {
 }
 
 // AI Agent 2: Extract business, message, footnote, title
-// Using gpt-4.1-nano (cheaper) since Marker AI pre-identifies content and Validator catches misses
+// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractBusinessInfo(scrapedContent, basicInfo) {
   // Ensure locationText is always a string (AI might return object/array)
   const locationText = typeof basicInfo.location === 'string' ? basicInfo.location : '';
@@ -7227,7 +7227,7 @@ async function extractBusinessInfo(scrapedContent, basicInfo) {
 
   try {
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -7298,7 +7298,7 @@ ${scrapedContent.substring(0, 25000)}`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4.1-nano', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -7308,11 +7308,11 @@ ${scrapedContent.substring(0, 25000)}`
 }
 
 // AI Agent 3: Extract key metrics for M&A evaluation
-// Using gpt-4.1-nano (cheaper) since Marker AI pre-identifies content and Validator catches misses
+// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractKeyMetrics(scrapedContent, previousData) {
   try {
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -7503,7 +7503,7 @@ ${scrapedContent.substring(0, 35000)}`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4.1-nano', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -7519,7 +7519,7 @@ async function extractKeyMetricsWithFocus(scrapedContent, context) {
     console.log('    Running focused re-extraction for missed items...');
 
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4.1',  // Use stronger model for focused extraction
+      model: 'gpt-4o',  // Use stronger model for focused extraction
       messages: [
         {
           role: 'system',
@@ -7564,7 +7564,7 @@ ${scrapedContent.substring(0, 30000)}`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -7574,11 +7574,11 @@ ${scrapedContent.substring(0, 30000)}`
 }
 
 // AI Agent 3b: Extract rich content for right-side table
-// Using gpt-4.1-nano (cheaper) since Marker AI pre-identifies content and Validator catches misses
+// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractProductsBreakdown(scrapedContent, previousData) {
   try {
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -7678,7 +7678,7 @@ ${scrapedContent.substring(0, 35000)}`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4.1-nano', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = JSON.parse(response.choices[0].message.content);
 
@@ -7725,11 +7725,11 @@ ${scrapedContent.substring(0, 35000)}`
 }
 
 // AI Agent 3c: Extract financial metrics for 財務実績 section
-// Using GPT-4.1-nano with retry for rate limits
+// Using GPT-4o-mini with retry for rate limits
 async function extractFinancialMetrics(scrapedContent, previousData) {
   try {
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -7778,7 +7778,7 @@ ${scrapedContent.substring(0, 15000)}`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4.1-nano', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -7800,7 +7800,7 @@ async function searchMissingInfo(companyName, website, missingFields) {
     // Use OpenAI Search model which has web search capability
     // Wrapped with retry for rate limits
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-5-search-api',
+      model: 'gpt-4o-search-preview',
       messages: [
         {
           role: 'user',
@@ -7823,7 +7823,7 @@ Return ONLY valid JSON, no explanations.`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const content = response.choices[0].message.content || '';
 
@@ -7868,7 +7868,7 @@ async function searchAdditionalMetrics(companyName, website, existingMetrics) {
     console.log(`  Step 6: Searching web for additional metrics...`);
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-5-search-api',
+      model: 'gpt-4o-search-preview',
       messages: [
         {
           role: 'user',
@@ -7922,7 +7922,7 @@ Return ONLY valid JSON.`
     });
 
     if (response.usage) {
-      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const content = response.choices[0].message.content || '';
 
@@ -7966,7 +7966,7 @@ async function generateMECESegments(targetDescription, companies) {
     });
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -8021,7 +8021,7 @@ Create segments for these ${targetDescription} companies. Ensure EVERY company h
     });
 
     if (response.usage) {
-      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = JSON.parse(response.choices[0].message.content);
     console.log(`Generated ${result.segments?.length || 0} MECE segments`);
@@ -8123,7 +8123,7 @@ async function generateMAStrategies(targetDescription, companies) {
     }));
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -8176,7 +8176,7 @@ Generate M&A strategies for each region WITHOUT mentioning specific company name
     });
 
     if (response.usage) {
-      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = JSON.parse(response.choices[0].message.content);
     console.log(`Generated ${result.strategies?.length || 0} regional M&A strategies`);
@@ -8188,11 +8188,11 @@ Generate M&A strategies for each region WITHOUT mentioning specific company name
 }
 
 // AI Review Agent: Validate extraction against source content and fix issues
-// Uses GPT-4.1 for accurate validation - compares extracted data against source
+// Uses GPT-4o for accurate validation - compares extracted data against source
 // Returns { data, issuesFound, missedItems } for iterative extraction
 async function reviewAndCleanData(companyData, scrapedContent, markers = null) {
   try {
-    console.log('  Step 6: Running AI validator (GPT-4.1) - comparing extraction vs source...');
+    console.log('  Step 6: Running AI validator (GPT-4o) - comparing extraction vs source...');
 
     // Use markers if available (structured snippets), otherwise use raw content
     let sourceSection;
@@ -8303,7 +8303,7 @@ Return ONLY valid JSON.`;
 
     // Wrap OpenAI call with retry for rate limits
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [
         { role: 'system', content: 'You are a data validation agent. Compare extracted data against source content and fix any discrepancies. Add any missing information found in the source.' },
         { role: 'user', content: prompt }
@@ -8313,7 +8313,7 @@ Return ONLY valid JSON.`;
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices[0].message.content;
 
@@ -8737,7 +8737,7 @@ async function processSingleWebsite(website, index, total) {
     const rawProductImages = extractProductProjectImages(scraped.rawHtml, businessType, trimmedWebsite);
     if (rawProductImages.length > 0) {
       console.log(`  [${index + 1}] Found ${rawProductImages.length} candidate images, verifying with Vision...`);
-      // Use GPT-4.1 Vision to verify images are actual products/projects (not junk)
+      // Use GPT-4o Vision to verify images are actual products/projects (not junk)
       productProjectImages = await verifyProductImagesWithVision(rawProductImages, businessType, openai);
     }
 
@@ -8745,8 +8745,8 @@ async function processSingleWebsite(website, index, total) {
     console.log(`  [${index + 1}] Step 6d: Extracting business relationships (metadata)...`);
     const businessRelationships = extractBusinessRelationships(scraped.rawHtml);
 
-    // Step 6e: Use GPT-4.1 Vision to read logo images (more accurate than metadata)
-    console.log(`  [${index + 1}] Step 6e: Reading logos with GPT-4.1 Vision...`);
+    // Step 6e: Use GPT-4o Vision to read logo images (more accurate than metadata)
+    console.log(`  [${index + 1}] Step 6e: Reading logos with GPT-4o Vision...`);
     const visionResults = await extractNamesFromLogosWithVision(scraped.rawHtml, trimmedWebsite);
 
     // Step 6f: Screenshot fallback - if vision/metadata extraction found few partners, use full-page screenshot
@@ -9276,8 +9276,8 @@ app.post('/api/generate-ppt', async (req, res) => {
         console.log('  Step 5b: Extracting business relationships (metadata)...');
         const businessRelationships = extractBusinessRelationships(scraped.rawHtml);
 
-        // Step 5c: Use GPT-4.1 Vision to read logo images
-        console.log('  Step 5c: Reading logos with GPT-4.1 Vision...');
+        // Step 5c: Use GPT-4o Vision to read logo images
+        console.log('  Step 5c: Reading logos with GPT-4o Vision...');
         const visionResults = await extractNamesFromLogosWithVision(scraped.rawHtml, website);
 
         // Step 5d: Screenshot fallback - if vision/metadata extraction found few partners, use full-page screenshot

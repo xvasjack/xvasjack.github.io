@@ -31,52 +31,12 @@ const { validatePptData } = require('./quality-gates');
 const { __test: serverTest } = require('./server');
 const { __test: orchestratorTest } = require('./research-orchestrator');
 const { __test: singlePptTest } = require('./ppt-single-country');
-const { resolveTemplatePattern, getTemplateSlideLayout } = require('./ppt-utils');
-const { analyzeBudget, compactPayload, runBudgetGate } = require('./budget-gate');
-const { runStressTest } = require('./stress-test-harness');
 
 const ROOT = __dirname;
 const VIETNAM_SCRIPT = path.join(ROOT, 'test-vietnam-research.js');
 const THAILAND_SCRIPT = path.join(ROOT, 'test-ppt-generation.js');
 const VIETNAM_PPT = path.join(ROOT, 'vietnam-output.pptx');
 const THAILAND_PPT = path.join(ROOT, 'test-output.pptx');
-
-const TABLE_ROUTE_KEYS = Object.freeze([
-  'foundationalActs',
-  'nationalPolicy',
-  'investmentRestrictions',
-  'keyIncentives',
-  'regulatorySummary',
-  'japanesePlayers',
-  'localMajor',
-  'foreignPlayers',
-  'partnerAssessment',
-  'caseStudy',
-  'maActivity',
-  'entryStrategy',
-  'implementation',
-  'targetSegments',
-  'goNoGo',
-  'timingIntelligence',
-  'lessonsLearned',
-  'dealEconomics',
-]);
-
-const CHART_ROUTE_KEYS = Object.freeze([
-  'marketSizeAndGrowth',
-  'supplyAndDemandDynamics',
-  'supplyAndDemandData',
-  'pricingAndTariffStructures',
-  'pricingAndEconomics',
-  'pricingAndCostBenchmarks',
-  'infrastructureAndGrid',
-  'tpes',
-  'finalDemand',
-  'electricity',
-  'gasLng',
-  'pricing',
-  'escoMarket',
-]);
 
 function parseRounds(argv) {
   const match = argv.find((arg) => arg.startsWith('--rounds='));
@@ -375,146 +335,58 @@ function runTemplateRouteRecoveryUnitChecks() {
     'ppt-single-country __test helper missing: resolveTemplateRouteWithGeometryGuard'
   );
 
-  // 1) Default route sanity: every block's selected template slide must carry required geometry.
-  for (const blockKey of TABLE_ROUTE_KEYS) {
-    const resolved = resolveTemplatePattern({ blockKey });
-    const layout = getTemplateSlideLayout(resolved.selectedSlide);
-    assert(
-      Boolean(layout && layout.table),
-      `Default template route for table block "${blockKey}" lacks table geometry (slide=${resolved.selectedSlide}, pattern=${resolved.patternKey})`
-    );
-  }
-  for (const blockKey of CHART_ROUTE_KEYS) {
-    const resolved = resolveTemplatePattern({ blockKey });
-    const layout = getTemplateSlideLayout(resolved.selectedSlide);
-    assert(
-      Array.isArray(layout?.charts) && layout.charts.length > 0,
-      `Default template route for chart block "${blockKey}" lacks chart geometry (slide=${resolved.selectedSlide}, pattern=${resolved.patternKey})`
-    );
-  }
-
-  // 2) Override recovery sanity: force incompatible override and verify route recovers.
-  for (const blockKey of TABLE_ROUTE_KEYS) {
-    const route = singlePptTest.resolveTemplateRouteWithGeometryGuard({
-      blockKey,
-      dataType: blockKey === 'dealEconomics' ? 'financial_performance' : 'section_summary',
-      data:
-        blockKey === 'dealEconomics'
-          ? { typicalDealSize: { average: '$1.2M' } }
-          : { overview: 'table route recovery check' },
-      templateSelection: 26, // chart-only slide override (incompatible for table blocks)
-      tableContextKeys: TABLE_ROUTE_KEYS,
-      chartContextKeys: CHART_ROUTE_KEYS,
-    });
-    assert.strictEqual(
-      route.recovered,
-      true,
-      `Table block "${blockKey}" should recover from chart-only override`
-    );
-    assert(
-      Boolean(route.layout && route.layout.table),
-      `Recovered table route for "${blockKey}" must include table geometry (selected=${route.resolved?.selectedSlide})`
-    );
-    assert.notStrictEqual(
-      Number(route.resolved?.selectedSlide),
-      26,
-      `Recovered table route for "${blockKey}" must not stay on chart slide 26`
-    );
-  }
-
-  for (const blockKey of CHART_ROUTE_KEYS) {
-    const route = singlePptTest.resolveTemplateRouteWithGeometryGuard({
-      blockKey,
-      dataType: 'time_series_multi_insight',
-      data: {
-        chartData: {
-          series: [
-            { name: '2024', value: 10 },
-            { name: '2025', value: 12 },
-          ],
-        },
-      },
-      templateSelection: 12, // table-only slide override (incompatible for chart blocks)
-      tableContextKeys: TABLE_ROUTE_KEYS,
-      chartContextKeys: CHART_ROUTE_KEYS,
-    });
-    assert.strictEqual(
-      route.recovered,
-      true,
-      `Chart block "${blockKey}" should recover from table-only override`
-    );
-    assert(
-      Array.isArray(route.layout?.charts) && route.layout.charts.length > 0,
-      `Recovered chart route for "${blockKey}" must include chart geometry (selected=${route.resolved?.selectedSlide})`
-    );
-    assert.notStrictEqual(
-      Number(route.resolved?.selectedSlide),
-      12,
-      `Recovered chart route for "${blockKey}" must not stay on table slide 12`
-    );
-  }
-}
-
-function runCrossPatternGeometryRecoveryChecks() {
-  assert(
-    singlePptTest && typeof singlePptTest.resolveTemplateRouteWithGeometryGuard === 'function',
-    'ppt-single-country __test helper missing: resolveTemplateRouteWithGeometryGuard'
-  );
-
-  const tableFallbackRoute = singlePptTest.resolveTemplateRouteWithGeometryGuard({
-    blockKey: 'syntheticTableGeometryBlock',
+  const tableRoute = singlePptTest.resolveTemplateRouteWithGeometryGuard({
+    blockKey: 'dealEconomics',
     dataType: 'financial_performance',
-    data: { overview: 'Synthetic table fallback probe' },
-    templateSelection: { pattern: 'dual_chart_financial' }, // chart-only pattern (26/29)
-    tableContextKeys: ['syntheticTableGeometryBlock'],
-    chartContextKeys: [],
+    data: { typicalDealSize: { average: '$1.2M' } },
+    templateSelection: 26, // chart-only slide override (incompatible for table block)
+    tableContextKeys: ['dealEconomics'],
+    chartContextKeys: ['marketSizeAndGrowth'],
   });
   assert.strictEqual(
-    tableFallbackRoute.recovered,
+    tableRoute.recovered,
     true,
-    'Cross-pattern fallback should recover synthetic table block from chart-only pattern'
+    'dealEconomics should recover from chart slide override'
   );
   assert.strictEqual(
-    tableFallbackRoute.resolved?.source,
-    'crossPatternGeometryRecovery',
-    'Table cross-pattern fallback source should be crossPatternGeometryRecovery'
+    Number(tableRoute.resolved?.selectedSlide),
+    12,
+    'dealEconomics should recover to slide 12 (table-backed default)'
   );
   assert.strictEqual(
-    tableFallbackRoute.reason,
-    'cross-pattern-fallback',
-    'Table cross-pattern fallback should record reason'
-  );
-  assert(
-    Boolean(tableFallbackRoute.layout && tableFallbackRoute.layout.table),
-    `Cross-pattern table fallback must land on table geometry (selected=${tableFallbackRoute.resolved?.selectedSlide})`
+    Boolean(tableRoute.layout && tableRoute.layout.table),
+    true,
+    'Recovered dealEconomics route must include table geometry'
   );
 
-  const chartFallbackRoute = singlePptTest.resolveTemplateRouteWithGeometryGuard({
-    blockKey: 'syntheticChartGeometryBlock',
-    dataType: 'company_comparison',
-    data: { players: [{ name: 'A' }] },
-    templateSelection: { pattern: 'company_comparison' }, // table-only pattern (22)
-    tableContextKeys: [],
-    chartContextKeys: ['syntheticChartGeometryBlock'],
+  const chartRoute = singlePptTest.resolveTemplateRouteWithGeometryGuard({
+    blockKey: 'marketSizeAndGrowth',
+    dataType: 'time_series_multi_insight',
+    data: {
+      chartData: {
+        series: [
+          { name: '2024', value: 10 },
+          { name: '2025', value: 12 },
+        ],
+      },
+    },
+    templateSelection: 12, // table-only slide override (incompatible for chart block)
+    tableContextKeys: ['dealEconomics'],
+    chartContextKeys: ['marketSizeAndGrowth'],
   });
   assert.strictEqual(
-    chartFallbackRoute.recovered,
+    chartRoute.recovered,
     true,
-    'Cross-pattern fallback should recover synthetic chart block from table-only pattern'
+    'marketSizeAndGrowth should recover from table slide override'
   );
   assert.strictEqual(
-    chartFallbackRoute.resolved?.source,
-    'crossPatternGeometryRecovery',
-    'Chart cross-pattern fallback source should be crossPatternGeometryRecovery'
-  );
-  assert.strictEqual(
-    chartFallbackRoute.reason,
-    'cross-pattern-fallback',
-    'Chart cross-pattern fallback should record reason'
+    Number(chartRoute.resolved?.selectedSlide),
+    13,
+    'marketSizeAndGrowth should recover to slide 13 (chart-backed default)'
   );
   assert(
-    Array.isArray(chartFallbackRoute.layout?.charts) && chartFallbackRoute.layout.charts.length > 0,
-    `Cross-pattern chart fallback must land on chart geometry (selected=${chartFallbackRoute.resolved?.selectedSlide})`
+    Array.isArray(chartRoute.layout?.charts) && chartRoute.layout.charts.length > 0,
+    'Recovered marketSizeAndGrowth route must include chart geometry'
   );
 }
 
@@ -659,297 +531,6 @@ function runPreRenderStructureUnitChecks() {
   );
 }
 
-function runRenderTransientKeyUnitChecks() {
-  assert(
-    singlePptTest && typeof singlePptTest.isTransientRenderKey === 'function',
-    'ppt-single-country __test helper missing: isTransientRenderKey'
-  );
-  assert(
-    singlePptTest && typeof singlePptTest.sanitizeRenderPayload === 'function',
-    'ppt-single-country __test helper missing: sanitizeRenderPayload'
-  );
-
-  const mustBlock = [
-    'section_0',
-    'section_1',
-    'section-2',
-    'gap_1',
-    'gap-2',
-    'verify_1',
-    'finalReviewGap1',
-    'final_review_gap_3',
-    'deepen_market',
-    'marketDeepenFinalReviewGap1',
-    'marketDeepen_2',
-    'market_deepen_3',
-    'competitorsDeepen1',
-    'competitors_deepen_2',
-    'policyDeepen1',
-    'contextDeepen_1',
-    'depthDeepen2',
-    'insightsDeepen3',
-    'insights_deepen_4',
-    '_wasArray',
-    'market_wasArray',
-    '_synthesisError',
-    '_internalMeta',
-  ];
-  for (const key of mustBlock) {
-    assert.strictEqual(
-      singlePptTest.isTransientRenderKey(key),
-      true,
-      `isTransientRenderKey should block "${key}"`
-    );
-  }
-
-  const mustAllow = [
-    'marketSizeAndGrowth',
-    'supplyAndDemandDynamics',
-    'pricingAndTariffStructures',
-    'localMajor',
-    'foreignPlayers',
-    'dealEconomics',
-    'overview',
-    'sources',
-    'chartData',
-    'players',
-  ];
-  for (const key of mustAllow) {
-    assert.strictEqual(
-      singlePptTest.isTransientRenderKey(key),
-      false,
-      `isTransientRenderKey should allow "${key}"`
-    );
-  }
-
-  const dirtyPayload = {
-    marketSizeAndGrowth: { overview: 'Valid content' },
-    marketDeepenFinalReviewGap1: { overview: 'Should be dropped' },
-    section_0: { overview: 'Should be dropped' },
-    _wasArray: true,
-    supplyAndDemandDynamics: {
-      overview: 'Valid nested',
-      deepen_extra: { detail: 'Transient nested key' },
-      chartData: { series: [1, 2, 3] },
-    },
-  };
-  const cleanedPayload = singlePptTest.sanitizeRenderPayload(dirtyPayload);
-  assert(
-    cleanedPayload.marketSizeAndGrowth &&
-      cleanedPayload.marketSizeAndGrowth.overview === 'Valid content',
-    'sanitizeRenderPayload must preserve canonical keys'
-  );
-  assert(
-    !Object.prototype.hasOwnProperty.call(cleanedPayload, 'marketDeepenFinalReviewGap1'),
-    'sanitizeRenderPayload must drop marketDeepenFinalReviewGap1'
-  );
-  assert(
-    !Object.prototype.hasOwnProperty.call(cleanedPayload, 'section_0'),
-    'sanitizeRenderPayload must drop section_0'
-  );
-  assert(
-    !Object.prototype.hasOwnProperty.call(cleanedPayload, '_wasArray'),
-    'sanitizeRenderPayload must drop _wasArray'
-  );
-  assert(
-    cleanedPayload.supplyAndDemandDynamics &&
-      cleanedPayload.supplyAndDemandDynamics.overview === 'Valid nested',
-    'sanitizeRenderPayload must preserve valid nested content'
-  );
-  assert(
-    !Object.prototype.hasOwnProperty.call(
-      cleanedPayload.supplyAndDemandDynamics || {},
-      'deepen_extra'
-    ),
-    'sanitizeRenderPayload must drop transient keys in nested objects'
-  );
-  assert(
-    cleanedPayload.supplyAndDemandDynamics &&
-      Array.isArray(cleanedPayload.supplyAndDemandDynamics.chartData?.series),
-    'sanitizeRenderPayload must preserve non-transient nested data'
-  );
-}
-
-function runBudgetGateUnitChecks() {
-  // Test 1: Payload that passes structure gate but has budget stress
-  const stressPayload = {
-    country: 'Vietnam',
-    policy: {
-      foundationalActs: { overview: 'A'.repeat(1200) },
-      nationalPolicy: { overview: 'Valid policy. '.repeat(80) },
-      investmentRestrictions: { overview: 'ok' },
-      regulatorySummary: { overview: 'B'.repeat(1600) },
-      keyIncentives: { overview: 'ok' },
-      sources: [],
-    },
-    market: {
-      marketSizeAndGrowth: {
-        overview: 'C'.repeat(1400),
-        keyInsight: 'D'.repeat(900),
-        chartData: {
-          series: [{ name: 'Revenue', data: [10, 20, 30, 40, 50] }],
-        },
-      },
-      supplyAndDemandDynamics: { overview: 'ok' },
-      pricingAndTariffStructures: { overview: 'ok' },
-    },
-    competitors: {
-      localMajor: {
-        players: Array.from({ length: 20 }, (_, i) => ({
-          name: `Company ${i}`,
-          description: 'E'.repeat(200),
-          revenue: '$100M',
-          marketShare: '5%',
-        })),
-      },
-      foreignPlayers: { players: [{ name: 'Foreign Co', description: 'ok' }] },
-    },
-    depth: {
-      dealEconomics: { overview: 'ok' },
-      partnerAssessment: { overview: 'ok' },
-      entryStrategy: { overview: 'ok' },
-      implementation: { overview: 'ok' },
-      targetSegments: { overview: 'ok' },
-    },
-    summary: {
-      timingIntelligence: { overview: 'ok' },
-      lessonsLearned: { overview: 'ok' },
-      keyInsights: [],
-      recommendation: 'ok',
-      goNoGo: { overallVerdict: 'GO' },
-      opportunities: [],
-      obstacles: [],
-      ratings: {},
-    },
-  };
-
-  // Budget analysis should detect stress
-  const report = analyzeBudget(stressPayload);
-  assert(
-    report.risk === 'medium' || report.risk === 'high',
-    `Expected budget risk medium or high for stress payload; got ${report.risk}`
-  );
-  assert(
-    report.issues.length > 0,
-    `Expected budget issues for stress payload; got ${report.issues.length}`
-  );
-  assert(
-    report.fieldBudgets.some((fb) => fb.exceeded),
-    'Expected at least one field budget to be exceeded'
-  );
-
-  // Compaction should reduce oversized fields
-  const compacted = compactPayload(stressPayload, report);
-  assert(
-    compacted.compactionLog.length > 0,
-    `Expected compaction log entries; got ${compacted.compactionLog.length}`
-  );
-  // Verify compacted fields are within budget
-  const recheck = analyzeBudget(compacted.payload);
-  const stillExceeded = recheck.fieldBudgets.filter((fb) => fb.exceeded);
-  assert(
-    stillExceeded.length === 0,
-    `After compaction, ${stillExceeded.length} field(s) still exceed budget: ${stillExceeded.map((f) => f.section + '.' + f.key).join(', ')}`
-  );
-
-  // Original payload should NOT be mutated
-  assert(
-    stressPayload.policy.regulatorySummary.overview.length === 1600,
-    'Original payload was mutated by compaction'
-  );
-
-  // Test 2: Clean payload should pass with low risk
-  const cleanPayload = {
-    country: 'Thailand',
-    policy: {
-      foundationalActs: { overview: 'Clean acts.' },
-      nationalPolicy: { overview: 'Clean policy.' },
-      investmentRestrictions: { overview: 'ok' },
-      regulatorySummary: { overview: 'Summary.' },
-      keyIncentives: { overview: 'ok' },
-      sources: [],
-    },
-    market: {
-      marketSizeAndGrowth: { overview: 'Growth.' },
-      supplyAndDemandDynamics: { overview: 'ok' },
-      pricingAndTariffStructures: { overview: 'ok' },
-    },
-    competitors: {
-      localMajor: { players: [{ name: 'A', description: 'ok' }] },
-      foreignPlayers: { players: [{ name: 'B', description: 'ok' }] },
-    },
-    depth: {
-      dealEconomics: { overview: 'ok' },
-      partnerAssessment: { overview: 'ok' },
-      entryStrategy: { overview: 'ok' },
-      implementation: { overview: 'ok' },
-      targetSegments: { overview: 'ok' },
-    },
-    summary: {
-      timingIntelligence: { overview: 'ok' },
-      lessonsLearned: { overview: 'ok' },
-      keyInsights: [],
-      recommendation: 'ok',
-      goNoGo: { overallVerdict: 'GO' },
-    },
-  };
-
-  const cleanReport = analyzeBudget(cleanPayload);
-  assert.strictEqual(
-    cleanReport.risk,
-    'low',
-    `Expected low risk for clean payload; got ${cleanReport.risk}`
-  );
-
-  // Test 3: runBudgetGate dry-run mode
-  const dryResult = runBudgetGate(stressPayload, { dryRun: true });
-  assert(
-    dryResult.compactionLog.length === 0,
-    `Dry-run should not compact; got ${dryResult.compactionLog.length} entries`
-  );
-  assert(dryResult.report.risk !== 'low', 'Dry-run should still report risk');
-
-  // Test 4: runBudgetGate with compaction
-  const fullResult = runBudgetGate(stressPayload, { dryRun: false });
-  if (fullResult.report.risk !== 'low') {
-    assert(
-      fullResult.compactionLog.length > 0,
-      'Non-low risk should trigger compaction in non-dry-run mode'
-    );
-  }
-
-  // Test 5: Table density detection
-  const denseTablePayload = {
-    country: 'Indonesia',
-    policy: {
-      foundationalActs: { overview: 'ok' },
-      nationalPolicy: { overview: 'ok' },
-      investmentRestrictions: { overview: 'ok' },
-    },
-    market: { marketSizeAndGrowth: { overview: 'ok' } },
-    competitors: {
-      localMajor: {
-        players: Array.from({ length: 25 }, (_, i) => ({
-          name: `Company ${i}`,
-          description: 'X'.repeat(150),
-          revenue: '$50M',
-          marketShare: '2%',
-          headquarters: 'Jakarta',
-          employees: '1000',
-        })),
-      },
-      foreignPlayers: { players: [] },
-    },
-    depth: {},
-    summary: {},
-  };
-  const denseReport = analyzeBudget(denseTablePayload);
-  assert(
-    denseReport.tableDensity.some((td) => td.overBudget),
-    'Expected table density to be over budget for 25-row table with long cells'
-  );
-}
-
 async function validateDeck(pptxPath, country, industry) {
   const result = await runValidation(pptxPath, getExpectations(country, industry));
   if (!result.valid) {
@@ -1075,20 +656,10 @@ async function runRound(round, total) {
   console.log('[Regression] Unit checks PASS (competitive optional-group gate override)');
   runTemplateRouteRecoveryUnitChecks();
   console.log('[Regression] Unit checks PASS (template route geometry recovery)');
-  runCrossPatternGeometryRecoveryChecks();
-  console.log('[Regression] Unit checks PASS (cross-pattern geometry fallback recovery)');
   await runDynamicTimeoutUnitChecks();
   console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
   runPreRenderStructureUnitChecks();
   console.log('[Regression] Unit checks PASS (pre-render structure gating)');
-  runRenderTransientKeyUnitChecks();
-  console.log('[Regression] Unit checks PASS (render-layer transient key filtering)');
-  runOversizedTextUnitChecks();
-  console.log('[Regression] Unit checks PASS (oversized text graceful degradation)');
-  runTableOverflowRecoveryUnitChecks();
-  console.log('[Regression] Unit checks PASS (table overflow recovery + fit score)');
-  runBudgetGateUnitChecks();
-  console.log('[Regression] Unit checks PASS (pre-render budget gate)');
 
   await runNodeScript(VIETNAM_SCRIPT);
   await runNodeScript(THAILAND_SCRIPT);

@@ -1,62 +1,16 @@
 {
-  "timestamp": "2026-02-13T01:41:38.084Z",
+  "timestamp": "2026-01-17T15:46:05.062Z",
   "valid": true,
   "summary": {
-    "passed": 37,
+    "passed": 31,
     "failed": 0,
-    "warnings": 1
+    "warnings": 0
   },
   "failed": [],
-  "warnings": [
-    {
-      "check": "Empty slides",
-      "message": "Slides with <50 chars: 5, 9, 16, 22, 28"
-    }
-  ],
+  "warnings": [],
   "structure": {
-    "slides": 35,
-    "charts": 6,
-    "tables": 78
-  },
-  "visual": {
-    "valid": true,
-    "score": 92,
-    "failed": 2,
-    "checks": [
-      {
-        "name": "Slide layout count",
-        "passed": false,
-        "expected": ">= 7",
-        "actual": 5,
-        "severity": "low"
-      },
-      {
-        "name": "Master layout link count",
-        "passed": false,
-        "expected": ">= 7",
-        "actual": 5,
-        "severity": "low"
-      }
-    ]
-  },
-  "slideAudit": {
-    "summary": {
-      "slides": 35,
-      "slidesWithIssues": 0,
-      "high": 0,
-      "medium": 0,
-      "low": 0,
-      "issueSlides": []
-    },
-    "topSlides": []
-  },
-  "xmlAudit": {
-    "valid": true,
-    "summary": {
-      "totalParts": 176,
-      "parsedParts": 176,
-      "issueCount": 0
-    },
-    "issues": []
+    "slides": 7,
+    "charts": 1,
+    "tables": 15
   }
 }

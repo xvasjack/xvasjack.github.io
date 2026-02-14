@@ -132,12 +132,12 @@ async function callPerplexity(prompt) {
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
     if (response.usage) {
-      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -151,15 +151,15 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Updated to use gpt-5-search-api (more stable than mini version)
+// Updated to use gpt-4o-search-preview (more stable than mini version)
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-5-search-api',
+      model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
-      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -169,7 +169,7 @@ async function callOpenAISearch(prompt) {
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4.1 if search model not available
+    // Fallback to regular gpt-4o if search model not available
     return callChatGPT(prompt);
   }
 }
@@ -769,23 +769,23 @@ ${isAIResearch ? 'COMPANY INFORMATION (from AI research - website was protected)
 ${pageText.substring(0, 10000)}`;
 
   try {
-    // First pass: gpt-4.1-nano (fast and cheap)
+    // First pass: gpt-4o-mini (fast and cheap)
     const firstPass = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: systemPrompt('gpt-4.1-nano') },
+        { role: 'system', content: systemPrompt('gpt-4o-mini') },
         { role: 'user', content: userPrompt },
       ],
       response_format: { type: 'json_object' },
     });
 
     if (firstPass.usage) {
-      recordTokens('gpt-4.1-nano', firstPass.usage.prompt_tokens || 0, firstPass.usage.completion_tokens || 0);
+      recordTokens('gpt-4o-mini', firstPass.usage.prompt_tokens || 0, firstPass.usage.completion_tokens || 0);
     }
 
     const result = JSON.parse(firstPass.choices[0].message.content);
 
-    // Check if we need a second pass with gpt-4.1
+    // Check if we need a second pass with gpt-4o
     const needsSecondPass =
       result.confidence === 'low' ||
       result.confidence === 'medium' ||
@@ -796,21 +796,21 @@ ${pageText.substring(0, 10000)}`;
 
     if (needsSecondPass) {
       console.log(
-        `  → Re-validating ${company.company_name} with gpt-4.1 (confidence: ${result.confidence})`
+        `  → Re-validating ${company.company_name} with gpt-4o (confidence: ${result.confidence})`
       );
 
-      // Second pass: gpt-4.1 (more accurate)
+      // Second pass: gpt-4o (more accurate)
       const secondPass = await openai.chat.completions.create({
-        model: 'gpt-4.1',
+        model: 'gpt-4o',
         messages: [
-          { role: 'system', content: systemPrompt('gpt-4.1') },
+          { role: 'system', content: systemPrompt('gpt-4o') },
           { role: 'user', content: userPrompt },
         ],
         response_format: { type: 'json_object' },
       });
 
       if (secondPass.usage) {
-        recordTokens('gpt-4.1', secondPass.usage.prompt_tokens || 0, secondPass.usage.completion_tokens || 0);
+        recordTokens('gpt-4o', secondPass.usage.prompt_tokens || 0, secondPass.usage.completion_tokens || 0);
       }
 
       const finalResult = JSON.parse(secondPass.choices[0].message.content);

@@ -36,7 +36,7 @@ if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
 if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4.1 fallback');
+  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
@@ -145,13 +145,13 @@ async function callPerplexity(prompt) {
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4.1',
+        'gpt-4o',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -168,16 +168,16 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Updated to use gpt-5-search-api (more stable than mini version)
+// Updated to use gpt-4o-search-preview (more stable than mini version)
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-5-search-api',
+      model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
       recordTokens(
-        'gpt-5-search-api',
+        'gpt-4o-search-preview',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -190,7 +190,7 @@ async function callOpenAISearch(prompt) {
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4.1 if search model not available
+    // Fallback to regular gpt-4o if search model not available
     return callChatGPT(prompt);
   }
 }
@@ -631,13 +631,13 @@ function strategy14_LocalLanguageOpenAISearch(business, country, _exclusion) {
   return queries;
 }
 
-// ============ EXTRACTION WITH GPT-4.1-nano ============
+// ============ EXTRACTION WITH GPT-4o-mini ============
 
 async function extractCompanies(text, country) {
   if (!text || text.length < 50) return [];
   try {
     const extraction = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -657,7 +657,7 @@ RULES:
     });
     if (extraction.usage) {
       recordTokens(
-        'gpt-4.1-nano',
+        'gpt-4o-mini',
         extraction.usage.prompt_tokens || 0,
         extraction.usage.completion_tokens || 0
       );
@@ -1244,7 +1244,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
   return rules;
 }
 
-// ============ VALIDATION (v24 - GPT-4.1 with LENIENT filtering) ============
+// ============ VALIDATION (v24 - GPT-4o with LENIENT filtering) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
@@ -1257,7 +1257,7 @@ async function validateCompanyStrict(company, business, country, exclusion, page
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4.1', // Use smarter model for better validation
+      model: 'gpt-4o', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -1306,7 +1306,7 @@ ${contentToValidate.substring(0, 10000)}`,
 
     if (validation.usage) {
       recordTokens(
-        'gpt-4.1',
+        'gpt-4o',
         validation.usage.prompt_tokens || 0,
         validation.usage.completion_tokens || 0
       );
@@ -1407,7 +1407,7 @@ async function validateCompany(company, business, country, exclusion, pageText) 
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -1452,7 +1452,7 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
 
     if (validation.usage) {
       recordTokens(
-        'gpt-4.1-nano',
+        'gpt-4o-mini',
         validation.usage.prompt_tokens || 0,
         validation.usage.completion_tokens || 0
       );
