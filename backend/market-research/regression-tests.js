@@ -43,6 +43,10 @@ const VIETNAM_SCRIPT = path.join(ROOT, 'test-vietnam-research.js');
 const THAILAND_SCRIPT = path.join(ROOT, 'test-ppt-generation.js');
 const VIETNAM_PPT = path.join(ROOT, 'vietnam-output.pptx');
 const THAILAND_PPT = path.join(ROOT, 'test-output.pptx');
+const ROUND_ARTIFACT_PATHS = [VIETNAM_PPT, THAILAND_PPT];
+const PRESERVE_GENERATED_PPTS = /^(1|true|yes|on)$/i.test(
+  String(process.env.PRESERVE_GENERATED_PPTS || '').trim()
+);
 
 function parseRounds(argv) {
   const match = argv.find((arg) => arg.startsWith('--rounds='));
@@ -92,6 +96,33 @@ function runNodeScript(scriptPath) {
       resolve({ stdout, stderr });
     });
   });
+}
+
+function snapshotArtifactState(filePaths) {
+  return (filePaths || []).map((filePath) => {
+    if (!fs.existsSync(filePath)) {
+      return { filePath, existed: false, buffer: null };
+    }
+    return {
+      filePath,
+      existed: true,
+      buffer: fs.readFileSync(filePath),
+    };
+  });
+}
+
+function restoreArtifactState(snapshot) {
+  for (const entry of snapshot || []) {
+    const filePath = entry?.filePath;
+    if (!filePath) continue;
+    if (entry.existed) {
+      fs.writeFileSync(filePath, entry.buffer);
+      continue;
+    }
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
 }
 
 function assertRegex(text, re, message) {
@@ -982,52 +1013,61 @@ function runCrashSignatureRegressionChecks() {
 
 async function runRound(round, total) {
   console.log(`\n[Regression] Round ${round}/${total}`);
+  const artifactSnapshot = PRESERVE_GENERATED_PPTS
+    ? null
+    : snapshotArtifactState(ROUND_ARTIFACT_PATHS);
 
-  runTemplateCloneUnitChecks();
-  console.log('[Regression] Unit checks PASS (template-clone filter behavior)');
-  runPptGateUnitChecks();
-  console.log('[Regression] Unit checks PASS (pre-render PPT gate block shaping)');
-  runCompetitiveGateUnitChecks();
-  console.log('[Regression] Unit checks PASS (competitive optional-group gate override)');
-  runTemplateRouteRecoveryUnitChecks();
-  console.log('[Regression] Unit checks PASS (template route geometry recovery)');
-  await runDynamicTimeoutUnitChecks();
-  console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
-  runPreRenderStructureUnitChecks();
-  console.log('[Regression] Unit checks PASS (pre-render structure gating)');
-  runTransientKeySanitizerUnitChecks();
-  console.log('[Regression] Unit checks PASS (transient key sanitizer canonical module)');
-  runCrashSignatureRegressionChecks();
-  console.log('[Regression] Unit checks PASS (crash signature type-mismatch guards)');
+  try {
+    runTemplateCloneUnitChecks();
+    console.log('[Regression] Unit checks PASS (template-clone filter behavior)');
+    runPptGateUnitChecks();
+    console.log('[Regression] Unit checks PASS (pre-render PPT gate block shaping)');
+    runCompetitiveGateUnitChecks();
+    console.log('[Regression] Unit checks PASS (competitive optional-group gate override)');
+    runTemplateRouteRecoveryUnitChecks();
+    console.log('[Regression] Unit checks PASS (template route geometry recovery)');
+    await runDynamicTimeoutUnitChecks();
+    console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
+    runPreRenderStructureUnitChecks();
+    console.log('[Regression] Unit checks PASS (pre-render structure gating)');
+    runTransientKeySanitizerUnitChecks();
+    console.log('[Regression] Unit checks PASS (transient key sanitizer canonical module)');
+    runCrashSignatureRegressionChecks();
+    console.log('[Regression] Unit checks PASS (crash signature type-mismatch guards)');
 
-  await runNodeScript(VIETNAM_SCRIPT);
-  await runNodeScript(THAILAND_SCRIPT);
+    await runNodeScript(VIETNAM_SCRIPT);
+    await runNodeScript(THAILAND_SCRIPT);
 
-  if (!fs.existsSync(VIETNAM_PPT)) throw new Error(`Missing generated file: ${VIETNAM_PPT}`);
-  if (!fs.existsSync(THAILAND_PPT)) throw new Error(`Missing generated file: ${THAILAND_PPT}`);
+    if (!fs.existsSync(VIETNAM_PPT)) throw new Error(`Missing generated file: ${VIETNAM_PPT}`);
+    if (!fs.existsSync(THAILAND_PPT)) throw new Error(`Missing generated file: ${THAILAND_PPT}`);
 
-  await validateDeck(VIETNAM_PPT, 'Vietnam', 'Energy Services');
-  await validateDeck(THAILAND_PPT, 'Thailand', 'Energy Services');
+    await validateDeck(VIETNAM_PPT, 'Vietnam', 'Energy Services');
+    await validateDeck(THAILAND_PPT, 'Thailand', 'Energy Services');
 
-  await ensureCountryIntegrity({
-    pptxPath: VIETNAM_PPT,
-    country: 'Vietnam',
-    wrongCountry: 'Thailand',
-  });
-  await ensureCountryIntegrity({
-    pptxPath: THAILAND_PPT,
-    country: 'Thailand',
-    wrongCountry: 'Vietnam',
-  });
-  console.log('[Regression] Country integrity PASS (cover + TOC country checks)');
+    await ensureCountryIntegrity({
+      pptxPath: VIETNAM_PPT,
+      country: 'Vietnam',
+      wrongCountry: 'Thailand',
+    });
+    await ensureCountryIntegrity({
+      pptxPath: THAILAND_PPT,
+      country: 'Thailand',
+      wrongCountry: 'Vietnam',
+    });
+    console.log('[Regression] Country integrity PASS (cover + TOC country checks)');
 
-  await ensureSparseSlideDiscipline(VIETNAM_PPT);
-  await ensureSparseSlideDiscipline(THAILAND_PPT);
-  console.log('[Regression] Sparse-slide discipline PASS (non-divider sparse slides blocked)');
+    await ensureSparseSlideDiscipline(VIETNAM_PPT);
+    await ensureSparseSlideDiscipline(THAILAND_PPT);
+    console.log('[Regression] Sparse-slide discipline PASS (non-divider sparse slides blocked)');
 
-  await ensureNoRepairNeeded(VIETNAM_PPT);
-  await ensureNoRepairNeeded(THAILAND_PPT);
-  console.log('[Regression] Package normalization PASS (no repair transforms needed)');
+    await ensureNoRepairNeeded(VIETNAM_PPT);
+    await ensureNoRepairNeeded(THAILAND_PPT);
+    console.log('[Regression] Package normalization PASS (no repair transforms needed)');
+  } finally {
+    if (!PRESERVE_GENERATED_PPTS && artifactSnapshot) {
+      restoreArtifactState(artifactSnapshot);
+    }
+  }
 }
 
 async function main() {
