@@ -1,0 +1,260 @@
+{
+  "_meta": {
+    "name": "edge-size-extremes",
+    "description": "Boundary cases: 0 items, 1 item, max items (50 rows, 20 cols), very long strings (10K chars). Tests size limits and edge conditions.",
+    "expectedOutcome": "partial-pass",
+    "createdAt": "2026-02-15T00:00:00.000Z",
+    "version": "1.0.0"
+  },
+  "synthesis": {
+    "isSingleCountry": true,
+    "country": "Test Country",
+    "executiveSummary": "LONG_STRING_10K_PLACEHOLDER"
+  },
+  "countryAnalysis": {
+    "country": "Test Country",
+    "policy": {
+      "foundationalActs": {
+        "slideTitle": "Test Country - Foundational Acts",
+        "keyMessage": "LONG_STRING_10K_PLACEHOLDER",
+        "acts": [
+          {
+            "name": "Single Act Only",
+            "year": "2024",
+            "requirements": "LONG_STRING_10K_PLACEHOLDER",
+            "enforcement": "Standard enforcement with monitoring and compliance verification processes in place across multiple regulatory bodies and oversight committees",
+            "penalties": "Standard penalties apply for violations of compliance requirements as determined by the regulatory oversight committee"
+          }
+        ]
+      },
+      "nationalPolicy": {
+        "slideTitle": "Test Country - National Policy",
+        "policyDirection": "LONG_STRING_10K_PLACEHOLDER",
+        "targets": [],
+        "keyInitiatives": []
+      },
+      "investmentRestrictions": {
+        "slideTitle": "Test Country - Foreign Investment Rules",
+        "ownershipLimits": {
+          "general": "49% cap",
+          "exceptions": "100% with promotion",
+          "promoted": "100%"
+        },
+        "incentives": [],
+        "riskLevel": "Low",
+        "riskJustification": "Minimal risk identified"
+      }
+    },
+    "market": {
+      "tpes": {
+        "slideTitle": "Test Country - Supply Overview",
+        "keyInsight": "Market data available for analysis with trends showing consistent growth patterns across all measured segments",
+        "narrative": "LONG_STRING_10K_PLACEHOLDER",
+        "chartData": {
+          "categories": ["2020", "2021", "2022", "2023", "2024", "2025", "2026", "2027", "2028", "2029", "2030", "2031", "2032", "2033", "2034", "2035", "2036", "2037", "2038", "2039"],
+          "series": [
+            { "name": "Series A", "values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20] },
+            { "name": "Series B", "values": [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1] },
+            { "name": "Series C", "values": [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5] },
+            { "name": "Series D", "values": [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765] },
+            { "name": "Series E", "values": [100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5] },
+            { "name": "Series F", "values": [0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8, 25.6, 51.2, 102.4, 204.8, 409.6, 819.2, 1638.4, 3276.8, 6553.6, 13107.2, 26214.4, 52428.8] }
+          ],
+          "unit": "Units"
+        }
+      },
+      "finalDemand": {
+        "slideTitle": "Test Country - Demand (Empty Arrays)",
+        "keyInsight": "Demand analysis shows growth potential across all primary market segments and secondary verticals with positive indicators",
+        "chartData": {
+          "categories": [],
+          "series": [],
+          "unit": "USD Billion"
+        }
+      },
+      "electricity": {
+        "slideTitle": "Test Country - Infrastructure (Single Point)",
+        "keyInsight": "Single data point available for infrastructure capacity assessment",
+        "demandGrowth": "N/A",
+        "totalCapacity": "Unknown",
+        "chartData": {
+          "categories": ["2024"],
+          "series": [
+            { "name": "Only Series", "values": [100] }
+          ],
+          "unit": "%"
+        }
+      },
+      "pricing": {
+        "slideTitle": "Test Country - Pricing (Max 50 Row Table)",
+        "keyInsight": "Comprehensive pricing data across all segments and sub-segments of the market over the analysis period",
+        "tableData": "FIFTY_ROW_TABLE_PLACEHOLDER",
+        "chartData": {
+          "categories": ["2020", "2021", "2022", "2023", "2024"],
+          "series": [
+            { "name": "Rate A", "values": [100, 110, 121, 133, 146] },
+            { "name": "Rate B", "values": [200, 210, 220, 231, 243] }
+          ],
+          "unit": "USD"
+        }
+      },
+      "escoMarket": {
+        "slideTitle": "Test Country - Services (20 Column Table)",
+        "keyInsight": "Services market segmented across 20 dimensions for comprehensive coverage of all potential service categories",
+        "marketSize": "5.0 billion (2024)",
+        "growthRate": "10% CAGR",
+        "tableData": "TWENTY_COLUMN_TABLE_PLACEHOLDER",
+        "chartData": {
+          "categories": ["2020", "2021", "2022", "2023", "2024"],
+          "series": [
+            { "name": "Segment 1", "values": [1.0, 1.2, 1.4, 1.6, 1.8] },
+            { "name": "Segment 2", "values": [0.8, 0.9, 1.0, 1.1, 1.2] },
+            { "name": "Segment 3", "values": [0.5, 0.6, 0.7, 0.8, 1.0] }
+          ],
+          "unit": "USD Billion"
+        }
+      }
+    },
+    "competitors": {
+      "japanesePlayers": {
+        "slideTitle": "Test Country - Japanese (Max Players)",
+        "marketInsight": "Comprehensive analysis of Japanese firms with extensive presence in the market across multiple sectors and segments",
+        "players": []
+      },
+      "localMajor": {
+        "slideTitle": "Test Country - Local (Single Player)",
+        "concentration": "Single dominant player",
+        "players": [
+          {
+            "name": "Solo Corp",
+            "type": "Listed",
+            "revenue": "2.0B",
+            "marketShare": "100%",
+            "description": "Solo Corp is the only major local professional services firm operating at scale in Test Country with USD 2.0 billion annual revenue, employing 3,500 professionals across 8 offices nationwide. The company grew 25% YoY in 2024 driven by government digital transformation contracts worth USD 450 million. Market dominance is reinforced by exclusive government framework agreements and a proprietary technology platform deployed across 200 agencies.",
+            "strategicAssessment": "Monopolistic position creates both partnership opportunity and competitive threat"
+          }
+        ]
+      },
+      "foreignPlayers": {
+        "slideTitle": "Test Country - Foreign (Empty)",
+        "competitiveInsight": "No significant foreign players identified in current market analysis period",
+        "players": []
+      },
+      "caseStudy": {
+        "slideTitle": "Test Country - Case Study",
+        "company": "MegaCorp International",
+        "entryYear": "2018",
+        "entryMode": "Acquisition of local firm",
+        "investment": "USD 500M",
+        "outcome": "Successfully integrated local operations within 18 months generating USD 1.2B annual revenue by 2024 through combined client base of 500 enterprise accounts.",
+        "applicability": "Large-scale acquisition viable for well-capitalized entrants seeking immediate market leadership",
+        "keyLessons": [
+          "LONG_STRING_10K_PLACEHOLDER"
+        ]
+      },
+      "maActivity": {
+        "slideTitle": "Test Country - M&A (Empty)",
+        "valuationMultiples": "Data not available",
+        "recentDeals": []
+      }
+    },
+    "depth": {
+      "dealEconomics": {
+        "slideTitle": "Test Country - Deal Economics",
+        "keyInsight": "Standard deal economics with typical margins and payback periods for the market segment and geography being analyzed",
+        "typicalDealSize": { "min": "0", "max": "999999999", "average": "50M" },
+        "contractTerms": {
+          "duration": "1 day to 99 years",
+          "revenueSplit": "0/100 to 100/0",
+          "guaranteeStructure": "Variable"
+        },
+        "financials": {
+          "paybackPeriod": "0 to infinity",
+          "irr": "0-100%",
+          "marginProfile": "Varies by segment"
+        }
+      },
+      "partnerAssessment": {
+        "slideTitle": "Test Country - Partners (Empty List)",
+        "recommendedPartner": "None identified",
+        "partners": []
+      },
+      "entryStrategy": {
+        "slideTitle": "Test Country - Entry Strategy",
+        "recommendation": "To be determined based on further analysis of market conditions and competitive dynamics",
+        "options": [],
+        "harveyBalls": {
+          "criteria": [],
+          "jv": [],
+          "acquisition": [],
+          "greenfield": []
+        }
+      },
+      "implementation": {
+        "slideTitle": "Test Country - Implementation",
+        "totalInvestment": "TBD",
+        "breakeven": "TBD",
+        "phases": [
+          {
+            "name": "Phase 1",
+            "activities": [],
+            "milestones": [],
+            "investment": "0"
+          }
+        ]
+      },
+      "targetSegments": {
+        "slideTitle": "Test Country - Target Segments",
+        "goToMarketApproach": "LONG_STRING_10K_PLACEHOLDER",
+        "segments": []
+      }
+    },
+    "summary": {
+      "opportunities": [
+        {
+          "opportunity": "LONG_STRING_10K_PLACEHOLDER",
+          "size": "Undefined",
+          "timing": "TBD",
+          "action": "LONG_STRING_10K_PLACEHOLDER"
+        }
+      ],
+      "obstacles": [],
+      "keyInsights": [
+        {
+          "title": "LONG_STRING_10K_PLACEHOLDER",
+          "data": "No specific data available for quantitative analysis at this stage of the market assessment process",
+          "pattern": "Pattern analysis pending additional research and data collection from primary and secondary sources",
+          "implication": "Implications to be determined after comprehensive data analysis is completed by the research team",
+          "timing": "Timeline to be established pending further market analysis"
+        }
+      ],
+      "ratings": {
+        "attractiveness": 0,
+        "feasibility": 10,
+        "attractivenessRationale": "",
+        "feasibilityRationale": "LONG_STRING_10K_PLACEHOLDER"
+      },
+      "goNoGo": {
+        "overallVerdict": "CONDITIONAL GO",
+        "conditions": [],
+        "criteria": []
+      },
+      "timingIntelligence": {
+        "slideTitle": "Test Country - Timing",
+        "windowOfOpportunity": "Unclear at this time pending further assessment of market conditions and competitive dynamics in the region",
+        "triggers": []
+      },
+      "lessonsLearned": {
+        "slideTitle": "Test Country - Lessons",
+        "failures": [],
+        "successFactors": []
+      },
+      "recommendation": "Further analysis required before recommendation can be provided."
+    }
+  },
+  "scope": {
+    "industry": "Test Industry",
+    "projectType": "market-entry",
+    "targetMarkets": ["Test Country"]
+  }
+}

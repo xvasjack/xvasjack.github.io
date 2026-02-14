@@ -1,0 +1,513 @@
+{
+  "_meta": {
+    "name": "clean-gold",
+    "description": "Perfect, schema-compliant synthesis payload with all sections fully populated using realistic-looking data. Should pass all quality gates.",
+    "expectedOutcome": "pass",
+    "createdAt": "2026-02-15T00:00:00.000Z",
+    "version": "1.0.0"
+  },
+  "synthesis": {
+    "isSingleCountry": true,
+    "country": "Test Country",
+    "executiveSummary": "Test Country presents a compelling market entry opportunity for Professional Services with a total addressable market exceeding USD 12 billion and growing at 15% CAGR. The regulatory environment is highly supportive with clear and well-established incentives for foreign investment, and several successful market entries by major international firms across multiple sectors demonstrate strong feasibility and attractive returns."
+  },
+  "countryAnalysis": {
+    "country": "Test Country",
+    "policy": {
+      "foundationalActs": {
+        "slideTitle": "Test Country - Foundational Acts",
+        "keyMessage": "Regulatory framework supports industry investment with clear enforcement mechanisms and established compliance pathways",
+        "acts": [
+          {
+            "name": "Professional Services Regulation Act",
+            "year": "2015 (amended 2021)",
+            "requirements": "All professional services firms must obtain a Class A license from the Professional Services Board, maintain minimum capital requirements of USD 500,000, and comply with annual reporting standards including audited financial statements",
+            "enforcement": "Professional Services Board conducts biannual compliance audits with mandatory corrective action plans for non-compliant firms",
+            "penalties": "Fines up to USD 750,000 for first violations; license suspension for repeat violations; criminal prosecution for fraud cases exceeding USD 1 million"
+          },
+          {
+            "name": "Foreign Business Services Act",
+            "year": "2018",
+            "requirements": "Foreign firms must establish a local entity with minimum 30% local shareholding or obtain Board of Investment promotion to operate with 100% foreign ownership in designated priority sectors",
+            "enforcement": "Ministry of Commerce conducts annual reviews of foreign business registrations with quarterly reporting requirements",
+            "penalties": "Operating without proper registration: fines up to USD 1,200,000 and mandatory business closure within 90 days"
+          },
+          {
+            "name": "Digital Services Standards Code",
+            "year": "2020 (updated 2024)",
+            "requirements": "All digital professional services platforms must comply with data protection standards, obtain cybersecurity certification, and implement client data residency within national borders",
+            "enforcement": "Digital Economy Commission oversees compliance through automated monitoring systems and annual third-party audits",
+            "penalties": "Non-compliance fines scaled to revenue (up to 4% of annual turnover); mandatory platform suspension for data breach incidents"
+          }
+        ]
+      },
+      "nationalPolicy": {
+        "slideTitle": "Test Country - National Policy",
+        "policyDirection": "Test Country targets 40% growth in professional services exports by 2030 under the National Services Development Plan, with emphasis on digital transformation and regional hub positioning",
+        "targets": [
+          {
+            "metric": "Services Export Growth",
+            "target": "40% increase from 2022 baseline",
+            "deadline": "2030",
+            "status": "On track - 22% achieved by 2024"
+          },
+          {
+            "metric": "Digital Services Adoption",
+            "target": "60% of firms using digital platforms",
+            "deadline": "2028",
+            "status": "Progress - 38% as of 2024"
+          },
+          {
+            "metric": "Regional Hub Status",
+            "target": "Top 3 ASEAN services hub",
+            "deadline": "2030",
+            "status": "Currently ranked 5th, improving"
+          }
+        ],
+        "keyInitiatives": [
+          "Smart Services Hub Program with USD 2.5 billion government investment in digital infrastructure",
+          "Professional Services Free Zone offering 15-year tax holidays for qualifying firms",
+          "Regional Services Center initiative attracting multinational headquarters with streamlined visa processing"
+        ]
+      },
+      "investmentRestrictions": {
+        "slideTitle": "Test Country - Foreign Investment Rules",
+        "ownershipLimits": {
+          "general": "49% foreign ownership cap under Foreign Business Act for non-promoted activities",
+          "exceptions": "Board of Investment promoted projects may receive 100% foreign ownership in priority sectors",
+          "promoted": "100% ownership for firms in Special Economic Zones or with BOI promotion certificates"
+        },
+        "incentives": [
+          {
+            "name": "BOI Promotion Scheme",
+            "benefit": "8-year corporate tax exemption, import duty waivers on equipment, unlimited repatriation of profits",
+            "eligibility": "Projects with minimum USD 1 million investment in professional services technology or regional headquarters"
+          },
+          {
+            "name": "Special Economic Zone Benefits",
+            "benefit": "Extended tax holidays up to 15 years, subsidized land lease, one-stop service center for permits",
+            "eligibility": "Operations located in designated economic zones with minimum 50 local employees"
+          }
+        ],
+        "riskLevel": "Medium-Low",
+        "riskJustification": "Stable regulatory environment with established foreign investment framework; main risks are bureaucratic processing delays averaging 3-4 months and occasional policy interpretation inconsistencies between provincial offices"
+      }
+    },
+    "market": {
+      "tpes": {
+        "slideTitle": "Test Country - Total Professional Services Supply",
+        "keyInsight": "Professional services supply growing steadily at 8.5% CAGR with increasing sophistication in digital delivery",
+        "narrative": "Total professional services supply reached USD 45.2 billion in 2024, with domestic firms accounting for 62% and international providers capturing the remaining 38%",
+        "chartData": {
+          "categories": ["2020", "2021", "2022", "2023", "2024"],
+          "series": [
+            { "name": "Consulting", "values": [12.5, 13.8, 15.2, 16.9, 18.4] },
+            { "name": "Legal & Compliance", "values": [8.3, 8.9, 9.6, 10.2, 10.8] },
+            { "name": "Technology Services", "values": [6.2, 7.5, 8.8, 10.2, 11.5] },
+            { "name": "Financial Advisory", "values": [3.8, 4.1, 4.3, 4.5, 4.5] }
+          ],
+          "unit": "USD Billion"
+        }
+      },
+      "finalDemand": {
+        "slideTitle": "Test Country - Final Demand by Sector",
+        "keyInsight": "Manufacturing sector accounts for 35% of professional services demand, presenting the largest addressable segment",
+        "chartData": {
+          "categories": ["2020", "2021", "2022", "2023", "2024"],
+          "series": [
+            { "name": "Manufacturing", "values": [11.2, 12.1, 13.5, 14.8, 15.8] },
+            { "name": "Financial Services", "values": [8.5, 9.2, 10.1, 10.8, 11.5] },
+            { "name": "Government", "values": [5.8, 6.2, 6.8, 7.5, 8.2] },
+            { "name": "Real Estate", "values": [3.2, 3.5, 3.8, 4.2, 4.7] }
+          ],
+          "unit": "USD Billion"
+        }
+      },
+      "electricity": {
+        "slideTitle": "Test Country - Digital Infrastructure",
+        "keyInsight": "Data center capacity expanding rapidly at 25% annually to support digital services growth",
+        "demandGrowth": "25% CAGR 2021-2024",
+        "totalCapacity": "850 MW installed data center capacity (2024)",
+        "chartData": {
+          "categories": ["2020", "2021", "2022", "2023", "2024"],
+          "series": [
+            { "name": "Cloud Services", "values": [35.5, 42.3, 48.8, 55.2, 62.1] },
+            { "name": "On-Premise", "values": [48.2, 42.5, 38.2, 32.5, 27.8] },
+            { "name": "Hybrid", "values": [12.8, 11.2, 9.5, 8.8, 7.2] },
+            { "name": "Edge Computing", "values": [3.5, 4.0, 3.5, 3.5, 2.9] }
+          ],
+          "unit": "%"
+        }
+      },
+      "pricing": {
+        "slideTitle": "Test Country - Service Pricing Trends",
+        "keyInsight": "Average hourly consulting rates increased 15% in 2024, driven by talent scarcity in specialized digital skills",
+        "chartData": {
+          "categories": ["2020", "2021", "2022", "2023", "2024"],
+          "series": [
+            { "name": "Senior Consultant", "values": [185, 195, 210, 235, 270] },
+            { "name": "Manager", "values": [280, 295, 315, 340, 385] },
+            { "name": "Director", "values": [420, 445, 475, 510, 580] }
+          ],
+          "unit": "USD/hour"
+        }
+      },
+      "escoMarket": {
+        "slideTitle": "Test Country - Managed Services Market",
+        "keyInsight": "Managed services growing at 18% annually as firms shift from project-based to recurring engagement models",
+        "marketSize": "USD 8.5 billion (2024)",
+        "growthRate": "18% CAGR 2021-2024",
+        "chartData": {
+          "categories": ["2020", "2021", "2022", "2023", "2024"],
+          "series": [
+            { "name": "IT Managed Services", "values": [2.1, 2.6, 3.2, 3.9, 4.6] },
+            { "name": "Business Process Outsourcing", "values": [1.5, 1.7, 1.9, 2.2, 2.5] },
+            { "name": "Advisory Retainers", "values": [0.6, 0.7, 0.9, 1.1, 1.4] }
+          ],
+          "unit": "USD Billion"
+        }
+      }
+    },
+    "competitors": {
+      "japanesePlayers": {
+        "slideTitle": "Test Country - Japanese Firms",
+        "marketInsight": "Japanese professional services firms hold 18% of the industrial advisory market, leveraging deep manufacturing sector relationships built over three decades of presence",
+        "players": [
+          {
+            "name": "Nomura Research Institute",
+            "presence": "Since 1992, 4 offices across major cities",
+            "description": "Leading management and IT consulting firm with USD 3.8 billion regional revenue. Controls 22% of financial services consulting through integrated technology and strategy solutions. Annual growth of 12% driven by digital transformation projects across banking and insurance sectors. Employs 850 consultants locally with plans to expand to 1,200 by 2026.",
+            "entryYear": "1992",
+            "revenue": "3.8B",
+            "strategicAssessment": "Strong technology-strategy integration gives competitive moat in financial services; premium pricing limits mid-market penetration"
+          },
+          {
+            "name": "NTT Data Services",
+            "presence": "Since 2005, 3 delivery centers",
+            "description": "Enterprise IT services and digital transformation specialist with USD 2.1 billion revenue in the region. Focuses on cloud migration, cybersecurity, and AI-driven analytics for government and large enterprise clients. Revenue grew 19% in 2024 driven by smart government contracts worth USD 450 million.",
+            "entryYear": "2005",
+            "revenue": "2.1B",
+            "strategicAssessment": "Government relationship advantage but faces increasing competition from Indian IT firms on pricing"
+          }
+        ]
+      },
+      "localMajor": {
+        "slideTitle": "Test Country - Major Local Firms",
+        "concentration": "Top 5 local firms hold 38% of domestic professional services market",
+        "players": [
+          {
+            "name": "PriceSmart Consulting Group",
+            "type": "Listed company (SET)",
+            "revenue": "5.2B",
+            "marketShare": "12%",
+            "description": "Largest local professional services firm by headcount with 4,500 employees across 12 offices. Revenue of USD 5.2 billion with 28% YoY growth driven by government digital transformation contracts. Won 3 of 5 major government IT modernization tenders in 2024 valued at USD 1.8 billion total. Market share grew from 9% to 12% in two years.",
+            "strategicAssessment": "Dominant government channel but limited international credentials; potential acquisition target for global firms"
+          },
+          {
+            "name": "AsiaLink Professional Services",
+            "type": "Listed conglomerate subsidiary",
+            "revenue": "8.5B",
+            "marketShare": "8%",
+            "description": "Professional services arm of a diversified conglomerate with total group revenue of USD 45 billion. Services division revenue of USD 8.5 billion growing at 32% annually, fastest among local players. Expanding into cross-border advisory leveraging parent company's presence across 15 ASEAN markets. Hired 200 experienced consultants from Big Four firms in 2024.",
+            "strategicAssessment": "Financial strength and regional network provide platform for rapid scaling; management consulting capabilities still developing"
+          }
+        ]
+      },
+      "foreignPlayers": {
+        "slideTitle": "Test Country - International Firms",
+        "competitiveInsight": "Big Four firms and global strategy houses dominate the premium segment, collectively holding 45% of engagements above USD 500,000",
+        "players": [
+          {
+            "name": "Deloitte Southeast Asia",
+            "origin": "Global (US HQ)",
+            "mode": "Member firm network",
+            "entryYear": "1968",
+            "revenue": "12.5B",
+            "description": "Market leader in professional services with USD 12.5 billion regional revenue across audit, consulting, tax, and advisory. Employs 8,500 professionals locally. Won landmark digital transformation engagement with national telecom provider worth USD 280 million over 5 years. 15% revenue growth in 2024 driven by ESG advisory and cybersecurity practices.",
+            "strategicAssessment": "Unmatched brand recognition and client base; faces margin pressure from local competitors in routine compliance work"
+          },
+          {
+            "name": "Roland Berger Asia Pacific",
+            "origin": "Germany",
+            "mode": "Wholly-owned subsidiary",
+            "entryYear": "2001",
+            "revenue": "1.8B",
+            "description": "European strategy consulting firm with USD 1.8 billion Asia Pacific revenue. Specializes in manufacturing sector transformation and supply chain optimization. Revenue grew 22% in 2024 driven by nearshoring advisory engagements as companies diversify from China. Key differentiator is deep automotive and industrial expertise with 150 specialized consultants.",
+            "strategicAssessment": "Niche industrial expertise commands premium; limited scale outside core sectors constrains growth"
+          }
+        ]
+      },
+      "caseStudy": {
+        "slideTitle": "Test Country - Market Entry Case Study",
+        "company": "Accenture Southeast Asia",
+        "entryYear": "1995",
+        "entryMode": "Organic growth from initial liaison office to full subsidiary",
+        "investment": "USD 350 million cumulative investment over 25 years",
+        "outcome": "Built a 6,000-person operation generating USD 2.8 billion in regional revenue by 2024. Now the second-largest professional services employer in the country.",
+        "applicability": "Demonstrates that patient organic growth can achieve dominant market position when supported by continuous investment in local talent development",
+        "keyLessons": [
+          "Investing heavily in local university partnerships created a sustainable talent pipeline",
+          "Starting with technology implementation services built credibility before expanding to strategy consulting",
+          "Government IT modernization contracts provided stable base revenue during economic downturns"
+        ]
+      },
+      "maActivity": {
+        "slideTitle": "Test Country - M&A Activity",
+        "valuationMultiples": "10-15x EBITDA for professional services firms with recurring revenue above 40%",
+        "recentDeals": [
+          {
+            "year": "2024",
+            "buyer": "Bain Capital Private Equity",
+            "target": "TechServ Holdings",
+            "value": "USD 850 million",
+            "rationale": "Acquire local IT services platform with 2,000+ enterprise clients and 65% recurring revenue"
+          },
+          {
+            "year": "2023",
+            "buyer": "Marsh McLennan",
+            "target": "AsiaRisk Consulting",
+            "value": "USD 320 million",
+            "rationale": "Expand risk and insurance advisory capabilities across ASEAN from acquired local platform"
+          }
+        ]
+      }
+    },
+    "depth": {
+      "dealEconomics": {
+        "slideTitle": "Test Country - Deal Economics",
+        "keyInsight": "Average engagement size USD 2.5 million with 25-30% gross margins typical for consulting engagements",
+        "typicalDealSize": { "min": "500K", "max": "15M", "average": "2.5M" },
+        "contractTerms": {
+          "duration": "6-24 months for project-based; 3-5 years for managed services",
+          "revenueSplit": "Typical 80/20 split between international lead and local subcontractor",
+          "guaranteeStructure": "Performance-linked fees with 15-20% at-risk component tied to KPIs"
+        },
+        "financials": {
+          "paybackPeriod": "18-24 months for new market office setup",
+          "irr": "25-30% for well-positioned entrants",
+          "marginProfile": "Gross margin 25-35% for implementation; 40-55% for advisory"
+        }
+      },
+      "partnerAssessment": {
+        "slideTitle": "Test Country - Partner Assessment",
+        "recommendedPartner": "PriceSmart Consulting Group",
+        "partners": [
+          {
+            "name": "PriceSmart Consulting Group",
+            "type": "Listed professional services firm",
+            "revenue": "5.2B",
+            "partnershipFit": 5,
+            "acquisitionFit": 4,
+            "description": "Largest local firm with deep government relationships and 4,500-person workforce. Strong cultural alignment with international standards and Big Four alumni in leadership."
+          },
+          {
+            "name": "AsiaLink Professional Services",
+            "type": "Conglomerate subsidiary",
+            "revenue": "8.5B",
+            "partnershipFit": 3,
+            "acquisitionFit": 3,
+            "description": "Strong financial backing from parent conglomerate but complex decision-making structure. Best suited for firms seeking immediate scale across multiple ASEAN markets."
+          }
+        ]
+      },
+      "entryStrategy": {
+        "slideTitle": "Test Country - Entry Strategy Options",
+        "recommendation": "Joint Venture with local partner recommended for firms lacking regional presence; Acquisition for those with existing ASEAN operations",
+        "options": [
+          {
+            "mode": "Joint Venture",
+            "timeline": "6-9 months to operational launch",
+            "investment": "USD 5-10 million",
+            "riskLevel": "Medium",
+            "pros": ["Immediate local client access via partner relationships", "Shared regulatory and compliance burden", "Lower upfront capital requirement"],
+            "cons": ["Shared decision-making may slow expansion", "IP protection concerns in advisory models", "Partner alignment on service quality standards"]
+          },
+          {
+            "mode": "Acquisition",
+            "timeline": "12-18 months including due diligence and integration",
+            "investment": "USD 20-50 million for mid-size local firm",
+            "riskLevel": "Medium-High",
+            "pros": ["Full operational control from day one", "Immediate revenue stream and talent base", "Eliminates competitor and gains market share"],
+            "cons": ["High upfront capital commitment", "Cultural and talent integration risk", "Premium valuations (10-15x EBITDA) in current market"]
+          }
+        ],
+        "harveyBalls": {
+          "criteria": ["Speed to Market", "Investment Required", "Market Access", "Control", "Risk Level"],
+          "jv": [4, 4, 5, 2, 3],
+          "acquisition": [2, 1, 4, 5, 2],
+          "greenfield": [1, 3, 1, 5, 2]
+        }
+      },
+      "implementation": {
+        "slideTitle": "Test Country - Implementation Roadmap",
+        "totalInvestment": "USD 8-15 million over 3 years for JV path; USD 25-55 million for acquisition path",
+        "breakeven": "18-24 months (JV) or 24-36 months (acquisition)",
+        "phases": [
+          {
+            "name": "Phase 1: Market Entry & Setup (Months 1-6)",
+            "activities": ["Establish legal entity and obtain BOI promotion", "Recruit founding team of 15-20 senior consultants", "Negotiate JV or acquisition terms with identified partner"],
+            "milestones": ["BOI promotion certificate obtained", "JV agreement signed", "First 3 client engagements secured"],
+            "investment": "USD 3-5 million"
+          },
+          {
+            "name": "Phase 2: Scale Operations (Months 7-18)",
+            "activities": ["Expand to 80+ consultants across 3 practice areas", "Build pipeline to 30+ active opportunities", "Establish university recruitment partnerships"],
+            "milestones": ["20th engagement completed", "Annual revenue reaches USD 15 million", "First government sector contract won"],
+            "investment": "USD 5-10 million"
+          }
+        ]
+      },
+      "targetSegments": {
+        "slideTitle": "Test Country - Target Customer Segments",
+        "goToMarketApproach": "Land-and-expand strategy starting with multinational corporations seeking regional advisory consistency",
+        "segments": [
+          {
+            "name": "Multinational Manufacturers",
+            "size": "USD 4.8 billion addressable",
+            "marketIntensity": "Very High",
+            "priority": 5
+          },
+          {
+            "name": "Financial Services Firms",
+            "size": "USD 3.2 billion addressable",
+            "marketIntensity": "High",
+            "priority": 4
+          },
+          {
+            "name": "Government & SOEs",
+            "size": "USD 2.8 billion addressable",
+            "marketIntensity": "Medium",
+            "priority": 3
+          }
+        ]
+      }
+    },
+    "summary": {
+      "opportunities": [
+        {
+          "opportunity": "Digital transformation demand creating urgent need for specialized consulting across manufacturing and financial services sectors",
+          "size": "USD 12 billion market by 2027",
+          "timing": "2025-2027",
+          "action": "Target top 50 multinational manufacturers with integrated technology and strategy offering"
+        },
+        {
+          "opportunity": "Government Smart Services Program mandating digital modernization across 500+ agencies with USD 5 billion allocated budget",
+          "size": "USD 5 billion government pipeline",
+          "timing": "2025-2030",
+          "action": "Obtain government vendor registration and secure local partner with existing government relationships"
+        },
+        {
+          "opportunity": "Nearshoring advisory boom as companies diversify manufacturing and services operations from China to ASEAN",
+          "size": "USD 3.5 billion advisory market emerging",
+          "timing": "2025-2028",
+          "action": "Build dedicated supply chain and site selection practice targeting Fortune 500 manufacturers"
+        }
+      ],
+      "obstacles": [
+        {
+          "obstacle": "Intense talent competition with Big Four and tech companies driving 20% annual salary inflation for experienced consultants",
+          "severity": "High",
+          "mitigation": "Invest in university partnerships and structured training programs; offer equity participation to retain top performers"
+        },
+        {
+          "obstacle": "Complex regulatory requirements for foreign professional services firms requiring 3-6 months for full operational setup",
+          "severity": "Medium",
+          "mitigation": "Engage specialist legal counsel and apply for BOI promotion simultaneously with entity incorporation"
+        }
+      ],
+      "keyInsights": [
+        {
+          "title": "Digital transformation spending accelerating 25% annually across manufacturing sector",
+          "data": "Manufacturing firms increased IT consulting spend from USD 2.1B to USD 3.8B between 2021-2024 (CAGR 22%)",
+          "pattern": "Cost pressure and competition from China driving urgent digitalization investment",
+          "implication": "Position as digital transformation partner with manufacturing domain expertise to capture share from generalist competitors",
+          "timing": "Critical window Q1-Q3 2026 as major procurement cycles begin"
+        },
+        {
+          "title": "Government Smart Services Program creating USD 5 billion in consulting opportunities over 5 years",
+          "data": "National Digital Government Plan allocating USD 5B across 500+ agencies with Phase 1 RFPs (USD 1.2B) issuing Q2 2026",
+          "pattern": "Policy-driven market creation — government mandate generates captive demand",
+          "implication": "Secure government vendor registration immediately; partner with local firm holding existing government framework agreements",
+          "timing": "Phase 1 RFPs closing Q3 2026 — registration process takes 4 months"
+        },
+        {
+          "title": "Nearshoring wave creating new USD 3.5 billion advisory market as companies diversify from China",
+          "data": "45 Fortune 500 companies announced ASEAN diversification plans in 2024, up from 12 in 2022",
+          "pattern": "Geopolitical risk driving structural shift in supply chain advisory demand",
+          "implication": "Build dedicated supply chain transformation practice combining site selection, regulatory navigation, and operational setup",
+          "timing": "Peak advisory demand expected H2 2026 through 2028"
+        }
+      ],
+      "ratings": {
+        "attractiveness": 8,
+        "feasibility": 7,
+        "attractivenessRationale": "Large addressable market (USD 12B+) with strong growth drivers including digital transformation, government spending, and nearshoring",
+        "feasibilityRationale": "Established professional services market with proven entry models; main challenges are talent acquisition and regulatory setup time"
+      },
+      "goNoGo": {
+        "overallVerdict": "CONDITIONAL GO",
+        "conditions": ["Secure local JV partner with government relationships by Q2 2026", "Obtain BOI promotion certificate before committing to permanent office"],
+        "criteria": [
+          {
+            "criterion": "Market Size > USD 5B",
+            "met": true,
+            "evidence": "USD 12B+ and growing 15% annually with strong structural tailwinds"
+          },
+          {
+            "criterion": "Regulatory Environment Favorable",
+            "met": true,
+            "evidence": "BOI promotion available; clear foreign investment framework; 100% ownership possible with promotion"
+          },
+          {
+            "criterion": "Competitive Entry Feasible",
+            "met": true,
+            "evidence": "Multiple successful entries by international firms; local partners available and willing"
+          },
+          {
+            "criterion": "Political Stability",
+            "met": true,
+            "evidence": "Stable governance with consistent pro-business policy trajectory over past decade"
+          }
+        ]
+      },
+      "timingIntelligence": {
+        "slideTitle": "Test Country - Why Now?",
+        "windowOfOpportunity": "Critical 24-month window (Q1 2026 - Q4 2027) driven by convergence of government spending, nearshoring demand, and digital transformation acceleration",
+        "triggers": [
+          {
+            "trigger": "Smart Services Program Phase 1 RFPs",
+            "impact": "USD 1.2 billion in consulting contracts releasing Q2 2026 with vendor registration deadline Q1 2026",
+            "action": "Complete government vendor registration and partner identification by March 2026"
+          },
+          {
+            "trigger": "Nearshoring Advisory Peak",
+            "impact": "45+ Fortune 500 companies executing ASEAN diversification plans requiring site selection and setup advisory",
+            "action": "Launch dedicated nearshoring practice by Q2 2026 to capture early-mover advantage"
+          }
+        ]
+      },
+      "lessonsLearned": {
+        "slideTitle": "Test Country - Lessons from Market",
+        "failures": [
+          {
+            "company": "StrategyHouse International (UK)",
+            "year": "2019",
+            "reason": "Attempted greenfield entry without local partner; failed to win government contracts due to lack of local relationships and government vendor registration",
+            "lesson": "Government sector (40% of premium consulting market) requires established local partner with existing framework agreements"
+          }
+        ],
+        "successFactors": [
+          "Local partner with government framework agreements is essential for public sector access",
+          "Investing in local talent development (not just expat deployment) builds credibility and lowers cost base within 18 months",
+          "Starting with implementation services builds trust before expanding to higher-margin strategy advisory"
+        ]
+      },
+      "recommendation": "Proceed with conditional market entry via Joint Venture with PriceSmart Consulting Group, targeting initial focus on manufacturing digital transformation and government Smart Services Program."
+    }
+  },
+  "scope": {
+    "industry": "Professional Services",
+    "projectType": "market-entry",
+    "targetMarkets": ["Test Country"]
+  }
+}

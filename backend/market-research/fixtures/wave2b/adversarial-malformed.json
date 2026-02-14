@@ -1,0 +1,142 @@
+{
+  "_meta": {
+    "name": "adversarial-malformed",
+    "description": "Deliberately broken payload with wrong types, null required fields, deep nesting, oversized strings, and structural violations. Should trigger validation failures.",
+    "expectedOutcome": "fail",
+    "createdAt": "2026-02-15T00:00:00.000Z",
+    "version": "1.0.0"
+  },
+  "synthesis": {
+    "isSingleCountry": null,
+    "country": 12345,
+    "executiveSummary": [1, 2, 3]
+  },
+  "countryAnalysis": {
+    "country": null,
+    "policy": {
+      "foundationalActs": {
+        "slideTitle": null,
+        "keyMessage": "",
+        "acts": "not-an-array"
+      },
+      "nationalPolicy": {
+        "slideTitle": true,
+        "policyDirection": 0,
+        "targets": {},
+        "keyInitiatives": null
+      },
+      "investmentRestrictions": null
+    },
+    "market": {
+      "tpes": {
+        "slideTitle": { "nested": { "deeply": { "very": { "extremely": { "incredibly": { "absurdly": { "ridiculously": { "level8": { "level9": { "level10": "deep-nesting-test" } } } } } } } } } },
+        "keyInsight": "",
+        "narrative": false,
+        "chartData": {
+          "categories": null,
+          "series": "invalid-series-type",
+          "unit": [1, 2, 3]
+        }
+      },
+      "finalDemand": {
+        "slideTitle": "Valid Title",
+        "keyInsight": "N/A",
+        "chartData": {
+          "categories": ["2020", "2021", "2022"],
+          "series": [
+            { "name": null, "values": ["not", "numbers", "here"] },
+            { "name": "Series B", "values": [null, null, null] }
+          ],
+          "unit": ""
+        }
+      },
+      "electricity": [],
+      "pricing": 42,
+      "escoMarket": {
+        "slideTitle": "Valid Slide",
+        "chartData": {
+          "categories": [],
+          "series": [],
+          "unit": "Empty"
+        }
+      }
+    },
+    "competitors": {
+      "japanesePlayers": {
+        "slideTitle": "Test - Japanese",
+        "marketInsight": "TBD",
+        "players": null
+      },
+      "localMajor": {
+        "slideTitle": "Test - Local",
+        "concentration": "Data unavailable",
+        "players": [
+          null,
+          {
+            "name": "",
+            "type": null,
+            "revenue": null,
+            "marketShare": "NaN",
+            "description": "Insufficient data",
+            "strategicAssessment": null
+          },
+          {
+            "name": "Valid Company",
+            "type": "Private",
+            "revenue": "1.2B",
+            "marketShare": "5%",
+            "description": "",
+            "strategicAssessment": "ok"
+          }
+        ]
+      },
+      "foreignPlayers": "was-an-object-now-string",
+      "caseStudy": {
+        "slideTitle": "",
+        "company": null,
+        "entryYear": "not-a-year",
+        "entryMode": "",
+        "investment": null,
+        "outcome": "",
+        "applicability": "",
+        "keyLessons": "should-be-array"
+      },
+      "maActivity": {
+        "slideTitle": false,
+        "valuationMultiples": null,
+        "recentDeals": [
+          null,
+          { "year": null, "buyer": "", "target": "", "value": "NaN", "rationale": null },
+          "not-an-object"
+        ]
+      }
+    },
+    "depth": null,
+    "summary": {
+      "opportunities": [],
+      "obstacles": [
+        { "obstacle": null, "severity": 999, "mitigation": false }
+      ],
+      "keyInsights": "not-an-array-of-insights",
+      "ratings": {
+        "attractiveness": "high",
+        "feasibility": -1,
+        "attractivenessRationale": null,
+        "feasibilityRationale": ""
+      },
+      "goNoGo": null,
+      "timingIntelligence": {
+        "slideTitle": null,
+        "windowOfOpportunity": "",
+        "triggers": "not-array"
+      },
+      "lessonsLearned": {
+        "slideTitle": 0,
+        "failures": "string-not-array",
+        "successFactors": null
+      },
+      "recommendation": null
+    }
+  },
+  "scope": null
+}
