@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node --expose-gc --max-old-space-size=450 server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "preflight:release": "node scripts/preflight-release.js",
+    "preflight:stress": "node scripts/preflight-release.js --stress-seeds=30",
+    "test:preflight": "node scripts/test-preflight.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
