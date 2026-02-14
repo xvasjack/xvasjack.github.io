@@ -744,7 +744,10 @@ function runRenderTransientKeyUnitChecks() {
     'sanitizeRenderPayload must preserve valid nested content'
   );
   assert(
-    !Object.prototype.hasOwnProperty.call(cleanedPayload.supplyAndDemandDynamics || {}, 'deepen_extra'),
+    !Object.prototype.hasOwnProperty.call(
+      cleanedPayload.supplyAndDemandDynamics || {},
+      'deepen_extra'
+    ),
     'sanitizeRenderPayload must drop transient keys in nested objects'
   );
   assert(
@@ -770,6 +773,41 @@ async function validateDeck(pptxPath, country, industry) {
   );
 }
 
+function runOversizedTextUnitChecks() {
+  assert(
+    singlePptTest && typeof singlePptTest.safeCell === 'function',
+    'ppt-single-country __test helper missing: safeCell'
+  );
+
+  // 8k, 12k, 20k char strings — must not throw, must return bounded string
+  for (const len of [8000, 12000, 20000]) {
+    const oversized = 'A'.repeat(len);
+    let result;
+    assert.doesNotThrow(() => {
+      result = singlePptTest.safeCell(oversized);
+    }, `safeCell must not throw on ${len}-char input`);
+    assert(typeof result === 'string', `safeCell(${len}) must return a string`);
+    assert(
+      result.length <= 3010,
+      `safeCell(${len}) must truncate to ≤3010 chars (3000 + ellipsis), got ${result.length}`
+    );
+    assert(result.length > 0, `safeCell(${len}) must not return empty string`);
+  }
+
+  // Normal-length input should pass through unchanged
+  const normal = 'Hello world, this is a test cell value.';
+  assert.strictEqual(
+    singlePptTest.safeCell(normal),
+    normal,
+    'Normal text should pass through unchanged'
+  );
+
+  // Empty/null should return empty
+  assert.strictEqual(singlePptTest.safeCell(''), '', 'Empty string should return empty');
+  assert.strictEqual(singlePptTest.safeCell(null), '', 'null should return empty');
+  assert.strictEqual(singlePptTest.safeCell(undefined), '', 'undefined should return empty');
+}
+
 async function runRound(round, total) {
   console.log(`\n[Regression] Round ${round}/${total}`);
 
@@ -789,6 +827,8 @@ async function runRound(round, total) {
   console.log('[Regression] Unit checks PASS (pre-render structure gating)');
   runRenderTransientKeyUnitChecks();
   console.log('[Regression] Unit checks PASS (render-layer transient key filtering)');
+  runOversizedTextUnitChecks();
+  console.log('[Regression] Unit checks PASS (oversized text graceful degradation)');
 
   await runNodeScript(VIETNAM_SCRIPT);
   await runNodeScript(THAILAND_SCRIPT);

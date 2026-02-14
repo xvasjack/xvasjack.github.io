@@ -377,12 +377,13 @@ function safeCell(value, maxLen) {
   if (!str) return '';
   const hardCap = 3000;
   if (str.length > hardCap) {
-    if (STRICT_TEMPLATE_FIDELITY) {
-      throw new Error(
-        `[PPT] Cell text exceeds hard cap (${str.length} > ${hardCap}) and cannot be rendered safely`
-      );
-    }
-    return truncate(str, hardCap, true);
+    console.warn(
+      `[PPT-SIZE-OVERFLOW] Cell text exceeds hard cap (${str.length} > ${hardCap}). Truncating to ${hardCap} chars instead of crashing.`
+    );
+    // Inline truncation — bypass DISABLE_TEXT_TRUNCATION since this is a safety cap, not content preference.
+    const cut = str.substring(0, hardCap);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > hardCap * 0.8 ? cut.substring(0, lastSpace) : cut).trim() + '...';
   }
   const requestedLimit = Number(maxLen);
   let effectiveLimit = hardCap;
@@ -7257,5 +7258,6 @@ module.exports = {
     resolveTemplateRouteWithGeometryGuard,
     isTransientRenderKey,
     sanitizeRenderPayload,
+    safeCell,
   },
 };
