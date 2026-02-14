@@ -439,6 +439,88 @@ async function normalizeSlideNonVisualIds(pptxBuffer) {
   };
 }
 
+async function normalizeAbsoluteRelationshipTargets(pptxBuffer) {
+  if (!Buffer.isBuffer(pptxBuffer) || pptxBuffer.length === 0) {
+    return { buffer: pptxBuffer, changed: false, stats: { skipped: true } };
+  }
+
+  const zip = await JSZip.loadAsync(pptxBuffer);
+  const relFiles = Object.keys(zip.files).filter((f) => /\.rels$/i.test(f));
+  const stats = {
+    relFilesScanned: relFiles.length,
+    relFilesAdjusted: 0,
+    normalizedTargets: 0,
+  };
+  let changed = false;
+
+  for (const relFile of relFiles) {
+    const relEntry = zip.file(relFile);
+    if (!relEntry) continue;
+    const xml = await relEntry.async('string');
+    if (!xml.includes('Target=')) continue;
+
+    const ownerPart = ownerPartFromRelPath(relFile);
+    const ownerDir = ownerPart ? path.posix.dirname(ownerPart) : '';
+    let changedOnFile = false;
+
+    const updated = xml.replace(/<Relationship\b[^>]*>/gi, (tag) => {
+      const targetMode = extractXmlAttr(tag, 'TargetMode').toLowerCase();
+      if (targetMode === 'external') return tag;
+
+      const rawTarget = extractXmlAttr(tag, 'Target');
+      if (!rawTarget || !rawTarget.startsWith('/')) return tag;
+      if (/^[a-z][a-z0-9+.-]*:/i.test(rawTarget)) return tag;
+
+      const hashIndex = rawTarget.indexOf('#');
+      const queryIndex = rawTarget.indexOf('?');
+      let splitIdx = -1;
+      if (hashIndex >= 0 && queryIndex >= 0) splitIdx = Math.min(hashIndex, queryIndex);
+      else splitIdx = Math.max(hashIndex, queryIndex);
+
+      const targetPathOnly = splitIdx >= 0 ? rawTarget.slice(0, splitIdx) : rawTarget;
+      const suffix = splitIdx >= 0 ? rawTarget.slice(splitIdx) : '';
+      const normalizedAbsolutePath = path.posix
+        .normalize(targetPathOnly.replace(/^\/+/, ''))
+        .replace(/^\/+/, '');
+      if (!normalizedAbsolutePath || normalizedAbsolutePath.startsWith('../')) return tag;
+
+      let relativePath = ownerDir
+        ? path.posix.relative(ownerDir, normalizedAbsolutePath)
+        : normalizedAbsolutePath;
+      if (!relativePath) {
+        relativePath = path.posix.basename(normalizedAbsolutePath);
+      }
+      relativePath = relativePath.replace(/\\/g, '/');
+      if (relativePath.startsWith('/')) {
+        relativePath = relativePath.replace(/^\/+/, '');
+      }
+
+      const rewrittenTarget = `${relativePath}${suffix}`;
+      if (!rewrittenTarget || rewrittenTarget === rawTarget) return tag;
+
+      changedOnFile = true;
+      stats.normalizedTargets += 1;
+      return tag.replace(
+        /\bTarget=(["'])(.*?)\1/i,
+        (_, quote) => `Target=${quote}${escapeXmlAttr(rewrittenTarget)}${quote}`
+      );
+    });
+
+    if (changedOnFile && updated !== xml) {
+      zip.file(relFile, updated);
+      changed = true;
+      stats.relFilesAdjusted += 1;
+    }
+  }
+
+  if (!changed) return { buffer: pptxBuffer, changed: false, stats };
+  return {
+    buffer: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }),
+    changed: true,
+    stats,
+  };
+}
+
 function extractXmlAttr(tag, attrName) {
   const re = new RegExp(`\\b${attrName}=(["'])(.*?)\\1`, 'i');
   const m = tag.match(re);
@@ -1171,6 +1253,7 @@ module.exports = {
   scanRelationshipTargets,
   scanRelationshipReferenceIntegrity,
   scanSlideNonVisualIdIntegrity,
+  normalizeAbsoluteRelationshipTargets,
   normalizeSlideNonVisualIds,
   scanPackageConsistency,
   reconcileContentTypesAndPackage,

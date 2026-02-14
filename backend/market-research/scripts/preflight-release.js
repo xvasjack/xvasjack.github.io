@@ -110,7 +110,10 @@ const DEFAULT_HEAD_CHECKS = [
   { file: 'ppt-utils.js', patterns: ['sanitizeHyperlinkUrl'] },
   { file: 'quality-gates.js', patterns: ['validatePptData'] },
   { file: 'template-clone-postprocess.js', patterns: ['isLockedTemplateText'] },
-  { file: 'pptx-validator.js', patterns: ['reconcileContentTypesAndPackage'] },
+  {
+    file: 'pptx-validator.js',
+    patterns: ['normalizeAbsoluteRelationshipTargets', 'reconcileContentTypesAndPackage'],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -134,11 +137,29 @@ function checkModuleImports() {
 
   const failures = [];
   const loaded = [];
+  const moduleContracts = {
+    'pptx-validator.js': [
+      'normalizeAbsoluteRelationshipTargets',
+      'normalizeSlideNonVisualIds',
+      'reconcileContentTypesAndPackage',
+    ],
+  };
 
   for (const mod of modules) {
     const fullPath = path.join(PROJECT_ROOT, mod);
     try {
-      require(fullPath);
+      const loadedModule = require(fullPath);
+      const requiredExports = moduleContracts[mod] || [];
+      const missingExports = requiredExports.filter((exportName) => {
+        return typeof loadedModule?.[exportName] !== 'function';
+      });
+      if (missingExports.length > 0) {
+        failures.push({
+          module: mod,
+          error: `missing required export(s): ${missingExports.join(', ')}`,
+        });
+        continue;
+      }
       loaded.push(mod);
     } catch (err) {
       failures.push({ module: mod, error: err.code || err.message });

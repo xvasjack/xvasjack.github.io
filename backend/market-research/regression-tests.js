@@ -151,13 +151,16 @@ async function ensureCountryIntegrity({ pptxPath, country, wrongCountry }) {
 
 async function ensureNoRepairNeeded(pptxPath) {
   const buffer = fs.readFileSync(pptxPath);
-  if (typeof normalizeAbsoluteRelationshipTargets === 'function') {
-    const absRel = await normalizeAbsoluteRelationshipTargets(buffer);
-    if (absRel.changed) {
-      throw new Error(
-        `${path.basename(pptxPath)} still needs relationship-target normalization (${absRel.stats?.normalizedTargets || 0})`
-      );
-    }
+  if (typeof normalizeAbsoluteRelationshipTargets !== 'function') {
+    throw new Error(
+      'pptx-validator contract broken: normalizeAbsoluteRelationshipTargets export is missing'
+    );
+  }
+  const absRel = await normalizeAbsoluteRelationshipTargets(buffer);
+  if (absRel.changed) {
+    throw new Error(
+      `${path.basename(pptxPath)} still needs relationship-target normalization (${absRel.stats?.normalizedTargets || 0})`
+    );
   }
 
   const idNorm = await normalizeSlideNonVisualIds(buffer);
