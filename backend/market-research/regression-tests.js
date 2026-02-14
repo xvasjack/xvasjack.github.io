@@ -318,6 +318,67 @@ function runCompetitiveGateUnitChecks() {
   );
 }
 
+function runTemplateRouteRecoveryUnitChecks() {
+  assert(
+    singlePptTest && typeof singlePptTest.resolveTemplateRouteWithGeometryGuard === 'function',
+    'ppt-single-country __test helper missing: resolveTemplateRouteWithGeometryGuard'
+  );
+
+  const tableRoute = singlePptTest.resolveTemplateRouteWithGeometryGuard({
+    blockKey: 'dealEconomics',
+    dataType: 'financial_performance',
+    data: { typicalDealSize: { average: '$1.2M' } },
+    templateSelection: 26, // chart-only slide override (incompatible for table block)
+    tableContextKeys: ['dealEconomics'],
+    chartContextKeys: ['marketSizeAndGrowth'],
+  });
+  assert.strictEqual(
+    tableRoute.recovered,
+    true,
+    'dealEconomics should recover from chart slide override'
+  );
+  assert.strictEqual(
+    Number(tableRoute.resolved?.selectedSlide),
+    12,
+    'dealEconomics should recover to slide 12 (table-backed default)'
+  );
+  assert.strictEqual(
+    Boolean(tableRoute.layout && tableRoute.layout.table),
+    true,
+    'Recovered dealEconomics route must include table geometry'
+  );
+
+  const chartRoute = singlePptTest.resolveTemplateRouteWithGeometryGuard({
+    blockKey: 'marketSizeAndGrowth',
+    dataType: 'time_series_multi_insight',
+    data: {
+      chartData: {
+        series: [
+          { name: '2024', value: 10 },
+          { name: '2025', value: 12 },
+        ],
+      },
+    },
+    templateSelection: 12, // table-only slide override (incompatible for chart block)
+    tableContextKeys: ['dealEconomics'],
+    chartContextKeys: ['marketSizeAndGrowth'],
+  });
+  assert.strictEqual(
+    chartRoute.recovered,
+    true,
+    'marketSizeAndGrowth should recover from table slide override'
+  );
+  assert.strictEqual(
+    Number(chartRoute.resolved?.selectedSlide),
+    13,
+    'marketSizeAndGrowth should recover to slide 13 (chart-backed default)'
+  );
+  assert(
+    Array.isArray(chartRoute.layout?.charts) && chartRoute.layout.charts.length > 0,
+    'Recovered marketSizeAndGrowth route must include chart geometry'
+  );
+}
+
 async function runDynamicTimeoutUnitChecks() {
   assert(
     orchestratorTest && typeof orchestratorTest.runInBatchesUntilDeadline === 'function',
@@ -484,6 +545,8 @@ async function runRound(round, total) {
   console.log('[Regression] Unit checks PASS (pre-render PPT gate block shaping)');
   runCompetitiveGateUnitChecks();
   console.log('[Regression] Unit checks PASS (competitive optional-group gate override)');
+  runTemplateRouteRecoveryUnitChecks();
+  console.log('[Regression] Unit checks PASS (template route geometry recovery)');
   await runDynamicTimeoutUnitChecks();
   console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
   runPreRenderStructureUnitChecks();

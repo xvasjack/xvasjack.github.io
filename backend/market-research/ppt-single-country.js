@@ -187,6 +187,142 @@ function ensureString(value, defaultValue) {
   return stripInvalidSurrogates(normalized.replace(XML_INVALID_CHARS, ''));
 }
 
+function getRequiredTemplateGeometry(blockKey, tableContextKeys, chartContextKeys) {
+  const normalizedKey = ensureString(blockKey, '').trim();
+  if (!normalizedKey) return null;
+  const tableSet =
+    tableContextKeys instanceof Set ? tableContextKeys : new Set(tableContextKeys || []);
+  if (tableSet.has(normalizedKey)) return 'table';
+  const chartSet =
+    chartContextKeys instanceof Set ? chartContextKeys : new Set(chartContextKeys || []);
+  if (chartSet.has(normalizedKey)) return 'chart';
+  return null;
+}
+
+function layoutHasRequiredTemplateGeometry(layout, requiredGeometry) {
+  if (!requiredGeometry) return true;
+  if (!layout || typeof layout !== 'object') return false;
+  if (requiredGeometry === 'table') return Boolean(layout.table);
+  if (requiredGeometry === 'chart') return Array.isArray(layout.charts) && layout.charts.length > 0;
+  return true;
+}
+
+function resolveTemplateRouteWithGeometryGuard({
+  blockKey,
+  dataType,
+  data,
+  templateSelection = null,
+  tableContextKeys = [],
+  chartContextKeys = [],
+} = {}) {
+  const requiredGeometry = getRequiredTemplateGeometry(
+    blockKey,
+    tableContextKeys,
+    chartContextKeys
+  );
+  const baseInput = { blockKey, dataType, data };
+  const primaryResolved = resolveTemplatePattern({
+    ...baseInput,
+    templateSelection,
+  });
+  const primarySlide = Number(primaryResolved?.selectedSlide);
+  const primaryLayout =
+    Number.isFinite(primarySlide) && primarySlide > 0 ? getTemplateSlideLayout(primarySlide) : null;
+
+  if (layoutHasRequiredTemplateGeometry(primaryLayout, requiredGeometry)) {
+    return {
+      resolved: primaryResolved,
+      layout: primaryLayout,
+      requiredGeometry,
+      recovered: false,
+      fromSlide: primarySlide,
+      toSlide: primarySlide,
+      reason: null,
+    };
+  }
+
+  const queue = [];
+  const seen = new Set();
+  const addCandidate = (route, reason) => {
+    if (!route || typeof route !== 'object') return;
+    const slide = Number(route.selectedSlide);
+    if (!Number.isFinite(slide) || slide <= 0) return;
+    const dedupeKey = `${ensureString(route.patternKey, '')}:${slide}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    queue.push({ route: { ...route, selectedSlide: slide }, reason: ensureString(reason, '') });
+  };
+
+  addCandidate(primaryResolved, 'primary');
+
+  const hasExplicitOverride = !(
+    templateSelection === null ||
+    templateSelection === undefined ||
+    (typeof templateSelection === 'string' && !templateSelection.trim())
+  );
+  let defaultResolved = null;
+  if (hasExplicitOverride) {
+    defaultResolved = resolveTemplatePattern({ ...baseInput, templateSelection: null });
+    addCandidate(defaultResolved, 'default-route');
+  }
+
+  const primarySlides = Array.isArray(primaryResolved?.templateSlides)
+    ? primaryResolved.templateSlides
+    : [];
+  for (const slideId of primarySlides) {
+    const slide = Number(slideId);
+    if (!Number.isFinite(slide) || slide <= 0) continue;
+    addCandidate({ ...primaryResolved, selectedSlide: slide }, 'primary-pattern-scan');
+  }
+
+  const defaultSlides = Array.isArray(defaultResolved?.templateSlides)
+    ? defaultResolved.templateSlides
+    : [];
+  for (const slideId of defaultSlides) {
+    const slide = Number(slideId);
+    if (!Number.isFinite(slide) || slide <= 0) continue;
+    addCandidate({ ...defaultResolved, selectedSlide: slide }, 'default-pattern-scan');
+  }
+
+  for (const candidate of queue) {
+    const layout = getTemplateSlideLayout(candidate.route.selectedSlide);
+    if (!layoutHasRequiredTemplateGeometry(layout, requiredGeometry)) continue;
+    if (candidate.route.selectedSlide === primarySlide) {
+      return {
+        resolved: candidate.route,
+        layout,
+        requiredGeometry,
+        recovered: false,
+        fromSlide: primarySlide,
+        toSlide: primarySlide,
+        reason: candidate.reason || null,
+      };
+    }
+    return {
+      resolved: {
+        ...candidate.route,
+        source: 'geometryRecovery',
+      },
+      layout,
+      requiredGeometry,
+      recovered: true,
+      fromSlide: primarySlide,
+      toSlide: candidate.route.selectedSlide,
+      reason: candidate.reason || null,
+    };
+  }
+
+  return {
+    resolved: primaryResolved,
+    layout: primaryLayout,
+    requiredGeometry,
+    recovered: false,
+    fromSlide: primarySlide,
+    toSlide: null,
+    reason: null,
+  };
+}
+
 // Safety wrapper: ensure any value going into a table cell is a plain, XML-safe string.
 // AI sometimes returns nested objects/arrays — this prevents pptxgenjs crashes.
 // XML sanitization happens in ensureString() above.
@@ -3081,12 +3217,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   function resolveBlockTemplate(block) {
     const overrideSelection = templateSlideSelections?.[block.key];
-    const resolved = resolveTemplatePattern({
+    const routeDecision = resolveTemplateRouteWithGeometryGuard({
       blockKey: block.key,
       dataType: block.dataType,
       data: block.data,
       templateSelection: overrideSelection,
+      tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+      chartContextKeys: CHART_TEMPLATE_CONTEXTS,
     });
+    const resolved = routeDecision.resolved;
+    const layout = routeDecision.layout;
+    if (routeDecision.recovered) {
+      console.warn(
+        `[PPT TEMPLATE] ${block.key}: recovered ${routeDecision.requiredGeometry || 'template'} route from slide ${routeDecision.fromSlide || 'n/a'} to ${routeDecision.toSlide || 'n/a'} (${routeDecision.reason || 'compatibility'})`
+      );
+    }
     const sourceLabel = ensureString(resolved.source, '').toLowerCase();
     const hasFallbackSource = sourceLabel.includes('fallback');
     const hasTemplateSlide =
@@ -3096,7 +3241,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         `[PPT TEMPLATE] Missing explicit template route for block "${block.key}" (pattern=${resolved.patternKey || 'none'}, slide=${resolved.selectedSlide || 'none'}, source=${resolved.source || 'unknown'})`
       );
     }
-    const layout = getTemplateSlideLayout(resolved.selectedSlide);
     if (!layout) {
       throw new Error(
         `[PPT TEMPLATE] Missing extracted layout for block "${block.key}" on template slide ${resolved.selectedSlide}`
@@ -7064,5 +7208,6 @@ module.exports = {
   generateSingleCountryPPT,
   __test: {
     shouldAllowCompetitiveOptionalGroupGap,
+    resolveTemplateRouteWithGeometryGuard,
   },
 };
