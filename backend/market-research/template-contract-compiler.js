@@ -156,8 +156,7 @@ const CONTRACT_VERSION = '1.0.0';
 // ---------------------------------------------------------------------------
 
 function loadTemplatePatterns(filePath) {
-  const resolvedPath =
-    filePath || path.join(__dirname, 'template-patterns.json');
+  const resolvedPath = filePath || path.join(__dirname, 'template-patterns.json');
   const raw = fs.readFileSync(resolvedPath, 'utf8');
   return JSON.parse(raw);
 }
@@ -249,10 +248,7 @@ function buildSlideLayout(slideDetail) {
   );
   const title = titleShape ? rectFromPos(titleShape.position) : null;
 
-  const largestTable =
-    tables.length > 0
-      ? tables.sort((a, b) => b.w * b.h - a.w * a.h)[0]
-      : null;
+  const largestTable = tables.length > 0 ? tables.sort((a, b) => b.w * b.h - a.w * a.h)[0] : null;
 
   return {
     slideNumber: slideDetail.slideNumber,
@@ -277,9 +273,10 @@ function buildSlideLayout(slideDetail) {
  * @returns {object} Compiled contract bundle
  */
 function compile(options = {}) {
-  const tp = options.templateData !== undefined
-    ? options.templateData
-    : loadTemplatePatterns(options.templatePath);
+  const tp =
+    options.templateData !== undefined
+      ? options.templateData
+      : loadTemplatePatterns(options.templatePath);
 
   if (!tp || typeof tp !== 'object') {
     throw new Error('Invalid template-patterns.json: not an object');
@@ -343,9 +340,8 @@ function compile(options = {}) {
     if (TABLE_TEMPLATE_CONTEXTS.has(blockKey)) requiredGeometry = 'table';
     else if (CHART_TEMPLATE_CONTEXTS.has(blockKey)) requiredGeometry = 'chart';
 
-    const tableDimensions = requiredGeometry === 'table'
-      ? inferMaxTableDimensions(slideLayout)
-      : null;
+    const tableDimensions =
+      requiredGeometry === 'table' ? inferMaxTableDimensions(slideLayout) : null;
 
     // Fallback chain: try all slides for this pattern if primary fails
     const fallbackChain = patternContract
@@ -610,27 +606,41 @@ function doctor(options = {}) {
   report.checks.push({
     name: 'block_slide_coverage',
     status: blocksWithoutSlide.length > 0 ? 'fail' : 'pass',
-    message: blocksWithoutSlide.length > 0
-      ? `${blocksWithoutSlide.length} blocks missing slide mapping: ${blocksWithoutSlide.map(([k]) => k).join(', ')}`
-      : `All ${Object.keys(compiled.blockContracts).length} blocks have explicit slide mappings`,
+    message:
+      blocksWithoutSlide.length > 0
+        ? `${blocksWithoutSlide.length} blocks missing slide mapping: ${blocksWithoutSlide.map(([k]) => k).join(', ')}`
+        : `All ${Object.keys(compiled.blockContracts).length} blocks have explicit slide mappings`,
   });
 
   // 5. Geometry verification per block
   const geometryIssues = [];
   for (const [blockKey, contract] of Object.entries(compiled.blockContracts)) {
-    if (contract.requiredGeometry === 'table' && contract.slideLayout && !contract.slideLayout.hasTable) {
-      geometryIssues.push(`${blockKey}: needs table but slide ${contract.primarySlideId} has no table`);
+    if (
+      contract.requiredGeometry === 'table' &&
+      contract.slideLayout &&
+      !contract.slideLayout.hasTable
+    ) {
+      geometryIssues.push(
+        `${blockKey}: needs table but slide ${contract.primarySlideId} has no table`
+      );
     }
-    if (contract.requiredGeometry === 'chart' && contract.slideLayout && !contract.slideLayout.hasCharts) {
-      geometryIssues.push(`${blockKey}: needs chart but slide ${contract.primarySlideId} has no charts`);
+    if (
+      contract.requiredGeometry === 'chart' &&
+      contract.slideLayout &&
+      !contract.slideLayout.hasCharts
+    ) {
+      geometryIssues.push(
+        `${blockKey}: needs chart but slide ${contract.primarySlideId} has no charts`
+      );
     }
   }
   report.checks.push({
     name: 'geometry_validation',
     status: geometryIssues.length > 0 ? 'warning' : 'pass',
-    message: geometryIssues.length > 0
-      ? `${geometryIssues.length} geometry issues: ${geometryIssues.slice(0, 5).join('; ')}`
-      : 'All block geometry requirements satisfied by their slide layouts',
+    message:
+      geometryIssues.length > 0
+        ? `${geometryIssues.length} geometry issues: ${geometryIssues.slice(0, 5).join('; ')}`
+        : 'All block geometry requirements satisfied by their slide layouts',
   });
 
   // 6. Drift detection
@@ -669,9 +679,10 @@ function doctor(options = {}) {
   report.checks.push({
     name: 'alias_validation',
     status: aliasIssues.length > 0 ? 'fail' : 'pass',
-    message: aliasIssues.length > 0
-      ? `Broken aliases: ${aliasIssues.join('; ')}`
-      : 'All pattern aliases resolve correctly',
+    message:
+      aliasIssues.length > 0
+        ? `Broken aliases: ${aliasIssues.join('; ')}`
+        : 'All pattern aliases resolve correctly',
   });
 
   // Summary
@@ -695,15 +706,207 @@ function doctor(options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// CLI: --doctor
+// auditCoverage() — Task 1: report which blocks have contracts
+// ---------------------------------------------------------------------------
+
+/**
+ * Audit contract coverage for all rendered blocks.
+ * Reports which blocks have contracts, which don't, and coverage %.
+ *
+ * @param {object} [options]
+ * @param {string} [options.templatePath]
+ * @param {object} [options.templateData]
+ * @param {string[]} [options.renderedBlocks] - list of block keys actually rendered at runtime
+ * @returns {object} Coverage report
+ */
+function auditCoverage(options = {}) {
+  let compiled;
+  try {
+    compiled = compile(options);
+  } catch (err) {
+    return {
+      error: err.message,
+      coveredBlocks: [],
+      uncoveredBlocks: [],
+      coveragePercent: 0,
+      totalBlocks: 0,
+    };
+  }
+
+  const contractedBlockKeys = new Set(Object.keys(compiled.blockContracts));
+  const renderedBlocks = Array.isArray(options.renderedBlocks)
+    ? options.renderedBlocks
+    : Object.keys(BLOCK_TEMPLATE_PATTERN_MAP);
+
+  const coveredBlocks = [];
+  const uncoveredBlocks = [];
+
+  for (const blockKey of renderedBlocks) {
+    if (contractedBlockKeys.has(blockKey)) {
+      const contract = compiled.blockContracts[blockKey];
+      coveredBlocks.push({
+        blockKey,
+        patternKey: contract.patternKey,
+        primarySlideId: contract.primarySlideId,
+        requiredGeometry: contract.requiredGeometry,
+        hasSlideLayout: Boolean(contract.slideLayout),
+      });
+    } else {
+      uncoveredBlocks.push({ blockKey });
+    }
+  }
+
+  const total = renderedBlocks.length;
+  const coveragePercent = total > 0 ? Number(((coveredBlocks.length / total) * 100).toFixed(1)) : 0;
+
+  return {
+    coveredBlocks,
+    uncoveredBlocks,
+    coveragePercent,
+    totalBlocks: total,
+    contractedBlockCount: contractedBlockKeys.size,
+    renderedBlockCount: renderedBlocks.length,
+    auditedAt: new Date().toISOString(),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// checkSparseContent() — Task 5: flag blocks with sparse content
+// ---------------------------------------------------------------------------
+
+const SPARSE_CONTENT_THRESHOLD = 60;
+
+/**
+ * Check for blocks whose content is too sparse for their template geometry.
+ * Flags any block where content length < SPARSE_CONTENT_THRESHOLD (60 chars).
+ *
+ * @param {object} blockContracts - from compile().blockContracts
+ * @param {object} contentMap - { blockKey: contentString | { text: string } }
+ * @returns {object} { sparse: [...], adequate: [...], skipped: [...] }
+ */
+function checkSparseContent(blockContracts, contentMap) {
+  if (!blockContracts || typeof blockContracts !== 'object') {
+    return { sparse: [], adequate: [], skipped: [], threshold: SPARSE_CONTENT_THRESHOLD };
+  }
+  if (!contentMap || typeof contentMap !== 'object') {
+    return { sparse: [], adequate: [], skipped: [], threshold: SPARSE_CONTENT_THRESHOLD };
+  }
+
+  const sparse = [];
+  const adequate = [];
+  const skipped = [];
+
+  for (const [blockKey, contract] of Object.entries(blockContracts)) {
+    const rawContent = contentMap[blockKey];
+    if (rawContent === undefined || rawContent === null) {
+      skipped.push({ blockKey, reason: 'no_content_provided' });
+      continue;
+    }
+
+    let text = '';
+    if (typeof rawContent === 'string') {
+      text = rawContent;
+    } else if (typeof rawContent === 'object' && rawContent.text) {
+      text = String(rawContent.text);
+    } else if (typeof rawContent === 'object') {
+      text = JSON.stringify(rawContent);
+    }
+
+    const charCount = text.trim().length;
+    const entry = {
+      blockKey,
+      charCount,
+      requiredGeometry: contract.requiredGeometry,
+      patternKey: contract.patternKey,
+      primarySlideId: contract.primarySlideId,
+    };
+
+    if (charCount < SPARSE_CONTENT_THRESHOLD) {
+      sparse.push({ ...entry, severity: charCount === 0 ? 'empty' : 'sparse' });
+    } else {
+      adequate.push(entry);
+    }
+  }
+
+  return { sparse, adequate, skipped, threshold: SPARSE_CONTENT_THRESHOLD };
+}
+
+// ---------------------------------------------------------------------------
+// generateDriftReport() — Task 7: JSON artifact comparing contracts vs runtime
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a comprehensive drift report artifact as a JSON-serializable object.
+ * Compares compiled contracts against runtime mappings and produces a report
+ * suitable for saving to disk or sending to monitoring.
+ *
+ * @param {object} [options]
+ * @param {string} [options.templatePath]
+ * @param {object} [options.templateData]
+ * @param {object} [options.runtimeMappings]
+ * @returns {object} Drift report artifact
+ */
+function generateDriftReport(options = {}) {
+  let compiled;
+  try {
+    compiled = compile(options);
+  } catch (err) {
+    return {
+      reportType: 'drift_report',
+      generatedAt: new Date().toISOString(),
+      error: err.message,
+      driftDetected: false,
+      issues: [],
+    };
+  }
+
+  const driftResult = drift(compiled, options.runtimeMappings || null);
+  const coverage = auditCoverage(options);
+
+  const blockSummary = {};
+  for (const [blockKey, contract] of Object.entries(compiled.blockContracts)) {
+    const matchingIssues = driftResult.issues.filter((i) => i.blockKey === blockKey);
+    blockSummary[blockKey] = {
+      contract: {
+        patternKey: contract.patternKey,
+        primarySlideId: contract.primarySlideId,
+        requiredGeometry: contract.requiredGeometry,
+        geometryType: contract.geometryType,
+      },
+      issueCount: matchingIssues.length,
+      issues: matchingIssues,
+      status: matchingIssues.length === 0 ? 'clean' : 'drifted',
+    };
+  }
+
+  return {
+    reportType: 'drift_report',
+    generatedAt: new Date().toISOString(),
+    contractVersion: compiled.version,
+    contractSignature: compiled.signature,
+    templateSource: compiled.templateSource,
+    driftDetected: driftResult.driftDetected,
+    summary: {
+      totalBlocks: Object.keys(compiled.blockContracts).length,
+      totalIssues: driftResult.issueCount,
+      errorCount: driftResult.errorCount,
+      warningCount: driftResult.warningCount,
+      coveragePercent: coverage.coveragePercent,
+    },
+    blockSummary,
+    allIssues: driftResult.issues,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// CLI: --doctor, --compile, --drift, --audit
 // ---------------------------------------------------------------------------
 
 if (require.main === module) {
   const args = process.argv.slice(2);
+  const templatePath = args.find((a) => a.startsWith('--template='))?.split('=')[1];
+
   if (args.includes('--doctor')) {
-    const templatePath = args
-      .find((a) => a.startsWith('--template='))
-      ?.split('=')[1];
     const report = doctor({ templatePath });
 
     console.log('\n=== Template Contract Doctor Report ===\n');
@@ -722,28 +925,74 @@ if (require.main === module) {
     console.log(
       `  ${report.summary.pass} pass, ${report.summary.warning} warnings, ${report.summary.fail} failures`
     );
-    console.log(`  Contract v${report.summary.contractVersion} | Signature: ${report.summary.signature?.substring(0, 24)}...`);
+    console.log(
+      `  Contract v${report.summary.contractVersion} | Signature: ${report.summary.signature?.substring(0, 24)}...`
+    );
     console.log(`  ${report.summary.patternCount} patterns, ${report.summary.blockCount} blocks\n`);
 
     process.exit(report.status === 'fail' ? 1 : 0);
   } else if (args.includes('--compile')) {
-    const templatePath = args
-      .find((a) => a.startsWith('--template='))
-      ?.split('=')[1];
     const compiled = compile({ templatePath });
     console.log(JSON.stringify(compiled, null, 2));
   } else if (args.includes('--drift')) {
-    const templatePath = args
-      .find((a) => a.startsWith('--template='))
-      ?.split('=')[1];
     const compiled = compile({ templatePath });
     const driftReport = drift(compiled);
     console.log(JSON.stringify(driftReport, null, 2));
+  } else if (args.includes('--audit')) {
+    // Task 11: CLI audit command — prints all mismatches
+    const compiled = compile({ templatePath });
+    const coverage = auditCoverage({ templatePath });
+    const driftReport = drift(compiled);
+
+    console.log('\n=== Template Contract Audit ===\n');
+
+    // Coverage
+    console.log(
+      `Coverage: ${coverage.coveragePercent}% (${coverage.coveredBlocks.length}/${coverage.totalBlocks} blocks)`
+    );
+    if (coverage.uncoveredBlocks.length > 0) {
+      console.log(`\nUncovered blocks:`);
+      for (const b of coverage.uncoveredBlocks) {
+        console.log(`  - ${b.blockKey}`);
+      }
+    }
+
+    // Drift mismatches
+    if (driftReport.driftDetected) {
+      console.log(
+        `\nDrift issues (${driftReport.issueCount} total, ${driftReport.errorCount} errors, ${driftReport.warningCount} warnings):`
+      );
+      for (const issue of driftReport.issues) {
+        const severity = issue.severity === 'error' ? '[ERROR]' : '[WARN]';
+        console.log(`  ${severity} ${issue.blockKey}: ${issue.message}`);
+      }
+    } else {
+      console.log('\nNo drift detected.');
+    }
+
+    // Block contract details
+    console.log(`\nBlock contracts (${Object.keys(compiled.blockContracts).length}):`);
+    const sortedBlocks = Object.entries(compiled.blockContracts).sort(([a], [b]) =>
+      a.localeCompare(b)
+    );
+    for (const [blockKey, contract] of sortedBlocks) {
+      const geo = contract.requiredGeometry || 'null';
+      const slide = contract.primarySlideId || 'null';
+      console.log(`  ${blockKey}: pattern=${contract.patternKey} slide=${slide} geometry=${geo}`);
+    }
+
+    console.log('');
+    process.exit(driftReport.errorCount > 0 ? 1 : 0);
   } else {
     console.log('Usage:');
     console.log('  node template-contract-compiler.js --doctor   Full diagnostic report');
-    console.log('  node template-contract-compiler.js --compile  Output compiled contracts as JSON');
+    console.log(
+      '  node template-contract-compiler.js --compile  Output compiled contracts as JSON'
+    );
     console.log('  node template-contract-compiler.js --drift    Run drift detection');
+    console.log(
+      '  node template-contract-compiler.js --audit    Print all mismatches and coverage'
+    );
     console.log('  Options: --template=<path>  Custom template-patterns.json path');
   }
 }
@@ -752,6 +1001,9 @@ module.exports = {
   compile,
   drift,
   doctor,
+  auditCoverage,
+  checkSparseContent,
+  generateDriftReport,
   // Exposed for testing
   CONTRACT_VERSION,
   BLOCK_TEMPLATE_PATTERN_MAP,
@@ -760,4 +1012,5 @@ module.exports = {
   CHART_TEMPLATE_CONTEXTS,
   SECTION_DIVIDER_TEMPLATE_SLIDES,
   DATA_TYPE_PATTERN_MAP,
+  SPARSE_CONTENT_THRESHOLD,
 };
