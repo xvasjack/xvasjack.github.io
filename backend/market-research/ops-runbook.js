@@ -443,6 +443,551 @@ function getCommands(category) {
   return COMMANDS;
 }
 
+// ============ ERROR CODE RUNBOOKS ============
+
+const ERROR_CODE_RUNBOOKS = {
+  PPT_STRUCTURAL_VALIDATION: {
+    code: 'PPT_STRUCTURAL_VALIDATION',
+    title: 'PPTX structural validation failure',
+    severity: 'critical',
+    steps: [
+      { action: 'Run integrity pipeline on the output buffer', command: 'node -e "require(\'./pptx-integrity-pipeline\').runIntegrityPipeline(require(\'fs\').readFileSync(\'output.pptx\')).then(r => console.log(JSON.stringify(r, null, 2)))"' },
+      { action: 'Check for duplicate slide IDs or broken refs', command: 'node -e "require(\'./pptx-validator\').validatePPTX(require(\'fs\').readFileSync(\'output.pptx\')).then(r => console.log(JSON.stringify(r, null, 2)))"' },
+      { action: 'Run repair', command: 'node repair-pptx.js output.pptx' },
+      { action: 'If repair fails, check template clone postprocess', command: 'grep -n "cloneSlide\\|duplicateSlide" ppt-single-country.js' },
+    ],
+  },
+  PPT_RENDERING_QUALITY: {
+    code: 'PPT_RENDERING_QUALITY',
+    title: 'Slide rendering failure rate too high',
+    severity: 'high',
+    steps: [
+      { action: 'Check PPT metrics for render failures', command: 'curl -s http://localhost:3010/api/diagnostics | jq .ppt' },
+      { action: 'Review template pattern coverage', command: 'node -e "console.log(JSON.stringify(require(\'./template-contract-compiler\').compile(), null, 2))"' },
+      { action: 'Regenerate template patterns', command: 'node build-template-patterns.js' },
+    ],
+  },
+  QUALITY_GATE_FAILED: {
+    code: 'QUALITY_GATE_FAILED',
+    title: 'Research quality gate failure',
+    severity: 'high',
+    steps: [
+      { action: 'Check diagnostics for failing gate', command: 'curl -s http://localhost:3010/api/diagnostics | jq "{synthesisGate, notReadyCountries, pptDataGateFailures}"' },
+      { action: 'Check synthesis scores per country', command: 'curl -s http://localhost:3010/api/diagnostics | jq ".countries[]? | {country, score: .synthesisScores?.overall}"' },
+      { action: 'If borderline, try soft bypass', command: 'SOFT_READINESS_GATE=true node server.js' },
+    ],
+  },
+  BUDGET_GATE: {
+    code: 'BUDGET_GATE',
+    title: 'Budget gate overflow risk',
+    severity: 'medium',
+    steps: [
+      { action: 'Check budget gate details', command: 'curl -s http://localhost:3010/api/diagnostics | jq .budgetGate' },
+      { action: 'Review field char budgets', command: 'grep -n "FIELD_CHAR_BUDGETS" budget-gate.js' },
+      { action: 'Increase limits if needed', command: 'Edit FIELD_CHAR_BUDGETS in budget-gate.js' },
+    ],
+  },
+  GEMINI_API_ERROR: {
+    code: 'GEMINI_API_ERROR',
+    title: 'Gemini API call failure',
+    severity: 'high',
+    steps: [
+      { action: 'Check API key validity', command: 'node -e "console.log(!!process.env.GEMINI_API_KEY ? \'Key set\' : \'Key missing\')"' },
+      { action: 'Check cost budget', command: 'curl -s http://localhost:3010/api/costs | jq .' },
+      { action: 'Reduce concurrency if rate-limited', command: 'Set RESEARCH_BATCH_SIZE=1 in env' },
+    ],
+  },
+  OOM: {
+    code: 'OOM',
+    title: 'Out of memory',
+    severity: 'critical',
+    steps: [
+      { action: 'Check stage memory usage', command: 'node -e "console.log(JSON.stringify(require(\'./perf-profiler\').getStageMetrics(), null, 2))"' },
+      { action: 'Run with GC and constrained heap', command: 'node --expose-gc --max-old-space-size=450 server.js' },
+      { action: 'Reduce batch size or maxTokens', command: 'Set COUNTRY_BATCH_SIZE=1 in env' },
+    ],
+  },
+  PIPELINE_ABORT: {
+    code: 'PIPELINE_ABORT',
+    title: 'Pipeline aborted (timeout or manual)',
+    severity: 'medium',
+    steps: [
+      { action: 'Check timeout config', command: 'echo $PIPELINE_TIMEOUT_SECONDS' },
+      { action: 'Disable timeout if needed', command: 'DISABLE_PIPELINE_TIMEOUT=true node server.js' },
+      { action: 'Check for abort controller usage', command: 'grep -n "AbortController\\|abort()" server.js' },
+    ],
+  },
+  EMAIL_DELIVERY: {
+    code: 'EMAIL_DELIVERY',
+    title: 'Email delivery failure',
+    severity: 'medium',
+    steps: [
+      { action: 'Verify SendGrid key', command: 'node -e "console.log(!!process.env.SENDGRID_API_KEY ? \'Key set\' : \'Key missing\')"' },
+      { action: 'Verify sender email', command: 'echo $SENDER_EMAIL' },
+      { action: 'Check server logs for SendGrid errors', command: 'grep -i "sendgrid\\|email.*fail" server.log' },
+    ],
+  },
+};
+
+// ============ OPERATIONAL PROFILES ============
+
+const PROFILES = {
+  'fast-check': {
+    name: 'fast-check',
+    description: 'Quick sanity check: env vars, module syntax, template contract',
+    checks: ['env-vars', 'key-files', 'module-syntax', 'template-contract'],
+    estimatedSeconds: 5,
+  },
+  'release-check': {
+    name: 'release-check',
+    description: 'Release readiness: fast-check + regression tests + preflight gates',
+    checks: ['env-vars', 'key-files', 'module-syntax', 'template-contract', 'regression-tests', 'preflight-gates'],
+    estimatedSeconds: 30,
+  },
+  'deep-audit': {
+    name: 'deep-audit',
+    description: 'Full audit: release-check + stress test + integrity pipeline',
+    checks: [
+      'env-vars', 'key-files', 'module-syntax', 'template-contract',
+      'regression-tests', 'preflight-gates', 'stress-test', 'integrity-pipeline',
+    ],
+    estimatedSeconds: 120,
+  },
+};
+
+// ============ RUN LOCAL READINESS ============
+
+/**
+ * One-command local readiness workflow.
+ * @param {object} options
+ * @param {string} options.mode - 'fast-check' | 'release-check' | 'deep-audit'
+ * @param {boolean} [options.strict] - If true, any warning becomes a failure
+ * @returns {{ pass: boolean, mode: string, checks: Array, duration: number, verdict: string }}
+ */
+function runLocalReadiness(options = {}) {
+  const startMs = Date.now();
+  const mode = options.mode || 'fast-check';
+  const strict = !!options.strict;
+  const profile = PROFILES[mode];
+
+  if (!profile) {
+    return {
+      pass: false,
+      mode,
+      checks: [{ name: 'profile-lookup', pass: false, output: `Unknown mode: ${mode}. Valid: ${Object.keys(PROFILES).join(', ')}` }],
+      duration: Date.now() - startMs,
+      verdict: `Invalid mode "${mode}"`,
+    };
+  }
+
+  const checks = [];
+  const fs = require('fs');
+
+  // --- env-vars ---
+  if (profile.checks.includes('env-vars')) {
+    const requiredVars = ['GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
+    const missing = requiredVars.filter((v) => !process.env[v]);
+    checks.push({
+      name: 'env-vars',
+      pass: missing.length === 0,
+      output: missing.length === 0 ? 'All required env vars set' : `Missing: ${missing.join(', ')}`,
+    });
+  }
+
+  // --- key-files ---
+  if (profile.checks.includes('key-files')) {
+    const keyFiles = ['server.js', 'budget-gate.js', 'quality-gates.js', 'pptx-validator.js', 'research-orchestrator.js', 'ai-clients.js', 'ppt-single-country.js'];
+    const missing = keyFiles.filter((f) => !fs.existsSync(path.join(SERVICE_DIR, f)));
+    checks.push({
+      name: 'key-files',
+      pass: missing.length === 0,
+      output: missing.length === 0 ? `All ${keyFiles.length} key files present` : `Missing: ${missing.join(', ')}`,
+    });
+  }
+
+  // --- module-syntax ---
+  if (profile.checks.includes('module-syntax')) {
+    const modulesToCheck = ['./budget-gate', './quality-gates', './perf-profiler'];
+    const errors = [];
+    for (const mod of modulesToCheck) {
+      try {
+        require(mod);
+      } catch (err) {
+        errors.push(`${mod}: ${err.message}`);
+      }
+    }
+    checks.push({
+      name: 'module-syntax',
+      pass: errors.length === 0,
+      output: errors.length === 0 ? 'All modules load OK' : errors.join('; '),
+    });
+  }
+
+  // --- template-contract ---
+  if (profile.checks.includes('template-contract')) {
+    let contractOk = false;
+    let contractOutput = '';
+    try {
+      const tcc = require('./template-contract-compiler');
+      const contract = tcc.compile();
+      const slideCount = contract && contract.slides ? Object.keys(contract.slides).length : 0;
+      contractOk = slideCount > 0;
+      contractOutput = contractOk ? `Template contract compiled: ${slideCount} slides` : 'Template contract has 0 slides';
+    } catch (err) {
+      contractOutput = `Template contract error: ${err.message}`;
+    }
+    checks.push({
+      name: 'template-contract',
+      pass: contractOk,
+      output: contractOutput,
+    });
+  }
+
+  // --- regression-tests ---
+  if (profile.checks.includes('regression-tests')) {
+    let testPass = false;
+    let testOutput = '';
+    try {
+      execSync('npx jest --testPathPattern=market-research --no-coverage --passWithNoTests 2>&1', {
+        cwd: path.join(SERVICE_DIR, '..'),
+        timeout: 60000,
+        stdio: 'pipe',
+      });
+      testPass = true;
+      testOutput = 'All tests passed';
+    } catch (err) {
+      testOutput = `Tests failed: ${(err.stdout || err.message || '').toString().slice(0, 200)}`;
+    }
+    checks.push({
+      name: 'regression-tests',
+      pass: testPass,
+      output: testOutput,
+    });
+  }
+
+  // --- preflight-gates ---
+  if (profile.checks.includes('preflight-gates')) {
+    let preflightPass = false;
+    let preflightOutput = '';
+    try {
+      const preflight = require('./preflight-gates');
+      if (typeof preflight.runAll === 'function') {
+        const result = preflight.runAll();
+        preflightPass = result && result.pass !== false;
+        preflightOutput = preflightPass ? 'Preflight gates passed' : `Preflight issues: ${JSON.stringify(result).slice(0, 200)}`;
+      } else {
+        preflightPass = true;
+        preflightOutput = 'Preflight module loaded (no runAll export)';
+      }
+    } catch (err) {
+      preflightOutput = `Preflight error: ${err.message}`;
+    }
+    checks.push({
+      name: 'preflight-gates',
+      pass: preflightPass,
+      output: preflightOutput,
+    });
+  }
+
+  // --- stress-test ---
+  if (profile.checks.includes('stress-test')) {
+    let stressPass = false;
+    let stressOutput = '';
+    try {
+      execSync('node stress-test-harness.js --quick 2>&1', {
+        cwd: SERVICE_DIR,
+        timeout: 120000,
+        stdio: 'pipe',
+      });
+      stressPass = true;
+      stressOutput = 'Stress test passed';
+    } catch (err) {
+      stressOutput = `Stress test failed: ${(err.stdout || err.message || '').toString().slice(0, 200)}`;
+    }
+    checks.push({
+      name: 'stress-test',
+      pass: stressPass,
+      output: stressOutput,
+    });
+  }
+
+  // --- integrity-pipeline ---
+  if (profile.checks.includes('integrity-pipeline')) {
+    let integrityPass = false;
+    let integrityOutput = '';
+    try {
+      const integ = require('./pptx-integrity-pipeline');
+      integrityPass = typeof integ.runIntegrityPipeline === 'function';
+      integrityOutput = integrityPass ? 'Integrity pipeline module available' : 'Missing runIntegrityPipeline export';
+    } catch (err) {
+      integrityOutput = `Integrity pipeline error: ${err.message}`;
+    }
+    checks.push({
+      name: 'integrity-pipeline',
+      pass: integrityPass,
+      output: integrityOutput,
+    });
+  }
+
+  const duration = Date.now() - startMs;
+  const failures = checks.filter((c) => !c.pass);
+  const pass = strict ? failures.length === 0 : failures.filter((c) => c.name !== 'preflight-gates' && c.name !== 'stress-test' && c.name !== 'integrity-pipeline').length === 0;
+
+  let verdict;
+  if (pass && failures.length === 0) {
+    verdict = `All ${checks.length} checks passed (${mode})`;
+  } else if (pass) {
+    verdict = `Passed with ${failures.length} non-critical warning(s) (${mode})`;
+  } else {
+    verdict = `FAILED: ${failures.length} check(s) failed (${mode})`;
+  }
+
+  return { pass, mode, checks, duration, verdict };
+}
+
+// ============ RECOMMEND ACTIONS ============
+
+/**
+ * Post-run action recommender. Given diagnostics from a pipeline run,
+ * returns exact remediation commands for each detected issue.
+ * @param {object} diagnostics - lastRunDiagnostics from server.js
+ * @returns {{ actions: Array<{issue: string, severity: string, command: string}>, summary: string }}
+ */
+function recommendActions(diagnostics) {
+  const actions = [];
+
+  if (!diagnostics) {
+    return { actions: [{ issue: 'No diagnostics provided', severity: 'info', command: 'curl -s http://localhost:3010/api/diagnostics | jq .' }], summary: 'No diagnostics to analyze' };
+  }
+
+  // Check stage failure
+  if (diagnostics.error || diagnostics.stage === 'error') {
+    const triage = triageError(diagnostics.error || '');
+    if (triage.matched) {
+      actions.push({
+        issue: triage.rootCause,
+        severity: 'critical',
+        command: triage.fix[0],
+      });
+    } else {
+      actions.push({
+        issue: `Pipeline error: ${diagnostics.error || 'unknown'}`,
+        severity: 'critical',
+        command: 'Check server logs for full stack trace',
+      });
+    }
+  }
+
+  // Quality gate issues
+  if (diagnostics.notReadyCountries && diagnostics.notReadyCountries.length > 0) {
+    actions.push({
+      issue: `${diagnostics.notReadyCountries.length} country(ies) not ready`,
+      severity: 'high',
+      command: 'curl -s http://localhost:3010/api/diagnostics | jq .notReadyCountries',
+    });
+  }
+
+  // Synthesis gate
+  if (diagnostics.synthesisGate && !diagnostics.synthesisGate.pass) {
+    actions.push({
+      issue: `Synthesis gate failed (score: ${diagnostics.synthesisGate.overall || 'N/A'})`,
+      severity: 'high',
+      command: 'Check synthesis prompts in research-orchestrator.js',
+    });
+  }
+
+  // PPT data gate
+  if (diagnostics.pptDataGateFailures && diagnostics.pptDataGateFailures.length > 0) {
+    actions.push({
+      issue: `PPT data gate failures: ${diagnostics.pptDataGateFailures.length}`,
+      severity: 'high',
+      command: 'curl -s http://localhost:3010/api/diagnostics | jq .pptDataGateFailures',
+    });
+  }
+
+  // Budget gate
+  if (diagnostics.budgetGate) {
+    for (const [country, bg] of Object.entries(diagnostics.budgetGate)) {
+      if (bg.risk === 'high') {
+        actions.push({
+          issue: `Budget gate high risk for ${country}`,
+          severity: 'medium',
+          command: `curl -s http://localhost:3010/api/diagnostics | jq '.budgetGate["${country}"]'`,
+        });
+      }
+    }
+  }
+
+  // PPT metrics
+  if (diagnostics.ppt) {
+    if (diagnostics.ppt.templateCoverage != null && diagnostics.ppt.templateCoverage < 95) {
+      actions.push({
+        issue: `Low template coverage: ${diagnostics.ppt.templateCoverage}%`,
+        severity: 'medium',
+        command: 'node build-template-patterns.js',
+      });
+    }
+    if (diagnostics.ppt.slideRenderFailureCount > 0) {
+      actions.push({
+        issue: `${diagnostics.ppt.slideRenderFailureCount} slide render failures`,
+        severity: 'high',
+        command: 'Check ppt-single-country.js render logic',
+      });
+    }
+  }
+
+  const summary = actions.length === 0
+    ? 'No issues detected — pipeline looks healthy'
+    : `${actions.length} action(s) recommended (${actions.filter((a) => a.severity === 'critical').length} critical)`;
+
+  return { actions, summary };
+}
+
+// ============ EXECUTE RUNBOOK ============
+
+/**
+ * Runbook decision tree execution helper.
+ * Given an error code, returns the step-by-step fix sequence.
+ * @param {string} errorCode - Error code key (e.g., 'PPT_STRUCTURAL_VALIDATION', 'OOM')
+ * @returns {{ found: boolean, code: string, title: string|null, severity: string|null, steps: Array|null, availableCodes: string[] }}
+ */
+function executeRunbook(errorCode) {
+  const availableCodes = Object.keys(ERROR_CODE_RUNBOOKS);
+
+  if (!errorCode || !ERROR_CODE_RUNBOOKS[errorCode]) {
+    return { found: false, code: errorCode || null, title: null, severity: null, steps: null, availableCodes };
+  }
+
+  const rb = ERROR_CODE_RUNBOOKS[errorCode];
+  return {
+    found: true,
+    code: rb.code,
+    title: rb.title,
+    severity: rb.severity,
+    steps: rb.steps.slice(),
+    availableCodes,
+  };
+}
+
+// ============ GET PROFILE ============
+
+/**
+ * Returns config for an operational profile.
+ * @param {string} name - 'fast-check' | 'release-check' | 'deep-audit'
+ * @returns {object|null}
+ */
+function getProfile(name) {
+  return PROFILES[name] || null;
+}
+
+// ============ GENERATE COMMAND COOKBOOK ============
+
+/**
+ * Auto-generate command list by scanning *.js files for CLI usage patterns.
+ * Reads the first 20 lines of each JS file looking for Usage/CLI comments.
+ * @returns {{ generated: Array<{file: string, commands: string[]}>, timestamp: string }}
+ */
+function generateCommandCookbook() {
+  const fs = require('fs');
+  const generated = [];
+
+  let jsFiles;
+  try {
+    jsFiles = fs.readdirSync(SERVICE_DIR).filter((f) => f.endsWith('.js') && !f.includes('.test.'));
+  } catch {
+    return { generated: [], timestamp: new Date().toISOString() };
+  }
+
+  for (const file of jsFiles) {
+    const filePath = path.join(SERVICE_DIR, file);
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n').slice(0, 30);
+      const commands = [];
+
+      for (const line of lines) {
+        // Match lines like: //   node ops-runbook.js --validate-local
+        const cliMatch = line.match(/\/\/\s+(node\s+\S+\.js\s+.+)/);
+        if (cliMatch) {
+          commands.push(cliMatch[1].trim());
+        }
+      }
+
+      // Also check for require.main === module pattern
+      if (content.includes('require.main === module')) {
+        // Extract CLI flags from process.argv checks
+        const flagMatches = content.match(/['"]--[\w-]+['"]/g);
+        if (flagMatches) {
+          const uniqueFlags = [...new Set(flagMatches.map((f) => f.replace(/['"]/g, '')))];
+          for (const flag of uniqueFlags) {
+            if (flag !== '--help') {
+              const exists = commands.some((c) => c.includes(flag));
+              if (!exists) {
+                commands.push(`node ${file} ${flag}`);
+              }
+            }
+          }
+        }
+      }
+
+      if (commands.length > 0) {
+        generated.push({ file, commands });
+      }
+    } catch {
+      // Skip unreadable files
+    }
+  }
+
+  return { generated, timestamp: new Date().toISOString() };
+}
+
+// ============ SAFE TO RUN VERDICT ============
+
+/**
+ * Clear yes/no verdict: "Is it safe to run the paid pipeline?"
+ * @param {Array} checks - Array of { name, pass, output } from runLocalReadiness or similar
+ * @returns {{ safe: boolean, verdict: string, evidence: Array<{check: string, status: string, detail: string}>, blockers: string[] }}
+ */
+function getSafeToRunVerdict(checks) {
+  if (!Array.isArray(checks) || checks.length === 0) {
+    return {
+      safe: false,
+      verdict: 'UNSAFE: No checks provided — cannot determine safety',
+      evidence: [],
+      blockers: ['No checks were provided'],
+    };
+  }
+
+  const evidence = checks.map((c) => ({
+    check: c.name,
+    status: c.pass ? 'PASS' : 'FAIL',
+    detail: c.output || '',
+  }));
+
+  // Critical checks that MUST pass
+  const criticalChecks = ['env-vars', 'key-files', 'module-syntax'];
+  const blockers = [];
+
+  for (const c of checks) {
+    if (criticalChecks.includes(c.name) && !c.pass) {
+      blockers.push(`${c.name}: ${c.output || 'failed'}`);
+    }
+  }
+
+  // Also block if more than half of all checks fail
+  const failCount = checks.filter((c) => !c.pass).length;
+  if (failCount > checks.length / 2) {
+    blockers.push(`${failCount}/${checks.length} checks failed — majority failure`);
+  }
+
+  const safe = blockers.length === 0;
+  const verdict = safe
+    ? `SAFE: All critical checks passed (${checks.length} total checks, ${failCount} warnings)`
+    : `UNSAFE: ${blockers.length} blocker(s) — ${blockers[0]}`;
+
+  return { safe, verdict, evidence, blockers };
+}
+
 // ============ CLI ============
 
 if (require.main === module) {
@@ -523,7 +1068,15 @@ module.exports = {
   triageError,
   getPlaybook,
   getCommands,
+  runLocalReadiness,
+  recommendActions,
+  executeRunbook,
+  getProfile,
+  generateCommandCookbook,
+  getSafeToRunVerdict,
   ERROR_PATTERNS,
   PLAYBOOKS,
   COMMANDS,
+  ERROR_CODE_RUNBOOKS,
+  PROFILES,
 };
