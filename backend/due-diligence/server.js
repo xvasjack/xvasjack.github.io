@@ -76,7 +76,7 @@ if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
 if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
+  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4.1 fallback');
 }
 if (!process.env.KIMI_API_KEY) {
   console.warn('KIMI_API_KEY not set - DD deep analysis will use Gemini 2.5 Pro instead');
@@ -530,13 +530,13 @@ async function _callGemini(prompt) {
   }
 }
 
-// GPT-4o fallback function for when Gemini fails
-async function _callGPT4oFallback(prompt, jsonMode = false, reason = '') {
+// GPT-4.1 fallback function for when Gemini fails
+async function _callGPT41Fallback(prompt, jsonMode = false, reason = '') {
   try {
-    console.log(`  Falling back to GPT-4o (reason: ${reason})...`);
+    console.log(`  Falling back to GPT-4.1 (reason: ${reason})...`);
 
     const requestOptions = {
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
     };
@@ -549,7 +549,7 @@ async function _callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     const response = await openai.chat.completions.create(requestOptions);
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -557,11 +557,11 @@ async function _callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     const result = response.choices?.[0]?.message?.content || '';
 
     if (result) {
-      console.log('  GPT-4o fallback successful');
+      console.log('  GPT-4.1 fallback successful');
     }
     return result;
   } catch (fallbackError) {
-    console.error('GPT-4o fallback error:', fallbackError.message);
+    console.error('GPT-4.1 fallback error:', fallbackError.message);
     return ''; // Return empty if both fail
   }
 }
@@ -691,13 +691,13 @@ async function _callPerplexity(prompt) {
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -714,16 +714,16 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Updated to use gpt-4o-search-preview (more stable than mini version)
+// Updated to use gpt-5-search-api (more stable than mini version)
 async function _callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-5-search-api',
       messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o-search-preview',
+        'gpt-5-search-api',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -736,7 +736,7 @@ async function _callOpenAISearch(prompt) {
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4o if search model not available
+    // Fallback to regular gpt-4.1 if search model not available
     return callChatGPT(prompt);
   }
 }
@@ -776,10 +776,10 @@ async function _callSerpAPI(query) {
   }
 }
 
-// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
+// DeepSeek V3.2 - Cost-effective alternative to GPT-4.1
 async function _callDeepSeek(prompt, maxTokens = 4000) {
   if (!process.env.DEEPSEEK_API_KEY) {
-    console.warn('DeepSeek API key not set, falling back to GPT-4o');
+    console.warn('DeepSeek API key not set, falling back to GPT-4.1');
     return null; // Caller should handle fallback
   }
   try {
@@ -1338,13 +1338,13 @@ function _strategy14_LocalLanguageOpenAISearch(business, country, _exclusion) {
   return queries;
 }
 
-// ============ EXTRACTION WITH GPT-4o-mini ============
+// ============ EXTRACTION WITH GPT-4.1-nano ============
 
 async function extractCompanies(text, country) {
   if (!text || text.length < 50) return [];
   try {
     const extraction = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-nano',
       messages: [
         {
           role: 'system',
@@ -1364,7 +1364,7 @@ RULES:
     });
     if (extraction.usage) {
       recordTokens(
-        'gpt-4o-mini',
+        'gpt-4.1-nano',
         extraction.usage.prompt_tokens || 0,
         extraction.usage.completion_tokens || 0
       );
@@ -1737,7 +1737,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
   return rules;
 }
 
-// ============ VALIDATION (v24 - GPT-4o with LENIENT filtering) ============
+// ============ VALIDATION (v24 - GPT-4.1 with LENIENT filtering) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
@@ -1750,7 +1750,7 @@ async function validateCompanyStrict(company, business, country, exclusion, page
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o', // Use smarter model for better validation
+      model: 'gpt-4.1', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -1799,7 +1799,7 @@ ${contentToValidate.substring(0, 10000)}`,
 
     if (validation.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         validation.usage.prompt_tokens || 0,
         validation.usage.completion_tokens || 0
       );
@@ -1900,7 +1900,7 @@ async function validateCompany(company, business, country, exclusion, pageText) 
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-nano',
       messages: [
         {
           role: 'system',
@@ -1945,7 +1945,7 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
 
     if (validation.usage) {
       recordTokens(
-        'gpt-4o-mini',
+        'gpt-4.1-nano',
         validation.usage.prompt_tokens || 0,
         validation.usage.completion_tokens || 0
       );
@@ -2106,25 +2106,25 @@ Return JSON format:
     }
   }
 
-  // Fallback to GPT-4o
+  // Fallback to GPT-4.1
   if (!result) {
     try {
       const gptResponse = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-4.1',
         messages: [{ role: 'user', content: analysisPrompt }],
         response_format: { type: 'json_object' },
         temperature: 0.1,
       });
       if (gptResponse.usage) {
         recordTokens(
-          'gpt-4o',
+          'gpt-4.1',
           gptResponse.usage.prompt_tokens || 0,
           gptResponse.usage.completion_tokens || 0
         );
       }
       result = JSON.parse(gptResponse.choices?.[0]?.message?.content || '{}');
     } catch (e) {
-      console.error('[DD] GPT-4o structure analysis failed:', e.message);
+      console.error('[DD] GPT-4.1 structure analysis failed:', e.message);
     }
   }
 
@@ -2628,18 +2628,18 @@ OUTPUT: Structured extraction organized by data category.`;
     deepAnalysis = await callGemini2Pro(analysisPrompt);
   }
 
-  // Final fallback to GPT-4o
+  // Final fallback to GPT-4.1
   if (!deepAnalysis) {
-    console.log('[DD] Using GPT-4o for analysis...');
+    console.log('[DD] Using GPT-4.1 for analysis...');
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages: [{ role: 'user', content: analysisPrompt }],
       temperature: 0.1,
       max_tokens: 16000,
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -2776,9 +2776,9 @@ CRITICAL: Output ONLY valid JSON. No markdown, no code blocks, no explanations. 
   rawResponse = await callGemini2Pro(fullReportPrompt, true); // JSON mode
 
   if (!rawResponse) {
-    console.log('[DD] Gemini failed, using GPT-4o for report...');
+    console.log('[DD] Gemini failed, using GPT-4.1 for report...');
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages: [{ role: 'user', content: fullReportPrompt }],
       temperature: 0.2,
       max_tokens: 16000,
@@ -2786,7 +2786,7 @@ CRITICAL: Output ONLY valid JSON. No markdown, no code blocks, no explanations. 
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );

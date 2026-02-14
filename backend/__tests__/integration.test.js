@@ -161,7 +161,7 @@ describe('Integration Tests', () => {
       // Simulate multiple API calls with retry
       await withRetry(
         async () => {
-          tracker.add('gpt-4o', 1000, 500, 'search');
+          tracker.add('gpt-4.1', 1000, 500, 'search');
           return 'success';
         },
         3,
@@ -283,11 +283,11 @@ describe('Integration Tests', () => {
         },
         async () => {
           gpt4oCalled = true;
-          tracker.add('gpt-4o', 500, 300, 'search');
+          tracker.add('gpt-4.1', 500, 300, 'search');
           return '[{"company_name": "Test Corp", "website": "https://test.com", "hq": "US"}]';
         },
         'Gemini',
-        'GPT-4o'
+        'GPT-4.1'
       );
 
       expect(geminiCalled).toBe(true);
@@ -297,7 +297,7 @@ describe('Integration Tests', () => {
       const summary = tracker.getSummary();
       expect(summary.callCount).toBe(2);
       expect(summary.byModel['gemini-2.5-flash']).toBeDefined();
-      expect(summary.byModel['gpt-4o']).toBeDefined();
+      expect(summary.byModel['gpt-4.1']).toBeDefined();
 
       const parsed = extractJSON(result);
       expect(parsed).toHaveLength(1);

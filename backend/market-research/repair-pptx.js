@@ -14,6 +14,7 @@ const {
   validatePPTX,
   scanRelationshipTargets,
   scanPackageConsistency,
+  normalizeAbsoluteRelationshipTargets,
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
 } = require('./pptx-validator');
@@ -68,6 +69,9 @@ async function repair(inputPath, outputPath) {
   const raw = fs.readFileSync(inputPath);
   let buffer = raw;
 
+  const relNormalize = await normalizeAbsoluteRelationshipTargets(buffer);
+  buffer = relNormalize.buffer;
+
   const idNormalize = await normalizeSlideNonVisualIds(buffer);
   buffer = idNormalize.buffer;
 
@@ -91,6 +95,9 @@ async function repair(inputPath, outputPath) {
 
   console.log(`Input:  ${inputPath}`);
   console.log(`Output: ${outputPath}`);
+  console.log(
+    `[Repair] Relationship target normalize: changed=${relNormalize.changed}, normalizedTargets=${relNormalize.stats?.normalizedTargets || 0}, filesChanged=${relNormalize.stats?.filesChanged || 0}`
+  );
   console.log(
     `[Repair] ID normalization: changed=${idNormalize.changed}, reassignedIds=${idNormalize.stats?.reassignedIds || 0}`
   );

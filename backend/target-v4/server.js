@@ -36,7 +36,7 @@ if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
 if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
+  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4.1 fallback');
 }
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
@@ -95,7 +95,7 @@ async function callGemini(prompt) {
   }
 }
 
-// GPT-4o fallback function for when Gemini fails
+// GPT-4.1 fallback function for when Gemini fails
 // Gemini 2.5 Pro - Most capable model for critical validation tasks
 // Use this for final data accuracy verification where errors are unacceptable
 // Claude (Anthropic) - excellent reasoning and analysis
@@ -145,12 +145,12 @@ async function callPerplexity(prompt) {
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -164,15 +164,15 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Updated to use gpt-4o-search-preview (more stable than mini version)
+// Updated to use gpt-5-search-api (more stable than mini version)
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-5-search-api',
       messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
-      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -182,7 +182,7 @@ async function callOpenAISearch(prompt) {
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4o if search model not available
+    // Fallback to regular gpt-4.1 if search model not available
     return callChatGPT(prompt);
   }
 }
@@ -222,7 +222,7 @@ async function callSerpAPI(query) {
   }
 }
 
-// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
+// DeepSeek V3.2 - Cost-effective alternative to GPT-4.1
 // Detect domain/context from text for domain-aware translation
 // Get domain-specific translation instructions
 // ============ SEARCH CONFIGURATION ============
@@ -626,13 +626,13 @@ function strategy14_LocalLanguageOpenAISearch(business, country, _exclusion) {
   return queries;
 }
 
-// ============ EXTRACTION WITH GPT-4o-mini ============
+// ============ EXTRACTION WITH GPT-4.1-nano ============
 
 async function extractCompanies(text, country) {
   if (!text || text.length < 50) return [];
   try {
     const extraction = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-nano',
       messages: [
         {
           role: 'system',
@@ -651,7 +651,7 @@ RULES:
       response_format: { type: 'json_object' },
     });
     if (extraction.usage) {
-      recordTokens('gpt-4o-mini', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
+      recordTokens('gpt-4.1-nano', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
     }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
@@ -1140,7 +1140,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
   return rules;
 }
 
-// ============ VALIDATION (v24 - GPT-4o with LENIENT filtering) ============
+// ============ VALIDATION (v24 - GPT-4.1 with LENIENT filtering) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
@@ -1153,7 +1153,7 @@ async function validateCompanyStrict(company, business, country, exclusion, page
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o', // Use smarter model for better validation
+      model: 'gpt-4.1', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -1201,7 +1201,7 @@ ${contentToValidate.substring(0, 10000)}`,
     });
 
     if (validation.usage) {
-      recordTokens('gpt-4o', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+      recordTokens('gpt-4.1', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
     }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -1325,7 +1325,7 @@ function buildEmailHTML(companies, business, country, exclusion) {
 async function expandRegionToCountries(region) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-nano',
       messages: [
         {
           role: 'system',
@@ -1345,7 +1345,7 @@ Example: ["Malaysia", "Thailand", "Indonesia"]`,
     });
 
     if (response.usage) {
-      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-4.1-nano', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = JSON.parse(response.choices[0].message.content);
     const countries = result.countries || result;
@@ -1420,7 +1420,7 @@ Be EXHAUSTIVE. The goal is to ensure we don't miss any company due to terminolog
 
   try {
     // Query multiple AI models for comprehensive coverage
-    console.log('  Querying GPT-4o, Gemini, and Perplexity for terminology discovery...');
+    console.log('  Querying GPT-4.1, Gemini, and Perplexity for terminology discovery...');
     const [gptResult, geminiResult, perplexityResult] = await Promise.all([
       callOpenAISearch(discoveryPrompt).catch((e) => {
         console.error('  GPT error:', e.message);
@@ -1746,7 +1746,7 @@ async function runExpansionRound(round, business, country, existingCompanies, te
     );
 
     // Run all 3 search-enabled models in parallel with error handling
-    console.log(`  Querying GPT-4o-mini Search, Gemini 2.0 Flash, Perplexity Sonar...`);
+    console.log(`  Querying GPT-4.1-nano Search, Gemini 2.0 Flash, Perplexity Sonar...`);
     const [gptResult, geminiResult, perplexityResult] = await Promise.all([
       callOpenAISearch(prompt).catch((e) => {
         console.error(`  GPT error: ${e.message}`);
@@ -1770,7 +1770,7 @@ async function runExpansionRound(round, business, country, existingCompanies, te
     ]);
 
     console.log(
-      `  GPT-4o-mini: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length}`
+      `  GPT-4.1-nano: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length}`
     );
 
     // Combine and filter out duplicates

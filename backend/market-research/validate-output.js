@@ -7,6 +7,9 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { validatePPTX, generateReport, readPPTX, extractAllText } = require('./pptx-validator');
+const { runVisualFidelityCheck } = require('./visual-fidelity-runner');
+const { runSlideAudit } = require('./slide-audit-runner');
+const { runXmlPackageAudit } = require('./xml-audit-runner');
 
 /**
  * Get expectations based on country and industry
@@ -27,7 +30,7 @@ function getExpectations(country = 'Vietnam', industry = 'Energy Services') {
     requiredText: ['Energy', industry, 'Opportunities', 'Obstacles'],
     slideChecks: [
       { slide: 1, minChars: 20, mustContain: [country] },
-      { slide: 2, minChars: 50, mustContain: ['Table of Contents'] },
+      { slide: 2, minChars: 50, mustContain: ['Table of Contents', country] },
       { slide: 3, minChars: 50, mustContain: ['Executive Summary', country] },
     ],
     tableChecks: [],
@@ -98,6 +101,79 @@ async function runValidation(filePath, expectations = EXPECTATIONS) {
     all.passed.push(...slideRes.passed);
     all.failed.push(...slideRes.failed);
     const report = await generateReport(filePath);
+    const visual = await runVisualFidelityCheck(filePath);
+    const slideAudit = await runSlideAudit(filePath);
+    const xmlAudit = await runXmlPackageAudit(filePath);
+    const visualFailed = (visual.checks || []).filter((c) => !c.passed);
+
+    if (!xmlAudit.valid) {
+      all.failed.push({
+        check: 'XML package integrity',
+        expected: 'all XML/rels parts parse cleanly',
+        actual: `${xmlAudit.summary?.issueCount || 0} issue(s)`,
+      });
+      for (const issue of (xmlAudit.issues || []).slice(0, 8)) {
+        all.failed.push({
+          check: `XML: ${issue.part}`,
+          expected: 'well-formed UTF-8 XML',
+          actual: `${issue.code} (${issue.message})`,
+        });
+      }
+    } else {
+      all.passed.push({
+        check: 'XML package integrity',
+        message: `${xmlAudit.summary?.parsedParts || 0}/${xmlAudit.summary?.totalParts || 0} parts parsed`,
+      });
+    }
+
+    if (visual.valid) {
+      all.passed.push({
+        check: 'Visual fidelity',
+        message: `score ${visual.score} (${visual.summary?.passed || 0}/${(visual.summary?.passed || 0) + (visual.summary?.failed || 0)})`,
+      });
+    } else {
+      all.failed.push({
+        check: 'Visual fidelity',
+        expected: 'valid visual match against template',
+        actual: `score ${visual.score || 0} | highFailures=${visual.summary?.highFailures || 0}`,
+      });
+      for (const chk of visualFailed.slice(0, 8)) {
+        all.failed.push({
+          check: `Visual: ${chk.name}`,
+          expected: chk.expected,
+          actual: chk.actual,
+        });
+      }
+    }
+
+    const auditHigh = Number(slideAudit.summary?.high || 0);
+    const auditMed = Number(slideAudit.summary?.medium || 0);
+    const issueSlides = Number(slideAudit.summary?.slidesWithIssues || 0);
+    if (auditHigh > 0) {
+      all.failed.push({
+        check: 'Slide-by-slide audit',
+        expected: '0 high-severity slide issues',
+        actual: auditHigh,
+      });
+      const topIssueSlides = (slideAudit.slides || [])
+        .filter((s) => Number(s.issueCount || 0) > 0)
+        .sort((a, b) => Number(b.issueCount || 0) - Number(a.issueCount || 0))
+        .slice(0, 8);
+      for (const s of topIssueSlides) {
+        const lead = (s.issues || [])[0];
+        if (!lead) continue;
+        all.failed.push({
+          check: `Slide ${s.slide}: ${lead.code}`,
+          expected: 'no severe formatting drift',
+          actual: lead.message,
+        });
+      }
+    } else {
+      all.passed.push({
+        check: 'Slide-by-slide audit',
+        message: `high=0, medium=${auditMed}, issueSlides=${issueSlides}`,
+      });
+    }
 
     const total = all.passed.length + all.failed.length;
     console.log('\n' + '='.repeat(60));
@@ -107,6 +183,15 @@ async function runValidation(filePath, expectations = EXPECTATIONS) {
     console.log('='.repeat(60));
     console.log(
       `Slides: ${report.slides.count} | Charts: ${report.charts.chartFiles} | Tables: ${report.tables.totalTables} | Text: ${report.text.total} chars`
+    );
+    console.log(
+      `Visual: ${visual.valid ? 'PASS' : 'FAIL'} | Score: ${visual.score || 0} | Failed checks: ${visual.summary?.failed || 0}`
+    );
+    console.log(
+      `Slide audit: issueSlides=${slideAudit.summary?.slidesWithIssues || 0} | high=${auditHigh} | medium=${auditMed}`
+    );
+    console.log(
+      `XML audit: ${xmlAudit.valid ? 'PASS' : 'FAIL'} | parts=${xmlAudit.summary?.parsedParts || 0}/${xmlAudit.summary?.totalParts || 0} | issues=${xmlAudit.summary?.issueCount || 0}`
     );
 
     if (all.failed.length > 0) {
@@ -124,7 +209,7 @@ async function runValidation(filePath, expectations = EXPECTATIONS) {
       console.log(`  ${s.slide}: ${s.chars} chars - "${s.preview.substring(0, 50)}..."`)
     );
 
-    return { valid: all.failed.length === 0, results: all, report };
+    return { valid: all.failed.length === 0, results: all, report, visual, slideAudit, xmlAudit };
   } catch (err) {
     console.error('Error:', err.message);
     return { valid: false, error: err.message };

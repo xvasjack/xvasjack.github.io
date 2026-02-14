@@ -9,15 +9,15 @@ const fetch = require('node-fetch');
 
 const MODEL_CONFIG = {
   // OpenAI
-  'gpt-4o': {
+  'gpt-4.1': {
     provider: 'openai',
-    cost: { input: 2.5, output: 10.0 }, // per 1M tokens
+    cost: { input: 2.0, output: 8.0 }, // per 1M tokens
     timeout: 30000,
     maxTokens: 8192,
   },
-  'gpt-4o-mini': {
+  'gpt-4.1-nano': {
     provider: 'openai',
-    cost: { input: 0.15, output: 0.6 },
+    cost: { input: 0.1, output: 0.4 },
     timeout: 30000,
     maxTokens: 4096,
   },

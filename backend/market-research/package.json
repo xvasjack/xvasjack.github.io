@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node --expose-gc --max-old-space-size=450 server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test:regression": "node regression-tests.js",
+    "extract:template:complete": "node extract-template-complete.js",
+    "extract:template:exhaustive": "node extract-template-exhaustive.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

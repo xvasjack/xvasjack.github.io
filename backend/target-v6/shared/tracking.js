@@ -30,9 +30,9 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 // Cost estimates per model (USD per 1K tokens)
 const MODEL_COSTS = {
   // OpenAI
-  'gpt-4o': { input: 0.005, output: 0.015 },
-  'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
-  'gpt-4o-search-preview': { input: 0.005, output: 0.015 },
+  'gpt-4.1': { input: 0.002, output: 0.008 },
+  'gpt-4.1-nano': { input: 0.0001, output: 0.0004 },
+  'gpt-5-search-api': { input: 0.00125, output: 0.01 },
   // Perplexity
   'sonar-pro': { input: 0.003, output: 0.015 },
   sonar: { input: 0.001, output: 0.001 },
@@ -153,7 +153,7 @@ function calculateCostFromTokens(model, inputTokens, outputTokens) {
   // Exact match first
   let costs = MODEL_COSTS[m];
   if (!costs) {
-    // Longest key match (prevents gpt-4o matching before gpt-4o-mini)
+    // Longest key match (prevents gpt-4.1 matching before gpt-4.1-nano)
     const sorted = Object.keys(MODEL_COSTS).sort((a, b) => b.length - a.length);
     const key = sorted.find((k) => m.includes(k));
     costs = key ? MODEL_COSTS[key] : null;

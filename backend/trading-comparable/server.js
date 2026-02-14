@@ -84,7 +84,7 @@ if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
 if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
+  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4.1 fallback');
 }
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
@@ -398,13 +398,13 @@ async function _callPerplexity(prompt) {
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -421,16 +421,16 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Updated to use gpt-4o-search-preview (more stable than mini version)
+// Updated to use gpt-5-search-api (more stable than mini version)
 async function _callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-5-search-api',
       messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o-search-preview',
+        'gpt-5-search-api',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -443,7 +443,7 @@ async function _callOpenAISearch(prompt) {
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4o if search model not available
+    // Fallback to regular gpt-4.1 if search model not available
     return callChatGPT(prompt);
   }
 }
@@ -483,10 +483,10 @@ async function _callSerpAPI(query) {
   }
 }
 
-// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
+// DeepSeek V3.2 - Cost-effective alternative to GPT-4.1
 async function _callDeepSeek(prompt, maxTokens = 4000) {
   if (!process.env.DEEPSEEK_API_KEY) {
-    console.warn('DeepSeek API key not set, falling back to GPT-4o');
+    console.warn('DeepSeek API key not set, falling back to GPT-4.1');
     return null; // Caller should handle fallback
   }
   try {
@@ -964,13 +964,13 @@ function _strategy14_LocalLanguageOpenAISearch(business, country, _exclusion) {
   return queries;
 }
 
-// ============ EXTRACTION WITH GPT-4o-mini ============
+// ============ EXTRACTION WITH GPT-4.1-nano ============
 
 async function extractCompanies(text, country) {
   if (!text || text.length < 50) return [];
   try {
     const extraction = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-nano',
       messages: [
         {
           role: 'system',
@@ -990,7 +990,7 @@ RULES:
     });
     if (extraction.usage) {
       recordTokens(
-        'gpt-4o-mini',
+        'gpt-4.1-nano',
         extraction.usage.prompt_tokens || 0,
         extraction.usage.completion_tokens || 0
       );
@@ -1363,7 +1363,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
   return rules;
 }
 
-// ============ VALIDATION (v24 - GPT-4o with LENIENT filtering) ============
+// ============ VALIDATION (v24 - GPT-4.1 with LENIENT filtering) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
@@ -1376,7 +1376,7 @@ async function validateCompanyStrict(company, business, country, exclusion, page
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o', // Use smarter model for better validation
+      model: 'gpt-4.1', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -1425,7 +1425,7 @@ ${contentToValidate.substring(0, 10000)}`,
 
     if (validation.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         validation.usage.prompt_tokens || 0,
         validation.usage.completion_tokens || 0
       );
@@ -1525,7 +1525,7 @@ async function validateCompany(company, business, country, exclusion, pageText) 
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-nano',
       messages: [
         {
           role: 'system',
@@ -1570,7 +1570,7 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
 
     if (validation.usage) {
       recordTokens(
-        'gpt-4o-mini',
+        'gpt-4.1-nano',
         validation.usage.prompt_tokens || 0,
         validation.usage.completion_tokens || 0
       );
@@ -1747,17 +1747,17 @@ async function checkRelevanceWithOpenAI(companies, filterCriteria) {
     return null;
   } catch (error) {
     console.error('Gemini 2.5 Flash relevance check error:', error.message);
-    // Fallback to GPT-4o
+    // Fallback to GPT-4.1
     try {
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-4.1',
         messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
       });
       if (response.usage) {
         recordTokens(
-          'gpt-4o',
+          'gpt-4.1',
           response.usage.prompt_tokens || 0,
           response.usage.completion_tokens || 0
         );
@@ -1766,11 +1766,11 @@ async function checkRelevanceWithOpenAI(companies, filterCriteria) {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        return { source: 'gpt-4o-fallback', results: parsed.results || parsed.companies || parsed };
+        return { source: 'gpt-4.1-fallback', results: parsed.results || parsed.companies || parsed };
       }
       return null;
     } catch (e) {
-      console.error('GPT-4o fallback error:', e.message);
+      console.error('GPT-4.1 fallback error:', e.message);
       return null;
     }
   }
@@ -1997,26 +1997,26 @@ OUTPUT FORMAT (JSON):
   "warnings": ["potential pitfalls to watch for"]
 }`;
 
-  // Use GPT-4o for deep analysis
+  // Use GPT-4.1 for deep analysis
   let analysisResult;
-  console.log('Using GPT-4o for deep analysis...');
+  console.log('Using GPT-4.1 for deep analysis...');
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
     }
     analysisResult = response.choices[0].message.content;
   } catch (error) {
-    console.error('GPT-4o analysis error:', error.message);
+    console.error('GPT-4.1 analysis error:', error.message);
   }
 
   // Parse the result
@@ -2045,33 +2045,33 @@ OUTPUT FORMAT (JSON):
 
 /**
  * Dual-Model Evaluation for Trading Comparable Filtering
- * Uses both GPT-4o and Gemini 2.5 Pro to evaluate companies
+ * Uses both GPT-4.1 and Gemini 2.5 Pro to evaluate companies
  * Only removes companies when BOTH models agree with high confidence
  */
 async function dualModelEvaluateCompanies(evaluationPrompt, companies) {
-  console.log('  Running dual-model evaluation (GPT-4o + Gemini 2.5 Pro)...');
+  console.log('  Running dual-model evaluation (GPT-4.1 + Gemini 2.5 Pro)...');
 
   // Run both models in parallel for efficiency
   const [gpt4oResult, geminiResult] = await Promise.all([
-    // GPT-4o evaluation
+    // GPT-4.1 evaluation
     (async () => {
       try {
         const response = await openai.chat.completions.create({
-          model: 'gpt-4o',
+          model: 'gpt-4.1',
           messages: [{ role: 'user', content: evaluationPrompt }],
           temperature: 0.2,
           response_format: { type: 'json_object' },
         });
         if (response.usage) {
           recordTokens(
-            'gpt-4o',
+            'gpt-4.1',
             response.usage.prompt_tokens || 0,
             response.usage.completion_tokens || 0
           );
         }
         return response.choices[0].message.content;
       } catch (error) {
-        console.error('  GPT-4o evaluation error:', error.message);
+        console.error('  GPT-4.1 evaluation error:', error.message);
         return null;
       }
     })(),
@@ -2087,7 +2087,7 @@ async function dualModelEvaluateCompanies(evaluationPrompt, companies) {
     })(),
   ]);
 
-  // Parse GPT-4o results
+  // Parse GPT-4.1 results
   let gpt4oEvals = [];
   if (gpt4oResult) {
     try {
@@ -2097,7 +2097,7 @@ async function dualModelEvaluateCompanies(evaluationPrompt, companies) {
         gpt4oEvals = parsed.evaluations || [];
       }
     } catch (error) {
-      console.error('  Failed to parse GPT-4o result:', error.message);
+      console.error('  Failed to parse GPT-4.1 result:', error.message);
     }
   }
 
@@ -2146,7 +2146,7 @@ async function dualModelEvaluateCompanies(evaluationPrompt, companies) {
         // BOTH models agree to remove with high confidence - REMOVE
         consensusEval.passes = false;
         consensusEval.confidence = Math.min(gpt4oEval.confidence, geminiEval.confidence);
-        consensusEval.reasoning = `[Dual-model consensus] GPT-4o: ${gpt4oEval.reasoning} | Gemini: ${geminiEval.reasoning}`;
+        consensusEval.reasoning = `[Dual-model consensus] GPT-4.1: ${gpt4oEval.reasoning} | Gemini: ${geminiEval.reasoning}`;
         consensusEval.business = gpt4oEval.business || geminiEval.business;
         consensusEval.consensusType = 'both_remove';
         agreementCount++;
@@ -2163,11 +2163,11 @@ async function dualModelEvaluateCompanies(evaluationPrompt, companies) {
         agreementCount++;
       }
     } else if (gpt4oEval) {
-      // Only GPT-4o available - require higher confidence (80%)
+      // Only GPT-4.1 available - require higher confidence (80%)
       if (!gpt4oEval.passes && (gpt4oEval.confidence || 0) >= 80) {
         consensusEval.passes = false;
         consensusEval.confidence = gpt4oEval.confidence;
-        consensusEval.reasoning = `[GPT-4o only, high confidence] ${gpt4oEval.reasoning}`;
+        consensusEval.reasoning = `[GPT-4.1 only, high confidence] ${gpt4oEval.reasoning}`;
         consensusEval.business = gpt4oEval.business;
       }
       consensusEval.consensusType = 'gpt4o_only';
@@ -2447,14 +2447,14 @@ OUTPUT JSON:
   let validationResult;
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages: [{ role: 'user', content: validationPrompt }],
       temperature: 0.2,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -2615,7 +2615,7 @@ async function enrichWithAnnualReports(companies) {
 // ============ TIER 3: WATERFALL FILTERS (Annual Report Based) ============
 
 /**
- * Generate deterministic waterfall filter rules using GPT-4o.
+ * Generate deterministic waterfall filter rules using GPT-4.1.
  * Analyzes available business profiles and creates 2-4 rules for filtering.
  *
  * @param {Array} companies - Companies with .businessProfile attached
@@ -2693,14 +2693,14 @@ IMPORTANT:
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -2718,7 +2718,7 @@ IMPORTANT:
 }
 
 /**
- * Apply waterfall filter rules deterministically using GPT-4o-mini for evaluation.
+ * Apply waterfall filter rules deterministically using GPT-4.1-nano for evaluation.
  * Each rule is applied uniformly to all companies. Creates an Excel sheet per rule.
  *
  * @param {Array} companies - Companies with .businessProfile attached
@@ -2755,7 +2755,7 @@ async function applyWaterfallFilters(
       break;
     }
 
-    // Evaluate each company against this rule using GPT-4o-mini
+    // Evaluate each company against this rule using GPT-4.1-nano
     const evaluations = await evaluateWaterfallRule(currentCompanies, rule);
 
     if (!evaluations) {
@@ -2835,7 +2835,7 @@ async function applyWaterfallFilters(
 }
 
 /**
- * Evaluate all companies against a single waterfall rule using GPT-4o-mini.
+ * Evaluate all companies against a single waterfall rule using GPT-4.1-nano.
  *
  * @param {Array} companies - Companies to evaluate
  * @param {object} rule - The waterfall rule
@@ -2878,14 +2878,14 @@ Be consistent and fair. Apply the same standard to all companies.`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-nano',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o-mini',
+        'gpt-4.1-nano',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -3042,14 +3042,14 @@ Make each step progressively more selective. First step should be broad, last st
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-4.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );

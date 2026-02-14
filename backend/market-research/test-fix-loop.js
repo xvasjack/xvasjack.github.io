@@ -9,6 +9,9 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { validatePPTX, generateReport, readPPTX } = require('./pptx-validator');
 const { getExpectations, validateSlides } = require('./validate-output');
+const { runVisualFidelityCheck } = require('./visual-fidelity-runner');
+const { runSlideAudit } = require('./slide-audit-runner');
+const { runXmlPackageAudit } = require('./xml-audit-runner');
 
 const CONFIG = {
   maxIterations: 10,
@@ -40,7 +43,15 @@ async function generatePPT() {
 }
 
 async function validate(expectations) {
-  const results = { passed: [], failed: [], warnings: [], details: null };
+  const results = {
+    passed: [],
+    failed: [],
+    warnings: [],
+    details: null,
+    visual: null,
+    slideAudit: null,
+    xmlAudit: null,
+  };
   try {
     const basic = await validatePPTX(CONFIG.outputFile, expectations);
     results.passed.push(...basic.passed);
@@ -51,6 +62,77 @@ async function validate(expectations) {
     results.passed.push(...slideRes.passed);
     results.failed.push(...slideRes.failed);
     results.details = await generateReport(CONFIG.outputFile);
+    results.visual = await runVisualFidelityCheck(CONFIG.outputFile);
+    results.slideAudit = await runSlideAudit(CONFIG.outputFile);
+    results.xmlAudit = await runXmlPackageAudit(CONFIG.outputFile);
+    if (results.visual.valid) {
+      results.passed.push({
+        check: 'Visual fidelity',
+        message: `score ${results.visual.score}`,
+      });
+    } else {
+      const failedVisualChecks = (results.visual.checks || []).filter((c) => !c.passed);
+      results.failed.push({
+        check: 'Visual fidelity',
+        expected: 'valid visual match against template',
+        actual: `score ${results.visual.score || 0} | highFailures=${results.visual.summary?.highFailures || 0}`,
+      });
+      for (const chk of failedVisualChecks.slice(0, 8)) {
+        results.failed.push({
+          check: `Visual: ${chk.name}`,
+          expected: chk.expected,
+          actual: chk.actual,
+        });
+      }
+    }
+
+    if (results.xmlAudit.valid) {
+      results.passed.push({
+        check: 'XML package integrity',
+        message: `${results.xmlAudit.summary?.parsedParts || 0}/${results.xmlAudit.summary?.totalParts || 0} parts parsed`,
+      });
+    } else {
+      results.failed.push({
+        check: 'XML package integrity',
+        expected: 'all XML/rels parts parse cleanly',
+        actual: `${results.xmlAudit.summary?.issueCount || 0} issue(s)`,
+      });
+      for (const issue of (results.xmlAudit.issues || []).slice(0, 8)) {
+        results.failed.push({
+          check: `XML: ${issue.part}`,
+          expected: 'well-formed UTF-8 XML',
+          actual: `${issue.code} (${issue.message})`,
+        });
+      }
+    }
+
+    const auditHigh = Number(results.slideAudit.summary?.high || 0);
+    if (auditHigh > 0) {
+      results.failed.push({
+        check: 'Slide-by-slide audit',
+        expected: '0 high-severity issues',
+        actual: auditHigh,
+      });
+      const topIssueSlides = (results.slideAudit.slides || [])
+        .filter((s) => Number(s.issueCount || 0) > 0)
+        .sort((a, b) => Number(b.issueCount || 0) - Number(a.issueCount || 0))
+        .slice(0, 8);
+      for (const s of topIssueSlides) {
+        const lead = (s.issues || [])[0];
+        if (!lead) continue;
+        results.failed.push({
+          check: `Slide ${s.slide}: ${lead.code}`,
+          expected: 'no severe formatting drift',
+          actual: lead.message,
+        });
+      }
+    } else {
+      results.passed.push({
+        check: 'Slide-by-slide audit',
+        message: `high=0, medium=${results.slideAudit.summary?.medium || 0}`,
+      });
+    }
+
     results.valid = results.failed.length === 0;
   } catch (err) {
     results.valid = false;
@@ -78,6 +160,21 @@ function printReport(iter, gen, val) {
     console.log(
       `Structure: ${val.details.slides.count} slides, ${val.details.charts.chartFiles} charts, ${val.details.tables.totalTables} tables`
     );
+  if (val.visual) {
+    console.log(
+      `Visual: ${val.visual.valid ? 'PASS' : 'FAIL'} | score ${val.visual.score || 0} | failed ${val.visual.summary?.failed || 0}`
+    );
+  }
+  if (val.slideAudit) {
+    console.log(
+      `Slide audit: issueSlides=${val.slideAudit.summary?.slidesWithIssues || 0} | high=${val.slideAudit.summary?.high || 0} | medium=${val.slideAudit.summary?.medium || 0}`
+    );
+  }
+  if (val.xmlAudit) {
+    console.log(
+      `XML audit: ${val.xmlAudit.valid ? 'PASS' : 'FAIL'} | parts=${val.xmlAudit.summary?.parsedParts || 0}/${val.xmlAudit.summary?.totalParts || 0} | issues=${val.xmlAudit.summary?.issueCount || 0}`
+    );
+  }
   if (val.failed.length > 0) {
     console.log('\nIssues:');
     val.failed.forEach((f, i) =>
@@ -106,6 +203,35 @@ function exportIssues(results) {
           slides: results.details.slides.count,
           charts: results.details.charts.chartFiles,
           tables: results.details.tables.totalTables,
+        }
+      : null,
+    visual: results.visual
+      ? {
+          valid: results.visual.valid,
+          score: results.visual.score || 0,
+          failed: results.visual.summary?.failed || 0,
+          checks: (results.visual.checks || []).filter((c) => !c.passed).slice(0, 12),
+        }
+      : null,
+    slideAudit: results.slideAudit
+      ? {
+          summary: results.slideAudit.summary || {},
+          topSlides: (results.slideAudit.slides || [])
+            .filter((s) => Number(s.issueCount || 0) > 0)
+            .sort((a, b) => Number(b.issueCount || 0) - Number(a.issueCount || 0))
+            .slice(0, 10)
+            .map((s) => ({
+              slide: s.slide,
+              issueCount: s.issueCount,
+              issues: (s.issues || []).slice(0, 3),
+            })),
+        }
+      : null,
+    xmlAudit: results.xmlAudit
+      ? {
+          valid: results.xmlAudit.valid,
+          summary: results.xmlAudit.summary || {},
+          issues: (results.xmlAudit.issues || []).slice(0, 20),
         }
       : null,
   };

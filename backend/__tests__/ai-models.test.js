@@ -17,11 +17,11 @@ const {
 
 describe('ai-models', () => {
   describe('MODEL_CONFIG', () => {
-    it('has configuration for gpt-4o', () => {
-      expect(MODEL_CONFIG['gpt-4o']).toBeDefined();
-      expect(MODEL_CONFIG['gpt-4o'].provider).toBe('openai');
-      expect(MODEL_CONFIG['gpt-4o'].cost.input).toBeGreaterThan(0);
-      expect(MODEL_CONFIG['gpt-4o'].cost.output).toBeGreaterThan(0);
+    it('has configuration for gpt-4.1', () => {
+      expect(MODEL_CONFIG['gpt-4.1']).toBeDefined();
+      expect(MODEL_CONFIG['gpt-4.1'].provider).toBe('openai');
+      expect(MODEL_CONFIG['gpt-4.1'].cost.input).toBeGreaterThan(0);
+      expect(MODEL_CONFIG['gpt-4.1'].cost.output).toBeGreaterThan(0);
     });
 
     it('has configuration for gemini-2.5-flash', () => {
@@ -172,11 +172,11 @@ describe('ai-models', () => {
   });
 
   describe('calculateModelCost', () => {
-    it('calculates gpt-4o cost correctly', () => {
-      const { cost, breakdown } = calculateModelCost('gpt-4o', 1000000, 500000);
-      expect(breakdown.input).toBe(2.5); // 1M * $2.5/1M
-      expect(breakdown.output).toBe(5.0); // 0.5M * $10/1M
-      expect(cost).toBe(7.5);
+    it('calculates gpt-4.1 cost correctly', () => {
+      const { cost, breakdown } = calculateModelCost('gpt-4.1', 1000000, 500000);
+      expect(breakdown.input).toBe(2.0); // 1M * $2.0/1M
+      expect(breakdown.output).toBe(4.0); // 0.5M * $8.0/1M
+      expect(cost).toBe(6.0);
     });
 
     it('calculates gemini cost correctly', () => {
@@ -190,7 +190,7 @@ describe('ai-models', () => {
     });
 
     it('handles zero tokens', () => {
-      const { cost } = calculateModelCost('gpt-4o', 0, 0);
+      const { cost } = calculateModelCost('gpt-4.1', 0, 0);
       expect(cost).toBe(0);
     });
   });
@@ -198,7 +198,7 @@ describe('ai-models', () => {
   describe('createCostTracker', () => {
     it('tracks costs across multiple calls', () => {
       const tracker = createCostTracker();
-      tracker.add('gpt-4o', 1000, 1000, 'search');
+      tracker.add('gpt-4.1', 1000, 1000, 'search');
       tracker.add('gemini-2.5-flash', 1000, 1000, 'validation');
       const summary = tracker.getSummary();
       expect(summary.callCount).toBe(2);
@@ -207,11 +207,11 @@ describe('ai-models', () => {
 
     it('groups by model and feature', () => {
       const tracker = createCostTracker();
-      tracker.add('gpt-4o', 1000, 500, 'search');
-      tracker.add('gpt-4o', 2000, 1000, 'search');
+      tracker.add('gpt-4.1', 1000, 500, 'search');
+      tracker.add('gpt-4.1', 2000, 1000, 'search');
       tracker.add('gemini-2.5-flash', 1000, 500, 'validation');
       const summary = tracker.getSummary();
-      expect(Object.keys(summary.byModel)).toContain('gpt-4o');
+      expect(Object.keys(summary.byModel)).toContain('gpt-4.1');
       expect(Object.keys(summary.byModel)).toContain('gemini-2.5-flash');
       expect(Object.keys(summary.byFeature)).toContain('search');
       expect(Object.keys(summary.byFeature)).toContain('validation');
@@ -219,8 +219,8 @@ describe('ai-models', () => {
 
     it('returns total cost correctly', () => {
       const tracker = createCostTracker();
-      const cost1 = tracker.add('gpt-4o', 1000000, 0);
-      const cost2 = tracker.add('gpt-4o', 0, 1000000);
+      const cost1 = tracker.add('gpt-4.1', 1000000, 0);
+      const cost2 = tracker.add('gpt-4.1', 0, 1000000);
       expect(tracker.getTotalCost()).toBe(cost1 + cost2);
     });
   });

@@ -19,6 +19,7 @@ const {
   scanRelationshipTargets,
   scanPackageConsistency,
   normalizeSlideNonVisualIds,
+  normalizeAbsoluteRelationshipTargets,
   reconcileContentTypesAndPackage,
 } = require('./pptx-validator');
 const { normalizeThemeToTemplate } = require('./theme-normalizer');
@@ -990,6 +991,13 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     majorFontFace: 'Segoe UI',
     minorFontFace: 'Segoe UI',
   });
+  const absoluteRelNormalize = await normalizeAbsoluteRelationshipTargets(pptxBuffer);
+  pptxBuffer = absoluteRelNormalize.buffer;
+  if (absoluteRelNormalize.changed) {
+    console.log(
+      `[PPT] Normalized ${absoluteRelNormalize.stats.normalizedTargets} absolute relationship target(s)`
+    );
+  }
   const nonVisualIdNormalize = await normalizeSlideNonVisualIds(pptxBuffer);
   pptxBuffer = nonVisualIdNormalize.buffer;
   if (nonVisualIdNormalize.changed) {
@@ -1001,11 +1009,13 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   pptxBuffer = contentTypeReconcile.buffer;
   if (contentTypeReconcile.changed) {
     const touched = [
+      ...(contentTypeReconcile.stats.addedDefaults || []),
+      ...(contentTypeReconcile.stats.correctedDefaults || []),
       ...(contentTypeReconcile.stats.addedOverrides || []),
       ...(contentTypeReconcile.stats.correctedOverrides || []),
       ...(contentTypeReconcile.stats.removedDangling || []),
     ].length;
-    console.log(`[PPT] Reconciled content types (${touched} override adjustment(s))`);
+    console.log(`[PPT] Reconciled content types (${touched} adjustment(s))`);
   }
   const relZip = await JSZip.loadAsync(pptxBuffer);
   const relIntegrity = await scanRelationshipTargets(relZip);
@@ -1041,11 +1051,13 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   pptxBuffer = finalReconcile.buffer;
   if (finalReconcile.changed) {
     const touched = [
+      ...(finalReconcile.stats.addedDefaults || []),
+      ...(finalReconcile.stats.correctedDefaults || []),
       ...(finalReconcile.stats.addedOverrides || []),
       ...(finalReconcile.stats.correctedOverrides || []),
       ...(finalReconcile.stats.removedDangling || []),
     ].length;
-    console.log(`[PPT] Final content-type reconcile applied (${touched} override adjustment(s))`);
+    console.log(`[PPT] Final content-type reconcile applied (${touched} adjustment(s))`);
   }
   const finalZip = await JSZip.loadAsync(pptxBuffer);
   const finalPackageConsistency = await scanPackageConsistency(finalZip);
