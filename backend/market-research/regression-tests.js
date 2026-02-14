@@ -33,6 +33,7 @@ const { __test: orchestratorTest } = require('./research-orchestrator');
 const { __test: singlePptTest } = require('./ppt-single-country');
 const { resolveTemplatePattern, getTemplateSlideLayout } = require('./ppt-utils');
 const { analyzeBudget, compactPayload, runBudgetGate } = require('./budget-gate');
+const { runStressTest } = require('./stress-test-harness');
 
 const ROOT = __dirname;
 const VIETNAM_SCRIPT = path.join(ROOT, 'test-vietnam-research.js');
@@ -82,6 +83,17 @@ function parseRounds(argv) {
   const value = Number.parseInt((match || '').split('=')[1] || '2', 10);
   if (!Number.isFinite(value) || value <= 0) return 2;
   return Math.min(value, 5);
+}
+
+function parseStress(argv) {
+  return argv.some((arg) => arg === '--stress');
+}
+
+function parseStressSeeds(argv) {
+  const match = argv.find((arg) => arg.startsWith('--stress-seeds='));
+  const value = Number.parseInt((match || '').split('=')[1] || '30', 10);
+  if (!Number.isFinite(value) || value <= 0) return 30;
+  return Math.min(value, 100);
 }
 
 function runNodeScript(scriptPath) {
@@ -1109,11 +1121,40 @@ async function runRound(round, total) {
 }
 
 async function main() {
-  const rounds = parseRounds(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const rounds = parseRounds(argv);
+  const stress = parseStress(argv);
+  const stressSeeds = parseStressSeeds(argv);
+
   for (let i = 1; i <= rounds; i++) {
     await runRound(i, rounds);
   }
   console.log(`\n[Regression] PASS (${rounds} round(s))`);
+
+  if (stress) {
+    console.log(`\n[Regression] Running stress test (${stressSeeds} seeds)...`);
+    const reportPath = path.join(ROOT, 'stress-report.md');
+    const result = await runStressTest({ seeds: stressSeeds, reportPath });
+    console.log(
+      `[Regression] Stress: ${result.passed}/${result.total} passed, ${result.failed} failed (${result.runtimeCrashes} runtime crashes, ${result.dataGateRejections} data-gate rejections)`
+    );
+    const crashes = result.failures.filter((f) => f.errorClass === 'runtime-crash');
+    if (crashes.length > 0) {
+      console.log(`[Regression] Runtime crashes (bugs):`);
+      for (const f of crashes.slice(0, 10)) {
+        console.log(`  seed=${f.seed} [${f.category}]: ${f.error}`);
+      }
+    }
+    console.log(`[Regression] Stress report: ${reportPath}`);
+    if (result.runtimeCrashes > 0) {
+      throw new Error(
+        `Stress test found ${result.runtimeCrashes} runtime crash(es) out of ${result.total} seeds`
+      );
+    }
+    console.log(
+      `[Regression] Stress PASS (${stressSeeds} seeds, ${result.dataGateRejections} expected gate rejections)`
+    );
+  }
 }
 
 main().catch((err) => {
