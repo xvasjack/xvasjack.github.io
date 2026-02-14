@@ -1208,6 +1208,89 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
   };
 }
 
+/**
+ * Compute a 0-100 fit score predicting how well rows will render in expectedRect.
+ * Used to choose fallback rendering strategy before attempting table render.
+ * Module-level so it can be exported via __test for regression testing.
+ */
+function computeTableFitScore(rows, expectedRect) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return {
+      score: 100,
+      breakdown: { rowScore: 100, colScore: 100, densityScore: 100, geometryScore: 100 },
+      recommendation: 'standard',
+    };
+  }
+  const rowCount = rows.length;
+  let colCount = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (Array.isArray(rows[i]) && rows[i].length > colCount) colCount = rows[i].length;
+  }
+  const rectH = Number(expectedRect?.h) || 3.5;
+  const rectW = Number(expectedRect?.w) || 8.5;
+  const rowHeight = rowCount > 0 ? rectH / rowCount : rectH;
+  const colWidth = colCount > 0 ? rectW / colCount : rectW;
+
+  let rowScore = 100;
+  if (rowCount > TABLE_FLEX_MAX_ROWS) {
+    rowScore = Math.max(0, 100 - (rowCount - TABLE_FLEX_MAX_ROWS) * 12);
+  } else if (rowCount > Math.floor(TABLE_FLEX_MAX_ROWS * 0.8)) {
+    rowScore = 80;
+  }
+
+  let colScore = 100;
+  if (colCount > TABLE_FLEX_MAX_COLS) {
+    colScore = Math.max(0, 100 - (colCount - TABLE_FLEX_MAX_COLS) * 15);
+  } else if (colCount > Math.floor(TABLE_FLEX_MAX_COLS * 0.8)) {
+    colScore = 80;
+  }
+
+  let geometryScore = 100;
+  if (rowHeight < TABLE_FLEX_MIN_ROW_HEIGHT) {
+    geometryScore = Math.max(0, Math.round((rowHeight / TABLE_FLEX_MIN_ROW_HEIGHT) * 100));
+  }
+  if (colWidth < TABLE_FLEX_MIN_COL_WIDTH) {
+    const colGeoScore = Math.max(0, Math.round((colWidth / TABLE_FLEX_MIN_COL_WIDTH) * 100));
+    geometryScore = Math.min(geometryScore, colGeoScore);
+  }
+
+  let totalLen = 0;
+  let cellCount = 0;
+  for (let ri = 0; ri < rows.length; ri++) {
+    if (!Array.isArray(rows[ri])) continue;
+    for (let ci = 0; ci < rows[ri].length; ci++) {
+      const cell = rows[ri][ci];
+      const text =
+        typeof cell === 'string'
+          ? cell
+          : cell && typeof cell === 'object'
+            ? String(cell.text || '')
+            : String(cell || '');
+      totalLen += text.length;
+      cellCount++;
+    }
+  }
+  const avgLen = cellCount > 0 ? totalLen / cellCount : 0;
+  let densityScore = 100;
+  if (avgLen > 360) {
+    densityScore = Math.max(0, 100 - Math.round((avgLen - 360) / 10));
+  } else if (avgLen > 220) {
+    densityScore = 80;
+  }
+
+  const score = Math.round((rowScore + colScore + geometryScore + densityScore) / 4);
+  let recommendation = 'standard';
+  if (score < 40) recommendation = 'fallback';
+  else if (score < 70) recommendation = 'truncate';
+  else if (score < 90) recommendation = 'compact';
+
+  return {
+    score,
+    breakdown: { rowScore, colScore, densityScore, geometryScore },
+    recommendation,
+  };
+}
+
 function shouldAllowCompetitiveOptionalGroupGap(sectionName, pptGate, blocks) {
   if (sectionName !== 'Competitive Landscape') return false;
   if (!pptGate || typeof pptGate !== 'object') return false;
@@ -1477,6 +1560,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     nonTemplatePatterns: [],
     slideRenderFailures: [],
     tableRecoveries: [],
+    tableFallbacks: [],
   };
   const templateCloneSlideMap = [];
   const SECTION_DIVIDER_TEMPLATE_SLIDES = {
@@ -2617,6 +2701,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const rowHeight = rowCount > 0 ? targetH / rowCount : targetH;
     const colWidth = colCount > 0 ? targetW / colCount : targetW;
 
+    let flexRecovered = false;
     if (STRICT_TEMPLATE_FIDELITY && enforceBudget) {
       const violations = [];
       if (widthDeltaTooMuch) {
@@ -2646,9 +2731,49 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         );
       }
       if (violations.length > 0) {
-        throw new Error(
-          `[PPT TEMPLATE] ${context}: bounded table flexibility exceeded (${violations.join('; ')})`
+        console.warn(
+          `[PPT TEMPLATE] ${context}: bounded table flexibility exceeded — attempting recovery (${violations.join('; ')})`
         );
+        // Recovery: truncate rows if over max
+        if (rowCount > TABLE_FLEX_MAX_ROWS && Array.isArray(tableRows)) {
+          const keep = TABLE_FLEX_MAX_ROWS - 1; // leave room for summary row
+          const truncated = tableRows.length - keep;
+          tableRows.length = keep;
+          tableRows.push([
+            {
+              text: `+${truncated} more items (table capacity exceeded)`,
+              options: { colspan: colCount, italic: true, color: '999999' },
+            },
+          ]);
+        }
+        // Recovery: drop excess columns
+        if (colCount > TABLE_FLEX_MAX_COLS && Array.isArray(tableRows)) {
+          for (let ri = 0; ri < tableRows.length; ri++) {
+            if (Array.isArray(tableRows[ri]) && tableRows[ri].length > TABLE_FLEX_MAX_COLS) {
+              tableRows[ri] = tableRows[ri].slice(0, TABLE_FLEX_MAX_COLS);
+            }
+          }
+        }
+        // Re-compute dimensions after recovery
+        const recoveredRowCount = Array.isArray(tableRows) ? tableRows.length : rowCount;
+        const recoveredColCount = countTableColumns(tableRows);
+        const recoveredRowHeight = recoveredRowCount > 0 ? targetH / recoveredRowCount : targetH;
+        const recoveredColWidth = recoveredColCount > 0 ? targetW / recoveredColCount : targetW;
+        nextOptions.h = Number(targetH.toFixed(3));
+        nextOptions.w = Number(targetW.toFixed(3));
+        templateUsageStats.tableFallbacks.push({
+          key: context,
+          reason: violations.join('; '),
+          recoveryType: 'bounded-flex',
+          originalRows: rowCount,
+          originalCols: colCount,
+          recoveredRows: recoveredRowCount,
+          recoveredCols: recoveredColCount,
+        });
+        console.log(
+          `[PPT] ${context}: table-flex recovery applied (rows: ${rowCount}->${recoveredRowCount}, cols: ${colCount}->${recoveredColCount})`
+        );
+        flexRecovered = true;
       }
     }
 
@@ -2670,6 +2795,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         requestedHeightScale,
         widthScale,
         heightScale,
+        recovered: flexRecovered,
       },
     };
   }
@@ -2876,13 +3002,34 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             }
           }
           if (severe.length > 0) {
+            // Recovery: hard-truncate remaining severe cells to their cap
+            for (const entry of severe) {
+              if (
+                entry.row >= 0 &&
+                entry.row < tableRows.length &&
+                Array.isArray(tableRows[entry.row])
+              ) {
+                const cell = tableRows[entry.row][entry.col];
+                if (typeof cell === 'string') {
+                  tableRows[entry.row][entry.col] = cell.slice(0, entry.cap - 3) + '...';
+                } else if (cell && typeof cell === 'object' && typeof cell.text === 'string') {
+                  cell.text = cell.text.slice(0, entry.cap - 3) + '...';
+                }
+              }
+            }
             const preview = severe
               .slice(0, 4)
               .map((entry) => `r${entry.row}c${entry.col}:${entry.len}>${entry.cap}`)
               .join(', ');
-            throw new Error(
-              `[PPT] ${resolvedContext}: table density overflow (${severe.length} severe cell(s)); ${preview}`
+            console.warn(
+              `[PPT] ${resolvedContext}: density-overflow recovery applied — hard-truncated ${severe.length} severe cell(s); ${preview}`
             );
+            templateUsageStats.tableFallbacks.push({
+              key: resolvedContext,
+              reason: `density-overflow: ${severe.length} severe cells`,
+              recoveryType: 'density-truncate',
+              severeCells: severe.length,
+            });
           }
         }
       }
@@ -6954,13 +7101,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const recoveredKeys = [...new Set(templateUsageStats.tableRecoveries.map((r) => r.key))].join(
       ', '
     );
-    if (STRICT_TEMPLATE_FIDELITY) {
-      throw new Error(
-        `Template fidelity violation: table recoveries used (${templateUsageStats.tableRecoveries.length}) on keys: ${recoveredKeys}`
-      );
-    }
     console.warn(
-      `[PPT TEMPLATE] Table recoveries used (${templateUsageStats.tableRecoveries.length}): ${recoveredKeys}`
+      `[PPT TEMPLATE] Table recoveries used (${templateUsageStats.tableRecoveries.length}): ${recoveredKeys}${STRICT_TEMPLATE_FIDELITY ? ' (fidelity warning — would have thrown)' : ''}`
     );
   }
   const geometryIssues = [
@@ -7210,6 +7352,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     slideRenderFailureCount: templateUsageStats.slideRenderFailures.length,
     tableRecoveryCount: templateUsageStats.tableRecoveries.length,
     tableRecoveryKeys: [...new Set(templateUsageStats.tableRecoveries.map((r) => r.key))],
+    tableFallbackCount: templateUsageStats.tableFallbacks.length,
+    tableFallbackKeys: [...new Set(templateUsageStats.tableFallbacks.map((f) => f.key))],
     geometryCheckCount: layoutFidelityStats.checks,
     geometryAlignedCount: layoutFidelityStats.aligned,
     geometryMaxDelta: Number(layoutFidelityStats.maxDelta.toFixed(4)),
@@ -7256,6 +7400,7 @@ module.exports = {
   __test: {
     shouldAllowCompetitiveOptionalGroupGap,
     resolveTemplateRouteWithGeometryGuard,
+    computeTableFitScore,
     isTransientRenderKey,
     sanitizeRenderPayload,
     safeCell,

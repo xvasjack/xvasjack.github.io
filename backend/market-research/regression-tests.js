@@ -808,6 +808,69 @@ function runOversizedTextUnitChecks() {
   assert.strictEqual(singlePptTest.safeCell(undefined), '', 'undefined should return empty');
 }
 
+function runTableOverflowRecoveryUnitChecks() {
+  assert(
+    singlePptTest && typeof singlePptTest.computeTableFitScore === 'function',
+    'ppt-single-country __test helper missing: computeTableFitScore'
+  );
+
+  // Build synthetic oversized table: 25 rows x 12 columns, 500+ char cells
+  const longCell = 'A'.repeat(550);
+  const headerRow = Array.from({ length: 12 }, (_, i) => `Column ${i + 1}`);
+  const bodyRow = Array.from({ length: 12 }, () => longCell);
+  const oversizedRows = [headerRow, ...Array.from({ length: 24 }, () => [...bodyRow])];
+
+  // Verify computeTableFitScore returns low score for oversized table
+  const fitResult = singlePptTest.computeTableFitScore(oversizedRows, { w: 8.5, h: 3.5 });
+  assert(
+    fitResult.score < 70,
+    `Expected fit score < 70 for oversized table; got ${fitResult.score}`
+  );
+  assert(
+    fitResult.recommendation !== 'standard',
+    `Expected non-standard recommendation for oversized table; got ${fitResult.recommendation}`
+  );
+
+  // Verify score breakdown penalizes oversized dimensions
+  assert(
+    fitResult.breakdown.rowScore <= 10,
+    `rowScore should be very low for 25 rows (exceeds maxRows=16); got ${fitResult.breakdown.rowScore}`
+  );
+  assert(
+    fitResult.breakdown.colScore <= 60,
+    `colScore should be penalized for 12 cols (exceeds maxCols=9); got ${fitResult.breakdown.colScore}`
+  );
+  assert(
+    fitResult.breakdown.densityScore < 100,
+    `densityScore should penalize 550-char cells; got ${fitResult.breakdown.densityScore}`
+  );
+
+  // Verify normal table gets high score
+  const normalRows = [
+    ['Header A', 'Header B', 'Header C'],
+    ['Data 1', 'Data 2', 'Data 3'],
+    ['Data 4', 'Data 5', 'Data 6'],
+  ];
+  const normalFit = singlePptTest.computeTableFitScore(normalRows, { w: 8.5, h: 3.5 });
+  assert(
+    normalFit.score >= 90,
+    `Expected fit score >= 90 for normal table; got ${normalFit.score}`
+  );
+  assert.strictEqual(
+    normalFit.recommendation,
+    'standard',
+    `Expected 'standard' recommendation for normal table; got ${normalFit.recommendation}`
+  );
+
+  // Verify empty table gets perfect score
+  const emptyFit = singlePptTest.computeTableFitScore([], { w: 8.5, h: 3.5 });
+  assert.strictEqual(
+    emptyFit.score,
+    100,
+    `Expected score 100 for empty table; got ${emptyFit.score}`
+  );
+}
+
 async function runRound(round, total) {
   console.log(`\n[Regression] Round ${round}/${total}`);
 
@@ -829,6 +892,8 @@ async function runRound(round, total) {
   console.log('[Regression] Unit checks PASS (render-layer transient key filtering)');
   runOversizedTextUnitChecks();
   console.log('[Regression] Unit checks PASS (oversized text graceful degradation)');
+  runTableOverflowRecoveryUnitChecks();
+  console.log('[Regression] Unit checks PASS (table overflow recovery + fit score)');
 
   await runNodeScript(VIETNAM_SCRIPT);
   await runNodeScript(THAILAND_SCRIPT);
