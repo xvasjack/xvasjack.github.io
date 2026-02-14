@@ -187,7 +187,7 @@ function getPhaseConfidence(clusterEntry) {
  * Factors:
  * - Frequency weight: how many seeds trigger it (0-40 pts)
  * - Severity weight: runtime-crash vs data-gate (0-30 pts)
- * - Paid-run risk multiplier: runtime crashes in render/validate get 1.5x
+ * - Paid-run phase bonus: runtime crashes in render/validate get +5
  * - Mutation breadth: if many mutation classes trigger it, the root cause is fragile (0-15 pts)
  * - Phase: earlier phases = wider blast radius (0-15 pts)
  */
@@ -223,13 +223,13 @@ function getRiskScore(clusterEntry, totalSeeds) {
   }
   score += maxPhaseWeight;
 
-  // Paid-run risk multiplier: runtime crashes in render/validate phases
-  // are especially dangerous because they happen after expensive API calls
+  // Paid-run phase bonus: render/validate failures are expensive, but should
+  // not outweigh the broader blast radius of earlier-phase failures.
   if (hasRuntimeCrash) {
     const paidPhases = ['render-ppt', 'validate-pptx'];
     const hitsPaidPhase = phases.some((p) => paidPhases.includes(p));
     if (hitsPaidPhase) {
-      score = Math.round(score * 1.5);
+      score += 5;
     }
   }
 

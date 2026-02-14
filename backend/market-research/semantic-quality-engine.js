@@ -980,7 +980,8 @@ function getDecisionScore(synthesis) {
 
   const sectionScores = {};
   const flagged = [];
-  const THRESHOLD = 50;
+  // Calibrated for noisy synthesized JSON sections where signal often appears in nested fields.
+  const THRESHOLD = 40;
 
   // Score each top-level section
   const sections = [
