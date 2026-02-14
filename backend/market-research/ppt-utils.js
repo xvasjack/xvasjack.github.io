@@ -1434,7 +1434,7 @@ function addStackedBarChart(slide, title, data, options = {}) {
   const pptxChartData = chartData.series.map((s, idx) => ({
     name: ensureString(s.name),
     labels: safeCategories,
-    values: (s.values || []).map((v) =>
+    values: (Array.isArray(s.values) ? s.values : []).map((v) =>
       typeof v === 'number' && isFinite(v) ? v : Number(v) || 0
     ),
     color: CHART_COLORS[idx % CHART_COLORS.length],
@@ -1548,7 +1548,7 @@ function addLineChart(slide, title, data, options = {}) {
   const pptxChartData = chartData.series.map((s, idx) => ({
     name: ensureString(s.name),
     labels: safeCategories,
-    values: (s.values || []).map((v) =>
+    values: (Array.isArray(s.values) ? s.values : []).map((v) =>
       typeof v === 'number' && isFinite(v) ? v : Number(v) || 0
     ),
     color: CHART_COLORS[idx % CHART_COLORS.length],

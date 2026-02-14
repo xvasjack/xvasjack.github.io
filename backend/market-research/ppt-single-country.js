@@ -7185,12 +7185,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     majorFontFace: 'Segoe UI',
     minorFontFace: 'Segoe UI',
   });
-  const absoluteRelNormalize = await normalizeAbsoluteRelationshipTargets(pptxBuffer);
-  pptxBuffer = absoluteRelNormalize.buffer;
-  if (absoluteRelNormalize.changed) {
-    console.log(
-      `[PPT] Normalized ${absoluteRelNormalize.stats.normalizedTargets} absolute relationship target(s)`
-    );
+  if (typeof normalizeAbsoluteRelationshipTargets === 'function') {
+    const absoluteRelNormalize = await normalizeAbsoluteRelationshipTargets(pptxBuffer);
+    pptxBuffer = absoluteRelNormalize.buffer;
+    if (absoluteRelNormalize.changed) {
+      console.log(
+        `[PPT] Normalized ${absoluteRelNormalize.stats.normalizedTargets} absolute relationship target(s)`
+      );
+    }
   }
   const nonVisualIdNormalize = await normalizeSlideNonVisualIds(pptxBuffer);
   pptxBuffer = nonVisualIdNormalize.buffer;

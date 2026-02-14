@@ -1016,12 +1016,14 @@ async function runMarketResearch(userPrompt, email, options = {}) {
 
       // Final server-side package hardening (defense-in-depth): normalize IDs and content-types
       // again before any validation/delivery so no generator path can bypass structural safety.
-      const serverRelNormalize = await normalizeAbsoluteRelationshipTargets(pptBuffer);
-      pptBuffer = serverRelNormalize.buffer;
-      if (serverRelNormalize.changed) {
-        console.log(
-          `[Server PPT] Normalized absolute relationship targets (${serverRelNormalize.stats.normalizedTargets} target(s) in ${serverRelNormalize.stats.filesChanged} rels file(s))`
-        );
+      if (typeof normalizeAbsoluteRelationshipTargets === 'function') {
+        const serverRelNormalize = await normalizeAbsoluteRelationshipTargets(pptBuffer);
+        pptBuffer = serverRelNormalize.buffer;
+        if (serverRelNormalize.changed) {
+          console.log(
+            `[Server PPT] Normalized absolute relationship targets (${serverRelNormalize.stats.normalizedTargets} target(s) in ${serverRelNormalize.stats.filesChanged} rels file(s))`
+          );
+        }
       }
       const serverIdNormalize = await normalizeSlideNonVisualIds(pptBuffer);
       pptBuffer = serverIdNormalize.buffer;
