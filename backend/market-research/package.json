@@ -8,7 +8,8 @@
     "dev": "node server.js",
     "test:regression": "node regression-tests.js",
     "extract:template:complete": "node extract-template-complete.js",
-    "extract:template:exhaustive": "node extract-template-exhaustive.js"
+    "extract:template:exhaustive": "node extract-template-exhaustive.js",
+    "preflight:release": "node scripts/preflight-release.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
