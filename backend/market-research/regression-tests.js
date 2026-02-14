@@ -31,6 +31,7 @@ const { validatePptData } = require('./quality-gates');
 const { __test: serverTest } = require('./server');
 const { __test: orchestratorTest } = require('./research-orchestrator');
 const { __test: singlePptTest } = require('./ppt-single-country');
+const { analyzeBudget, compactPayload, runBudgetGate, FIELD_CHAR_BUDGETS } = require('./budget-gate');
 
 const ROOT = __dirname;
 const VIETNAM_SCRIPT = path.join(ROOT, 'test-vietnam-research.js');
@@ -555,6 +556,185 @@ function runPreRenderStructureUnitChecks() {
   );
 }
 
+function runBudgetGateUnitChecks() {
+  // Test 1: Payload that passes structure gate but has budget stress
+  const stressPayload = {
+    country: 'Vietnam',
+    policy: {
+      foundationalActs: { overview: 'A'.repeat(1200) },
+      nationalPolicy: { overview: 'Valid policy. '.repeat(80) },
+      investmentRestrictions: { overview: 'ok' },
+      regulatorySummary: { overview: 'B'.repeat(1600) },
+      keyIncentives: { overview: 'ok' },
+      sources: [],
+    },
+    market: {
+      marketSizeAndGrowth: {
+        overview: 'C'.repeat(1400),
+        keyInsight: 'D'.repeat(900),
+        chartData: {
+          series: [{ name: 'Revenue', data: [10, 20, 30, 40, 50] }],
+        },
+      },
+      supplyAndDemandDynamics: { overview: 'ok' },
+      pricingAndTariffStructures: { overview: 'ok' },
+    },
+    competitors: {
+      localMajor: {
+        players: Array.from({ length: 20 }, (_, i) => ({
+          name: `Company ${i}`,
+          description: 'E'.repeat(200),
+          revenue: '$100M',
+          marketShare: '5%',
+        })),
+      },
+      foreignPlayers: { players: [{ name: 'Foreign Co', description: 'ok' }] },
+    },
+    depth: {
+      dealEconomics: { overview: 'ok' },
+      partnerAssessment: { overview: 'ok' },
+      entryStrategy: { overview: 'ok' },
+      implementation: { overview: 'ok' },
+      targetSegments: { overview: 'ok' },
+    },
+    summary: {
+      timingIntelligence: { overview: 'ok' },
+      lessonsLearned: { overview: 'ok' },
+      keyInsights: [],
+      recommendation: 'ok',
+      goNoGo: { overallVerdict: 'GO' },
+      opportunities: [],
+      obstacles: [],
+      ratings: {},
+    },
+  };
+
+  // Budget analysis should detect stress
+  const report = analyzeBudget(stressPayload);
+  assert(
+    report.risk === 'medium' || report.risk === 'high',
+    `Expected budget risk medium or high for stress payload; got ${report.risk}`
+  );
+  assert(
+    report.issues.length > 0,
+    `Expected budget issues for stress payload; got ${report.issues.length}`
+  );
+  assert(
+    report.fieldBudgets.some((fb) => fb.exceeded),
+    'Expected at least one field budget to be exceeded'
+  );
+
+  // Compaction should reduce oversized fields
+  const compacted = compactPayload(stressPayload, report);
+  assert(
+    compacted.compactionLog.length > 0,
+    `Expected compaction log entries; got ${compacted.compactionLog.length}`
+  );
+  // Verify compacted fields are within budget
+  const recheck = analyzeBudget(compacted.payload);
+  const stillExceeded = recheck.fieldBudgets.filter((fb) => fb.exceeded);
+  assert(
+    stillExceeded.length === 0,
+    `After compaction, ${stillExceeded.length} field(s) still exceed budget: ${stillExceeded.map((f) => f.section + '.' + f.key).join(', ')}`
+  );
+
+  // Original payload should NOT be mutated
+  assert(
+    stressPayload.policy.regulatorySummary.overview.length === 1600,
+    'Original payload was mutated by compaction'
+  );
+
+  // Test 2: Clean payload should pass with low risk
+  const cleanPayload = {
+    country: 'Thailand',
+    policy: {
+      foundationalActs: { overview: 'Clean acts.' },
+      nationalPolicy: { overview: 'Clean policy.' },
+      investmentRestrictions: { overview: 'ok' },
+      regulatorySummary: { overview: 'Summary.' },
+      keyIncentives: { overview: 'ok' },
+      sources: [],
+    },
+    market: {
+      marketSizeAndGrowth: { overview: 'Growth.' },
+      supplyAndDemandDynamics: { overview: 'ok' },
+      pricingAndTariffStructures: { overview: 'ok' },
+    },
+    competitors: {
+      localMajor: { players: [{ name: 'A', description: 'ok' }] },
+      foreignPlayers: { players: [{ name: 'B', description: 'ok' }] },
+    },
+    depth: {
+      dealEconomics: { overview: 'ok' },
+      partnerAssessment: { overview: 'ok' },
+      entryStrategy: { overview: 'ok' },
+      implementation: { overview: 'ok' },
+      targetSegments: { overview: 'ok' },
+    },
+    summary: {
+      timingIntelligence: { overview: 'ok' },
+      lessonsLearned: { overview: 'ok' },
+      keyInsights: [],
+      recommendation: 'ok',
+      goNoGo: { overallVerdict: 'GO' },
+    },
+  };
+
+  const cleanReport = analyzeBudget(cleanPayload);
+  assert.strictEqual(
+    cleanReport.risk,
+    'low',
+    `Expected low risk for clean payload; got ${cleanReport.risk}`
+  );
+
+  // Test 3: runBudgetGate dry-run mode
+  const dryResult = runBudgetGate(stressPayload, { dryRun: true });
+  assert(
+    dryResult.compactionLog.length === 0,
+    `Dry-run should not compact; got ${dryResult.compactionLog.length} entries`
+  );
+  assert(
+    dryResult.report.risk !== 'low',
+    'Dry-run should still report risk'
+  );
+
+  // Test 4: runBudgetGate with compaction
+  const fullResult = runBudgetGate(stressPayload, { dryRun: false });
+  if (fullResult.report.risk !== 'low') {
+    assert(
+      fullResult.compactionLog.length > 0,
+      'Non-low risk should trigger compaction in non-dry-run mode'
+    );
+  }
+
+  // Test 5: Table density detection
+  const denseTablePayload = {
+    country: 'Indonesia',
+    policy: { foundationalActs: { overview: 'ok' }, nationalPolicy: { overview: 'ok' }, investmentRestrictions: { overview: 'ok' } },
+    market: { marketSizeAndGrowth: { overview: 'ok' } },
+    competitors: {
+      localMajor: {
+        players: Array.from({ length: 25 }, (_, i) => ({
+          name: `Company ${i}`,
+          description: 'X'.repeat(150),
+          revenue: '$50M',
+          marketShare: '2%',
+          headquarters: 'Jakarta',
+          employees: '1000',
+        })),
+      },
+      foreignPlayers: { players: [] },
+    },
+    depth: {},
+    summary: {},
+  };
+  const denseReport = analyzeBudget(denseTablePayload);
+  assert(
+    denseReport.tableDensity.some((td) => td.overBudget),
+    'Expected table density to be over budget for 25-row table with long cells'
+  );
+}
+
 async function validateDeck(pptxPath, country, industry) {
   const result = await runValidation(pptxPath, getExpectations(country, industry));
   if (!result.valid) {
@@ -588,6 +768,8 @@ async function runRound(round, total) {
   console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
   runPreRenderStructureUnitChecks();
   console.log('[Regression] Unit checks PASS (pre-render structure gating)');
+  runBudgetGateUnitChecks();
+  console.log('[Regression] Unit checks PASS (pre-render budget gate)');
 
   await runNodeScript(VIETNAM_SCRIPT);
   await runNodeScript(THAILAND_SCRIPT);

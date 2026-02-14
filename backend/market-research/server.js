@@ -26,6 +26,7 @@ const {
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
 } = require('./pptx-validator');
+const { runBudgetGate } = require('./budget-gate');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers({
@@ -1037,6 +1038,36 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           lastRunDiagnostics.error = `Pre-render structure gate failed: ${issueSummary}`;
         }
         throw new Error(`Pre-render structure gate failed: ${issueSummary}`);
+      }
+
+      // Budget Gate: Pre-render payload budget analysis & compaction.
+      // Catches payloads that pass structural gates but would cause late render stress
+      // (oversized fields, dense tables, thin charts).
+      for (let i = 0; i < countryAnalyses.length; i++) {
+        const ca = countryAnalyses[i];
+        const budgetResult = runBudgetGate(ca, { dryRun: false });
+        console.log(
+          `[Budget Gate] ${ca.country}: risk=${budgetResult.report.risk}, issues=${budgetResult.report.issues.length}` +
+          (budgetResult.compactionLog.length > 0
+            ? `, compacted=${budgetResult.compactionLog.length} field(s)`
+            : '')
+        );
+        if (budgetResult.compactionLog.length > 0) {
+          for (const entry of budgetResult.compactionLog) {
+            console.log(
+              `[Budget Gate] Compacted ${ca.country}.${entry.section}.${entry.key}: ${entry.action} (${entry.before} → ${entry.after})`
+            );
+          }
+          countryAnalyses[i] = budgetResult.payload;
+        }
+        if (lastRunDiagnostics) {
+          if (!lastRunDiagnostics.budgetGate) lastRunDiagnostics.budgetGate = {};
+          lastRunDiagnostics.budgetGate[ca.country] = {
+            risk: budgetResult.report.risk,
+            issues: budgetResult.report.issues.slice(0, 20),
+            compacted: budgetResult.compactionLog.length,
+          };
+        }
       }
 
       // Stage 4: Generate PPT
