@@ -27,6 +27,12 @@ const {
   reconcileContentTypesAndPackage,
 } = require('./pptx-validator');
 const { runBudgetGate } = require('./budget-gate');
+const {
+  isTransientKey,
+  sanitizeTransientKeys,
+  createSanitizationContext,
+  logSanitizationResult,
+} = require('./transient-key-sanitizer');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers({
@@ -186,35 +192,7 @@ const REQUIRED_DEPTH_SECTION_KEYS = [
   'implementation',
   'targetSegments',
 ];
-const TRANSIENT_SECTION_KEY_PATTERNS = [
-  /^section[_-]?\d+$/i,
-  /^gap[_-]?\d+$/i,
-  /^verify[_-]?\d+$/i,
-  /^final[_-]?review[_-]?gap[_-]?\d+$/i,
-  /^deepen[_-]?/i,
-  /deepen/i,
-  /_wasarray/i,
-];
-
-function isTransientSectionKey(key) {
-  const normalized = String(key || '').trim();
-  if (!normalized) return true;
-  return TRANSIENT_SECTION_KEY_PATTERNS.some((re) => re.test(normalized));
-}
-
-function isTransientTopLevelKey(key) {
-  const normalized = String(key || '').trim();
-  if (!normalized) return false;
-  const compact = normalized.replace(/\s+/g, '').toLowerCase();
-  // `finalReview` is stable metadata emitted by review stages and must not trip transient-key guard.
-  if (compact === 'finalreview') return false;
-  if (compact === '_wasarray') return true;
-  if (/^section[_-]?\d+$/i.test(normalized)) return true;
-  if (/deepen/i.test(normalized)) return true;
-  if (/^final[_-]?review(?:[_-]?(?:gap|issue))?\d+$/i.test(normalized)) return true;
-  if (/^finalreview(?:gap|issue)\d+$/i.test(compact)) return true;
-  return false;
-}
+// Transient key detection delegated to ./transient-key-sanitizer.js (canonical module).
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -373,124 +351,69 @@ function buildPptGateBlocks(countryAnalysis) {
   return blocks;
 }
 
+// Sanitization happens BEFORE this function via sanitizeTransientKeys().
+// This function only checks required/canonical sections on already-clean data.
 function collectPreRenderStructureIssues(countryAnalyses) {
   const issues = [];
   const requiredSections = ['policy', 'market', 'competitors', 'depth', 'summary'];
-
   for (const ca of countryAnalyses || []) {
     const country = ca?.country || 'Unknown';
     const countryPrefix = `${country}:`;
-
     for (const section of requiredSections) {
       if (!isPlainObject(ca?.[section])) {
         issues.push(`${countryPrefix} section "${section}" must be a JSON object`);
       }
     }
-
-    if (isPlainObject(ca)) {
-      for (const key of Object.keys(ca)) {
-        if (isTransientTopLevelKey(key)) {
-          issues.push(`${countryPrefix} transient top-level key "${key}" is not allowed`);
-        }
-      }
-    }
-
     if (isPlainObject(ca?.market)) {
-      const marketKeys = Object.keys(ca.market).filter((k) => !String(k).startsWith('_'));
-      const transientMarketKeys = marketKeys.filter((k) => isTransientSectionKey(k));
-      if (transientMarketKeys.length > 0) {
-        issues.push(
-          `${countryPrefix} market has transient sections: ${transientMarketKeys.join(', ')}`
-        );
-      }
+      const marketKeys = Object.keys(ca.market);
       const invalid = marketKeys.filter((k) => !CANONICAL_MARKET_SECTION_KEYS.includes(k));
-      if (invalid.length > 0) {
+      if (invalid.length > 0)
         issues.push(`${countryPrefix} market has non-canonical sections: ${invalid.join(', ')}`);
-      }
-
       const missing = CANONICAL_MARKET_SECTION_KEYS.filter((k) => !(k in ca.market));
-      if (missing.length > 0) {
+      if (missing.length > 0)
         issues.push(`${countryPrefix} market missing canonical sections: ${missing.join(', ')}`);
-      }
     }
-
     if (isPlainObject(ca?.policy)) {
-      const policyKeys = Object.keys(ca.policy).filter((k) => !String(k).startsWith('_'));
-      const transientPolicyKeys = policyKeys.filter((k) => isTransientSectionKey(k));
-      if (transientPolicyKeys.length > 0) {
-        issues.push(
-          `${countryPrefix} policy has transient sections: ${transientPolicyKeys.join(', ')}`
-        );
-      }
+      const policyKeys = Object.keys(ca.policy);
       const invalid = policyKeys.filter((k) => !CANONICAL_POLICY_SECTION_KEYS.includes(k));
-      if (invalid.length > 0) {
+      if (invalid.length > 0)
         issues.push(`${countryPrefix} policy has non-canonical sections: ${invalid.join(', ')}`);
-      }
       const missing = REQUIRED_POLICY_SECTION_KEYS.filter((k) => !(k in ca.policy));
-      if (missing.length > 0) {
+      if (missing.length > 0)
         issues.push(`${countryPrefix} policy missing required sections: ${missing.join(', ')}`);
-      }
     }
-
     if (isPlainObject(ca?.competitors)) {
-      const competitorKeys = Object.keys(ca.competitors).filter((k) => !String(k).startsWith('_'));
-      const transientCompetitorKeys = competitorKeys.filter((k) => isTransientSectionKey(k));
-      if (transientCompetitorKeys.length > 0) {
-        issues.push(
-          `${countryPrefix} competitors has transient sections: ${transientCompetitorKeys.join(', ')}`
-        );
-      }
+      const competitorKeys = Object.keys(ca.competitors);
       const invalid = competitorKeys.filter((k) => !CANONICAL_COMPETITOR_SECTION_KEYS.includes(k));
-      if (invalid.length > 0) {
+      if (invalid.length > 0)
         issues.push(
           `${countryPrefix} competitors has non-canonical sections: ${invalid.join(', ')}`
         );
-      }
       const missing = REQUIRED_COMPETITOR_SECTION_KEYS.filter((k) => !(k in ca.competitors));
-      if (missing.length > 0) {
+      if (missing.length > 0)
         issues.push(
           `${countryPrefix} competitors missing required sections: ${missing.join(', ')}`
         );
-      }
     }
-
     if (isPlainObject(ca?.summary)) {
-      const summaryKeys = Object.keys(ca.summary).filter((k) => !String(k).startsWith('_'));
-      const transientSummaryKeys = summaryKeys.filter((k) => isTransientSectionKey(k));
-      if (transientSummaryKeys.length > 0) {
-        issues.push(
-          `${countryPrefix} summary has transient sections: ${transientSummaryKeys.join(', ')}`
-        );
-      }
+      const summaryKeys = Object.keys(ca.summary);
       const invalid = summaryKeys.filter((k) => !CANONICAL_SUMMARY_SECTION_KEYS.includes(k));
-      if (invalid.length > 0) {
+      if (invalid.length > 0)
         issues.push(`${countryPrefix} summary has non-canonical sections: ${invalid.join(', ')}`);
-      }
       const missing = REQUIRED_SUMMARY_SECTION_KEYS.filter((k) => !(k in ca.summary));
-      if (missing.length > 0) {
+      if (missing.length > 0)
         issues.push(`${countryPrefix} summary missing required sections: ${missing.join(', ')}`);
-      }
     }
-
     if (isPlainObject(ca?.depth)) {
-      const depthKeys = Object.keys(ca.depth).filter((k) => !String(k).startsWith('_'));
-      const transientDepthKeys = depthKeys.filter((k) => isTransientSectionKey(k));
-      if (transientDepthKeys.length > 0) {
-        issues.push(
-          `${countryPrefix} depth has transient sections: ${transientDepthKeys.join(', ')}`
-        );
-      }
+      const depthKeys = Object.keys(ca.depth);
       const invalid = depthKeys.filter((k) => !CANONICAL_DEPTH_SECTION_KEYS.includes(k));
-      if (invalid.length > 0) {
+      if (invalid.length > 0)
         issues.push(`${countryPrefix} depth has non-canonical sections: ${invalid.join(', ')}`);
-      }
       const missing = REQUIRED_DEPTH_SECTION_KEYS.filter((k) => !(k in ca.depth));
-      if (missing.length > 0) {
+      if (missing.length > 0)
         issues.push(`${countryPrefix} depth missing required sections: ${missing.join(', ')}`);
-      }
     }
   }
-
   return issues;
 }
 
@@ -1028,7 +951,23 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         );
       }
 
-      // Hard pre-render schema guard: block transient/malformed synthesis before PPT renderer sees it.
+      // Sanitize transient keys from all country analyses before structural gating.
+      const preRenderSanitizationCtx = createSanitizationContext();
+      for (let i = 0; i < countryAnalyses.length; i++) {
+        countryAnalyses[i] = sanitizeTransientKeys(countryAnalyses[i], preRenderSanitizationCtx);
+      }
+      logSanitizationResult('pre-render', preRenderSanitizationCtx);
+      if (lastRunDiagnostics) {
+        lastRunDiagnostics.preRenderSanitization = {
+          droppedTransientKeyCount: preRenderSanitizationCtx.droppedTransientKeyCount,
+          droppedTransientKeySamples: preRenderSanitizationCtx.droppedTransientKeySamples.slice(
+            0,
+            15
+          ),
+        };
+      }
+
+      // Hard pre-render schema guard: check required/canonical sections on sanitized data.
       const preRenderStructureIssues = collectPreRenderStructureIssues(countryAnalyses);
       if (preRenderStructureIssues.length > 0) {
         const issueSummary = preRenderStructureIssues.slice(0, 12).join(' | ');
@@ -1245,6 +1184,19 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         );
       }
 
+      // Aggregate budget gate metrics across all countries for diagnostics
+      let budgetGateRisk = 'low';
+      let budgetGateCompactedFields = 0;
+      if (lastRunDiagnostics?.budgetGate) {
+        const riskOrder = { low: 0, medium: 1, high: 2 };
+        for (const bg of Object.values(lastRunDiagnostics.budgetGate)) {
+          if ((riskOrder[bg.risk] || 0) > (riskOrder[budgetGateRisk] || 0)) {
+            budgetGateRisk = bg.risk;
+          }
+          budgetGateCompactedFields += bg.compacted || 0;
+        }
+      }
+
       if (lastRunDiagnostics) {
         lastRunDiagnostics.ppt = pptMetrics || {
           templateCoverage: null,
@@ -1258,6 +1210,8 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           geometryMaxDelta: null,
           geometryIssueCount: null,
         };
+        lastRunDiagnostics.ppt.budgetGateRisk = budgetGateRisk;
+        lastRunDiagnostics.ppt.budgetGateCompactedFields = budgetGateCompactedFields;
         if (pptStructureValidation) {
           lastRunDiagnostics.pptStructure = {
             valid: pptStructureValidation.valid,

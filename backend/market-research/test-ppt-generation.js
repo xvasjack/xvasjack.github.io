@@ -5,6 +5,7 @@
  */
 
 const { generateSingleCountryPPT } = require('./ppt-single-country');
+const { runBudgetGate } = require('./budget-gate');
 const fs = require('fs');
 const path = require('path');
 
@@ -905,7 +906,18 @@ const scope = {
 
 async function main() {
   console.log('Generating test PPT using production generateSingleCountryPPT()...');
-  const buffer = await generateSingleCountryPPT(synthesis, countryAnalysis, scope);
+
+  // Budget gate: compact oversized fields before rendering (mirrors server.js path)
+  const budgetResult = runBudgetGate(countryAnalysis, { dryRun: false });
+  const renderAnalysis =
+    budgetResult.compactionLog.length > 0 ? budgetResult.payload : countryAnalysis;
+  if (budgetResult.compactionLog.length > 0) {
+    console.log(
+      `[Budget Gate] Compacted ${budgetResult.compactionLog.length} field(s), risk=${budgetResult.report.risk}`
+    );
+  }
+
+  const buffer = await generateSingleCountryPPT(synthesis, renderAnalysis, scope);
   const outputPath = path.join(__dirname, 'test-output.pptx');
   fs.writeFileSync(outputPath, buffer);
   console.log(`Generated ${outputPath} (${(buffer.length / 1024).toFixed(0)} KB)`);

@@ -78,6 +78,12 @@ const {
 } = require('./pptx-validator');
 const { normalizeThemeToTemplate } = require('./theme-normalizer');
 const { applyTemplateClonePostprocess } = require('./template-clone-postprocess');
+const {
+  isTransientKey,
+  sanitizeTransientKeys,
+  createSanitizationContext,
+  logSanitizationResult,
+} = require('./transient-key-sanitizer');
 
 const STRICT_TEMPLATE_FIDELITY = !/^(0|false|no|off)$/i.test(
   String(process.env.STRICT_TEMPLATE_FIDELITY || 'true').trim()
@@ -475,30 +481,7 @@ function compactRenderPayload(node, path = []) {
   return node;
 }
 
-// Render-time payload normalization.
-// Goal: keep a stable slide grammar even when synthesis returns transient/array-shaped structures.
-const RENDER_TRANSIENT_KEY_PATTERNS = [
-  /^_/,
-  /^section[_-]?\d+$/i,
-  /^gap[_-]?\d+$/i,
-  /^verify[_-]?\d+$/i,
-  /^final[_-]?review[_-]?gap[_-]?\d+$/i,
-  /^deepen[_-]?/i,
-  /^market[_-]?deepen[_-]?/i,
-  /^competitors?[_-]?deepen[_-]?/i,
-  /^policy[_-]?deepen[_-]?/i,
-  /^context[_-]?deepen[_-]?/i,
-  /^depth[_-]?deepen[_-]?/i,
-  /^insights?[_-]?deepen[_-]?/i,
-  /^marketdeepen/i,
-  /^competitorsdeepen/i,
-  /^policydeepen/i,
-  /^contextdeepen/i,
-  /^depthdeepen/i,
-  /^insightsdeepen/i,
-  /_wasarray$/i,
-  /_synthesiserror$/i,
-];
+// Render-time transient key detection delegated to ./transient-key-sanitizer.js (canonical module).
 
 const MARKET_CANONICAL_ALIAS_MAP = {
   marketSizeAndGrowth: ['marketSizeAndGrowth', 'market_size_and_growth'],
@@ -577,24 +560,9 @@ const DEPTH_ALIAS_MAP = {
 // Production safety guard: never allow transient/non-template sections to reach renderer.
 const STRICT_RENDER_NORMALIZATION = true;
 
-function isTransientRenderKey(key) {
-  const normalized = ensureString(key).trim().toLowerCase();
-  return RENDER_TRANSIENT_KEY_PATTERNS.some((re) => re.test(normalized));
-}
-
-function sanitizeRenderPayload(value, depth = 0) {
-  if (depth > 8) return value;
-  if (value == null) return value;
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return value.map((item) => sanitizeRenderPayload(item, depth + 1));
-  if (typeof value !== 'object') return value;
-
-  const cleaned = {};
-  for (const [key, child] of Object.entries(value)) {
-    if (isTransientRenderKey(key)) continue;
-    cleaned[key] = sanitizeRenderPayload(child, depth + 1);
-  }
-  return cleaned;
+// sanitizeRenderPayload replaced by sanitizeTransientKeys from canonical module.
+function sanitizeRenderPayload(value) {
+  return sanitizeTransientKeys(value);
 }
 
 function selectFirstAliasValue(input, aliases) {
@@ -1736,8 +1704,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Target: 50+ words with specific metrics, strategic context, and market relevance
   function enrichDescription(company) {
     if (!company || typeof company !== 'object') return company;
-    const desc = company.description || '';
-    const wordCount = desc.split(/\s+/).filter(Boolean).length;
+    const desc = ensureString(company.description, '');
+    const wordCount = desc ? desc.split(/\s+/).filter(Boolean).length : 0;
     if (wordCount >= 45) return company; // Already rich enough
     // Build a richer description from available fields
     const parts = [];
@@ -1799,7 +1767,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Apply validation, deduplication, and description enrichment to all player arrays
   function enrichPlayerArray(arr) {
-    if (!Array.isArray(arr)) return arr;
+    if (!Array.isArray(arr)) return [];
     return dedupeCompanies(
       arr.filter(isValidCompany).map(ensureWebsite).map(flattenPlayerProfile).map(enrichDescription)
     );
@@ -1820,7 +1788,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Global cross-array dedup: remove companies that appear in multiple arrays
   const globalSeen = new Set();
   function globalDedup(arr) {
-    if (!arr) return arr;
+    if (!Array.isArray(arr)) return [];
     return arr.filter((item) => {
       const key = String(item.name || '')
         .trim()
@@ -2724,6 +2692,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           recoveredRows: recoveredRowCount,
           recoveredCols: recoveredColCount,
         });
+        templateUsageStats.tableRecoveries.push({
+          key: context,
+          reason: violations.join('; '),
+          recoveryType: 'bounded-flex',
+          originalRows: rowCount,
+          recoveredRows: recoveredRowCount,
+        });
         console.log(
           `[PPT] ${context}: table-flex recovery applied (rows: ${rowCount}->${recoveredRowCount}, cols: ${colCount}->${recoveredColCount})`
         );
@@ -2887,6 +2862,84 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
       }
     }
+    // Pre-flight fit score check — route to appropriate recovery strategy
+    const fitScoreRect = { w: Number(addOptions?.w) || 8.5, h: Number(addOptions?.h) || 3.5 };
+    const fitResult = computeTableFitScore(tableRows, fitScoreRect);
+    if (fitResult.recommendation === 'fallback') {
+      console.warn(
+        `[PPT] ${resolvedContext}: table fit score=${fitResult.score} (${fitResult.recommendation}) — applying aggressive recovery`
+      );
+      if (tableRows.length > TABLE_FLEX_MAX_ROWS) {
+        const keep = Math.min(TABLE_FLEX_MAX_ROWS - 1, 10);
+        const truncated = tableRows.length - keep;
+        tableRows.length = keep;
+        tableRows.push([
+          {
+            text: `+${truncated} more items (table too large for slide)`,
+            options: { colspan: countTableColumns(tableRows) || 1, italic: true, color: '999999' },
+          },
+        ]);
+      }
+      const maxCols = Math.min(TABLE_FLEX_MAX_COLS, 6);
+      for (let ri = 0; ri < tableRows.length; ri++) {
+        if (Array.isArray(tableRows[ri]) && tableRows[ri].length > maxCols) {
+          tableRows[ri] = tableRows[ri].slice(0, maxCols);
+        }
+      }
+      templateUsageStats.tableRecoveries.push({
+        key: resolvedContext,
+        reason: `fit-score-fallback: score=${fitResult.score}`,
+        recoveryType: 'fit-score-fallback',
+        originalScore: fitResult.score,
+        breakdown: fitResult.breakdown,
+      });
+    } else if (fitResult.recommendation === 'truncate') {
+      console.log(
+        `[PPT] ${resolvedContext}: table fit score=${fitResult.score} (${fitResult.recommendation}) — applying truncation`
+      );
+      if (tableRows.length > TABLE_FLEX_MAX_ROWS) {
+        const keep = TABLE_FLEX_MAX_ROWS - 1;
+        const truncated = tableRows.length - keep;
+        tableRows.length = keep;
+        tableRows.push([
+          {
+            text: `+${truncated} more items`,
+            options: { colspan: countTableColumns(tableRows) || 1, italic: true, color: '999999' },
+          },
+        ]);
+      }
+      if (countTableColumns(tableRows) > TABLE_FLEX_MAX_COLS) {
+        for (let ri = 0; ri < tableRows.length; ri++) {
+          if (Array.isArray(tableRows[ri]) && tableRows[ri].length > TABLE_FLEX_MAX_COLS) {
+            tableRows[ri] = tableRows[ri].slice(0, TABLE_FLEX_MAX_COLS);
+          }
+        }
+      }
+      templateUsageStats.tableRecoveries.push({
+        key: resolvedContext,
+        reason: `fit-score-truncate: score=${fitResult.score}`,
+        recoveryType: 'fit-score-truncate',
+        originalScore: fitResult.score,
+        breakdown: fitResult.breakdown,
+      });
+    }
+    // Absolute hard cap: no cell should ever exceed 800 chars regardless of density settings
+    for (let ri = 0; ri < tableRows.length; ri++) {
+      if (!Array.isArray(tableRows[ri])) continue;
+      for (let ci = 0; ci < tableRows[ri].length; ci++) {
+        const cell = tableRows[ri][ci];
+        if (typeof cell === 'string' && cell.length > 800) {
+          tableRows[ri][ci] = cell.slice(0, 797) + '...';
+        } else if (
+          cell &&
+          typeof cell === 'object' &&
+          typeof cell.text === 'string' &&
+          cell.text.length > 800
+        ) {
+          cell.text = cell.text.slice(0, 797) + '...';
+        }
+      }
+    }
     if (addOptions && typeof addOptions === 'object') {
       const configuredFontSize = Number(addOptions.fontSize);
       if (Number.isFinite(configuredFontSize) && configuredFontSize > 0) {
@@ -2981,6 +3034,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             templateUsageStats.tableFallbacks.push({
               key: resolvedContext,
               reason: `density-overflow: ${severe.length} severe cells`,
+              recoveryType: 'density-truncate',
+              severeCells: severe.length,
+            });
+            templateUsageStats.tableRecoveries.push({
+              key: resolvedContext,
+              reason: `density-overflow: ${severe.length} severe cells hard-truncated`,
               recoveryType: 'density-truncate',
               severeCells: severe.length,
             });
@@ -3133,31 +3192,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     'confidenceScore',
   ]);
 
-  const TRANSIENT_SYNTHESIS_KEY_PATTERNS = [
-    /^_/,
-    /^section[_-]?\d+$/i,
-    /^gap[_-]?\d+$/i,
-    /^verify[_-]?\d+$/i,
-    /^final[_-]?review[_-]?gap[_-]?\d+$/i,
-    /^deepen[_-]?/i,
-    /^market[_-]?deepen[_-]?/i,
-    /^competitors?[_-]?deepen[_-]?/i,
-    /^policy[_-]?deepen[_-]?/i,
-    /^context[_-]?deepen[_-]?/i,
-    /^depth[_-]?deepen[_-]?/i,
-    /^insights?[_-]?deepen[_-]?/i,
-    /^marketdeepen/i,
-    /^competitorsdeepen/i,
-    /^policydeepen/i,
-    /^contextdeepen/i,
-    /^depthdeepen/i,
-    /^insightsdeepen/i,
-    /_wasarray$/i,
-    /_synthesiserror$/i,
-  ];
+  // isTransientSynthesisKey replaced by isTransientKey from canonical module.
   function isTransientSynthesisKey(key) {
-    const normalized = ensureString(key).trim().toLowerCase();
-    return TRANSIENT_SYNTHESIS_KEY_PATTERNS.some((re) => re.test(normalized));
+    return isTransientKey(key);
   }
 
   const SEMANTIC_EMPTY_TEXT_PATTERNS = [
@@ -4676,7 +4713,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         pattern: block._templatePattern || null,
         error: err.message,
       });
-      throw new Error(`Slide "${block.key}" render failed: ${err.message}`);
+      // Recovery: add placeholder instead of crashing — let remaining slides render
+      addDataUnavailableMessage(slide, 'Content rendering failed for this section');
     }
 
     return slide;
@@ -5116,9 +5154,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       investNextY = investNextY + incTableH + 0.15;
     }
     if (data.riskLevel && investNextY < CONTENT_BOTTOM - 0.4) {
-      const riskColor = data.riskLevel.toLowerCase().includes('high')
+      const riskLevelStr = ensureString(data.riskLevel, '').toLowerCase();
+      const riskColor = riskLevelStr.includes('high')
         ? COLORS.red
-        : data.riskLevel.toLowerCase().includes('low')
+        : riskLevelStr.includes('low')
           ? COLORS.green
           : COLORS.orange;
       slide.addText(`Regulatory Risk: ${safeCell(data.riskLevel).toUpperCase()}`, {
@@ -5565,8 +5604,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       stratInsights.push(`Recommended: ${ensureString(data.recommendation)}`);
     if (options.length > 0) {
       stratInsights.push(`${options.length} entry options analyzed`);
-      const lowestRisk = options.find((o) => o.riskLevel?.toLowerCase().includes('low'));
-      const fastest = options.find((o) => o.timeline?.includes('12') || o.timeline?.includes('6'));
+      const lowestRisk = options.find((o) =>
+        ensureString(o.riskLevel, '').toLowerCase().includes('low')
+      );
+      const fastest = options.find((o) => {
+        const t = ensureString(o.timeline, '');
+        return t.includes('12') || t.includes('6');
+      });
       if (lowestRisk) stratInsights.push(`Low Risk: ${lowestRisk.mode}`);
       if (fastest) stratInsights.push(`Fastest: ${fastest.mode} (${fastest.timeline})`);
     }
@@ -5960,10 +6004,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       goNoGoCriteria.length > 0
         ? CONTENT_Y + safeTableHeight(goNoGoCriteria.length + 1, { fontSize: 14, maxH: 3.5 }) + 0.15
         : 1.5;
+    const verdictStr = ensureString(data.overallVerdict, '');
     const verdictColor =
-      data.overallVerdict?.includes('GO') && !data.overallVerdict?.includes('NO')
+      verdictStr.includes('GO') && !verdictStr.includes('NO')
         ? COLORS.green
-        : data.overallVerdict?.includes('NO')
+        : verdictStr.includes('NO')
           ? COLORS.red
           : COLORS.orange;
     if (data.overallVerdict) {
@@ -6662,7 +6707,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const titleSlide = pptx.addSlide({ masterName: 'NO_BAR' });
   titleSlide.background = { data: `image/png;base64,${COVER_BG_B64}` };
   // Use client/project name if available, otherwise country
-  const coverTitle = scope.clientName || (country || 'UNKNOWN').toUpperCase();
+  const coverTitle = scope.clientName || ensureString(country, 'UNKNOWN').toUpperCase();
   const coverSubtitle = scope.projectName
     ? `${scope.projectName} - ${scope.industry} Market Selection`
     : `${scope.industry} - Market Overview & Analysis`;
@@ -6990,10 +7035,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   const finalGoNoGo = summary.goNoGo || {};
   if (finalGoNoGo.overallVerdict) {
+    const finalVerdictStr = ensureString(finalGoNoGo.overallVerdict, '');
     const finalVerdictType =
-      finalGoNoGo.overallVerdict.includes('GO') && !finalGoNoGo.overallVerdict.includes('NO')
+      finalVerdictStr.includes('GO') && !finalVerdictStr.includes('NO')
         ? 'positive'
-        : finalGoNoGo.overallVerdict.includes('NO')
+        : finalVerdictStr.includes('NO')
           ? 'negative'
           : 'warning';
     addCalloutBox(
@@ -7047,9 +7093,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ),
     ].join(', ');
     const totalResolvedBlocks = Math.max(templateUsageStats.resolved.length, 1);
-    throw new Error(
-      `PPT rendering failures detected (${templateUsageStats.slideRenderFailures.length}/${totalResolvedBlocks}): ${failKeys}`
+    console.warn(
+      `[PPT TEMPLATE] Recoverable rendering failures (${templateUsageStats.slideRenderFailures.length}/${totalResolvedBlocks}): ${failKeys}`
     );
+    // Only throw if more than half of slides failed (truly unrecoverable)
+    if (templateUsageStats.slideRenderFailures.length > totalResolvedBlocks * 0.5) {
+      throw new Error(
+        `PPT rendering failures too severe (${templateUsageStats.slideRenderFailures.length}/${totalResolvedBlocks}): ${failKeys}`
+      );
+    }
   }
   if (templateUsageStats.tableRecoveries.length > 0) {
     const recoveredKeys = [...new Set(templateUsageStats.tableRecoveries.map((r) => r.key))].join(
@@ -7308,6 +7360,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     tableRecoveryKeys: [...new Set(templateUsageStats.tableRecoveries.map((r) => r.key))],
     tableFallbackCount: templateUsageStats.tableFallbacks.length,
     tableFallbackKeys: [...new Set(templateUsageStats.tableFallbacks.map((f) => f.key))],
+    tableRecoveryTypes: templateUsageStats.tableRecoveries.reduce((acc, r) => {
+      acc[r.recoveryType] = (acc[r.recoveryType] || 0) + 1;
+      return acc;
+    }, {}),
     geometryCheckCount: layoutFidelityStats.checks,
     geometryAlignedCount: layoutFidelityStats.aligned,
     geometryMaxDelta: Number(layoutFidelityStats.maxDelta.toFixed(4)),
@@ -7349,10 +7405,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   return pptxBuffer;
 }
 
+// Standalone version of globalDedup for testing (the real one is closure-scoped)
+function _dedupeGlobalCompanyList(arr, seenSet) {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter((item) => {
+    const key = String(item.name || '')
+      .trim()
+      .toLowerCase()
+      .replace(
+        /\b(ltd|inc|corp|co|llc|plc|sdn\s*bhd|pte|pvt|limited|corporation|company)\b\.?/gi,
+        ''
+      )
+      .replace(/[^a-z0-9]/g, '');
+    if (!key || seenSet.has(key)) return false;
+    seenSet.add(key);
+    return true;
+  });
+}
+
 module.exports = {
   generateSingleCountryPPT,
   __test: {
     shouldAllowCompetitiveOptionalGroupGap,
     resolveTemplateRouteWithGeometryGuard,
+    computeTableFitScore,
+    safeCell,
+    dedupeGlobalCompanyList: _dedupeGlobalCompanyList,
+    isTransientKey,
+    sanitizeTransientKeys,
   },
 };

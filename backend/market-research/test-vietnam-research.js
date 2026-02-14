@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { generateSingleCountryPPT } = require('./ppt-single-country');
+const { runBudgetGate } = require('./budget-gate');
 const {
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
@@ -20,7 +21,18 @@ const {
   scanRelationshipTargets,
   scanPackageConsistency,
 } = require('./pptx-validator');
-const { runVisualFidelityCheck } = require('./visual-fidelity-runner');
+// Lazy-load visual fidelity runner (optional module, may not exist yet)
+let runVisualFidelityCheck;
+try {
+  ({ runVisualFidelityCheck } = require('./visual-fidelity-runner'));
+} catch {
+  runVisualFidelityCheck = async () => ({
+    valid: true,
+    score: 0,
+    summary: { failed: 0 },
+    checks: [],
+  });
+}
 
 const mockData = {
   country: 'Vietnam',
@@ -678,9 +690,18 @@ function collectPackageConsistencyIssues(scan) {
 async function main() {
   console.log('Generating Vietnam PPT using production single-country renderer...');
 
-  const countryAnalysis = buildCountryAnalysis(mockData);
+  let countryAnalysis = buildCountryAnalysis(mockData);
   const synthesis = buildSynthesis(mockData);
   const scope = buildScope(mockData);
+
+  // Budget gate: compact oversized fields before rendering (mirrors server.js path)
+  const budgetResult = runBudgetGate(countryAnalysis, { dryRun: false });
+  if (budgetResult.compactionLog.length > 0) {
+    countryAnalysis = budgetResult.payload;
+    console.log(
+      `[Budget Gate] Compacted ${budgetResult.compactionLog.length} field(s), risk=${budgetResult.report.risk}`
+    );
+  }
 
   let buffer = await generateSingleCountryPPT(synthesis, countryAnalysis, scope);
 

@@ -1,6 +1,8 @@
 'use strict';
 
 const { generateSingleCountryPPT } = require('./ppt-single-country');
+const { runBudgetGate } = require('./budget-gate');
+const { isTransientKey } = require('./transient-key-sanitizer');
 const JSZip = require('jszip');
 const fs = require('fs');
 const path = require('path');
@@ -1058,7 +1060,7 @@ function applyLongStringMutations(payload, rng) {
   }
 }
 
-// Transient keys to inject
+// Transient keys to inject (must all match isTransientKey from ./transient-key-sanitizer.js)
 const TRANSIENT_KEYS_POOL = [
   'section_0',
   'section_1',
@@ -1404,6 +1406,12 @@ async function runStressTest({ seeds = 30, reportPath = null } = {}) {
       const { synthesis, countryAnalysis, scope } = buildBasePayload();
       const mutated = mutatePayload({ synthesis, countryAnalysis, scope }, seed);
 
+      // Budget gate: compact oversized fields before rendering (mirrors server.js path)
+      const budgetResult = runBudgetGate(mutated.countryAnalysis, { dryRun: false });
+      if (budgetResult.compactionLog.length > 0) {
+        mutated.countryAnalysis = budgetResult.payload;
+      }
+
       const buffer = await generateSingleCountryPPT(
         mutated.synthesis,
         mutated.countryAnalysis,
@@ -1464,9 +1472,50 @@ async function runStressTest({ seeds = 30, reportPath = null } = {}) {
   return { passed, failed, total: seeds, failures, runtimeCrashes, dataGateRejections, report };
 }
 
+// ============ TABLE PRESSURE STRESS TEST ============
+
+async function runTablePressureStressTest() {
+  console.log('[Stress] Running table pressure stress test...');
+  const payload = buildBasePayload();
+  const longCell = 'Market analysis data point with extensive detail. '.repeat(20);
+  payload.market.marketSizeAndGrowth = {
+    slideTitle: 'Market Size Stress Test',
+    keyMessage: 'Testing extreme table rendering resilience',
+    tableData: Array.from({ length: 25 }, (_, i) => ({
+      segment: `Segment ${i + 1}`,
+      value2023: `$${(Math.random() * 1000).toFixed(1)}M`,
+      value2024: `$${(Math.random() * 1000).toFixed(1)}M`,
+      growth: `${(Math.random() * 20).toFixed(1)}%`,
+      marketShare: `${(Math.random() * 100).toFixed(1)}%`,
+      drivers: longCell,
+      challenges: longCell,
+      outlook: longCell,
+      region: `Region ${i % 5}`,
+      subSegment: `Sub-${i}`,
+      notes: longCell,
+      forecast: `$${(Math.random() * 2000).toFixed(1)}M`,
+    })),
+  };
+  try {
+    const result = await generateSingleCountryPPT(payload);
+    const metrics = result.__pptMetrics;
+    console.log('[Stress] Table pressure test PASSED - no crash');
+    console.log(`[Stress]   slideRenderFailures: ${metrics?.slideRenderFailureCount || 0}`);
+    console.log(`[Stress]   tableFallbackCount: ${metrics?.tableFallbackCount || 0}`);
+    console.log(`[Stress]   tableRecoveryCount: ${metrics?.tableRecoveryCount || 0}`);
+    console.log(
+      `[Stress]   tableRecoveryTypes: ${JSON.stringify(metrics?.tableRecoveryTypes || {})}`
+    );
+    return { passed: true, metrics };
+  } catch (err) {
+    console.error(`[Stress] Table pressure test FAILED: ${err.message}`);
+    return { passed: false, error: err.message };
+  }
+}
+
 // ============ EXPORTS ============
 
-module.exports = { runStressTest };
+module.exports = { runStressTest, runTablePressureStressTest };
 
 // ============ CLI ============
 

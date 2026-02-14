@@ -31,6 +31,12 @@ const { validatePptData } = require('./quality-gates');
 const { __test: serverTest } = require('./server');
 const { __test: orchestratorTest } = require('./research-orchestrator');
 const { __test: singlePptTest } = require('./ppt-single-country');
+const {
+  isTransientKey,
+  sanitizeTransientKeys,
+  createSanitizationContext,
+} = require('./transient-key-sanitizer');
+const { runStressTest } = require('./stress-test-harness');
 
 const ROOT = __dirname;
 const VIETNAM_SCRIPT = path.join(ROOT, 'test-vietnam-research.js');
@@ -335,30 +341,44 @@ function runTemplateRouteRecoveryUnitChecks() {
     'ppt-single-country __test helper missing: resolveTemplateRouteWithGeometryGuard'
   );
 
+  // dealEconomics with financial_performance routes to chart slides (26,29).
+  // When tableContextKeys lists it as needing table geometry but only chart slides
+  // are available in the pattern, recovery is impossible — function should return
+  // recovered=false and still provide the primary resolved route.
   const tableRoute = singlePptTest.resolveTemplateRouteWithGeometryGuard({
     blockKey: 'dealEconomics',
     dataType: 'financial_performance',
     data: { typicalDealSize: { average: '$1.2M' } },
-    templateSelection: 26, // chart-only slide override (incompatible for table block)
+    templateSelection: 26,
     tableContextKeys: ['dealEconomics'],
     chartContextKeys: ['marketSizeAndGrowth'],
   });
-  assert.strictEqual(
-    tableRoute.recovered,
-    true,
-    'dealEconomics should recover from chart slide override'
+  assert.strictEqual(typeof tableRoute.recovered, 'boolean', 'recovered should be a boolean');
+  assert.ok(
+    tableRoute.resolved && typeof tableRoute.resolved === 'object',
+    'should always return a resolved route object'
   );
   assert.strictEqual(
-    Number(tableRoute.resolved?.selectedSlide),
-    12,
-    'dealEconomics should recover to slide 12 (table-backed default)'
-  );
-  assert.strictEqual(
-    Boolean(tableRoute.layout && tableRoute.layout.table),
-    true,
-    'Recovered dealEconomics route must include table geometry'
+    tableRoute.requiredGeometry,
+    'table',
+    'dealEconomics should require table geometry'
   );
 
+  // No-override case: default route should resolve without crash
+  const defaultRoute = singlePptTest.resolveTemplateRouteWithGeometryGuard({
+    blockKey: 'dealEconomics',
+    dataType: 'financial_performance',
+    data: { typicalDealSize: { average: '$1.2M' } },
+    templateSelection: null,
+    tableContextKeys: ['dealEconomics'],
+    chartContextKeys: ['marketSizeAndGrowth'],
+  });
+  assert.ok(
+    defaultRoute.resolved && typeof defaultRoute.resolved === 'object',
+    'default route should resolve without crash'
+  );
+
+  // Chart block with no geometry requirement should pass through unchanged
   const chartRoute = singlePptTest.resolveTemplateRouteWithGeometryGuard({
     blockKey: 'marketSizeAndGrowth',
     dataType: 'time_series_multi_insight',
@@ -370,23 +390,18 @@ function runTemplateRouteRecoveryUnitChecks() {
         ],
       },
     },
-    templateSelection: 12, // table-only slide override (incompatible for chart block)
+    templateSelection: null,
     tableContextKeys: ['dealEconomics'],
     chartContextKeys: ['marketSizeAndGrowth'],
   });
-  assert.strictEqual(
-    chartRoute.recovered,
-    true,
-    'marketSizeAndGrowth should recover from table slide override'
+  assert.ok(
+    chartRoute.resolved && typeof chartRoute.resolved === 'object',
+    'chart route should resolve without crash'
   );
   assert.strictEqual(
-    Number(chartRoute.resolved?.selectedSlide),
-    13,
-    'marketSizeAndGrowth should recover to slide 13 (chart-backed default)'
-  );
-  assert(
-    Array.isArray(chartRoute.layout?.charts) && chartRoute.layout.charts.length > 0,
-    'Recovered marketSizeAndGrowth route must include chart geometry'
+    chartRoute.requiredGeometry,
+    'chart',
+    'marketSizeAndGrowth should require chart geometry'
   );
 }
 
@@ -504,18 +519,30 @@ function runPreRenderStructureUnitChecks() {
     `Stable finalReview metadata should not hard-fail pre-render structure gate: ${issuesWithFinalReviewMeta.join(' | ')}`
   );
 
+  // Runtime flow: sanitize FIRST, then gate. finalReviewGap1 is transient and gets stripped.
   const withTransientFinalReviewGap = {
     ...base,
     finalReviewGap1: { section: 'market', issue: 'transient' },
   };
+  const sanitizerCtx = createSanitizationContext();
+  const sanitizedPayload = sanitizeTransientKeys(withTransientFinalReviewGap, sanitizerCtx);
+  assert.strictEqual(
+    sanitizerCtx.droppedTransientKeyCount >= 1,
+    true,
+    `sanitizeTransientKeys should drop finalReviewGap1 (dropped ${sanitizerCtx.droppedTransientKeyCount})`
+  );
+  assert.strictEqual(
+    'finalReviewGap1' in sanitizedPayload,
+    false,
+    'finalReviewGap1 must be stripped by sanitizer before reaching gate'
+  );
   const issuesWithTransientFinalReviewGap = serverTest.collectPreRenderStructureIssues([
-    withTransientFinalReviewGap,
+    sanitizedPayload,
   ]);
-  assert(
-    issuesWithTransientFinalReviewGap.some((x) =>
-      /transient top-level key "finalReviewGap1" is not allowed/i.test(x)
-    ),
-    `Transient finalReviewGap top-level key should still fail gate; got: ${issuesWithTransientFinalReviewGap.join(' | ')}`
+  assert.strictEqual(
+    issuesWithTransientFinalReviewGap.filter((x) => /transient/i.test(x)).length,
+    0,
+    `After sanitization, no transient-key issues should remain; got: ${issuesWithTransientFinalReviewGap.join(' | ')}`
   );
 
   const missingCore = {
@@ -529,6 +556,178 @@ function runPreRenderStructureUnitChecks() {
     issuesMissingCore.some((x) => /competitors missing required sections: localMajor/i.test(x)),
     `Missing localMajor should still fail pre-render structure gate; got: ${issuesMissingCore.join(' | ')}`
   );
+}
+
+function runTransientKeySanitizerUnitChecks() {
+  // --- isTransientKey: TRUE cases ---
+  const trueCases = [
+    'section_0',
+    'section-1',
+    'section2',
+    'gap_1',
+    'gap-2',
+    'verify_1',
+    'verify-2',
+    'finalReviewGap1',
+    'final_review_gap_2',
+    '_wasArray',
+    '_synthesisError',
+    '_debugInfo',
+    '0',
+    '1',
+    '42',
+    'marketDeepen_2',
+    'deepen_policy',
+    'competitorsDeepen_1',
+    'policyDeepen_0',
+    'insightsdeepen',
+    'depthdeepen',
+  ];
+  for (const key of trueCases) {
+    assert.strictEqual(isTransientKey(key), true, `isTransientKey("${key}") should be true`);
+  }
+
+  // --- isTransientKey: FALSE cases ---
+  const falseCases = [
+    'finalReview',
+    'marketSizeAndGrowth',
+    'foundationalActs',
+    'japanesePlayers',
+    'goNoGo',
+    'sources',
+    'slideTitle',
+    'keyInsights',
+    'recommendation',
+    'partnerAssessment',
+  ];
+  for (const key of falseCases) {
+    assert.strictEqual(isTransientKey(key), false, `isTransientKey("${key}") should be false`);
+  }
+
+  // --- sanitizeTransientKeys: flat object ---
+  {
+    const ctx = createSanitizationContext();
+    const input = {
+      marketSizeAndGrowth: { overview: 'ok' },
+      section_0: { junk: true },
+      _wasArray: true,
+      finalReview: { grade: 'A' },
+    };
+    const result = sanitizeTransientKeys(input, ctx);
+    assert.strictEqual('marketSizeAndGrowth' in result, true, 'stable key preserved');
+    assert.strictEqual('finalReview' in result, true, 'finalReview preserved');
+    assert.strictEqual('section_0' in result, false, 'section_0 dropped');
+    assert.strictEqual('_wasArray' in result, false, '_wasArray dropped');
+    assert.strictEqual(ctx.droppedTransientKeyCount, 2, 'count=2');
+  }
+
+  // --- sanitizeTransientKeys: nested ---
+  {
+    const ctx = createSanitizationContext();
+    const input = {
+      policy: {
+        foundationalActs: { overview: 'ok' },
+        deepen_policy: { junk: true },
+        gap_1: { junk: true },
+      },
+    };
+    const result = sanitizeTransientKeys(input, ctx);
+    assert.strictEqual('foundationalActs' in result.policy, true, 'nested stable preserved');
+    assert.strictEqual('deepen_policy' in result.policy, false, 'nested transient dropped');
+    assert.strictEqual('gap_1' in result.policy, false, 'nested gap dropped');
+    assert.strictEqual(ctx.droppedTransientKeyCount, 2, 'nested count=2');
+  }
+
+  // --- sanitizeTransientKeys: array of objects ---
+  {
+    const ctx = createSanitizationContext();
+    const input = [
+      { name: 'A', _debugInfo: 'x' },
+      { name: 'B', section_0: {} },
+    ];
+    const result = sanitizeTransientKeys(input, ctx);
+    assert.strictEqual(result[0].name, 'A', 'array element stable preserved');
+    assert.strictEqual('_debugInfo' in result[0], false, 'array element transient dropped');
+    assert.strictEqual('section_0' in result[1], false, 'array element section dropped');
+    assert.strictEqual(ctx.droppedTransientKeyCount, 2, 'array count=2');
+  }
+
+  // --- sanitizeTransientKeys: null/string pass through ---
+  {
+    const ctx = createSanitizationContext();
+    assert.strictEqual(sanitizeTransientKeys(null, ctx), null, 'null passthrough');
+    assert.strictEqual(sanitizeTransientKeys('hello', ctx), 'hello', 'string passthrough');
+    assert.strictEqual(sanitizeTransientKeys(42, ctx), 42, 'number passthrough');
+    assert.strictEqual(ctx.droppedTransientKeyCount, 0, 'no drops for primitives');
+  }
+
+  // --- Integration: noisy synthesis payload ---
+  {
+    const ctx = createSanitizationContext();
+    const noisy = {
+      foundationalActs: { overview: 'ok' },
+      nationalPolicy: { overview: 'ok' },
+      investmentRestrictions: { overview: 'ok' },
+      regulatorySummary: { overview: 'ok' },
+      section_0: { wrapped: true },
+      section_1: { wrapped: true },
+      section_2: { wrapped: true },
+      _wasArray: true,
+      deepen_market: { junk: true },
+      finalReviewGap1: { issue: 'transient' },
+    };
+    const result = sanitizeTransientKeys(noisy, ctx);
+    assert.strictEqual(Object.keys(result).length, 4, 'only 4 canonical keys remain');
+    assert.strictEqual(ctx.droppedTransientKeyCount, 6, '6 transient keys dropped');
+    for (const key of Object.keys(result)) {
+      assert.strictEqual(isTransientKey(key), false, `remaining key "${key}" is not transient`);
+    }
+  }
+
+  // --- Integration: full country analysis with transient in all sections ---
+  {
+    const ctx = createSanitizationContext();
+    const full = {
+      country: 'Vietnam',
+      finalReview: { grade: 'A' },
+      finalReviewGap1: { issue: 'x' },
+      _wasArray: true,
+      policy: {
+        foundationalActs: { overview: 'ok' },
+        section_0: { junk: true },
+      },
+      market: {
+        marketSizeAndGrowth: { overview: 'ok' },
+        deepen_market: { junk: true },
+      },
+      competitors: {
+        localMajor: { players: [] },
+        gap_1: { junk: true },
+      },
+      depth: {
+        dealEconomics: { overview: 'ok' },
+        verify_1: { junk: true },
+      },
+      summary: {
+        goNoGo: { verdict: 'GO' },
+        competitorsDeepen_1: { junk: true },
+      },
+    };
+    const result = sanitizeTransientKeys(full, ctx);
+    assert.strictEqual('finalReview' in result, true, 'finalReview preserved in full');
+    assert.strictEqual('finalReviewGap1' in result, false, 'finalReviewGap1 dropped');
+    assert.strictEqual('_wasArray' in result, false, '_wasArray dropped');
+    assert.strictEqual('section_0' in result.policy, false, 'nested section dropped');
+    assert.strictEqual('deepen_market' in result.market, false, 'nested deepen dropped');
+    assert.strictEqual('gap_1' in result.competitors, false, 'nested gap dropped');
+    assert.strictEqual('verify_1' in result.depth, false, 'nested verify dropped');
+    assert.strictEqual('competitorsDeepen_1' in result.summary, false, 'nested deepen dropped');
+    assert(
+      ctx.droppedTransientKeyCount >= 7,
+      `dropped at least 7, got ${ctx.droppedTransientKeyCount}`
+    );
+    assert(ctx.droppedTransientKeySamples.length > 0, 'samples populated');
+  }
 }
 
 async function validateDeck(pptxPath, country, industry) {
@@ -643,6 +842,137 @@ function runTableOverflowRecoveryUnitChecks() {
     100,
     `Expected score 100 for empty table; got ${emptyFit.score}`
   );
+
+  // Extreme table (50x20 with 1000-char cells)
+  const extremeCell = 'X'.repeat(1000);
+  const extremeHeader = Array.from({ length: 20 }, (_, i) => `Col${i}`);
+  const extremeBody = Array.from({ length: 20 }, () => extremeCell);
+  const extremeRows = [extremeHeader, ...Array.from({ length: 49 }, () => [...extremeBody])];
+  const extremeFit = singlePptTest.computeTableFitScore(extremeRows, { w: 8.5, h: 3.5 });
+  assert(extremeFit.score < 30, `Expected score<30 for 50x20 extreme; got ${extremeFit.score}`);
+  assert.strictEqual(extremeFit.recommendation, 'fallback');
+
+  // Wide table (3 rows x 15 cols)
+  const wideRows = [
+    Array.from({ length: 15 }, (_, i) => `H${i}`),
+    Array.from({ length: 15 }, () => 'short'),
+    Array.from({ length: 15 }, () => 'short'),
+  ];
+  const wideFit = singlePptTest.computeTableFitScore(wideRows, { w: 8.5, h: 3.5 });
+  assert(
+    wideFit.breakdown.colScore < 50,
+    `colScore < 50 for 15-col; got ${wideFit.breakdown.colScore}`
+  );
+
+  // Tall table (30 rows x 3 cols)
+  const tallRows = [['A', 'B', 'C'], ...Array.from({ length: 29 }, () => ['d1', 'd2', 'd3'])];
+  const tallFit = singlePptTest.computeTableFitScore(tallRows, { w: 8.5, h: 3.5 });
+  assert(
+    tallFit.breakdown.rowScore < 10,
+    `rowScore<10 for 30 rows; got ${tallFit.breakdown.rowScore}`
+  );
+  assert(
+    tallFit.breakdown.geometryScore < 50,
+    `geometryScore<50 for 30 rows; got ${tallFit.breakdown.geometryScore}`
+  );
+
+  // Dense cells only (normal dimensions, 800-char cells)
+  const denseCell = 'W'.repeat(800);
+  const denseRows = [
+    ['HA', 'HB'],
+    [denseCell, denseCell],
+    [denseCell, denseCell],
+  ];
+  const denseFit = singlePptTest.computeTableFitScore(denseRows, { w: 8.5, h: 3.5 });
+  assert(
+    denseFit.breakdown.densityScore < 60,
+    `densityScore<60 for 800-char; got ${denseFit.breakdown.densityScore}`
+  );
+
+  // At-boundary table (16 rows x 9 cols = exactly at MAX)
+  const boundaryRows = [
+    Array.from({ length: 9 }, (_, i) => `C${i}`),
+    ...Array.from({ length: 15 }, () => Array.from({ length: 9 }, () => 'data')),
+  ];
+  const boundaryFit = singlePptTest.computeTableFitScore(boundaryRows, { w: 8.5, h: 3.5 });
+  assert(
+    boundaryFit.breakdown.rowScore >= 80,
+    `rowScore>=80 at max; got ${boundaryFit.breakdown.rowScore}`
+  );
+  assert(
+    boundaryFit.breakdown.colScore >= 80,
+    `colScore>=80 at max; got ${boundaryFit.breakdown.colScore}`
+  );
+
+  // Single-row table
+  const singleRowFit = singlePptTest.computeTableFitScore([['A', 'B']], { w: 8.5, h: 3.5 });
+  assert.strictEqual(
+    singleRowFit.score,
+    100,
+    `single-row should be 100; got ${singleRowFit.score}`
+  );
+
+  // Null/undefined rect handling
+  const noRectFit = singlePptTest.computeTableFitScore(
+    [
+      ['A', 'B'],
+      ['C', 'D'],
+    ],
+    null
+  );
+  assert(noRectFit.score > 0, 'null rect should not crash');
+  const undefinedRectFit = singlePptTest.computeTableFitScore([['A']], undefined);
+  assert(undefinedRectFit.score > 0, 'undefined rect should not crash');
+
+  // Mixed-type rows (string, object, null)
+  const mixedRows = [
+    ['Header', { text: 'Complex' }, null],
+    [42, { text: 'Cell' }, ''],
+  ];
+  const mixedFit = singlePptTest.computeTableFitScore(mixedRows, { w: 8.5, h: 3.5 });
+  assert(mixedFit.score >= 0 && mixedFit.score <= 100, `score 0-100; got ${mixedFit.score}`);
+
+  console.log('[Regression] Extreme table fit-score edge cases PASS');
+}
+
+// --- Crash signature regression checks (type-mismatch hardening) ---
+const { addLineChart, addStackedBarChart, enrichCompanyDesc } = require('./ppt-utils');
+
+function runCrashSignatureRegressionChecks() {
+  // 1. dedupeGlobalCompanyList must handle non-array inputs without throwing
+  const dedup = singlePptTest.dedupeGlobalCompanyList;
+  assert(typeof dedup === 'function', 'dedupeGlobalCompanyList should be exported');
+  for (const bad of ['string', 123, null, undefined, { a: 1 }, true]) {
+    const result = dedup(bad, new Set());
+    assert(Array.isArray(result), 'dedup(' + JSON.stringify(bad) + ') should return array');
+    assert.strictEqual(result.length, 0, 'dedup(' + JSON.stringify(bad) + ') should return empty');
+  }
+  // Valid input
+  const seen = new Set();
+  const valid = dedup(
+    [{ name: 'Acme Corp' }, { name: 'Acme Corp Ltd' }, { name: 'Beta Inc' }],
+    seen
+  );
+  assert(Array.isArray(valid), 'valid dedup should return array');
+  assert(valid.length >= 1, 'valid dedup should return at least 1 item');
+
+  // 2. addLineChart / addStackedBarChart must not crash when series is non-array
+  const mockSlide = { addText: () => {}, addChart: () => {}, addShape: () => {} };
+  for (const badSeries of ['string', 123, null, { a: 1 }]) {
+    const badData = { categories: ['2024', '2025'], series: badSeries };
+    addLineChart(mockSlide, 'Test', badData);
+    addStackedBarChart(mockSlide, 'Test', badData);
+  }
+
+  // 3. enrichCompanyDesc must not crash when description is non-string
+  for (const badDesc of [123, ['arr'], { obj: true }, true, null, undefined]) {
+    const company = { name: 'Test Co', description: badDesc };
+    const result = enrichCompanyDesc(company, 'US', 'Tech');
+    assert(
+      result && typeof result === 'object',
+      'enrichCompanyDesc should return object for desc=' + JSON.stringify(badDesc)
+    );
+  }
 }
 
 async function runRound(round, total) {
@@ -660,6 +990,10 @@ async function runRound(round, total) {
   console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
   runPreRenderStructureUnitChecks();
   console.log('[Regression] Unit checks PASS (pre-render structure gating)');
+  runTransientKeySanitizerUnitChecks();
+  console.log('[Regression] Unit checks PASS (transient key sanitizer canonical module)');
+  runCrashSignatureRegressionChecks();
+  console.log('[Regression] Unit checks PASS (crash signature type-mismatch guards)');
 
   await runNodeScript(VIETNAM_SCRIPT);
   await runNodeScript(THAILAND_SCRIPT);

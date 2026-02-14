@@ -11,6 +11,12 @@ const {
   extractJsonFromContent,
 } = require('./research-agents');
 const { ensureString: _ensureString } = require('./shared/utils');
+const {
+  isTransientKey,
+  sanitizeTransientKeys,
+  createSanitizationContext,
+  logSanitizationResult,
+} = require('./transient-key-sanitizer');
 
 function ensureString(value, defaultValue = '') {
   return _ensureString(value, defaultValue);
@@ -255,31 +261,10 @@ function hasSemanticArtifactPayload(value, depth = 0) {
   });
 }
 
-const TRANSIENT_TOP_LEVEL_PATTERNS = [
-  /^section[_-]?\d+$/i,
-  /^gap[_-]?\d+$/i,
-  /^verify[_-]?\d+$/i,
-  /^final[_-]?review[_-]?gap[_-]?\d+$/i,
-  /^deepen[_-]?/i,
-  /^market[_-]?deepen[_-]?/i,
-  /^competitors?[_-]?deepen[_-]?/i,
-  /^policy[_-]?deepen[_-]?/i,
-  /^context[_-]?deepen[_-]?/i,
-  /^depth[_-]?deepen[_-]?/i,
-  /^insights?[_-]?deepen[_-]?/i,
-  /^marketdeepen/i,
-  /^competitorsdeepen/i,
-  /^policydeepen/i,
-  /^contextdeepen/i,
-  /^depthdeepen/i,
-  /^insightsdeepen/i,
-];
-
+// Transient key detection delegated to ./transient-key-sanitizer.js (canonical module).
 function hasTransientTopLevelKeys(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  return Object.keys(value).some((key) =>
-    TRANSIENT_TOP_LEVEL_PATTERNS.some((re) => re.test(ensureString(key).trim()))
-  );
+  return Object.keys(value).some((key) => isTransientKey(key));
 }
 
 const STRICT_POLICY_TOP_LEVEL_KEYS = new Set([
@@ -493,24 +478,9 @@ function getClientScopeGuard(industry, clientContext) {
   return 'SCOPE GUARD: prioritize hydrocarbon energy services (oil, gas, LNG, upstream/downstream, O&M, EPC, maintenance). Do not pivot the storyline to renewable-only opportunities unless the provided evidence explicitly proves a direct hydrocarbon-services adjacency.';
 }
 
-const TRANSIENT_RESEARCH_KEY_PATTERNS = [
-  /^_/,
-  /^section_\d+$/,
-  /^\d+$/,
-  /_wasarray/,
-  /_synthesiserror/,
-  /(?:^|_)deepen(?:_|$)/,
-  /deepen(?:_|-)?gap_?\d*$/,
-  /deepenfinalreviewgap_?\d*$/,
-  /final[_-]?review[_-]?gap/,
-  /(?:^|_)gap_\d+$/,
-  /(?:^|_)verify(?:_|$|\d)/,
-];
-
+// isTransientResearchKey replaced by isTransientKey from canonical module.
 function isTransientResearchKey(key) {
-  const normalized = ensureString(key).toLowerCase().trim();
-  if (!normalized) return true;
-  return TRANSIENT_RESEARCH_KEY_PATTERNS.some((re) => re.test(normalized));
+  return isTransientKey(key);
 }
 
 function selectResearchTopicsByPrefix(researchData, prefix) {
@@ -2778,8 +2748,13 @@ Return ONLY valid JSON.`;
         if (candidate._wasArray) {
           return { pass: false, reason: 'top-level array payload is not acceptable for policy' };
         }
+        // Sanitize transient keys instead of hard-failing.
         if (hasTransientTopLevelKeys(candidate)) {
-          return { pass: false, reason: 'top-level transient section keys detected' };
+          const ctx = createSanitizationContext();
+          const cleaned = sanitizeTransientKeys(candidate, ctx);
+          logSanitizationResult('synthesizePolicy', ctx);
+          Object.keys(candidate).forEach((k) => delete candidate[k]);
+          Object.assign(candidate, cleaned);
         }
         const disallowedTopLevel = findDisallowedTopLevelKeys(
           candidate,
@@ -3002,8 +2977,13 @@ Return ONLY valid JSON.`;
     if (candidate._wasArray) {
       return { pass: false, reason: 'top-level array payload is not acceptable for market' };
     }
+    // Sanitize transient keys instead of hard-failing.
     if (hasTransientTopLevelKeys(candidate)) {
-      return { pass: false, reason: 'top-level transient section keys detected' };
+      const ctx = createSanitizationContext();
+      const cleaned = sanitizeTransientKeys(candidate, ctx);
+      logSanitizationResult('synthesizeMarket', ctx);
+      Object.keys(candidate).forEach((k) => delete candidate[k]);
+      Object.assign(candidate, cleaned);
     }
     // Normalize first, then enforce canonical contract.
     // This preserves strictness while allowing harmless key-shape drift
@@ -4468,10 +4448,14 @@ Return ONLY valid JSON.`;
         return { pass: false, reason: 'summary payload missing summary and depth sections' };
       }
       if (hasSummary && hasTransientTopLevelKeys(candidate.summary)) {
-        return { pass: false, reason: 'summary contains transient top-level keys' };
+        const ctx = createSanitizationContext();
+        candidate.summary = sanitizeTransientKeys(candidate.summary, ctx);
+        logSanitizationResult('synthesizeSummary:summary', ctx);
       }
       if (hasDepth && hasTransientTopLevelKeys(candidate.depth)) {
-        return { pass: false, reason: 'depth contains transient top-level keys' };
+        const ctx = createSanitizationContext();
+        candidate.depth = sanitizeTransientKeys(candidate.depth, ctx);
+        logSanitizationResult('synthesizeSummary:depth', ctx);
       }
       if (hasSummary) {
         const disallowedSummaryKeys = findDisallowedTopLevelKeys(
@@ -4928,8 +4912,13 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
         if (candidate._wasArray) {
           return { pass: false, reason: 'array-normalized payload is not acceptable' };
         }
+        // Sanitize transient keys instead of hard-failing.
         if (hasTransientTopLevelKeys(candidate)) {
-          return { pass: false, reason: 'top-level transient section keys detected' };
+          const ctx = createSanitizationContext();
+          const cleaned = sanitizeTransientKeys(candidate, ctx);
+          logSanitizationResult('reSynthesize', ctx);
+          Object.keys(candidate).forEach((k) => delete candidate[k]);
+          Object.assign(candidate, cleaned);
         }
         const hasPolicy =
           candidate.policy &&
@@ -4960,7 +4949,9 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
             return { pass: false, reason: 'summary must be an object when present' };
           }
           if (candidate.summary && hasTransientTopLevelKeys(candidate.summary)) {
-            return { pass: false, reason: 'summary contains transient top-level keys' };
+            const ctx = createSanitizationContext();
+            candidate.summary = sanitizeTransientKeys(candidate.summary, ctx);
+            logSanitizationResult('reSynthesize:summary', ctx);
           }
           if (candidate.summary) {
             const disallowedSummaryKeys = findDisallowedTopLevelKeys(
@@ -4983,7 +4974,9 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
             return { pass: false, reason: 'depth must be an object when present' };
           }
           if (candidate.depth && hasTransientTopLevelKeys(candidate.depth)) {
-            return { pass: false, reason: 'depth contains transient top-level keys' };
+            const ctx = createSanitizationContext();
+            candidate.depth = sanitizeTransientKeys(candidate.depth, ctx);
+            logSanitizationResult('reSynthesize:depth', ctx);
           }
           if (candidate.depth) {
             const disallowedDepthKeys = findDisallowedTopLevelKeys(
@@ -7220,7 +7213,11 @@ Do NOT skip this validation. If you catch yourself returning JSON without checki
         return { pass: false, reason: 'array-normalized payload is not acceptable' };
       }
       if (hasTransientTopLevelKeys(candidate)) {
-        return { pass: false, reason: 'top-level transient section keys detected' };
+        const ctx = createSanitizationContext();
+        const cleaned = sanitizeTransientKeys(candidate, ctx);
+        logSanitizationResult('synthesizeSingleCountry', ctx);
+        Object.keys(candidate).forEach((k) => delete candidate[k]);
+        Object.assign(candidate, cleaned);
       }
       if (hasSemanticArtifactPayload(candidate)) {
         return {

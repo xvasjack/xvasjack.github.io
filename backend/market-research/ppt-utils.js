@@ -289,6 +289,7 @@ function safeArray(arr, max = 5) {
 // Guard addTable calls so malformed AI rows never throw and break slide generation.
 function normalizeTableRows(rows) {
   if (!Array.isArray(rows)) return null;
+  const NORMALIZE_MAX_CELL_CHARS = 1000;
   const normalized = rows
     .map((row) => {
       if (Array.isArray(row)) {
@@ -301,9 +302,17 @@ function normalizeTableRows(rows) {
                 ? normalizedCell.text
                 : ''
             );
+            if (normalizedCell.text.length > NORMALIZE_MAX_CELL_CHARS) {
+              normalizedCell.text =
+                normalizedCell.text.slice(0, NORMALIZE_MAX_CELL_CHARS - 3) + '...';
+            }
             return normalizedCell;
           }
-          return { text: ensureString(cell) };
+          let cellText = ensureString(cell);
+          if (cellText.length > NORMALIZE_MAX_CELL_CHARS) {
+            cellText = cellText.slice(0, NORMALIZE_MAX_CELL_CHARS - 3) + '...';
+          }
+          return { text: cellText };
         });
         return cells.length > 0 ? cells : null;
       }
@@ -431,7 +440,35 @@ function safeAddTable(slide, rows, options = {}, context = 'table') {
     console.warn(`[PPT] ${context}: invalid rows, skipping table`);
     return false;
   }
+  // Safety: cap rows at 40 and cols at 20 as absolute maximums
+  if (normalizedRows.length > 40) {
+    const truncated = normalizedRows.length - 39;
+    normalizedRows.length = 39;
+    const maxColCount = normalizedRows.reduce(
+      (max, r) => (Array.isArray(r) ? Math.max(max, r.length) : max),
+      1
+    );
+    normalizedRows.push([
+      {
+        text: `+${truncated} more rows omitted`,
+        options: { colspan: maxColCount, italic: true, color: '999999' },
+      },
+    ]);
+    console.warn(`[PPT-UTILS] ${context}: truncated ${truncated} excess rows (max=40)`);
+  }
+  for (let ri = 0; ri < normalizedRows.length; ri++) {
+    if (Array.isArray(normalizedRows[ri]) && normalizedRows[ri].length > 20) {
+      normalizedRows[ri] = normalizedRows[ri].slice(0, 20);
+    }
+  }
   let addOptions = options && typeof options === 'object' ? { ...options } : options;
+  // Safety: ensure table dimensions are positive and finite
+  if (addOptions && typeof addOptions === 'object') {
+    if (!Number.isFinite(Number(addOptions.w)) || Number(addOptions.w) <= 0) addOptions.w = 8.5;
+    if (!Number.isFinite(Number(addOptions.h)) || Number(addOptions.h) <= 0) addOptions.h = 3.5;
+    if (!Number.isFinite(Number(addOptions.x)) || Number(addOptions.x) < 0) addOptions.x = 0.5;
+    if (!Number.isFinite(Number(addOptions.y)) || Number(addOptions.y) < 0) addOptions.y = 1.5;
+  }
   const compacted = compactTableColumns(normalizedRows, addOptions, context);
   let tableRows = compacted.rows;
   addOptions = compacted.options;
@@ -652,8 +689,8 @@ function flattenPlayerProfile(p) {
 // Module-scope company description enricher for use in multi-country path
 function enrichCompanyDesc(company, countryStr, industryStr) {
   if (!company || typeof company !== 'object') return company;
-  const desc = company.description || '';
-  const wordCount = desc.split(/\s+/).filter(Boolean).length;
+  const desc = String(company.description || '');
+  const wordCount = desc ? desc.split(/\s+/).filter(Boolean).length : 0;
   if (wordCount >= 50) return company;
   const parts = [];
   if (desc) parts.push(desc);
@@ -1327,7 +1364,12 @@ function addStackedBarChart(slide, title, data, options = {}) {
     chartData = mergeHistoricalProjected(data);
   }
 
-  if (!chartData || !chartData.categories || !chartData.series || chartData.series.length === 0) {
+  if (
+    !chartData ||
+    !chartData.categories ||
+    !Array.isArray(chartData.series) ||
+    chartData.series.length === 0
+  ) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
       x: options.x || TEMPLATE.contentArea.x,
@@ -1345,7 +1387,7 @@ function addStackedBarChart(slide, title, data, options = {}) {
 
   // Validate series values are all numbers
   const hasInvalidValues = chartData.series.some(
-    (s) => s.values && s.values.some((v) => typeof v !== 'number' || !isFinite(v))
+    (s) => Array.isArray(s.values) && s.values.some((v) => typeof v !== 'number' || !isFinite(v))
   );
   if (hasInvalidValues) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
@@ -1436,7 +1478,12 @@ function addLineChart(slide, title, data, options = {}) {
     chartData = mergeHistoricalProjected(data);
   }
 
-  if (!chartData || !chartData.categories || !chartData.series || chartData.series.length === 0) {
+  if (
+    !chartData ||
+    !chartData.categories ||
+    !Array.isArray(chartData.series) ||
+    chartData.series.length === 0
+  ) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
       x: options.x || TEMPLATE.contentArea.x,
@@ -1454,7 +1501,7 @@ function addLineChart(slide, title, data, options = {}) {
 
   // Validate series values are all numbers
   const hasInvalidValues = chartData.series.some(
-    (s) => s.values && s.values.some((v) => typeof v !== 'number' || !isFinite(v))
+    (s) => Array.isArray(s.values) && s.values.some((v) => typeof v !== 'number' || !isFinite(v))
   );
   if (hasInvalidValues) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
@@ -1895,7 +1942,7 @@ const BLOCK_TEMPLATE_PATTERN_MAP = Object.freeze({
   foreignPlayers: 'company_comparison',
   caseStudy: 'case_study_rows',
   maActivity: 'company_comparison',
-  dealEconomics: 'dual_chart_financial',
+  dealEconomics: 'regulatory_table',
   partnerAssessment: 'company_comparison',
   entryStrategy: 'regulatory_table',
   implementation: 'case_study_rows',
@@ -1933,7 +1980,7 @@ const BLOCK_TEMPLATE_SLIDE_MAP = Object.freeze({
   foreignPlayers: 22,
   caseStudy: 23,
   maActivity: 24,
-  dealEconomics: 26,
+  dealEconomics: 12,
   partnerAssessment: 22,
   entryStrategy: 12,
   implementation: 28,
