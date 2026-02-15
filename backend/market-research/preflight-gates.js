@@ -887,8 +887,42 @@ function checkSchemaCompatibility() {
 }
 
 // ---------------------------------------------------------------------------
-// Gate 11: Sparse Slide Gate
+// Gate 11: Sparse Slide Gate (divider-aware)
 // ---------------------------------------------------------------------------
+
+/**
+ * Classify whether a sparse slide from a report is a divider/section-intent slide.
+ * Divider slides are structurally intentional and should not trigger sparse warnings.
+ */
+function isReportSlideDivider(slide) {
+  const text = String(slide.text || slide.preview || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  if (!text) return false;
+  if (text.startsWith('table of contents') || text.includes('table of contents')) return true;
+  if (/^appendix\b/.test(text)) return true;
+  const dividerPatterns = [
+    /^policy\s*[&]\s*regulatory$/,
+    /^market\s+overview$/,
+    /^competitive\s+landscape$/,
+    /^strategic\s+analysis$/,
+    /^recommendations$/,
+    /^executive\s+summary$/,
+    /^key\s+findings$/,
+    /^opportunities\s*[&]\s*obstacles$/,
+  ];
+  for (const pattern of dividerPatterns) {
+    if (pattern.test(text)) return true;
+  }
+  // Title-only heuristic: short text with no sentence punctuation
+  if (text.length < 80) {
+    const words = text.split(/\s+/);
+    if (words.length <= 6 && !/[.!?;]/.test(text)) return true;
+  }
+  return false;
+}
+
 function checkSparseSlideGate() {
   const elapsed = timer();
 
@@ -906,7 +940,8 @@ function checkSparseSlideGate() {
 
   try {
     const reportFiles = fs.readdirSync(reportsDir).filter((f) => f.endsWith('.json'));
-    let sparseWarnings = 0;
+    let sparseContentWarnings = 0;
+    let dividerSlidesExcluded = 0;
     const sparseDetails = [];
 
     for (const file of reportFiles) {
@@ -914,7 +949,11 @@ function checkSparseSlideGate() {
         const content = JSON.parse(fs.readFileSync(path.join(reportsDir, file), 'utf8'));
         if (content.sparseSlides && Array.isArray(content.sparseSlides)) {
           for (const slide of content.sparseSlides) {
-            sparseWarnings++;
+            if (isReportSlideDivider(slide)) {
+              dividerSlidesExcluded++;
+              continue;
+            }
+            sparseContentWarnings++;
             sparseDetails.push(
               `${file}: slide ${slide.index || '?'} has ${slide.elementCount || 0} elements`
             );
@@ -925,13 +964,13 @@ function checkSparseSlideGate() {
       }
     }
 
-    if (sparseWarnings > 0) {
+    if (sparseContentWarnings > 0) {
       return makeCheckResult(
         'Sparse slide gate',
         false,
         SEVERITY.DEGRADED,
         elapsed(),
-        `${sparseWarnings} sparse slide warning(s) found`,
+        `${sparseContentWarnings} sparse content slide(s) found (${dividerSlidesExcluded} divider slide(s) excluded)`,
         sparseDetails
       );
     }
@@ -941,7 +980,7 @@ function checkSparseSlideGate() {
       true,
       SEVERITY.DEGRADED,
       elapsed(),
-      'No sparse slide warnings found'
+      `No sparse content slides found${dividerSlidesExcluded > 0 ? ` (${dividerSlidesExcluded} divider slide(s) excluded)` : ''}`
     );
   } catch (err) {
     return makeCheckResult(
@@ -1521,4 +1560,5 @@ module.exports = {
   QUICK_GATES,
   FULL_GATES,
   REMEDIATION_MAP,
+  isReportSlideDivider,
 };

@@ -24,6 +24,7 @@ const {
   normalizeAbsoluteRelationshipTargets,
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
+  classifySlideIntent,
 } = require('./pptx-validator');
 const { getExpectations, runValidation } = require('./validate-output');
 const { __test: cloneTest } = require('./template-clone-postprocess');
@@ -219,30 +220,16 @@ async function ensureNoRepairNeeded(pptxPath) {
 async function ensureSparseSlideDiscipline(pptxPath) {
   const { zip } = await readPPTX(pptxPath);
   const textData = await extractAllText(zip);
-  const allowedSparse = new Set([
-    'policy & regulatory',
-    'market overview',
-    'competitive landscape',
-    'strategic analysis',
-    'recommendations',
-    'appendix',
-  ]);
   const threshold = 60;
   const violations = [];
   for (const slide of textData.slides || []) {
     const charCount = Number(slide.charCount || 0);
     if (charCount >= threshold) continue;
-    const normalized = String(slide.fullText || '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
-    if (!normalized) {
-      violations.push(`slide ${slide.slideNum} empty text`);
-      continue;
-    }
-    if (normalized.startsWith('table of contents')) continue;
-    if (normalized.startsWith('appendix')) continue;
-    if (allowedSparse.has(normalized)) continue;
+    const fullText = String(slide.fullText || '');
+    const intent = classifySlideIntent(fullText, charCount);
+    if (intent.isDivider) continue;
+    // Genuinely sparse content slide — violation
+    const normalized = fullText.replace(/\s+/g, ' ').trim().toLowerCase();
     violations.push(`slide ${slide.slideNum} (${charCount} chars): "${normalized.slice(0, 80)}"`);
   }
   if (violations.length > 0) {
@@ -971,6 +958,71 @@ function runTableOverflowRecoveryUnitChecks() {
   console.log('[Regression] Extreme table fit-score edge cases PASS');
 }
 
+function runDividerAwareSparseUnitChecks() {
+  // --- classifySlideIntent: divider slides should be classified as isDivider=true ---
+
+  // Section divider titles
+  const dividerCases = [
+    { text: 'Policy & Regulatory', reason: 'section_divider' },
+    { text: 'Market Overview', reason: 'section_divider' },
+    { text: 'Competitive Landscape', reason: 'section_divider' },
+    { text: 'Strategic Analysis', reason: 'section_divider' },
+    { text: 'Recommendations', reason: 'section_divider' },
+    { text: 'Appendix', reason: 'appendix_header' },
+    { text: 'Executive Summary', reason: 'section_divider' },
+    { text: 'Table of Contents', reason: 'toc' },
+    { text: 'Table of Contents  Policy & Regulatory  Market Overview', reason: 'toc' },
+  ];
+
+  for (const { text, reason } of dividerCases) {
+    const result = classifySlideIntent(text, text.length);
+    assert.strictEqual(
+      result.isDivider,
+      true,
+      `classifySlideIntent("${text}") should be divider (reason=${reason}), got isDivider=${result.isDivider}, reason=${result.reason}`
+    );
+  }
+
+  // Title-only heuristic: short text, no sentence structure
+  const titleOnly = classifySlideIntent('Vietnam Energy', 14);
+  assert.strictEqual(
+    titleOnly.isDivider,
+    true,
+    'Short title-only text should be classified as divider'
+  );
+  assert.strictEqual(titleOnly.reason, 'title_only');
+
+  // --- classifySlideIntent: content slides should NOT be classified as dividers ---
+
+  const contentCases = [
+    '', // empty is NOT a divider
+    'The energy market in Vietnam grew by 15% in 2024, driven by industrial expansion.',
+    'Key findings include strong policy support and growing FDI inflows. Investment barriers remain.',
+  ];
+
+  for (const text of contentCases) {
+    const result = classifySlideIntent(text, text.length);
+    assert.strictEqual(
+      result.isDivider,
+      false,
+      `classifySlideIntent("${text.slice(0, 40)}...") should NOT be divider, got isDivider=${result.isDivider}, reason=${result.reason}`
+    );
+  }
+
+  // Empty slide: should be classified as NOT divider (genuinely empty = bad)
+  const emptyResult = classifySlideIntent('', 0);
+  assert.strictEqual(emptyResult.isDivider, false, 'Empty slide is NOT a divider');
+  assert.strictEqual(emptyResult.reason, 'empty');
+
+  // Long text under 80 chars WITH sentence punctuation should NOT be a divider
+  const shortSentence = classifySlideIntent('This is a real content slide.', 29);
+  assert.strictEqual(
+    shortSentence.isDivider,
+    false,
+    'Short text with sentence punctuation should not be classified as divider'
+  );
+}
+
 // --- Crash signature regression checks (type-mismatch hardening) ---
 const { addLineChart, addStackedBarChart, enrichCompanyDesc } = require('./ppt-utils');
 
@@ -1034,6 +1086,8 @@ async function runRound(round, total) {
     console.log('[Regression] Unit checks PASS (transient key sanitizer canonical module)');
     runCrashSignatureRegressionChecks();
     console.log('[Regression] Unit checks PASS (crash signature type-mismatch guards)');
+    runDividerAwareSparseUnitChecks();
+    console.log('[Regression] Unit checks PASS (divider-aware sparse slide classification)');
 
     await runNodeScript(VIETNAM_SCRIPT);
     await runNodeScript(THAILAND_SCRIPT);

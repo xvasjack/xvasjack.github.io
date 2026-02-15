@@ -12,6 +12,7 @@ const {
   readPPTX,
   extractAllText,
   countTables,
+  classifySlideIntent,
 } = require('./pptx-validator');
 
 /**
@@ -83,11 +84,22 @@ async function validateRealOutput(filePath, expectations = REAL_EXPECTATIONS) {
         fail('Avg content', `>= ${q.minAvgCharsPerSlide} chars/slide`, avgChars.toFixed(0));
       else pass('Avg content', `${avgChars.toFixed(0)} chars/slide`);
 
-      // Empty slides
-      const emptySlides = textData.slides.filter((s) => s.charCount < 100);
-      if (emptySlides.length > q.maxEmptySlides)
-        warn('Empty slides', `${emptySlides.length} slides with <100 chars`);
-      else pass('Content density', `${emptySlides.length} sparse slides`);
+      // Sparse slides (divider-aware)
+      const lowContentSlides = textData.slides.filter((s) => s.charCount < 100);
+      const sparseContentSlides = lowContentSlides.filter((s) => {
+        const intent = classifySlideIntent(s.fullText, s.charCount);
+        return !intent.isDivider;
+      });
+      if (sparseContentSlides.length > q.maxEmptySlides)
+        warn(
+          'Sparse content slides',
+          `${sparseContentSlides.length} content slides with <100 chars`
+        );
+      else
+        pass(
+          'Content density',
+          `${sparseContentSlides.length} sparse content slides (${lowContentSlides.length - sparseContentSlides.length} divider slides excluded)`
+        );
 
       // Required sections
       const fullText = textData.slides

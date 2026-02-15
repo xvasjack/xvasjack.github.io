@@ -25,7 +25,9 @@ const {
   checkSchemaCompatibility,
   checkSparseSlideGate,
   checkSourceCoverageGate,
+  isReportSlideDivider,
 } = require('./preflight-gates');
+const { classifySlideIntent } = require('./pptx-validator');
 
 // ---------------------------------------------------------------------------
 // 1. Gate Modes: dev, test, release
@@ -848,5 +850,97 @@ describe('parseArgs Enhanced', () => {
     expect(args.stressSeeds).toBe(100);
     expect(args.sourceCoverageThreshold).toBe(80);
     expect(args.reportDir).toBe('/tmp/reports');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 12. Divider-Aware Sparse Slide Classification
+// ---------------------------------------------------------------------------
+describe('Divider-Aware Sparse Slide Classification', () => {
+  describe('classifySlideIntent', () => {
+    test('classifies section divider titles as dividers', () => {
+      const dividers = [
+        'Policy & Regulatory',
+        'Market Overview',
+        'Competitive Landscape',
+        'Strategic Analysis',
+        'Recommendations',
+        'Executive Summary',
+      ];
+      for (const text of dividers) {
+        const result = classifySlideIntent(text, text.length);
+        expect(result.isDivider).toBe(true);
+        expect(result.reason).toBe('section_divider');
+      }
+    });
+
+    test('classifies TOC slides as dividers', () => {
+      const result = classifySlideIntent('Table of Contents', 17);
+      expect(result.isDivider).toBe(true);
+      expect(result.reason).toBe('toc');
+    });
+
+    test('classifies TOC with section labels as dividers', () => {
+      const result = classifySlideIntent(
+        'Table of Contents  Policy & Regulatory  Market Overview',
+        55
+      );
+      expect(result.isDivider).toBe(true);
+      expect(result.reason).toBe('toc');
+    });
+
+    test('classifies appendix header as divider', () => {
+      const result = classifySlideIntent('Appendix', 8);
+      expect(result.isDivider).toBe(true);
+      expect(result.reason).toBe('appendix_header');
+    });
+
+    test('classifies short title-only text as divider', () => {
+      const result = classifySlideIntent('Vietnam Energy', 14);
+      expect(result.isDivider).toBe(true);
+      expect(result.reason).toBe('title_only');
+    });
+
+    test('does NOT classify empty slides as dividers', () => {
+      const result = classifySlideIntent('', 0);
+      expect(result.isDivider).toBe(false);
+      expect(result.reason).toBe('empty');
+    });
+
+    test('does NOT classify content slides as dividers', () => {
+      const text =
+        'The energy market in Vietnam grew by 15% in 2024, driven by industrial expansion and new regulatory frameworks.';
+      const result = classifySlideIntent(text, text.length);
+      expect(result.isDivider).toBe(false);
+      expect(result.reason).toBe('content');
+    });
+
+    test('does NOT classify short text with sentence punctuation as divider', () => {
+      const result = classifySlideIntent('This is real content.', 21);
+      expect(result.isDivider).toBe(false);
+    });
+  });
+
+  describe('isReportSlideDivider', () => {
+    test('identifies section divider slides from report data', () => {
+      expect(isReportSlideDivider({ text: 'Market Overview' })).toBe(true);
+      expect(isReportSlideDivider({ preview: 'Policy & Regulatory' })).toBe(true);
+      expect(isReportSlideDivider({ text: 'Table of Contents' })).toBe(true);
+    });
+
+    test('rejects genuine content slides', () => {
+      expect(
+        isReportSlideDivider({ text: 'Strong industrial growth in Q3 2024. Market expanded.' })
+      ).toBe(false);
+    });
+
+    test('handles empty/missing text gracefully', () => {
+      expect(isReportSlideDivider({})).toBe(false);
+      expect(isReportSlideDivider({ text: '' })).toBe(false);
+    });
+
+    test('identifies title-only short labels as dividers', () => {
+      expect(isReportSlideDivider({ text: 'Key Themes' })).toBe(true);
+    });
   });
 });
