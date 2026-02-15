@@ -3511,8 +3511,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       // ===== LEFT TABLE (会社概要資料) =====
       // Determine if single location (for HQ label)
       const locationText = ensureString(company.location);
+      const branchNetworkSummary = getBranchNetworkSummaryFromCompany(company);
+      const hasBranchCoverage = !!branchNetworkSummary;
       const locationLines = locationText.split('\n').filter(line => line.trim());
-      const isSingleLocation = locationLines.length <= 1 && !locationText.toLowerCase().includes('branch') && !locationText.toLowerCase().includes('factory') && !locationText.toLowerCase().includes('warehouse');
+      const isSingleLocation = !hasBranchCoverage &&
+        locationLines.length <= 1 &&
+        !locationText.toLowerCase().includes('branch') &&
+        !locationText.toLowerCase().includes('factory') &&
+        !locationText.toLowerCase().includes('warehouse');
       const locationLabel = isSingleLocation ? 'HQ' : 'Location';
 
       // Helper function to check if value is empty or placeholder text
@@ -3622,10 +3628,13 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         tableData.push(['Est. Year', company.established_year, null]);
       }
 
-      // Add Location if available (clean up HQ: prefix if needed)
-      if (!isEmptyValue(company.location)) {
-        const cleanLocation = cleanLocationValue(company.location, locationLabel);
-        tableData.push([locationLabel, cleanLocation, null]);
+      // Add Location row (HQ + branch footprint in same row when available)
+      if (!isEmptyValue(company.location) || hasBranchCoverage) {
+        const cleanLocation = !isEmptyValue(company.location)
+          ? cleanLocationValue(company.location, locationLabel)
+          : '';
+        const locationValue = [cleanLocation, branchNetworkSummary].filter(Boolean).join('\n');
+        tableData.push([locationLabel, locationValue, null]);
       }
 
       // Add Shareholding row after HQ - always present with yellow highlight
@@ -3676,15 +3685,22 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
           if (metricLabel && metricValue && !isEmptyValue(metricValue)) {
             const labelLower = metricLabel.toLowerCase();
+            const metricValueLower = metricValue.toLowerCase();
 
             // Skip excluded metrics
             const isExcluded = EXCLUDED_METRICS.some(ex => labelLower.includes(ex));
+            const isBranchDuplicate = hasBranchCoverage && (
+              labelLower.includes('branch') ||
+              (labelLower.includes('office') && metricValueLower.includes('branch')) ||
+              (labelLower.includes('location') && metricValueLower.includes('branch'))
+            );
 
             // Skip if this category is already shown on the right table
             const isInRightTable = excludeKeywords.some(kw => labelLower.includes(kw));
 
             // Skip if this label already exists or is duplicate of business/location
             if (!isExcluded &&
+                !isBranchDuplicate &&
                 !isInRightTable &&
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
@@ -5637,24 +5653,72 @@ function extractBranchLocationSummary(content, officeCount = null) {
   const text = ensureString(content).replace(/\s+/g, ' ').trim();
   if (!text) return '';
 
+  const numberWordMap = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20
+  };
+
+  const parseCount = (value) => {
+    const parsed = Number.parseInt(String(value || '').replace(/,/g, ''), 10);
+    if (!Number.isFinite(parsed) || parsed < 2 || parsed > 500) return 0;
+    return parsed;
+  };
+
+  let extractedCount = parseCount(officeCount);
+  if (!extractedCount) {
+    const countMatch = text.match(/(?:over|more than|around|approximately|about|at least)?\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:branches?|offices?|locations?|depots?|warehouses?)/i);
+    if (countMatch) extractedCount = parseCount(countMatch[1]);
+  }
+  if (!extractedCount) {
+    const wordCountMatch = text.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b\s*(?:branches?|offices?|locations?|depots?|warehouses?)/i);
+    if (wordCountMatch) extractedCount = numberWordMap[wordCountMatch[1].toLowerCase()] || 0;
+  }
+
   const extractedTokens = [];
+  const coverageFragments = [];
   const patterns = [
     /(?:branches?|offices?|locations?|depots?|warehouses?)\s*(?:in|across|at|throughout|covering)\s+([^.!?;|]{10,220})/gi,
     /(?:branch|office|location)\s*(?:network|coverage)?\s*[:\-]\s*([^.!?;|]{10,220})/gi,
     /(?:with|has|have|operates?)\s+\d{1,3}\s*(?:branches?|offices?|locations?)\s*(?:in|across|at)\s+([^.!?;|]{10,220})/gi
   ];
 
+  const cleanCoverageFragment = (rawValue) => {
+    return ensureString(rawValue)
+      .replace(/\b(?:to|for|with|which|that|where|offering|providing|serving)\b.*$/i, '')
+      .replace(/\s+/g, ' ')
+      .replace(/[,:;.\-]+$/g, '')
+      .trim();
+  };
+
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(text)) !== null) {
-      const fragment = ensureString(match[1]);
+      const fragment = cleanCoverageFragment(match[1]);
       if (!fragment) continue;
+      coverageFragments.push(fragment);
       extractedTokens.push(...fragment.split(/,|\/|&|\band\b|\bor\b/gi));
     }
   }
 
   const stopTokens = new Set([
-    'australia', 'new zealand', 'singapore', 'malaysia',
     'branch', 'branches', 'office', 'offices', 'location', 'locations',
     'warehouse', 'warehouses', 'depot', 'depots',
     'nationwide', 'domestic', 'international',
@@ -5667,35 +5731,127 @@ function extractBranchLocationSummary(content, officeCount = null) {
   for (const rawToken of extractedTokens) {
     let token = ensureString(rawToken)
       .replace(/[()]/g, ' ')
+      .replace(/\b(?:to|for|with|which|that|where|offering|providing|serving)\b.*$/i, '')
       .replace(/\b(?:branch|branches|office|offices|location|locations|warehouse|warehouses|depot|depots)\b/gi, '')
       .replace(/\s+/g, ' ')
+      .replace(/[,:;.\-]+$/g, '')
       .trim();
 
     if (!token) continue;
     const lower = token.toLowerCase();
     if (stopTokens.has(lower)) continue;
     if (!/[A-Za-z]/.test(token)) continue;
-    if (token.length < 3 || token.length > 35) continue;
+    if (token.length < 3 || token.length > 45) continue;
+    const tokenWords = token.split(' ').filter(Boolean);
+    if (tokenWords.length > 4) continue;
+    if (/\b(service|services|servicing|provide|providing|supply|supplying|support|supporting|products?|industry|nationally|foodservice|distribution|network)\b/i.test(lower)) continue;
 
     const normalizedKey = lower.replace(/\s+/g, ' ');
     if (dedup.has(normalizedKey)) continue;
     dedup.add(normalizedKey);
-    cities.push(toTitleCase(token));
+    cities.push(/^[A-Z]{2,4}$/.test(token) ? token.toUpperCase() : toTitleCase(token));
   }
 
-  const parsedOfficeCount = Number.parseInt(String(officeCount || ''), 10);
-  const hasOfficeCount = Number.isFinite(parsedOfficeCount) && parsedOfficeCount >= 2;
-  const coverageCount = hasOfficeCount ? parsedOfficeCount : cities.length;
+  const regions = [];
+  const addRegion = (rawRegion) => {
+    const candidate = ensureString(rawRegion).replace(/\s+/g, ' ').trim();
+    if (!candidate) return;
+    const lower = candidate.toLowerCase();
+    if (/\ball states?\s+in\s+australia\b/.test(lower)) {
+      regions.push('all states in Australia');
+      return;
+    }
+    if (/\ball regions?\s+in\s+new zealand\b/.test(lower)) {
+      regions.push('all regions in New Zealand');
+      return;
+    }
+    if (lower.includes('australia')) {
+      regions.push('Australia');
+      return;
+    }
+    if (lower.includes('new zealand') || /\bnz\b/.test(lower)) {
+      regions.push('New Zealand');
+      return;
+    }
+    if (/\ball states?\b/.test(lower) && candidate.length <= 60) {
+      regions.push(candidate);
+    }
+  };
 
-  if (coverageCount < 2) return '';
+  for (const fragment of coverageFragments) {
+    addRegion(fragment);
+  }
+  if (/\bnationwide\b/i.test(text) && /\baustralia\b/i.test(text)) addRegion('Australia');
+  if (/\bnationwide\b/i.test(text) && /\bnew zealand\b/i.test(text)) addRegion('New Zealand');
+  if (/\ball states?\s+in\s+australia\b/i.test(text)) addRegion('all states in Australia');
+  if (/\ball regions?\s+in\s+new zealand\b/i.test(text)) addRegion('all regions in New Zealand');
 
-  if (cities.length > 0) {
-    const visibleCities = cities.slice(0, 5);
-    const hiddenCount = Math.max(0, coverageCount - visibleCities.length);
-    return `${coverageCount} branches across ${visibleCities.join(', ')}${hiddenCount > 0 ? `, +${hiddenCount} more` : ''}`;
+  const uniqueRegions = Array.from(new Set(regions.map(r => r.toLowerCase())))
+    .map(lower => regions.find(r => r.toLowerCase() === lower))
+    .filter(Boolean);
+
+  const regionPriority = (region) => {
+    const lower = region.toLowerCase();
+    if (lower.includes('all states')) return 0;
+    if (lower.includes('all regions')) return 1;
+    if (lower === 'australia' || lower === 'new zealand') return 2;
+    return 3;
+  };
+  uniqueRegions.sort((a, b) => regionPriority(a) - regionPriority(b));
+  const primaryRegion = uniqueRegions[0] || '';
+
+  let coverageCount = extractedCount;
+  if (!coverageCount && cities.length >= 2) {
+    coverageCount = cities.length;
   }
 
-  return `${coverageCount} branches/offices`;
+  const broadRegions = new Set(['australia', 'new zealand', 'singapore', 'malaysia']);
+  const specificLocations = cities.filter(name => {
+    const lower = ensureString(name).toLowerCase();
+    if (!lower) return false;
+    if (broadRegions.has(lower)) return false;
+    if (lower.includes('all states') || lower.includes('all regions')) return false;
+    return true;
+  });
+
+  if (specificLocations.length >= 2) {
+    const visibleCities = specificLocations.slice(0, 5);
+    const displayCount = coverageCount || specificLocations.length;
+    const hiddenCount = Math.max(0, displayCount - visibleCities.length);
+    if (displayCount >= 2) {
+      return `${displayCount} branches across ${visibleCities.join(', ')}${hiddenCount > 0 ? `, +${hiddenCount} more` : ''}`;
+    }
+  }
+
+  if (coverageCount >= 2 && primaryRegion) {
+    return `${coverageCount} branches across ${primaryRegion}`;
+  }
+
+  if (coverageCount >= 2) {
+    return `${coverageCount} branches`;
+  }
+
+  if (primaryRegion) {
+    return `Branch network across ${primaryRegion}`;
+  }
+
+  return '';
+}
+
+function getBranchNetworkSummaryFromCompany(company) {
+  const direct = ensureString(company?._branchNetworkSummary).trim();
+  if (direct) return direct;
+
+  const metrics = Array.isArray(company?.key_metrics) ? company.key_metrics : [];
+  for (const metric of metrics) {
+    const label = ensureString(metric?.label).toLowerCase();
+    const value = ensureString(metric?.value).trim();
+    if (!value) continue;
+    if (label.includes('branch network') || label.includes('branch')) return value;
+    if ((label.includes('office') || label.includes('location')) && /\bbranches?\b/i.test(value)) return value;
+  }
+
+  return '';
 }
 
 // Extract JSON-LD structured data for address information
@@ -7357,6 +7513,7 @@ function buildScreenshotFallbackCompanyData(websiteUrl, scrapeError, basicInfo =
     _supplierSegments: null,
     _principalSegments: null,
     _brandSegments: null,
+    _branchNetworkSummary: '',
     _relationshipCoverageStatus: 'needs_manual_review',
     _partialExtraction: true,
     _screenshotFallbackUsed: true,
@@ -9779,6 +9936,8 @@ async function processSingleWebsite(website, index, total) {
       _principalSegments: principalSegments,
       // Brands segmented for display when brand lists are long
       _brandSegments: brandSegments,
+      // Branch footprint summary for Location row (e.g., "5 branches across ...")
+      _branchNetworkSummary: branchNetworkSummary,
       // Relationship coverage quality gate (used to fail loudly in slide output)
       _relationshipCoverageStatus: relationshipCoverageStatus
     };
@@ -10400,6 +10559,8 @@ app.post('/api/generate-ppt', async (req, res) => {
           _principalSegments: principalSegments,
           // Brands segmented for display when brand lists are long
           _brandSegments: brandSegments,
+          // Branch footprint summary for Location row (e.g., "5 branches across ...")
+          _branchNetworkSummary: branchNetworkSummary,
           // Relationship coverage quality gate (used to fail loudly in slide output)
           _relationshipCoverageStatus: relationshipCoverageStatus
         };
