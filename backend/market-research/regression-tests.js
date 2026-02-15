@@ -37,6 +37,14 @@ const {
   createSanitizationContext,
 } = require('./transient-key-sanitizer');
 const { runStressTest } = require('./stress-test-harness');
+const {
+  runStressLab,
+  checkDeterminism,
+  DEFAULT_SEEDS,
+  DEEP_SEEDS,
+  __test: stressLabTest,
+} = require('./stress-lab');
+const { clusterWithSummary, __test: clusterTest } = require('./failure-cluster-analyzer');
 
 const ROOT = __dirname;
 const VIETNAM_SCRIPT = path.join(ROOT, 'test-vietnam-research.js');
@@ -59,11 +67,15 @@ function parseStress(argv) {
   return argv.some((arg) => arg === '--stress');
 }
 
+function parseDeep(argv) {
+  return argv.some((arg) => arg === '--deep' || arg === '--nightly');
+}
+
 function parseStressSeeds(argv) {
   const match = argv.find((arg) => arg.startsWith('--stress-seeds='));
   const value = Number.parseInt((match || '').split('=')[1] || '30', 10);
   if (!Number.isFinite(value) || value <= 0) return 30;
-  return Math.min(value, 100);
+  return Math.min(value, 1000);
 }
 
 function runNodeScript(scriptPath) {
@@ -1011,6 +1023,175 @@ function runCrashSignatureRegressionChecks() {
   }
 }
 
+// --- Stress lab deterministic replay checks ---
+function runStressLabDeterminismChecks() {
+  // Same seed must produce identical scenario metadata
+  const scenario1a = stressLabTest.getSeedScenario(42);
+  const scenario1b = stressLabTest.getSeedScenario(42);
+  assert.deepStrictEqual(scenario1a, scenario1b, 'Same seed must produce identical scenario');
+
+  // Different seeds should produce different scenarios (at least some)
+  const scenarios = new Set();
+  for (let seed = 1; seed <= 50; seed++) {
+    const s = stressLabTest.getSeedScenario(seed);
+    scenarios.add(`${s.country}|${s.industry}|${s.projectType}`);
+  }
+  assert(
+    scenarios.size >= 5,
+    `Expected at least 5 distinct scenarios from 50 seeds, got ${scenarios.size}`
+  );
+
+  // Same seed must produce identical mutation classes
+  const mutations1a = stressLabTest.selectMutationsForSeed(42);
+  const mutations1b = stressLabTest.selectMutationsForSeed(42);
+  assert.deepStrictEqual(
+    mutations1a,
+    mutations1b,
+    'Same seed must produce identical mutation classes'
+  );
+
+  // Same seed must produce identical mutated payload
+  const base1 = stressLabTest.buildBasePayload(42);
+  const base2 = stressLabTest.buildBasePayload(42);
+  assert.strictEqual(
+    JSON.stringify(base1),
+    JSON.stringify(base2),
+    'Same seed must produce identical base payload'
+  );
+
+  // Verify seed diversity constants
+  assert(stressLabTest.SEED_COUNTRIES.length >= 4, 'Need at least 4 countries for diversity');
+  assert(stressLabTest.SEED_INDUSTRIES.length >= 4, 'Need at least 4 industries for diversity');
+  assert(
+    stressLabTest.SEED_PROJECT_TYPES.length >= 3,
+    'Need at least 3 project types for diversity'
+  );
+
+  // Verify 300+ seeds cover all scenario dimensions
+  const allCountries = new Set();
+  const allIndustries = new Set();
+  const allProjectTypes = new Set();
+  for (let seed = 1; seed <= 300; seed++) {
+    const s = stressLabTest.getSeedScenario(seed);
+    allCountries.add(s.country);
+    allIndustries.add(s.industry);
+    allProjectTypes.add(s.projectType);
+  }
+  assert.strictEqual(
+    allCountries.size,
+    stressLabTest.SEED_COUNTRIES.length,
+    `300 seeds should cover all ${stressLabTest.SEED_COUNTRIES.length} countries, got ${allCountries.size}`
+  );
+  assert.strictEqual(
+    allIndustries.size,
+    stressLabTest.SEED_INDUSTRIES.length,
+    `300 seeds should cover all ${stressLabTest.SEED_INDUSTRIES.length} industries, got ${allIndustries.size}`
+  );
+  assert.strictEqual(
+    allProjectTypes.size,
+    stressLabTest.SEED_PROJECT_TYPES.length,
+    `300 seeds should cover all ${stressLabTest.SEED_PROJECT_TYPES.length} project types, got ${allProjectTypes.size}`
+  );
+}
+
+// --- Failure cluster analyzer checks ---
+function runFailureClusterAnalyzerChecks() {
+  // extractErrorSignature normalizes similar errors
+  const sig1 = clusterTest.extractErrorSignature(
+    "Cannot read properties of undefined (reading 'map')"
+  );
+  const sig2 = clusterTest.extractErrorSignature(
+    "Cannot read properties of undefined (reading 'filter')"
+  );
+  assert(
+    typeof sig1 === 'string' && sig1.length > 0,
+    'extractErrorSignature should return non-empty string'
+  );
+
+  // extractStackSignature
+  const stack = `Error: test
+    at renderSlide (/app/ppt-single-country.js:123:45)
+    at generatePPT (/app/ppt-single-country.js:456:12)
+    at runSeed (/app/stress-lab.js:789:10)`;
+  const stackSig = clusterTest.extractStackSignature(stack);
+  assert(stackSig.includes('renderSlide'), 'Stack signature should include function name');
+  assert(stackSig.includes('ppt-single-country.js'), 'Stack signature should include file name');
+
+  // extractStackSignature handles null/empty
+  assert.strictEqual(clusterTest.extractStackSignature(null), '');
+  assert.strictEqual(clusterTest.extractStackSignature(''), '');
+
+  // extractCombinedSignature
+  const combined = clusterTest.extractCombinedSignature('Cannot read properties', stack);
+  assert(combined.includes('Cannot read properties'), 'Combined should include error');
+  assert(combined.includes('['), 'Combined should include stack bracket');
+
+  // clusterWithSummary handles empty
+  const emptySummary = clusterWithSummary([]);
+  assert.strictEqual(emptySummary.clusters.length, 0, 'Empty input = no clusters');
+  assert.strictEqual(emptySummary.topBlockers.length, 0, 'Empty input = no blockers');
+
+  // clusterWithSummary handles non-array
+  const nullSummary = clusterWithSummary(null);
+  assert.strictEqual(nullSummary.clusters.length, 0, 'null input = no clusters');
+
+  // clusterWithSummary clusters failures correctly
+  const mockTelemetry = [
+    { seed: 1, status: 'pass' },
+    {
+      seed: 2,
+      status: 'fail',
+      error: 'Cannot read properties of null',
+      errorClass: 'runtime-crash',
+      failedPhase: 'render-ppt',
+      mutationClasses: ['transient-keys'],
+      stack: '',
+    },
+    {
+      seed: 3,
+      status: 'fail',
+      error: 'Cannot read properties of null',
+      errorClass: 'runtime-crash',
+      failedPhase: 'render-ppt',
+      mutationClasses: ['schema-corruption'],
+      stack: '',
+    },
+    {
+      seed: 4,
+      status: 'fail',
+      error: '[PPT] Data gate failed',
+      errorClass: 'data-gate',
+      failedPhase: 'render-ppt',
+      mutationClasses: ['empty-null'],
+      stack: '',
+    },
+    { seed: 5, status: 'pass' },
+  ];
+  const summary = clusterWithSummary(mockTelemetry, { topN: 10 });
+  assert(summary.clusters.length >= 1, 'Should have at least 1 cluster');
+  assert(summary.stats.totalFailures === 3, 'Should count 3 failures');
+  assert(summary.stats.runtimeCrashes === 2, 'Should count 2 runtime crashes');
+  assert(summary.stats.uniqueSignatures >= 1, 'Should have at least 1 unique signature');
+  assert(summary.topBlockers.length >= 1, 'Should have at least 1 top blocker');
+  assert(
+    summary.topBlockers[0].replayCommand.includes('--seed='),
+    'Blocker should have replay command'
+  );
+
+  // Verify most frequent cluster is ranked first
+  const topCluster = summary.clusters[0];
+  assert(
+    topCluster.count >= 2,
+    'Top cluster should have count >= 2 (the null error appears twice)'
+  );
+}
+
+// --- Stress lab runtime mode checks ---
+function runStressLabRuntimeModeChecks() {
+  assert.strictEqual(DEFAULT_SEEDS, 30, 'DEFAULT_SEEDS should be 30 for quick mode');
+  assert.strictEqual(DEEP_SEEDS, 300, 'DEEP_SEEDS should be 300 for deep/nightly mode');
+}
+
 async function runRound(round, total) {
   console.log(`\n[Regression] Round ${round}/${total}`);
   const artifactSnapshot = PRESERVE_GENERATED_PPTS
@@ -1034,6 +1215,12 @@ async function runRound(round, total) {
     console.log('[Regression] Unit checks PASS (transient key sanitizer canonical module)');
     runCrashSignatureRegressionChecks();
     console.log('[Regression] Unit checks PASS (crash signature type-mismatch guards)');
+    runStressLabDeterminismChecks();
+    console.log('[Regression] Unit checks PASS (stress lab deterministic replay + seed diversity)');
+    runFailureClusterAnalyzerChecks();
+    console.log('[Regression] Unit checks PASS (failure cluster analyzer signature grouping)');
+    runStressLabRuntimeModeChecks();
+    console.log('[Regression] Unit checks PASS (stress lab runtime mode constants)');
 
     await runNodeScript(VIETNAM_SCRIPT);
     await runNodeScript(THAILAND_SCRIPT);
@@ -1074,6 +1261,7 @@ async function main() {
   const argv = process.argv.slice(2);
   const rounds = parseRounds(argv);
   const stress = parseStress(argv);
+  const deep = parseDeep(argv);
   const stressSeeds = parseStressSeeds(argv);
 
   for (let i = 1; i <= rounds; i++) {
@@ -1082,7 +1270,7 @@ async function main() {
   console.log(`\n[Regression] PASS (${rounds} round(s))`);
 
   if (stress) {
-    console.log(`\n[Regression] Running stress test (${stressSeeds} seeds)...`);
+    console.log(`\n[Regression] Running stress test harness (${stressSeeds} seeds)...`);
     const reportPath = path.join(ROOT, 'stress-report.md');
     const result = await runStressTest({ seeds: stressSeeds, reportPath });
     console.log(
@@ -1103,6 +1291,45 @@ async function main() {
     }
     console.log(
       `[Regression] Stress PASS (${stressSeeds} seeds, ${result.dataGateRejections} expected gate rejections)`
+    );
+  }
+
+  if (deep) {
+    const labSeeds = stressSeeds > DEFAULT_SEEDS ? stressSeeds : DEEP_SEEDS;
+    console.log(`\n[Regression] Running stress lab deep mode (${labSeeds} seeds)...`);
+    const labReportPath = path.join(ROOT, 'stress-lab-report.md');
+    const labResult = await runStressLab({
+      seeds: labSeeds,
+      deep: true,
+      reportPath: labReportPath,
+    });
+    const labStats = labResult.stats;
+    console.log(
+      `[Regression] Stress Lab: ${labStats.passed}/${labStats.total} passed, ${labStats.failed} failed (${labStats.runtimeCrashes} runtime crashes, ${labStats.dataGateRejections} data-gate rejections)`
+    );
+    if (labResult.topBlockers && labResult.topBlockers.length > 0) {
+      console.log(`[Regression] Top crash signatures:`);
+      for (const b of labResult.topBlockers.slice(0, 5)) {
+        const cls = (b.errorClasses || []).includes('runtime-crash') ? 'BUG' : 'gate';
+        console.log(
+          `  #${b.rank} (${cls}, risk=${b.riskScore}, count=${b.count}): ${(b.signature || '').substring(0, 80)}`
+        );
+        console.log(`    Replay: ${b.replayCommand}`);
+      }
+    }
+    if (labStats.scenarioCoverage) {
+      console.log(
+        `[Regression] Scenario coverage: ${labStats.scenarioCoverage.countries.length} countries, ${labStats.scenarioCoverage.industries.length} industries, ${labStats.scenarioCoverage.projectTypes.length} project types`
+      );
+    }
+    console.log(`[Regression] Stress lab report: ${labReportPath}`);
+    if (labStats.runtimeCrashes > 0) {
+      throw new Error(
+        `Stress lab found ${labStats.runtimeCrashes} runtime crash(es) out of ${labStats.total} seeds`
+      );
+    }
+    console.log(
+      `[Regression] Stress Lab PASS (${labSeeds} seeds, ${labStats.dataGateRejections} expected gate rejections, ${labStats.clusterCount || 0} failure clusters)`
     );
   }
 }
