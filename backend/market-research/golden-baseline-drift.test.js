@@ -267,7 +267,13 @@ test('extractGeometryInvariants captures pattern element positions', () => {
 test('extractTextInvariants captures sections and titles', () => {
   const text = extractTextInvariants(GOLD_COUNTRY_ANALYSIS);
   assert.strictEqual(text.country, 'Test Country');
-  assert.deepStrictEqual(text.sectionHeadings, ['policy', 'market', 'competitors', 'depth', 'summary']);
+  assert.deepStrictEqual(text.sectionHeadings, [
+    'policy',
+    'market',
+    'competitors',
+    'depth',
+    'summary',
+  ]);
   assert(text.slideTitles.length >= 5, 'Should have at least 5 slide titles');
   assert(
     text.slideTitles.some((t) => t.slideTitle === 'Test Country - Foundational Acts'),
@@ -335,7 +341,11 @@ test('same input produces identical structural baselines (deterministic)', () =>
 test('comparing identical snapshots produces zero drift', () => {
   const snapshot = captureStructuralBaseline(GOLD_COUNTRY_ANALYSIS, GOLD_TEMPLATE_PATTERNS);
   const drift = detectStructuralDrift(snapshot, snapshot, DRIFT_THRESHOLDS);
-  assert.strictEqual(drift.strictViolations.length, 0, 'No strict violations for identical snapshots');
+  assert.strictEqual(
+    drift.strictViolations.length,
+    0,
+    'No strict violations for identical snapshots'
+  );
   assert.strictEqual(drift.toleratedDrift.length, 0, 'No tolerated drift for identical snapshots');
   assert.strictEqual(drift.totalDriftItems, 0, 'Total drift should be 0');
 });
@@ -359,7 +369,7 @@ test('geometry drift beyond tolerance triggers strict violation', () => {
 test('geometry drift within tolerance triggers tolerated drift', () => {
   const report = { strictViolations: [], toleratedDrift: [] };
   const baseline = { title: { x: 0.3758, y: 0.0488, w: 12.5862, h: 0.9097 } };
-  const current = { title: { x: 0.3790, y: 0.0488, w: 12.5862, h: 0.9097 } }; // x shifted 0.0032
+  const current = { title: { x: 0.379, y: 0.0488, w: 12.5862, h: 0.9097 } }; // x shifted 0.0032
 
   compareGeometryInvariants(baseline, current, DRIFT_THRESHOLDS, report);
   assert.strictEqual(report.strictViolations.length, 0, 'Should not have strict violations');
@@ -371,7 +381,10 @@ test('geometry drift within tolerance triggers tolerated drift', () => {
 
 test('missing geometry element triggers strict violation', () => {
   const report = { strictViolations: [], toleratedDrift: [] };
-  const baseline = { title: { x: 0.38, y: 0.05, w: 12.59, h: 0.91 }, content: { x: 0.38, y: 1.5, w: 12.59, h: 5 } };
+  const baseline = {
+    title: { x: 0.38, y: 0.05, w: 12.59, h: 0.91 },
+    content: { x: 0.38, y: 1.5, w: 12.59, h: 5 },
+  };
   const current = { title: { x: 0.38, y: 0.05, w: 12.59, h: 0.91 } }; // content missing
 
   compareGeometryInvariants(baseline, current, DRIFT_THRESHOLDS, report);
@@ -384,7 +397,10 @@ test('missing geometry element triggers strict violation', () => {
 test('new geometry element triggers strict violation', () => {
   const report = { strictViolations: [], toleratedDrift: [] };
   const baseline = { title: { x: 0.38, y: 0.05, w: 12.59, h: 0.91 } };
-  const current = { title: { x: 0.38, y: 0.05, w: 12.59, h: 0.91 }, newElem: { x: 1, y: 2, w: 3, h: 4 } };
+  const current = {
+    title: { x: 0.38, y: 0.05, w: 12.59, h: 0.91 },
+    newElem: { x: 1, y: 2, w: 3, h: 4 },
+  };
 
   compareGeometryInvariants(baseline, current, DRIFT_THRESHOLDS, report);
   assert(
@@ -399,7 +415,12 @@ console.log('\n  --- Slide Dimension Drift ---');
 
 test('changed slide dimensions trigger strict violation', () => {
   const report = { strictViolations: [], toleratedDrift: [] };
-  const baseline = { widthInches: 13.3333, heightInches: 7.5, widthEmu: 12192000, heightEmu: 6858000 };
+  const baseline = {
+    widthInches: 13.3333,
+    heightInches: 7.5,
+    widthEmu: 12192000,
+    heightEmu: 6858000,
+  };
   const current = { widthInches: 10.0, heightInches: 7.5, widthEmu: 9144000, heightEmu: 6858000 };
 
   compareSlideDimensions(baseline, current, DRIFT_THRESHOLDS, report);
@@ -543,7 +564,9 @@ test('removed subkey triggers strict violation', () => {
 
   compareSectionStructure(baseline, current, report);
   assert(
-    report.strictViolations.some((v) => v.category === 'subkey-removed' && v.subKey === 'nationalPolicy'),
+    report.strictViolations.some(
+      (v) => v.category === 'subkey-removed' && v.subKey === 'nationalPolicy'
+    ),
     'Should detect removed subkey'
   );
 });
@@ -578,12 +601,18 @@ test('country mismatch triggers strict violation', () => {
 
 test('removed heading triggers strict violation', () => {
   const report = { strictViolations: [], toleratedDrift: [] };
-  const baseline = { country: 'Test', sectionHeadings: ['policy', 'market', 'competitors'], slideTitles: [] };
+  const baseline = {
+    country: 'Test',
+    sectionHeadings: ['policy', 'market', 'competitors'],
+    slideTitles: [],
+  };
   const current = { country: 'Test', sectionHeadings: ['policy', 'market'], slideTitles: [] };
 
   compareTextInvariants(baseline, current, DRIFT_THRESHOLDS, report);
   assert(
-    report.strictViolations.some((v) => v.category === 'heading-removed' && v.heading === 'competitors'),
+    report.strictViolations.some(
+      (v) => v.category === 'heading-removed' && v.heading === 'competitors'
+    ),
     'Should detect removed heading'
   );
 });
@@ -646,12 +675,16 @@ test('layout change triggers strict violation', () => {
 
 test('removed element key triggers strict violation', () => {
   const report = { strictViolations: [], toleratedDrift: [] };
-  const baseline = { cover: { id: 1, layout: 3, elementKeys: ['companyName', 'logo', 'projectTitle'] } };
+  const baseline = {
+    cover: { id: 1, layout: 3, elementKeys: ['companyName', 'logo', 'projectTitle'] },
+  };
   const current = { cover: { id: 1, layout: 3, elementKeys: ['companyName', 'logo'] } };
 
   compareTemplateStructure(baseline, current, report);
   assert(
-    report.strictViolations.some((v) => v.category === 'pattern-element-removed' && v.element === 'projectTitle'),
+    report.strictViolations.some(
+      (v) => v.category === 'pattern-element-removed' && v.element === 'projectTitle'
+    ),
     'Should detect removed element'
   );
 });
@@ -911,7 +944,12 @@ test('runFullDriftCheck returns PASS when both match', () => {
     createBaseline(testName, gateResults);
     saveStructuralBaseline(testName, snapshot);
 
-    const result = runFullDriftCheck(testName, gateResults, GOLD_COUNTRY_ANALYSIS, GOLD_TEMPLATE_PATTERNS);
+    const result = runFullDriftCheck(
+      testName,
+      gateResults,
+      GOLD_COUNTRY_ANALYSIS,
+      GOLD_TEMPLATE_PATTERNS
+    );
     assert.strictEqual(result.overallVerdict, 'PASS');
     assert.strictEqual(result.gate.hasDrift, false);
     assert.strictEqual(result.structural.verdict, 'PASS');
@@ -953,7 +991,12 @@ test('runFullDriftCheck returns FAIL when gate has new failures', () => {
     saveStructuralBaseline(testName, snapshot);
 
     const currentGates = { pass: false, score: 40, failures: ['New critical failure'] };
-    const result = runFullDriftCheck(testName, currentGates, GOLD_COUNTRY_ANALYSIS, GOLD_TEMPLATE_PATTERNS);
+    const result = runFullDriftCheck(
+      testName,
+      currentGates,
+      GOLD_COUNTRY_ANALYSIS,
+      GOLD_TEMPLATE_PATTERNS
+    );
     assert.strictEqual(result.overallVerdict, 'FAIL');
     assert(result.verdictReasons.includes('gate-drift'));
   } finally {
@@ -1069,7 +1112,11 @@ test('custom thresholds can widen geometry tolerance', () => {
       geometry: { strict: 0, tolerated: 0.1 },
     };
     const resultWide = compareStructuralBaseline(testName, drifted, wideThresholds);
-    assert.strictEqual(resultWide.hasStrictViolations, false, 'Wide tolerance should not be strict');
+    assert.strictEqual(
+      resultWide.hasStrictViolations,
+      false,
+      'Wide tolerance should not be strict'
+    );
     assert.strictEqual(resultWide.hasToleratedDrift, true, 'Wide tolerance should be tolerated');
   } finally {
     deleteStructuralBaseline(testName);
@@ -1080,7 +1127,19 @@ test('custom thresholds can widen geometry tolerance', () => {
 
 console.log(`\n[Golden Baseline Drift Tests] ${passed} passed, ${failed} failed`);
 
-if (failed > 0) {
+const inJest = Boolean(process.env.JEST_WORKER_ID);
+
+if (inJest) {
+  global.describe('golden baseline drift harness', () => {
+    global.test('all harness checks pass', () => {
+      if (failed > 0) {
+        const details = failures.map((f) => `- ${f.name}: ${f.error}`).join('\n');
+        throw new Error(`${failed} harness check(s) failed:\n${details}`);
+      }
+      global.expect(passed).toBeGreaterThan(0);
+    });
+  });
+} else if (failed > 0) {
   console.log('\nFailures:');
   for (const f of failures) {
     console.log(`  - ${f.name}: ${f.error}`);
