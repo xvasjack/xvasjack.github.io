@@ -221,7 +221,7 @@ Now translate the following new segment, maintaining consistency with the contex
     }
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o', // Use GPT-4o for better translation quality
+      model: 'gpt-5.1', // Use GPT-4o for better translation quality
       messages: [
         {
           role: 'system',
@@ -244,7 +244,7 @@ Output only the translation, nothing else.`,
       temperature: 0.3, // Balanced temperature for fluency while maintaining consistency
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     return response.choices[0].message.content || text;
   } catch (error) {

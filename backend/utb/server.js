@@ -117,13 +117,13 @@ async function callPerplexity(prompt) {
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -142,14 +142,14 @@ async function callChatGPT(prompt) {
 async function callChatGPTJSON(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );

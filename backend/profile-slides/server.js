@@ -1198,7 +1198,7 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     console.log(`  Falling back to GPT-4o (reason: ${reason})...`);
 
     const requestOptions = {
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1
     };
@@ -1210,7 +1210,7 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
 
     const response = await openai.chat.completions.create(requestOptions);
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices?.[0]?.message?.content || '';
 
@@ -1343,12 +1343,12 @@ async function callPerplexity(prompt) {
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -1362,15 +1362,15 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Updated to use gpt-4o-search-preview (more stable than mini version)
+// Updated to use gpt-5-search-api (more stable than mini version)
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-5-search-api',
       messages: [{ role: 'user', content: prompt }]
     });
     if (response.usage) {
-      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -1380,7 +1380,7 @@ async function callOpenAISearch(prompt) {
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4o if search model not available
+    // Fallback to regular gpt-5.1 if search model not available
     return callChatGPT(prompt);
   }
 }
@@ -2174,7 +2174,7 @@ async function validateCompanyStrict(company, business, country, exclusion, page
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Use smarter model for better validation
+      model: 'gpt-5.1',  // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -2222,7 +2222,7 @@ ${contentToValidate.substring(0, 10000)}`
     });
 
     if (validation.usage) {
-      recordTokens('gpt-4o', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
     }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -5719,7 +5719,7 @@ async function extractFullAddress(scrapedContent, websiteUrl, currentLocation) {
     const contentToSearch = contactSection || scrapedContent;
 
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [
         {
           role: 'system',
@@ -5759,7 +5759,7 @@ If you cannot find more details, return: { "location": "" }`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = JSON.parse(response.choices[0].message.content);
     if (result.location && result.location !== currentLocation) {
@@ -5925,7 +5925,7 @@ Rules:
 
     const visionResponse = await withRetry(async () => {
       return await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-5.1',
         messages: [{ role: 'user', content: visionContent }],
         max_tokens: 800,
         temperature: 0.1
@@ -5933,7 +5933,7 @@ Rules:
     }, 2, 3000);
 
     if (visionResponse.usage) {
-      recordTokens('gpt-4o', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
     }
     const responseText = visionResponse.choices[0]?.message?.content || '[]';
 
@@ -6540,7 +6540,7 @@ Rules:
 
     const visionResponse = await withRetry(async () => {
       return await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-5.1',
         messages: [{ role: 'user', content: visionContent }],
         max_tokens: 1200,  // Increased for exhaustive extraction (30+ logos)
         temperature: 0.1
@@ -6548,7 +6548,7 @@ Rules:
     }, 2, 3000); // 2 retries, 3s base delay for rate limits
 
     if (visionResponse.usage) {
-      recordTokens('gpt-4o', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
     }
     const responseText = visionResponse.choices[0]?.message?.content || '{}';
 
@@ -6650,7 +6650,7 @@ async function extractPartnersFromScreenshot(websiteUrl) {
     // Send to GPT-4o Vision
     const visionResponse = await withRetry(async () => {
       return await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-5.1',
         messages: [{
           role: 'user',
           content: [
@@ -6702,7 +6702,7 @@ Rules:
     }, 2, 3000);
 
     if (visionResponse.usage) {
-      recordTokens('gpt-4o', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
     }
     const responseText = visionResponse.choices[0]?.message?.content || '{}';
 
@@ -7058,7 +7058,7 @@ function cleanCustomerName(text) {
 async function extractBasicInfo(scrapedContent, websiteUrl) {
   try {
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [
         {
           role: 'system',
@@ -7116,7 +7116,7 @@ Content: ${scrapedContent.substring(0, 25000)}`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -7519,7 +7519,7 @@ async function extractKeyMetricsWithFocus(scrapedContent, context) {
     console.log('    Running focused re-extraction for missed items...');
 
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o',  // Use stronger model for focused extraction
+      model: 'gpt-5.1',  // Use stronger model for focused extraction
       messages: [
         {
           role: 'system',
@@ -7564,7 +7564,7 @@ ${scrapedContent.substring(0, 30000)}`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -7800,7 +7800,7 @@ async function searchMissingInfo(companyName, website, missingFields) {
     // Use OpenAI Search model which has web search capability
     // Wrapped with retry for rate limits
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-5-search-api',
       messages: [
         {
           role: 'user',
@@ -7823,7 +7823,7 @@ Return ONLY valid JSON, no explanations.`
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const content = response.choices[0].message.content || '';
 
@@ -7868,7 +7868,7 @@ async function searchAdditionalMetrics(companyName, website, existingMetrics) {
     console.log(`  Step 6: Searching web for additional metrics...`);
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-5-search-api',
       messages: [
         {
           role: 'user',
@@ -7922,7 +7922,7 @@ Return ONLY valid JSON.`
     });
 
     if (response.usage) {
-      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const content = response.choices[0].message.content || '';
 
@@ -7966,7 +7966,7 @@ async function generateMECESegments(targetDescription, companies) {
     });
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [
         {
           role: 'system',
@@ -8021,7 +8021,7 @@ Create segments for these ${targetDescription} companies. Ensure EVERY company h
     });
 
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = JSON.parse(response.choices[0].message.content);
     console.log(`Generated ${result.segments?.length || 0} MECE segments`);
@@ -8123,7 +8123,7 @@ async function generateMAStrategies(targetDescription, companies) {
     }));
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [
         {
           role: 'system',
@@ -8176,7 +8176,7 @@ Generate M&A strategies for each region WITHOUT mentioning specific company name
     });
 
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = JSON.parse(response.choices[0].message.content);
     console.log(`Generated ${result.strategies?.length || 0} regional M&A strategies`);
@@ -8303,7 +8303,7 @@ Return ONLY valid JSON.`;
 
     // Wrap OpenAI call with retry for rate limits
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [
         { role: 'system', content: 'You are a data validation agent. Compare extracted data against source content and fix any discrepancies. Add any missing information found in the source.' },
         { role: 'user', content: prompt }
@@ -8313,7 +8313,7 @@ Return ONLY valid JSON.`;
     }));
 
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
     }
     const result = response.choices[0].message.content;
 

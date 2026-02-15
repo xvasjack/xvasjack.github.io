@@ -398,13 +398,13 @@ async function _callPerplexity(prompt) {
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -421,16 +421,16 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Updated to use gpt-4o-search-preview (more stable than mini version)
+// Updated to use gpt-5-search-api (more stable than mini version)
 async function _callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-5-search-api',
       messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o-search-preview',
+        'gpt-5-search-api',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -443,7 +443,7 @@ async function _callOpenAISearch(prompt) {
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4o if search model not available
+    // Fallback to regular gpt-5.1 if search model not available
     return callChatGPT(prompt);
   }
 }
@@ -1376,7 +1376,7 @@ async function validateCompanyStrict(company, business, country, exclusion, page
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o', // Use smarter model for better validation
+      model: 'gpt-5.1', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -1425,7 +1425,7 @@ ${contentToValidate.substring(0, 10000)}`,
 
     if (validation.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         validation.usage.prompt_tokens || 0,
         validation.usage.completion_tokens || 0
       );
@@ -1750,14 +1750,14 @@ async function checkRelevanceWithOpenAI(companies, filterCriteria) {
     // Fallback to GPT-4o
     try {
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-5.1',
         messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
       });
       if (response.usage) {
         recordTokens(
-          'gpt-4o',
+          'gpt-5.1',
           response.usage.prompt_tokens || 0,
           response.usage.completion_tokens || 0
         );
@@ -2002,14 +2002,14 @@ OUTPUT FORMAT (JSON):
   console.log('Using GPT-4o for deep analysis...');
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -2057,14 +2057,14 @@ async function dualModelEvaluateCompanies(evaluationPrompt, companies) {
     (async () => {
       try {
         const response = await openai.chat.completions.create({
-          model: 'gpt-4o',
+          model: 'gpt-5.1',
           messages: [{ role: 'user', content: evaluationPrompt }],
           temperature: 0.2,
           response_format: { type: 'json_object' },
         });
         if (response.usage) {
           recordTokens(
-            'gpt-4o',
+            'gpt-5.1',
             response.usage.prompt_tokens || 0,
             response.usage.completion_tokens || 0
           );
@@ -2447,14 +2447,14 @@ OUTPUT JSON:
   let validationResult;
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [{ role: 'user', content: validationPrompt }],
       temperature: 0.2,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -2693,14 +2693,14 @@ IMPORTANT:
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -3042,14 +3042,14 @@ Make each step progressively more selective. First step should be broad, last st
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );

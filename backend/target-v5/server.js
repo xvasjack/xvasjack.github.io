@@ -120,7 +120,7 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     console.log(`  Falling back to GPT-4o (reason: ${reason})...`);
 
     const requestOptions = {
-      model: 'gpt-4o',
+      model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
     };
@@ -133,7 +133,7 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     const response = await openai.chat.completions.create(requestOptions, { timeout: 60000 });
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -197,7 +197,7 @@ async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create(
       {
-        model: 'gpt-4o',
+        model: 'gpt-5.1',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.2,
       },
@@ -205,7 +205,7 @@ async function callChatGPT(prompt) {
     );
     if (response.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -222,19 +222,19 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Updated to use gpt-4o-search-preview (more stable than mini version)
+// Updated to use gpt-5-search-api (more stable than mini version)
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create(
       {
-        model: 'gpt-4o-search-preview',
+        model: 'gpt-5-search-api',
         messages: [{ role: 'user', content: prompt }],
       },
       { timeout: 90000 }
     );
     if (response.usage) {
       recordTokens(
-        'gpt-4o-search-preview',
+        'gpt-5-search-api',
         response.usage.prompt_tokens || 0,
         response.usage.completion_tokens || 0
       );
@@ -247,7 +247,7 @@ async function callOpenAISearch(prompt) {
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4o if search model not available
+    // Fallback to regular gpt-5.1 if search model not available
     return callChatGPT(prompt);
   }
 }
@@ -579,7 +579,7 @@ async function _validateCompanyStrict(company, business, country, exclusion, pag
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o', // Use smarter model for better validation
+      model: 'gpt-5.1', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -628,7 +628,7 @@ ${contentToValidate.substring(0, 10000)}`,
 
     if (validation.usage) {
       recordTokens(
-        'gpt-4o',
+        'gpt-5.1',
         validation.usage.prompt_tokens || 0,
         validation.usage.completion_tokens || 0
       );

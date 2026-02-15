@@ -100,7 +100,7 @@ Google's newest model with frontier-class performance:
 
 **Current Usage:**
 - Website finding: Multiple search APIs
-- Company validation: **GPT-4o** (gpt-4o line 1391: "Use smarter model for better validation")
+- Company validation: **GPT-5.1** (updated from GPT-4o for stronger reasoning quality)
 - Batch size: 15 companies parallel
 
 **Cost Impact:** MEDIUM - ~$0.02-0.05 per company
