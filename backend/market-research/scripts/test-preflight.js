@@ -5,6 +5,10 @@ const assert = require('assert');
 const {
   verifyHeadContent,
   checkDirtyTree,
+  checkGitAvailable,
+  checkGitBranch,
+  checkHeadSha,
+  checkGitDivergence,
   checkModuleImports,
   parseArgs,
   generateJsonReport,
@@ -97,10 +101,117 @@ function main() {
     assert.ok('pass' in result, 'should have pass field');
     assert.ok('dirty' in result, 'should have dirty field');
     assert.ok(Array.isArray(result.dirty), 'dirty should be array');
+    assert.ok(typeof result.pass === 'boolean', 'pass should be boolean');
+  });
+
+  test('checkDirtyTree: dirty result includes remediation', () => {
+    // If the tree happens to be dirty, remediation should exist
+    const result = checkDirtyTree();
+    if (!result.pass && !result.gitUnavailable) {
+      assert.ok(result.remediation, 'dirty tree failure should include remediation');
+      assert.ok(
+        result.remediation.includes('git stash') || result.remediation.includes('git commit'),
+        'remediation should suggest git stash or commit'
+      );
+    }
+    // If clean, remediation should be null
+    if (result.pass) {
+      assert.strictEqual(result.remediation, null, 'clean tree should have null remediation');
+    }
+  });
+
+  test('checkDirtyTree: gitUnavailable path returns pass=false', () => {
+    // We can't easily simulate git unavailable in-process, but we can verify
+    // the shape contract: if gitUnavailable is set, pass must be false
+    const result = checkDirtyTree();
+    if (result.gitUnavailable) {
+      assert.strictEqual(result.pass, false, 'gitUnavailable should mean pass=false');
+      assert.ok(result.remediation, 'gitUnavailable should include remediation');
+    }
+    // In normal env, gitUnavailable should not be set
+    assert.ok(!result.gitUnavailable, 'git should be available in test environment');
+  });
+
+  // -----------------------------------------------------------------------
+  // checkGitAvailable
+  // -----------------------------------------------------------------------
+  test('checkGitAvailable: git is available in test env', () => {
+    const result = checkGitAvailable();
+    assert.strictEqual(result.pass, true, 'git should be available');
+  });
+
+  test('checkGitAvailable: returns correct shape', () => {
+    const result = checkGitAvailable();
+    assert.ok('pass' in result, 'should have pass field');
+    // On success, no error or remediation needed
+    if (result.pass) {
+      assert.ok(!result.error, 'no error on pass');
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // checkGitBranch
+  // -----------------------------------------------------------------------
+  test('checkGitBranch: returns expected shape', () => {
+    const result = checkGitBranch('main');
+    assert.ok('pass' in result, 'should have pass field');
+    assert.ok('branch' in result, 'should have branch field');
+  });
+
+  test('checkGitBranch: wrong branch returns failure with remediation', () => {
+    const result = checkGitBranch('nonexistent-branch-xyz-99999');
+    // We're almost certainly not on this branch
+    assert.strictEqual(result.pass, false, 'should fail on wrong branch');
+    assert.ok(result.remediation, 'should include remediation');
     assert.ok(
-      typeof result.pass === 'boolean' || result.restricted,
-      'pass should be boolean or restricted'
+      result.remediation.includes('git checkout'),
+      'remediation should suggest git checkout'
     );
+  });
+
+  test('checkGitBranch: current branch matches expected', () => {
+    // Get actual current branch first
+    const initial = checkGitBranch('main');
+    const actualBranch = initial.branch;
+    if (actualBranch && actualBranch !== '(detached HEAD)') {
+      const result = checkGitBranch(actualBranch);
+      assert.strictEqual(result.pass, true, `should pass when expected matches actual '${actualBranch}'`);
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // checkHeadSha
+  // -----------------------------------------------------------------------
+  test('checkHeadSha: returns expected shape', () => {
+    const result = checkHeadSha();
+    assert.ok('pass' in result, 'should have pass field');
+    assert.ok('sha' in result, 'should have sha field');
+  });
+
+  test('checkHeadSha: SHA is valid in test env', () => {
+    const result = checkHeadSha();
+    assert.strictEqual(result.pass, true, 'HEAD SHA should be resolvable');
+    assert.ok(result.sha, 'sha should be non-empty');
+    assert.ok(result.sha.length >= 7, 'sha should be at least 7 chars');
+    assert.ok(Array.isArray(result.branches), 'should have branches array');
+    assert.ok(result.branches.length > 0, 'HEAD should be on at least one branch');
+  });
+
+  // -----------------------------------------------------------------------
+  // checkGitDivergence
+  // -----------------------------------------------------------------------
+  test('checkGitDivergence: returns expected shape', () => {
+    const result = checkGitDivergence();
+    assert.ok('pass' in result, 'should have pass field');
+    assert.ok('ahead' in result, 'should have ahead field');
+    assert.ok('behind' in result, 'should have behind field');
+  });
+
+  test('checkGitDivergence: failure includes remediation', () => {
+    const result = checkGitDivergence('origin/nonexistent-branch-xyz-99999');
+    // This should fail because the remote branch doesn't exist
+    assert.strictEqual(result.pass, false, 'should fail for nonexistent remote branch');
+    assert.ok(result.remediation, 'should include remediation');
   });
 
   // -----------------------------------------------------------------------
@@ -135,6 +246,7 @@ function main() {
     assert.strictEqual(result.help, false, 'help should be false');
     assert.strictEqual(result.strict, false, 'strict should be false');
     assert.strictEqual(result.gateMode, 'dev', 'gateMode should be dev');
+    assert.strictEqual(result.expectedBranch, 'main', 'expectedBranch should default to main');
     assert.ok(result.reportDir, 'reportDir should be set');
   });
 
@@ -183,6 +295,17 @@ function main() {
     const result = parseArgs(['--strict', '--mode=release']);
     assert.strictEqual(result.strict, true);
     assert.strictEqual(result.gateMode, 'release');
+  });
+
+  test('parseArgs: --expected-branch=staging', () => {
+    const result = parseArgs(['--expected-branch=staging']);
+    assert.strictEqual(result.expectedBranch, 'staging', 'expectedBranch should be staging');
+  });
+
+  test('parseArgs: combined --strict --expected-branch=release', () => {
+    const result = parseArgs(['--strict', '--expected-branch=release']);
+    assert.strictEqual(result.strict, true);
+    assert.strictEqual(result.expectedBranch, 'release');
   });
 
   // -----------------------------------------------------------------------
@@ -308,6 +431,43 @@ function main() {
       result.failures[0].missing[0] === 'FAKE_FUNCTION_THAT_DOES_NOT_EXIST',
       'failure should name the missing pattern'
     );
+  });
+
+  // -----------------------------------------------------------------------
+  // Integration: strict mode git checks
+  // -----------------------------------------------------------------------
+  test('integration: all git check functions are exported', () => {
+    assert.ok(typeof checkGitAvailable === 'function', 'checkGitAvailable should be exported');
+    assert.ok(typeof checkGitBranch === 'function', 'checkGitBranch should be exported');
+    assert.ok(typeof checkHeadSha === 'function', 'checkHeadSha should be exported');
+    assert.ok(typeof checkGitDivergence === 'function', 'checkGitDivergence should be exported');
+  });
+
+  test('integration: git checks all return objects with pass field', () => {
+    const results = [
+      checkGitAvailable(),
+      checkGitBranch('main'),
+      checkHeadSha(),
+      checkGitDivergence(),
+    ];
+    for (const r of results) {
+      assert.ok('pass' in r, 'each git check result should have pass field');
+      assert.ok(typeof r.pass === 'boolean', 'pass should be boolean');
+    }
+  });
+
+  test('integration: failed git checks always include remediation', () => {
+    // Test with impossible branch name to guarantee failure
+    const branchResult = checkGitBranch('impossible-branch-name-xyz-99999');
+    assert.strictEqual(branchResult.pass, false);
+    assert.ok(branchResult.remediation, 'failed branch check must have remediation');
+    assert.ok(branchResult.remediation.length > 10, 'remediation should be descriptive');
+
+    // Test with impossible remote branch
+    const divResult = checkGitDivergence('origin/impossible-branch-xyz-99999');
+    assert.strictEqual(divResult.pass, false);
+    assert.ok(divResult.remediation, 'failed divergence check must have remediation');
+    assert.ok(divResult.remediation.length > 10, 'remediation should be descriptive');
   });
 
   // -----------------------------------------------------------------------
