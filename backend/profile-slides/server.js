@@ -5632,6 +5632,73 @@ function extractMetricsFromText(text) {
   return metrics;
 }
 
+// Extract branch/office location coverage summary from website text.
+// Returns readable value like "5 branches across Sydney, Melbourne, Brisbane, Perth, Adelaide".
+function extractBranchLocationSummary(content, officeCount = null) {
+  const text = ensureString(content).replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+
+  const extractedTokens = [];
+  const patterns = [
+    /(?:branches?|offices?|locations?|depots?|warehouses?)\s*(?:in|across|at|throughout|covering)\s+([^.!?;|]{10,220})/gi,
+    /(?:branch|office|location)\s*(?:network|coverage)?\s*[:\-]\s*([^.!?;|]{10,220})/gi,
+    /(?:with|has|have|operates?)\s+\d{1,3}\s*(?:branches?|offices?|locations?)\s*(?:in|across|at)\s+([^.!?;|]{10,220})/gi
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      const fragment = ensureString(match[1]);
+      if (!fragment) continue;
+      extractedTokens.push(...fragment.split(/,|\/|&|\band\b|\bor\b/gi));
+    }
+  }
+
+  const stopTokens = new Set([
+    'australia', 'new zealand', 'singapore', 'malaysia',
+    'branch', 'branches', 'office', 'offices', 'location', 'locations',
+    'warehouse', 'warehouses', 'depot', 'depots',
+    'nationwide', 'domestic', 'international',
+    'region', 'regions', 'state', 'states', 'country', 'countries',
+    'metropolitan', 'metropolitan area', 'area', 'areas', 'and', 'or'
+  ]);
+
+  const dedup = new Set();
+  const cities = [];
+  for (const rawToken of extractedTokens) {
+    let token = ensureString(rawToken)
+      .replace(/[()]/g, ' ')
+      .replace(/\b(?:branch|branches|office|offices|location|locations|warehouse|warehouses|depot|depots)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!token) continue;
+    const lower = token.toLowerCase();
+    if (stopTokens.has(lower)) continue;
+    if (!/[A-Za-z]/.test(token)) continue;
+    if (token.length < 3 || token.length > 35) continue;
+
+    const normalizedKey = lower.replace(/\s+/g, ' ');
+    if (dedup.has(normalizedKey)) continue;
+    dedup.add(normalizedKey);
+    cities.push(toTitleCase(token));
+  }
+
+  const parsedOfficeCount = Number.parseInt(String(officeCount || ''), 10);
+  const hasOfficeCount = Number.isFinite(parsedOfficeCount) && parsedOfficeCount >= 2;
+  const coverageCount = hasOfficeCount ? parsedOfficeCount : cities.length;
+
+  if (coverageCount < 2) return '';
+
+  if (cities.length > 0) {
+    const visibleCities = cities.slice(0, 5);
+    const hiddenCount = Math.max(0, coverageCount - visibleCities.length);
+    return `${coverageCount} branches across ${visibleCities.join(', ')}${hiddenCount > 0 ? `, +${hiddenCount} more` : ''}`;
+  }
+
+  return `${coverageCount} branches/offices`;
+}
+
 // Extract JSON-LD structured data for address information
 function extractStructuredAddress(rawHtml) {
   if (!rawHtml) return null;
@@ -9360,8 +9427,10 @@ async function processSingleWebsite(website, index, total) {
     const regexCoveredTypes = new Set();
 
     // Build regex metrics first (these are guaranteed accurate)
-    if (regexMetrics.office_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.office_count), label: normalizeLabel(regexMetrics.office_text || 'Offices') });
+    const branchNetworkSummary = extractBranchLocationSummary(scraped.content, regexMetrics.office_count);
+    if (branchNetworkSummary) {
+      regexBasedMetrics.push({ value: branchNetworkSummary, label: 'Branch Network' });
+      regexCoveredTypes.add('branch');
       regexCoveredTypes.add('office');
     }
     if (regexMetrics.employee_count) {
@@ -10097,7 +10166,12 @@ app.post('/api/generate-ppt', async (req, res) => {
         // Build regex metrics first (deterministic, no hallucination)
         const regexBasedMetrics = [];
         const regexCoveredTypes = new Set();
-        if (regexMetrics.office_count) { regexBasedMetrics.push({ value: String(regexMetrics.office_count), label: normalizeLabel(regexMetrics.office_text || 'Offices') }); regexCoveredTypes.add('office'); }
+        const branchNetworkSummary = extractBranchLocationSummary(scraped.content, regexMetrics.office_count);
+        if (branchNetworkSummary) {
+          regexBasedMetrics.push({ value: branchNetworkSummary, label: 'Branch Network' });
+          regexCoveredTypes.add('branch');
+          regexCoveredTypes.add('office');
+        }
         if (regexMetrics.employee_count) { regexBasedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' }); regexCoveredTypes.add('employee'); }
         if (regexMetrics.years_experience) { regexBasedMetrics.push({ value: String(regexMetrics.years_experience), label: 'Years Experience' }); regexCoveredTypes.add('year'); }
         if (regexMetrics.export_countries) { regexBasedMetrics.push({ value: String(regexMetrics.export_countries), label: 'Export Countries' }); regexCoveredTypes.add('export'); }
