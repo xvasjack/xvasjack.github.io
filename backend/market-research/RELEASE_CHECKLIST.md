@@ -19,24 +19,41 @@
 
    Reports are written to `preflight-reports/` (JSON + markdown).
 
-3. **Run with stress test (optional, recommended before major releases)**
+3. **Run strict preflight (recommended for production deploys)**
+   ```bash
+   node scripts/preflight-release.js --strict
+   ```
+   Strict mode adds hard-fail git checks:
+   - **Git available**: git binary must be reachable (no degraded mode)
+   - **Branch check**: must be on expected branch (default: `main`)
+   - **HEAD SHA**: must resolve to a valid, trackable commit
+   - **Divergence**: local must not be behind `origin/main`
+   - **Clean tree**: git-unavailable is a hard FAIL, not a warning
+
+   Each failure includes a remediation message with the exact command to run.
+
+4. **Run with stress test (optional, recommended before major releases)**
    ```bash
    npm run preflight:stress
    # or with custom seed count:
    node scripts/preflight-release.js --stress-seeds=50
    ```
 
-4. **Verify you're on the right branch**
+5. **Verify you're on the right branch**
    ```bash
    git log --oneline -3
    ```
+   Or use strict preflight which does this automatically:
+   ```bash
+   node scripts/preflight-release.js --strict --expected-branch=main
+   ```
 
-5. **Push to main** (Railway deploys from main)
+6. **Push to main** (Railway deploys from main)
    ```bash
    git checkout main && git merge your-branch && git push origin main
    ```
 
-6. **Verify deployment**
+7. **Verify deployment**
    - Check Railway deploy logs
    - Hit the health endpoint to confirm the new commit is live
 
@@ -53,18 +70,37 @@ After each run, check `preflight-reports/` for:
 | `npm run preflight:release` | Run all checks (no stress) |
 | `npm run preflight:stress` | Run all checks + 30-seed stress test |
 | `npm run test:preflight` | Run preflight unit tests only |
+| `node scripts/preflight-release.js --strict` | Strict mode (git checks hard-fail) |
+| `node scripts/preflight-release.js --strict --expected-branch=staging` | Strict with custom branch |
 | `node scripts/preflight-release.js --stress-seeds=50` | Custom stress seed count |
 | `node scripts/preflight-release.js --report-dir=/tmp` | Custom report output dir |
 | `node scripts/preflight-release.js --help` | Show usage |
 
+## Strict Mode Git Checks (--strict)
+
+In strict mode, the following are **HARD FAILURES** (not warnings):
+
+| Check | What it verifies | On failure, run: |
+|-------|-----------------|-----------------|
+| Git available | `git --version` succeeds | `apt-get install git` or `brew install git` |
+| Branch | On expected branch (default: main) | `git checkout main` |
+| HEAD SHA | HEAD resolves to a commit on a branch | `git log --oneline -3` to inspect |
+| Divergence | Not behind origin/main | `git pull origin main --rebase` |
+| Clean tree (degraded) | Git is accessible for tree check | Ensure git is in PATH |
+| Clean tree (dirty) | No uncommitted .js/.json changes | `git stash` or `git add -A && git commit` |
+
 ## If Preflight Fails
 
-- **Uncommitted changes**: Commit or stash before deploying. The deployed commit won't include uncommitted work.
-- **HEAD content missing**: Your latest fixes aren't committed. Run `git diff` to see what's staged vs unstaged.
+- **Git not available**: Install git and ensure it's in PATH. Run `which git` to verify.
+- **Wrong branch**: Run `git checkout main` (or your expected branch).
+- **HEAD SHA not trackable**: Your HEAD may be detached or orphaned. Run `git checkout main`.
+- **Diverged from origin/main**: Run `git pull origin main --rebase` to sync.
+- **Uncommitted changes**: Commit or stash before deploying. The deployed commit won't include uncommitted work. Run `git stash` or `git add -A && git commit -m "pre-deploy"`.
+- **HEAD content missing**: Your latest fixes aren't committed. Run `git diff` to see what's staged vs unstaged, then `git add -A && git commit`.
 - **Module import failure**: A required file is missing or has a syntax error. Check the reported module.
 - **Regression test failure**: A code change broke existing behavior. Fix the regression before deploying.
 - **Stress test failure**: Runtime crashes found — there are unguarded code paths. Fix before deploying.
-- **WARN (degraded mode)**: Git execution was blocked. Preflight validated local files but cannot guarantee HEAD parity. Proceed with caution.
+- **WARN (degraded mode, non-strict)**: Git execution was blocked. Preflight validated local files but cannot guarantee HEAD parity. Use `--strict` to make this a hard failure.
 
 ## Exit Codes
 
@@ -79,3 +115,4 @@ After each run, check `preflight-reports/` for:
 - "Done" = code is on main AND pushed. Verify with `git log origin/main`.
 - Every fix must include regression test coverage.
 - Always verify the exact file the user will open, not just "it works locally."
+- Use `--strict` for production deploys to prevent false confidence from degraded git state.

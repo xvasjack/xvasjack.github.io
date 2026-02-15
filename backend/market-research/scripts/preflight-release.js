@@ -14,7 +14,6 @@ const RELATIVE_PREFIX = 'backend/market-research/';
 // ---------------------------------------------------------------------------
 function checkDirtyTree() {
   let output;
-  const restricted = false;
   try {
     output = execFileSync('git', ['status', '--porcelain', '--', '.'], {
       cwd: PROJECT_ROOT,
@@ -30,13 +29,22 @@ function checkDirtyTree() {
       /not found/i.test(errMsg);
     if (isEnvError) {
       return {
-        pass: true,
+        pass: false,
         dirty: [],
+        gitUnavailable: true,
         restricted: true,
-        warning: 'git unavailable — cannot verify clean tree. Proceeding with caution.',
+        warning: 'git unavailable — cannot verify clean tree.',
+        remediation:
+          "Ensure git is installed and available in PATH. Run 'which git' to verify. " +
+          'If running in a container, install git or mount the host git binary.',
       };
     }
-    return { pass: false, dirty: [`git status failed: ${errMsg}`], restricted: false };
+    return {
+      pass: false,
+      dirty: [`git status failed: ${errMsg}`],
+      restricted: false,
+      remediation: `Investigate git error: ${errMsg}`,
+    };
   }
 
   const dirty = output
@@ -48,7 +56,190 @@ function checkDirtyTree() {
       return file.endsWith('.js') || file.endsWith('.json');
     });
 
-  return { pass: dirty.length === 0, dirty, restricted };
+  return {
+    pass: dirty.length === 0,
+    dirty,
+    restricted: false,
+    remediation: dirty.length > 0
+      ? "Run 'git stash' or 'git add -A && git commit -m \"pre-deploy\"' to clean the working tree."
+      : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 1b. Git availability check
+// ---------------------------------------------------------------------------
+function checkGitAvailable() {
+  try {
+    execFileSync('git', ['--version'], { cwd: GIT_ROOT, encoding: 'utf8' });
+    return { pass: true };
+  } catch (err) {
+    return {
+      pass: false,
+      error: String(err?.message || err || ''),
+      remediation:
+        "git is not available. Install git ('apt-get install git' or 'brew install git') " +
+        "and ensure it is in your PATH. Run 'which git' to verify.",
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 1c. Git branch check
+// ---------------------------------------------------------------------------
+function checkGitBranch(expectedBranch) {
+  try {
+    const branch = execFileSync('git', ['branch', '--show-current'], {
+      cwd: GIT_ROOT,
+      encoding: 'utf8',
+    }).trim();
+
+    if (!branch) {
+      return {
+        pass: false,
+        branch: '(detached HEAD)',
+        remediation:
+          `You are in detached HEAD state. Run 'git checkout ${expectedBranch}' ` +
+          'to switch to the expected branch before deploying.',
+      };
+    }
+
+    if (branch !== expectedBranch) {
+      return {
+        pass: false,
+        branch,
+        remediation:
+          `Currently on branch '${branch}', expected '${expectedBranch}'. ` +
+          `Run 'git checkout ${expectedBranch}' to switch.`,
+      };
+    }
+
+    return { pass: true, branch };
+  } catch (err) {
+    return {
+      pass: false,
+      branch: 'unknown',
+      error: String(err?.message || err || ''),
+      remediation:
+        "Could not determine current branch. Ensure you are inside a git repository. " +
+        "Run 'git status' to verify.",
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 1d. HEAD SHA check
+// ---------------------------------------------------------------------------
+function checkHeadSha() {
+  try {
+    const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: GIT_ROOT,
+      encoding: 'utf8',
+    }).trim();
+
+    if (!sha || sha.length < 7) {
+      return {
+        pass: false,
+        sha: null,
+        remediation:
+          "HEAD SHA could not be resolved. Ensure the repository has at least one commit. " +
+          "Run 'git log --oneline -1' to verify.",
+      };
+    }
+
+    // Check if HEAD is an ancestor of a branch (not orphaned)
+    const result = spawnSync('git', ['branch', '--contains', sha], {
+      cwd: GIT_ROOT,
+      encoding: 'utf8',
+    });
+    const branches = (result.stdout || '')
+      .split('\n')
+      .map((l) => l.replace(/^\*?\s*/, '').trim())
+      .filter(Boolean);
+
+    if (branches.length === 0) {
+      return {
+        pass: false,
+        sha,
+        remediation:
+          `HEAD (${sha.slice(0, 8)}) is not contained in any branch. ` +
+          "This commit may be orphaned. Run 'git log --oneline -3' to inspect and " +
+          "'git checkout main' to return to a tracked branch.",
+      };
+    }
+
+    return { pass: true, sha, branches };
+  } catch (err) {
+    return {
+      pass: false,
+      sha: null,
+      error: String(err?.message || err || ''),
+      remediation:
+        "Could not read HEAD SHA. Ensure git is available and you are in a valid repository. " +
+        "Run 'git status' to verify.",
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 1e. Divergence from origin/main check
+// ---------------------------------------------------------------------------
+function checkGitDivergence(remoteBranch) {
+  const target = remoteBranch || 'origin/main';
+  try {
+    // Fetch latest from remote (best effort)
+    spawnSync('git', ['fetch', '--quiet', target.split('/')[0]], {
+      cwd: GIT_ROOT,
+      timeout: 15000,
+    });
+
+    // Check if remote branch exists
+    const remoteCheck = spawnSync('git', ['rev-parse', '--verify', target], {
+      cwd: GIT_ROOT,
+      encoding: 'utf8',
+    });
+    if (remoteCheck.status !== 0) {
+      return {
+        pass: false,
+        ahead: 0,
+        behind: 0,
+        error: `Remote branch '${target}' not found`,
+        remediation:
+          `Remote branch '${target}' does not exist. Run 'git fetch origin' to update remote refs. ` +
+          "If this is a new repository, push your branch first with 'git push -u origin main'.",
+      };
+    }
+
+    const revList = execFileSync('git', ['rev-list', '--left-right', '--count', `${target}...HEAD`], {
+      cwd: GIT_ROOT,
+      encoding: 'utf8',
+    }).trim();
+
+    const [behind, ahead] = revList.split(/\s+/).map(Number);
+
+    if (behind > 0) {
+      return {
+        pass: false,
+        ahead,
+        behind,
+        remediation:
+          `Local is ${behind} commit(s) behind ${target} and ${ahead} ahead. ` +
+          `Run 'git pull origin main --rebase' to sync, then 'git push'.`,
+      };
+    }
+
+    return { pass: true, ahead, behind };
+  } catch (err) {
+    return {
+      pass: false,
+      ahead: 0,
+      behind: 0,
+      error: String(err?.message || err || ''),
+      remediation:
+        `Could not check divergence from ${target}. Run 'git fetch origin' and retry. ` +
+        "Ensure the remote is configured with 'git remote -v'.",
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -272,6 +463,7 @@ function parseArgs(argv) {
   let help = false;
   let strict = false;
   let gateMode = 'dev';
+  let expectedBranch = 'main';
 
   for (const arg of argv) {
     if (arg === '--help' || arg === '-h') {
@@ -290,10 +482,12 @@ function parseArgs(argv) {
       if (val === 'dev' || val === 'test' || val === 'release') {
         gateMode = val;
       }
+    } else if (arg.startsWith('--expected-branch=')) {
+      expectedBranch = arg.split('=')[1];
     }
   }
 
-  return { stressSeeds, reportDir, help, strict, gateMode };
+  return { stressSeeds, reportDir, help, strict, gateMode, expectedBranch };
 }
 
 // ---------------------------------------------------------------------------
@@ -411,17 +605,28 @@ function main() {
 Usage: node scripts/preflight-release.js [options]
 
 Options:
-  --strict              Treat any non-pass (including WARN) as failure
-  --mode=dev|test|release  Gate severity mode (default: dev)
-  --stress-seeds=N      Run stress test with N seeds (1-100, default: skip)
-  --report-dir=PATH     Output directory for reports (default: preflight-reports/)
-  --help                Show this help
+  --strict                  Treat any non-pass (including WARN) as failure;
+                            git-degraded paths become hard failures
+  --mode=dev|test|release   Gate severity mode (default: dev)
+  --expected-branch=NAME    Expected git branch (default: main)
+  --stress-seeds=N          Run stress test with N seeds (1-100, default: skip)
+  --report-dir=PATH         Output directory for reports (default: preflight-reports/)
+  --help                    Show this help
+
+Strict mode git checks:
+  In --strict mode, the following are HARD FAILURES (not warnings):
+  - Git binary unavailable
+  - Uncommitted changes in working tree
+  - Not on expected branch (default: main)
+  - HEAD SHA unresolvable or orphaned
+  - Local branch diverged from origin/main
 
 Examples:
   npm run preflight:release                         # standard checks only
   npm run preflight:stress                          # checks + 30-seed stress test
   node scripts/preflight-release.js --strict        # strict mode (no warnings allowed)
   node scripts/preflight-release.js --mode=release --strict  # release hard gates
+  node scripts/preflight-release.js --strict --expected-branch=staging
   node scripts/preflight-release.js --stress-seeds=50
 `);
     process.exit(0);
@@ -438,18 +643,135 @@ Examples:
   const checkResults = [];
   let anyFail = false;
 
+  // --- 0a. Git availability ---
+  if (args.strict) {
+    const tGit = Date.now();
+    const gitAvail = checkGitAvailable();
+    const dGit = Date.now() - tGit;
+    if (gitAvail.pass) {
+      checkResults.push({
+        name: 'Git available',
+        pass: true,
+        status: 'PASS',
+        durationMs: dGit,
+        details: null,
+      });
+      console.log('[PASS] Git is available');
+    } else {
+      anyFail = true;
+      checkResults.push({
+        name: 'Git available',
+        pass: false,
+        status: 'FAIL',
+        durationMs: dGit,
+        details: gitAvail.error,
+        remediation: gitAvail.remediation,
+      });
+      console.log('[FAIL] Git is not available — all git checks will fail');
+      console.log(`  Remediation: ${gitAvail.remediation}`);
+    }
+
+    // --- 0b. Branch check ---
+    const tBranch = Date.now();
+    const branchResult = checkGitBranch(args.expectedBranch);
+    const dBranch = Date.now() - tBranch;
+    if (branchResult.pass) {
+      checkResults.push({
+        name: 'Git branch',
+        pass: true,
+        status: 'PASS',
+        durationMs: dBranch,
+        details: `On branch '${branchResult.branch}'`,
+      });
+      console.log(`[PASS] On expected branch '${branchResult.branch}'`);
+    } else {
+      anyFail = true;
+      checkResults.push({
+        name: 'Git branch',
+        pass: false,
+        status: 'FAIL',
+        durationMs: dBranch,
+        details: branchResult.remediation,
+        remediation: branchResult.remediation,
+      });
+      console.log(`[FAIL] Wrong branch: '${branchResult.branch}' (expected '${args.expectedBranch}')`);
+      console.log(`  Remediation: ${branchResult.remediation}`);
+    }
+
+    // --- 0c. HEAD SHA check ---
+    const tSha = Date.now();
+    const shaResult = checkHeadSha();
+    const dSha = Date.now() - tSha;
+    if (shaResult.pass) {
+      checkResults.push({
+        name: 'HEAD SHA',
+        pass: true,
+        status: 'PASS',
+        durationMs: dSha,
+        details: `SHA: ${shaResult.sha.slice(0, 8)} on branch(es): ${shaResult.branches.join(', ')}`,
+      });
+      console.log(`[PASS] HEAD SHA ${shaResult.sha.slice(0, 8)} is trackable`);
+    } else {
+      anyFail = true;
+      checkResults.push({
+        name: 'HEAD SHA',
+        pass: false,
+        status: 'FAIL',
+        durationMs: dSha,
+        details: shaResult.remediation,
+        remediation: shaResult.remediation,
+      });
+      console.log(`[FAIL] HEAD SHA not trackable: ${shaResult.sha || 'unknown'}`);
+      console.log(`  Remediation: ${shaResult.remediation}`);
+    }
+
+    // --- 0d. Divergence check ---
+    const tDiv = Date.now();
+    const divResult = checkGitDivergence();
+    const dDiv = Date.now() - tDiv;
+    if (divResult.pass) {
+      const aheadMsg = divResult.ahead > 0 ? ` (${divResult.ahead} ahead)` : '';
+      checkResults.push({
+        name: 'Git divergence',
+        pass: true,
+        status: 'PASS',
+        durationMs: dDiv,
+        details: `In sync with origin/main${aheadMsg}`,
+      });
+      console.log(`[PASS] Not diverged from origin/main${aheadMsg}`);
+    } else {
+      anyFail = true;
+      checkResults.push({
+        name: 'Git divergence',
+        pass: false,
+        status: 'FAIL',
+        durationMs: dDiv,
+        details: divResult.remediation,
+        remediation: divResult.remediation,
+      });
+      const divergeMsg = divResult.error
+        ? divResult.error
+        : `${divResult.behind} behind, ${divResult.ahead} ahead`;
+      console.log(`[FAIL] Diverged from origin/main: ${divergeMsg}`);
+      console.log(`  Remediation: ${divResult.remediation}`);
+    }
+  }
+
   // --- 1. Dirty tree ---
   const t1 = Date.now();
   const dirty = checkDirtyTree();
   const d1 = Date.now() - t1;
   if (dirty.pass) {
-    const status = dirty.restricted ? 'WARN' : 'PASS';
-    const msg = dirty.restricted
-      ? dirty.warning
-      : 'Clean working tree (no uncommitted .js/.json changes)';
-
-    // In strict mode, WARN is treated as failure
-    if (args.strict && status === 'WARN') {
+    checkResults.push({
+      name: 'Clean tree',
+      pass: true,
+      status: 'PASS',
+      durationMs: d1,
+      details: null,
+    });
+    console.log('[PASS] Clean working tree (no uncommitted .js/.json changes)');
+  } else if (dirty.gitUnavailable) {
+    if (args.strict) {
       anyFail = true;
       checkResults.push({
         name: 'Clean tree',
@@ -457,19 +779,23 @@ Examples:
         status: 'FAIL',
         durationMs: d1,
         warning: dirty.warning,
-        details: 'Strict mode: degraded git check treated as failure',
+        details: `git unavailable — cannot verify clean tree.\n  Remediation: ${dirty.remediation}`,
+        remediation: dirty.remediation,
       });
-      console.log(`[FAIL] ${msg} (strict mode rejects warnings)`);
+      console.log('[FAIL] git unavailable — cannot verify clean tree (strict mode)');
+      console.log(`  Remediation: ${dirty.remediation}`);
     } else {
       checkResults.push({
         name: 'Clean tree',
         pass: true,
-        status,
+        status: 'WARN',
         durationMs: d1,
         warning: dirty.warning,
         details: null,
+        remediation: dirty.remediation,
       });
-      console.log(`[${status}] ${msg}`);
+      console.log(`[WARN] ${dirty.warning}`);
+      console.log(`  Remediation: ${dirty.remediation}`);
     }
   } else {
     anyFail = true;
@@ -479,15 +805,20 @@ Examples:
       status: 'FAIL',
       durationMs: d1,
       details: dirty.dirty.join('\n'),
+      remediation: dirty.remediation,
     });
     console.log("[FAIL] Uncommitted changes — deployed commit won't include these:");
     for (const d of dirty.dirty) console.log(`  ${d}`);
+    console.log(`  Remediation: ${dirty.remediation}`);
   }
 
   // --- 2. HEAD content ---
   const t2 = Date.now();
   const head = verifyHeadContent(DEFAULT_HEAD_CHECKS);
   const d2 = Date.now() - t2;
+  const headRemediation =
+    "Commit your changes with 'git add -A && git commit -m \"fix\"'. " +
+    "Then re-run preflight to verify HEAD contains all required patterns.";
   if (head.pass) {
     const status = head.degradedMode ? 'WARN' : 'PASS';
 
@@ -499,8 +830,12 @@ Examples:
         status: 'FAIL',
         durationMs: d2,
         details: 'Strict mode: degraded HEAD check treated as failure',
+        remediation:
+          "git is blocked — HEAD content could not be verified against the actual commit. " +
+          "Ensure git is available and the repository is valid. Run 'git show HEAD:backend/market-research/server.js' to test.",
       });
-      console.log(`[FAIL] HEAD content verified in degraded mode (strict mode rejects warnings)`);
+      console.log('[FAIL] HEAD content verified in degraded mode (strict mode rejects warnings)');
+      console.log('  Remediation: Ensure git is available for accurate HEAD content verification.');
     } else {
       checkResults.push({
         name: 'HEAD content',
@@ -533,8 +868,10 @@ Examples:
       status: 'FAIL',
       durationMs: d2,
       details: detailLines.join('\n'),
+      remediation: headRemediation,
     });
     console.log(`[FAIL] HEAD content (${head.passedPatterns}/${head.totalPatterns} patterns)`);
+    console.log(`  Remediation: ${headRemediation}`);
   }
 
   // --- 3. Module imports ---
@@ -712,6 +1049,10 @@ if (require.main === module) {
 
 module.exports = {
   checkDirtyTree,
+  checkGitAvailable,
+  checkGitBranch,
+  checkHeadSha,
+  checkGitDivergence,
   verifyHeadContent,
   checkModuleImports,
   runRegressionTests,
