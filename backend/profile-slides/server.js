@@ -11,6 +11,7 @@ const { Document, Packer, Paragraph, TextRun } = require('docx');
 const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
+const zlib = require('zlib');
 const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
@@ -207,6 +208,7 @@ function filterGarbageNames(names, companyName = '') {
       'thumbnail', 'gallery', 'slider', 'carousel', 'video', 'animation'
     ];
     if (genericTerms.includes(lower.trim())) return false;
+    if (/(download|login|sign in|sign up|register|application form|order online|reviews?|privacy policy|terms)/i.test(lower)) return false;
 
     // Product names that aren't customers (security industry specific)
     const productTerms = [
@@ -241,6 +243,8 @@ function filterGarbageNames(names, companyName = '') {
     // Combined brand/product listings
     if (/hanwha.*hikvision|hikvision.*hanwha/i.test(name)) return false;
     if (/dahua.*hikvision|hikvision.*dahua/i.test(name)) return false;
+    // Common false positives from testimonial/person-name blocks
+    if (/^[A-Z][a-z]+-[A-Z][a-z]+$/.test(name)) return false;
 
     return true;
   }).map(name => toTitleCase(stripCompanySuffix(name))); // Strip suffixes and title case
@@ -250,6 +254,62 @@ function filterGarbageNames(names, companyName = '') {
 // Rough estimate: 1 token ≈ 4 characters for English text
 // GPT-4o limit: 128K tokens ≈ 512K chars, but leave margin for response
 const MAX_INPUT_CHARS = 100000; // ~25K tokens, safe margin for 128K limit
+const RELATIONSHIP_SEGMENT_MIN_COUNT = 5; // Segment long relationship lists for readable slide output
+const AU_STATE_MAP = {
+  'nsw': 'New South Wales',
+  'new south wales': 'New South Wales',
+  'vic': 'Victoria',
+  'victoria': 'Victoria',
+  'qld': 'Queensland',
+  'queensland': 'Queensland',
+  'wa': 'Western Australia',
+  'western australia': 'Western Australia',
+  'sa': 'South Australia',
+  'south australia': 'South Australia',
+  'tas': 'Tasmania',
+  'tasmania': 'Tasmania',
+  'act': 'Australian Capital Territory',
+  'australian capital territory': 'Australian Capital Territory',
+  'nt': 'Northern Territory',
+  'northern territory': 'Northern Territory'
+};
+const NZ_REGION_MAP = {
+  'auckland': 'Auckland',
+  'wellington': 'Wellington',
+  'canterbury': 'Canterbury',
+  'christchurch': 'Canterbury',
+  'otago': 'Otago',
+  'dunedin': 'Otago',
+  'waikato': 'Waikato',
+  'hamilton': 'Waikato',
+  'bay of plenty': 'Bay of Plenty',
+  'tauranga': 'Bay of Plenty',
+  'hawke bay': "Hawke's Bay",
+  'hawkes bay': "Hawke's Bay",
+  'napier': "Hawke's Bay",
+  'hastings': "Hawke's Bay",
+  'northland': 'Northland',
+  'manawatu': 'Manawatu-Whanganui',
+  'palmerston north': 'Manawatu-Whanganui',
+  'taranaki': 'Taranaki',
+  'southland': 'Southland',
+  'nelson': 'Nelson',
+  'marlborough': 'Marlborough',
+  'tasman': 'Tasman',
+  'gisborne': 'Gisborne',
+  'west coast': 'West Coast'
+};
+const AU_CITY_REGION_MAP = {
+  'regency park': 'South Australia',
+  'adelaide': 'South Australia',
+  'melbourne': 'Victoria',
+  'sydney': 'New South Wales',
+  'brisbane': 'Queensland',
+  'perth': 'Western Australia',
+  'hobart': 'Tasmania',
+  'darwin': 'Northern Territory',
+  'canberra': 'Australian Capital Territory'
+};
 
 function estimateTokens(text) {
   return Math.ceil((text || '').length / 4);
@@ -3606,6 +3666,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         'key partnerships': ['partner', 'partnership']
       };
       const excludeKeywords = categoryKeywords[rightTableCategory] || [];
+      const companyNameForFilter = company.company_name || company.title || '';
 
       // Add key metrics as separate rows if available (skip duplicates and empty values)
       if (company.key_metrics && Array.isArray(company.key_metrics)) {
@@ -3629,8 +3690,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
                 !labelLower.includes('location')) {
+              const displayMetricValue = segmentRelationshipBlobValue(metricLabel, metricValue, companyNameForFilter);
               // Always normalize label to Title Case for consistent display
-              tableData.push([normalizeLabel(metricLabel), metricValue, null]);
+              tableData.push([normalizeLabel(metricLabel), displayMetricValue, null]);
               existingLabels.add(labelLower);
             }
           }
@@ -3640,25 +3702,87 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         tableData.push(['Key Metrics', company.metrics, null]);
       }
 
-      // Add Principal Partners row if available (from businessRelationships)
+      // Add Principal Partners / Brands rows if available (from businessRelationships)
       const relationships = company._businessRelationships || {};
+      const relationshipCoverageStatus = ensureString(company._relationshipCoverageStatus);
 
-      // Get company name for filtering (to exclude company's own name from customers list)
-      const companyNameForFilter = company.company_name || company.title || '';
+      const cleanedPrincipals = filterGarbageNames(relationships.principals || [], companyNameForFilter);
+      const cleanedSuppliers = filterGarbageNames(relationships.suppliers || [], companyNameForFilter);
+      const cleanedBrands = filterGarbageNames(relationships.brands || [], companyNameForFilter);
 
-      if (relationships.principals && relationships.principals.length > 0) {
-        const cleanedPrincipals = filterGarbageNames(relationships.principals, companyNameForFilter);
-        if (cleanedPrincipals.length > 0) {
-          // Apply acronym fixing (AMP, HID, etc. should be ALL CAPS)
-          const principalsList = fixAcronymCasing(cleanedPrincipals.slice(0, 10).join(', '));
-          if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
-            tableData.push(['Principal Partners', principalsList, null]);
-            existingLabels.add('principal partners');
-            console.log(`    Added Principal Partners: ${principalsList}`);
-          }
+      if (cleanedPrincipals.length > 0) {
+        const principalSegments = (company._principalSegments && Object.keys(company._principalSegments).length > 0)
+          ? company._principalSegments
+          : buildPrincipalSegments(cleanedPrincipals, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+        const principalSegmentLines = buildSegmentDisplayLines(principalSegments, {
+          maxLines: 4,
+          maxNamesPerLine: 4,
+          forceNumbered: true
+        });
+        const principalsList = fixAcronymCasing(
+          principalSegmentLines.length > 0
+            ? principalSegmentLines.join('\n')
+            : cleanedPrincipals.slice(0, 10).join(', ')
+        );
+        if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
+          tableData.push(['Principal Partners', principalsList, null]);
+          existingLabels.add('principal partners');
+          console.log(`    Added Principal Partners: ${principalsList}`);
         }
       } else {
         console.log(`    No principals found in _businessRelationships`);
+      }
+
+      // Add Key Suppliers row and segment long supplier lists into readable grouped lines.
+      if (cleanedSuppliers.length > 0 && !existingLabels.has('key suppliers') && !existingLabels.has('suppliers')) {
+        const supplierSegments = (company._supplierSegments && Object.keys(company._supplierSegments).length > 0)
+          ? company._supplierSegments
+          : buildSupplierSegments(cleanedSuppliers, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+        const supplierSegmentLines = buildSegmentDisplayLines(supplierSegments, {
+          maxLines: 4,
+          maxNamesPerLine: 4,
+          forceNumbered: true
+        });
+        const suppliersList = fixAcronymCasing(
+          supplierSegmentLines.length > 0
+            ? supplierSegmentLines.join('\n')
+            : cleanedSuppliers.slice(0, 10).join(', ')
+        );
+        tableData.push(['Key Suppliers', suppliersList, null]);
+        existingLabels.add('key suppliers');
+        console.log(`    Added Key Suppliers: ${suppliersList.substring(0, 80)}...`);
+      }
+
+      // Add Principal Brands separately so brand names are not lost when principals are missing
+      if (cleanedBrands.length > 0 && !existingLabels.has('principal brands') && !existingLabels.has('brands carried')) {
+        const principalNameSet = new Set(cleanedPrincipals.map(name => name.toLowerCase()));
+        const brandOnly = cleanedBrands.filter(name => !principalNameSet.has(name.toLowerCase()));
+        const brandsToShow = brandOnly.length > 0 ? brandOnly : cleanedBrands;
+        const brandSegments = (company._brandSegments && Object.keys(company._brandSegments).length > 0)
+          ? company._brandSegments
+          : buildDeterministicSegments(brandsToShow, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+        const brandSegmentLines = buildSegmentDisplayLines(brandSegments, {
+          maxLines: 4,
+          maxNamesPerLine: 4,
+          forceNumbered: true
+        });
+        const brandsList = fixAcronymCasing(
+          brandSegmentLines.length > 0
+            ? brandSegmentLines.join('\n')
+            : brandsToShow.slice(0, 10).join(', ')
+        );
+        tableData.push(['Principal Brands', brandsList, null]);
+        existingLabels.add('principal brands');
+        console.log(`    Added Principal Brands: ${brandsList}`);
+      }
+
+      // Fail loudly in slide output if relationship coverage is still too weak after deep mode.
+      if (cleanedPrincipals.length === 0 && cleanedBrands.length === 0 &&
+          relationshipCoverageStatus === 'needs_manual_review' &&
+          !existingLabels.has('principal brands')) {
+        tableData.push(['Principal Brands', 'Manual review required (website does not expose reliable names)', null]);
+        existingLabels.add('principal brands');
+        console.log('    Added Principal Brands: Manual review required');
       }
 
       // Add Key Customers row if available and not already shown on right side
@@ -3669,17 +3793,24 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         if (!isCustomersOnRight && !existingLabels.has('customers') && !existingLabels.has('key customers')) {
           const cleanedCustomers = filterGarbageNames(relationships.customers, companyNameForFilter);
           if (cleanedCustomers.length > 0) {
-            // If we have segmented customers (from AI), use that format
-            // Otherwise just list them comma-separated
-            const segmented = company._customerSegments;
             let customersList;
-            if (segmented && Object.keys(segmented).length > 0) {
-              // Format: "Industry: Cust1, Cust2\nIndustry2: Cust3, Cust4"
-              customersList = Object.entries(segmented)
-                .map(([industry, names]) => `${industry}: ${names.join(', ')}`)
-                .join('\n');
+            const aiSegmentLines = buildSegmentDisplayLines(company._customerSegments, {
+              maxLines: 4,
+              maxNamesPerLine: 4,
+              forceNumbered: true
+            });
+            if (aiSegmentLines.length > 0) {
+              customersList = aiSegmentLines.join('\n');
             } else {
-              customersList = cleanedCustomers.slice(0, 10).join(', ');
+              const deterministicSegments = buildDeterministicSegments(cleanedCustomers, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+              const fallbackSegmentLines = buildSegmentDisplayLines(deterministicSegments, {
+                maxLines: 4,
+                maxNamesPerLine: 4,
+                forceNumbered: true
+              });
+              customersList = fallbackSegmentLines.length > 0
+                ? fallbackSegmentLines.join('\n')
+                : cleanedCustomers.slice(0, 10).join(', ');
             }
             // Apply acronym fixing (VVF, BNI, PLN should be ALL CAPS)
             customersList = fixAcronymCasing(customersList);
@@ -3789,238 +3920,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         });
       }
 
-      // ===== RIGHT SECTION (varies by layout selection and business type) =====
-      // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'images', 'images-6', 'images-labeled', 'empty'
+      // ===== RIGHT SECTION (table-only layout) =====
+      // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'empty'
       console.log(`  Right layout setting: ${rightLayout}`);
 
       // Skip entire right section if empty layout selected
       if (rightLayout === 'empty') {
         console.log('  Skipping right section (empty layout selected)');
       } else {
-        const businessType = company.business_type || 'industrial';
-        const preExtractedImages = company._productProjectImages || [];
-        const hasPreExtractedImages = preExtractedImages.length > 0;
-
-        // Check if this is a B2C or project-based business with images to show
-        const isImageBusiness = (businessType === 'b2c' || businessType === 'consumer' || businessType === 'project');
-        const hasAIProjects = company.projects && company.projects.length > 0;
-        const hasAIProducts = company.products && company.products.length > 0;
-
-        // Determine if we should show images or table based on rightLayout
-        const forceImages = rightLayout.startsWith('images');
-        const forceTable = rightLayout.startsWith('table-');
-        const hasImages = hasPreExtractedImages || hasAIProjects || hasAIProducts;
-
-        if ((forceImages && hasImages) || (!forceTable && isImageBusiness && hasImages)) {
-        // IMAGE LAYOUTS: Show product/project images
-        // Use pre-extracted images first, fallback to AI-extracted data
-
-        if (hasPreExtractedImages) {
-          // Use pre-extracted images (from HTML scraping)
-          console.log(`  Using ${preExtractedImages.length} pre-extracted images for right side (layout: ${rightLayout})`);
-
-          const gridStartX = 6.86;
-          const gridStartY = 1.91;
-
-          if (rightLayout === 'images-vertical' || rightLayout === 'images-labeled') {
-            // Layout: 4 images stacked vertically, label on RIGHT of each image
-            const rowHeight = 1.1;
-            const imageW = 1.8;
-            const imageH = 1.0;
-            const labelX = gridStartX + imageW + 0.1;
-            const labelW = 4.0;
-
-            for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
-              const img = preExtractedImages[i];
-              const cellY = gridStartY + (i * rowHeight);
-
-              try {
-                const imgBase64 = await fetchImageAsBase64(img.url);
-                if (imgBase64) {
-                  slide.addImage({
-                    data: `data:image/jpeg;base64,${imgBase64}`,
-                    x: gridStartX, y: cellY, w: imageW, h: imageH,
-                    sizing: { type: 'contain', w: imageW, h: imageH }
-                  });
-
-                  if (img.label) {
-                    slide.addText(img.label, {
-                      x: labelX, y: cellY, w: labelW, h: imageH,
-                      fontSize: 12, fontFace: 'Segoe UI',
-                      color: COLORS.black, align: 'left', valign: 'middle'
-                    });
-                  }
-                }
-              } catch (imgErr) {
-                console.log(`  Failed to fetch image: ${img.url}`);
-              }
-            }
-          } else if (rightLayout === 'images-6') {
-            // Layout: 6 images in 2x3 grid on RIGHT side only
-            const colWidth = 3.0;
-            const rowHeight = 1.4;
-            const imageW = 2.8;
-            const imageH = 1.2;
-
-            for (let i = 0; i < Math.min(preExtractedImages.length, 6); i++) {
-              const img = preExtractedImages[i];
-              const col = i % 2;
-              const row = Math.floor(i / 2);
-              const cellX = gridStartX + (col * colWidth);
-              const cellY = gridStartY + (row * rowHeight);
-
-              try {
-                const imgBase64 = await fetchImageAsBase64(img.url);
-                if (imgBase64) {
-                  slide.addImage({
-                    data: `data:image/jpeg;base64,${imgBase64}`,
-                    x: cellX, y: cellY, w: imageW, h: imageH,
-                    sizing: { type: 'contain', w: imageW, h: imageH }
-                  });
-                }
-              } catch (imgErr) {
-                console.log(`  Failed to fetch image: ${img.url}`);
-              }
-            }
-          } else if (rightLayout === 'images-4' || rightLayout === 'images') {
-            // Layout: 4 images in 2x2 grid on RIGHT side only
-            const colWidth = 3.0;
-            const rowHeight = 2.1;
-            const imageW = 2.8;
-            const imageH = 1.8;
-
-            for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
-              const img = preExtractedImages[i];
-              const col = i % 2;
-              const row = Math.floor(i / 2);
-              const cellX = gridStartX + (col * colWidth);
-              const cellY = gridStartY + (row * rowHeight);
-
-              try {
-                const imgBase64 = await fetchImageAsBase64(img.url);
-                if (imgBase64) {
-                  slide.addImage({
-                    data: `data:image/jpeg;base64,${imgBase64}`,
-                    x: cellX, y: cellY, w: imageW, h: imageH,
-                    sizing: { type: 'contain', w: imageW, h: imageH }
-                  });
-                }
-              } catch (imgErr) {
-                console.log(`  Failed to fetch image: ${img.url}`);
-              }
-            }
-          } else {
-            // Fallback: 2x2 grid for 4 images
-            const colWidth = 3.0;
-            const rowHeight = 2.1;
-            const imageW = 2.8;
-            const imageH = 1.8;
-
-            for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
-              const img = preExtractedImages[i];
-              const col = i % 2;
-              const row = Math.floor(i / 2);
-              const cellX = gridStartX + (col * colWidth);
-              const cellY = gridStartY + (row * rowHeight);
-
-              try {
-                const imgBase64 = await fetchImageAsBase64(img.url);
-                if (imgBase64) {
-                  slide.addImage({
-                    data: `data:image/jpeg;base64,${imgBase64}`,
-                    x: cellX, y: cellY, w: imageW, h: imageH,
-                    sizing: { type: 'contain', w: imageW, h: imageH }
-                  });
-                }
-              } catch (imgErr) {
-                console.log(`  Failed to fetch image: ${img.url}`);
-              }
-            }
-          }
-        } else if (businessType === 'project' && hasAIProjects) {
-          // Fallback: Use AI-extracted project data
-          const projects = company.projects.slice(0, 4);
-
-          const gridStartX = 6.86;
-          const gridStartY = 1.91;
-          const colWidth = 3.0;
-          const rowHeight = 2.4;
-          const imageW = 1.4;
-          const imageH = 1.1;
-          const textOffsetX = 1.5;
-          const textWidth = 1.4;
-
-          for (let i = 0; i < projects.length; i++) {
-            const project = projects[i];
-            const col = i % 2;
-            const row = Math.floor(i / 2);
-            const cellX = gridStartX + (col * colWidth);
-            const cellY = gridStartY + (row * rowHeight);
-
-            if (project.image_url) {
-              try {
-                const imgBase64 = await fetchImageAsBase64(project.image_url);
-                if (imgBase64) {
-                  slide.addImage({
-                    data: `data:image/jpeg;base64,${imgBase64}`,
-                    x: cellX, y: cellY, w: imageW, h: imageH,
-                    sizing: { type: 'cover', w: imageW, h: imageH }
-                  });
-                }
-              } catch (imgErr) {
-                console.log(`  Failed to fetch project image: ${project.image_url}`);
-              }
-            }
-
-            slide.addText(project.name || '', {
-              x: cellX + textOffsetX, y: cellY, w: textWidth, h: 0.5,
-              fontSize: 14, fontFace: 'Segoe UI', bold: true,
-              color: COLORS.black, valign: 'top'
-            });
-
-            const metricsText = (project.metrics || []).join('\n');
-            if (metricsText) {
-              slide.addText(metricsText, {
-                x: cellX + textOffsetX, y: cellY + 0.5, w: textWidth, h: 0.8,
-                fontSize: 9, fontFace: 'Segoe UI',
-                color: COLORS.black, valign: 'top'
-              });
-            }
-          }
-        } else if ((businessType === 'consumer' || businessType === 'b2c') && hasAIProducts) {
-          // Fallback: Use AI-extracted product data
-          const products = company.products.slice(0, 4);
-          const productWidth = 1.4;
-          const productStartX = 6.86;
-          const productY = 1.91;
-
-          for (let i = 0; i < products.length; i++) {
-            const product = products[i];
-            const xPos = productStartX + (i * (productWidth + 0.15));
-
-            if (product.image_url) {
-              try {
-                const imgBase64 = await fetchImageAsBase64(product.image_url);
-                if (imgBase64) {
-                  slide.addImage({
-                    data: `data:image/jpeg;base64,${imgBase64}`,
-                    x: xPos, y: productY, w: productWidth, h: 1.2,
-                    sizing: { type: 'contain', w: productWidth, h: 1.2 }
-                  });
-                }
-              } catch (imgErr) {
-                console.log(`  Failed to fetch product image: ${product.image_url}`);
-              }
-            }
-
-            slide.addText(product.name || '', {
-              x: xPos, y: productY + 1.25, w: productWidth, h: 0.35,
-              fontSize: 14, fontFace: 'Segoe UI', bold: true,
-              color: COLORS.black, align: 'center', valign: 'top'
-            });
-          }
-        }
-      } else if (forceTable || !isImageBusiness || !hasImages) {
         // TABLE LAYOUT: Show table format - THEMATIC (one category only based on breakdown_title)
         // Right side should focus on ONE thing: products, OR customers, OR suppliers, etc.
         // Row limit based on rightLayout: 'table-6' = 6 rows, 'table-unlimited' = no limit, 'table-half' = 3 rows (half height with 財務実績 section below)
@@ -4048,24 +3955,49 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           // Show customers only - filter garbage data first
           const cleanedCustomers = filterGarbageNames(relationships.customers || [], companyNameForFilter);
           if (cleanedCustomers.length > 0) {
-            cleanedCustomers.slice(0, maxRows).forEach(customer => {
-              prioritizedItems.push({ label: customer, value: '' });
+            const aiSegmentLines = buildSegmentDisplayLines(company._customerSegments, {
+              maxLines: maxRows,
+              maxNamesPerLine: 4,
+              forceNumbered: true
             });
-            console.log(`  Right side (Customers): ${cleanedCustomers.length} items after filtering`);
+            if (aiSegmentLines.length > 0) {
+              aiSegmentLines.slice(0, maxRows).forEach(line => {
+                prioritizedItems.push({ label: 'Customer', value: fixAcronymCasing(line) });
+              });
+              console.log(`  Right side (Customers segmented): ${cleanedCustomers.length} items after filtering`);
+            } else {
+              const deterministicSegments = buildDeterministicSegments(cleanedCustomers, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+              const fallbackSegmentLines = buildSegmentDisplayLines(deterministicSegments, {
+                maxLines: maxRows,
+                maxNamesPerLine: 4,
+                forceNumbered: true
+              });
+              if (fallbackSegmentLines.length > 0) {
+                fallbackSegmentLines.slice(0, maxRows).forEach(line => {
+                  prioritizedItems.push({ label: 'Customer', value: fixAcronymCasing(line) });
+                });
+                console.log(`  Right side (Customers segmented fallback): ${cleanedCustomers.length} items after filtering`);
+              } else {
+                cleanedCustomers.slice(0, maxRows).forEach(customer => {
+                  prioritizedItems.push({ label: 'Customer', value: customer });
+                });
+                console.log(`  Right side (Customers): ${cleanedCustomers.length} items after filtering`);
+              }
+            }
           }
         } else if (breakdownTitle.includes('supplier') || breakdownTitle.includes('principal') || breakdownTitle.includes('partner')) {
           // Show suppliers/principals only - filter garbage data first
           const cleanedPrincipals = filterGarbageNames(relationships.principals || [], companyNameForFilter);
           if (cleanedPrincipals.length > 0) {
             cleanedPrincipals.slice(0, maxRows).forEach(principal => {
-              prioritizedItems.push({ label: principal, value: '' });
+              prioritizedItems.push({ label: 'Principal', value: principal });
             });
             console.log(`  Right side (Principals): ${cleanedPrincipals.length} items after filtering`);
           } else {
             const cleanedSuppliers = filterGarbageNames(relationships.suppliers || [], companyNameForFilter);
             if (cleanedSuppliers.length > 0) {
               cleanedSuppliers.slice(0, maxRows).forEach(supplier => {
-                prioritizedItems.push({ label: supplier, value: '' });
+                prioritizedItems.push({ label: 'Supplier', value: supplier });
               });
               console.log(`  Right side (Suppliers): ${cleanedSuppliers.length} items after filtering`);
             }
@@ -4074,10 +4006,35 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           // Show brands only - filter garbage data first
           const cleanedBrands = filterGarbageNames(relationships.brands || [], companyNameForFilter);
           if (cleanedBrands.length > 0) {
-            cleanedBrands.slice(0, maxRows).forEach(brand => {
-              prioritizedItems.push({ label: brand, value: '' });
+            const aiBrandSegmentLines = buildSegmentDisplayLines(company._brandSegments, {
+              maxLines: maxRows,
+              maxNamesPerLine: 4,
+              forceNumbered: true
             });
-            console.log(`  Right side (Brands): ${cleanedBrands.length} items after filtering`);
+            if (aiBrandSegmentLines.length > 0) {
+              aiBrandSegmentLines.slice(0, maxRows).forEach(line => {
+                prioritizedItems.push({ label: 'Brand', value: fixAcronymCasing(line) });
+              });
+              console.log(`  Right side (Brands segmented): ${cleanedBrands.length} items after filtering`);
+            } else {
+              const deterministicBrandSegments = buildDeterministicSegments(cleanedBrands, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+              const fallbackBrandSegmentLines = buildSegmentDisplayLines(deterministicBrandSegments, {
+                maxLines: maxRows,
+                maxNamesPerLine: 4,
+                forceNumbered: true
+              });
+              if (fallbackBrandSegmentLines.length > 0) {
+                fallbackBrandSegmentLines.slice(0, maxRows).forEach(line => {
+                  prioritizedItems.push({ label: 'Brand', value: fixAcronymCasing(line) });
+                });
+                console.log(`  Right side (Brands segmented fallback): ${cleanedBrands.length} items after filtering`);
+              } else {
+                cleanedBrands.slice(0, maxRows).forEach(brand => {
+                  prioritizedItems.push({ label: 'Brand', value: brand });
+                });
+                console.log(`  Right side (Brands): ${cleanedBrands.length} items after filtering`);
+              }
+            }
           }
         } else {
           // Default: Products/Applications/Services - use breakdown_items
@@ -4099,6 +4056,16 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           });
 
           prioritizedItems = validBreakdownItems;
+          if (prioritizedItems.length === 0) {
+            const fallbackBrands = filterGarbageNames(
+              [...(relationships.brands || []), ...(relationships.principals || [])],
+              companyNameForFilter
+            );
+            if (fallbackBrands.length > 0) {
+              prioritizedItems = fallbackBrands.map(name => ({ label: 'Brand', value: name }));
+              console.log(`  Right side fallback (Principal Brands): ${fallbackBrands.length} items`);
+            }
+          }
           console.log(`  Right side (Products/Apps): ${prioritizedItems.length} items`);
         }
 
@@ -4171,7 +4138,6 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             line: { color: COLORS.dk2, width: 1.75 }
           });
         }
-      }
       } // End of rightLayout !== 'empty' else block
 
       // ===== FOOTNOTE (single text box with stacked content) =====
@@ -4270,7 +4236,6 @@ async function scrapeWebsite(url) {
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
       .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
       .replace(/<!--[\s\S]*?-->/g, '')
       .replace(/<[^>]+>/g, ' ')
@@ -4306,19 +4271,21 @@ function discoverPagesFromNavigation(html, origin) {
   // NOTE: Only use universal English keywords - local language pages will be
   // discovered via link text analysis below, not hardcoded URL patterns
   const priorityKeywords = {
-    // Highest priority - manufacturing/production info
-    'manufacturing': 1, 'production': 1, 'factory': 1, 'facilities': 1, 'plant': 1,
-    'capabilities': 2, 'capacity': 2, 'operations': 2,
+    // Highest priority - relationship pages (critical for principal/brand/customer extraction)
+    'partners': 1, 'partner': 1, 'principal': 1, 'principals': 1, 'suppliers': 1, 'supplier': 1,
+    'brands': 1, 'brand': 1, 'clients': 1, 'client': 1, 'customers': 1, 'customer': 1,
+    'trusted': 1, 'trusted-by': 1, 'distributor': 1, 'dealers': 1, 'dealer': 1,
+    // Manufacturing/production info
+    'manufacturing': 2, 'production': 2, 'factory': 2, 'facilities': 2, 'plant': 2,
+    'capabilities': 3, 'capacity': 3, 'operations': 3,
     // Company info
-    'about': 3, 'about-us': 3, 'aboutus': 3, 'company': 3, 'profile': 3, 'company-profile': 3,
-    'history': 4, 'milestone': 4, 'journey': 4, 'story': 4,
+    'about': 4, 'about-us': 4, 'aboutus': 4, 'company': 4, 'profile': 4, 'company-profile': 4,
+    'history': 5, 'milestone': 5, 'journey': 5, 'story': 5,
     // Products and services
-    'products': 5, 'product': 5, 'services': 5, 'service': 5, 'solutions': 5,
+    'products': 6, 'product': 6, 'services': 6, 'service': 6, 'solutions': 6,
+    'wholesale': 5, 'catalog': 5, 'catalogue': 5, 'collections': 5, 'collection': 5, 'range': 5,
     // Contact and location
-    'contact': 6, 'contact-us': 6, 'contactus': 6, 'location': 6, 'locations': 6,
-    // Partners and clients (English only - universal in business URLs)
-    'partners': 7, 'clients': 7, 'customers': 7, 'portfolio': 7,
-    'customer': 7, 'client': 7, 'partner': 7,
+    'contact': 7, 'contact-us': 7, 'contactus': 7, 'location': 7, 'locations': 7,
     // Quality and certifications
     'quality': 8, 'certification': 8, 'certifications': 8, 'awards': 8,
     // Team
@@ -4413,6 +4380,85 @@ function discoverPagesFromNavigation(html, origin) {
   return urlsWithPriority.map(item => item.url);
 }
 
+async function discoverPagesFromSitemap(origin, options = {}) {
+  if (!origin) return [];
+
+  const maxSitemaps = Math.max(1, Math.min(parseInt(options.maxSitemaps || '6', 10), 10));
+  const maxUrls = Math.max(10, Math.min(parseInt(options.maxUrls || '80', 10), 200));
+  const sitemapQueue = [`${origin}/sitemap.xml`, `${origin}/sitemap_index.xml`];
+  const visitedSitemaps = new Set();
+  const discovered = new Set();
+
+  const priorityTokens = [
+    'partner', 'principal', 'supplier', 'brand', 'client', 'customer', 'trusted',
+    'products', 'product', 'wholesale', 'catalog', 'catalogue', 'collections', 'collection',
+    'distributor', 'dealers', 'references', 'portfolio'
+  ];
+  const skipTokens = ['blog', 'news', 'career', 'privacy', 'terms', 'policy', 'legal', 'faq'];
+
+  let scanned = 0;
+  while (sitemapQueue.length > 0 && scanned < maxSitemaps && discovered.size < maxUrls) {
+    const sitemapUrl = sitemapQueue.shift();
+    if (!sitemapUrl || visitedSitemaps.has(sitemapUrl)) continue;
+    visitedSitemaps.add(sitemapUrl);
+    scanned += 1;
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      const response = await fetch(sitemapUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        redirect: 'follow',
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (!response.ok) continue;
+
+      const xml = await response.text();
+      if (!xml || xml.length < 20) continue;
+
+      const locMatches = [...xml.matchAll(/<loc>([^<]+)<\/loc>/gi)];
+      for (const m of locMatches) {
+        if (discovered.size >= maxUrls) break;
+        const raw = ensureString(m[1]).trim();
+        if (!raw) continue;
+        let parsed;
+        try {
+          parsed = new URL(raw);
+        } catch {
+          continue;
+        }
+        if (parsed.origin !== origin) continue;
+
+        const normalizedPath = parsed.pathname.replace(/\/+$/, '').toLowerCase() || '/';
+        const normalizedUrl = `${origin}${normalizedPath}`;
+
+        if (normalizedPath.endsWith('.xml') || normalizedPath.includes('sitemap')) {
+          if (!visitedSitemaps.has(normalizedUrl)) sitemapQueue.push(normalizedUrl);
+          continue;
+        }
+        if (normalizedPath === '/' || normalizedPath === '/index.html' || normalizedPath === '/index.php') continue;
+        if (skipTokens.some(token => normalizedPath.includes(token))) continue;
+
+        discovered.add(normalizedUrl);
+      }
+    } catch {
+      // Ignore sitemap failures
+    }
+  }
+
+  const scored = Array.from(discovered).map(url => {
+    const path = new URL(url).pathname.toLowerCase();
+    let score = 5;
+    if (priorityTokens.some(token => path.includes(token))) score = 0;
+    else if (path.split('/').filter(Boolean).length <= 1) score = 2;
+    return { url, score, len: path.length };
+  });
+
+  scored.sort((a, b) => (a.score - b.score) || (a.len - b.len));
+  return scored.map(item => item.url);
+}
+
 // Scrape multiple pages from a website using dynamic page discovery
 // 1. Scrape homepage
 // 2. Discover all pages from navigation links
@@ -4448,6 +4494,17 @@ async function scrapeMultiplePages(baseUrl) {
     // Step 2: Discover pages from navigation
     const discoveredPages = discoverPagesFromNavigation(homepageResult.rawHtml, origin);
 
+    // Step 2b: Pull additional candidates from sitemap (helps JS-heavy sites where nav links are sparse).
+    const sitemapPages = await discoverPagesFromSitemap(origin, { maxSitemaps: 6, maxUrls: 80 });
+    if (sitemapPages.length > 0) {
+      for (const sitemapUrl of sitemapPages) {
+        if (!discoveredPages.includes(sitemapUrl) && !results.pagesScraped.includes(sitemapUrl)) {
+          discoveredPages.push(sitemapUrl);
+        }
+      }
+      console.log(`    Sitemap discovery added ${sitemapPages.length} candidate pages`);
+    }
+
     // Step 3: Also add common ENGLISH fallback paths that might not be in navigation
     // (some sites hide these in footer or don't link them prominently)
     // NOTE: We don't hardcode language-specific paths - the link text analysis above
@@ -4457,8 +4514,10 @@ async function scrapeMultiplePages(baseUrl) {
       '/capabilities', '/capacity', '/operations',
       '/about', '/about-us', '/about.html', '/aboutus', '/company', '/profile', '/company-profile',
       '/contact', '/contact-us', '/contact.html', '/contactus',
-      '/products', '/services',
-      '/clients', '/customers', '/partners', '/our-clients', '/our-customers', '/our-partners'
+      '/products', '/product', '/our-products', '/services', '/wholesale', '/catalog', '/catalogue', '/collections', '/collection', '/range',
+      '/clients', '/customers', '/partners', '/our-clients', '/our-customers', '/our-partners',
+      '/principals', '/principal-partners', '/suppliers', '/vendors', '/brands', '/our-brands',
+      '/brand-portfolio', '/distributors', '/dealer', '/dealers', '/trusted-by', '/references'
     ];
 
     for (const path of fallbackPaths) {
@@ -4469,7 +4528,7 @@ async function scrapeMultiplePages(baseUrl) {
     }
 
     // Step 4: Scrape discovered pages (increased limit to catch more local language pages)
-    const MAX_PAGES = 12;
+    const MAX_PAGES = 16;
     const scrapedUrls = new Set([baseUrl]);
 
     for (const pageUrl of discoveredPages) {
@@ -4616,77 +4675,6 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
     console.log(`  [Logo] Error extracting logo: ${e.message}`);
     return null;
   }
-}
-
-// Extract customer/partner names from image alt texts and filenames
-// ONLY extracts from sections that are explicitly marked as client/customer/partner areas
-// This prevents extracting random product images as customer names
-function extractCustomerNamesFromImages(rawHtml) {
-  if (!rawHtml) return [];
-
-  const customerNames = new Set();
-
-  // First, find sections that contain client/customer/partner keywords
-  // Only extract from these sections to avoid product images, banners, etc.
-  const sectionKeywords = ['client', 'customer', 'partner', 'trusted by', 'our clients', 'our customers'];
-  const sectionPatterns = sectionKeywords.map(kw =>
-    new RegExp(`<(?:section|div|ul)[^>]*(?:class|id)=["'][^"']*${kw}[^"']*["'][^>]*>[\\s\\S]*?<\\/(?:section|div|ul)>`, 'gi')
-  );
-
-  let clientSectionsHtml = '';
-  for (const pattern of sectionPatterns) {
-    const matches = rawHtml.match(pattern) || [];
-    clientSectionsHtml += matches.join('\n');
-  }
-
-  // If no explicit client sections found, skip alt text extraction entirely
-  // This prevents extracting random product/service images as customers
-  if (clientSectionsHtml.length > 0) {
-    // Pattern 1: Extract from alt text ONLY within client sections
-    const imgAltPattern = /<img[^>]*alt=["']([^"']+)["'][^>]*>/gi;
-    let match;
-    while ((match = imgAltPattern.exec(clientSectionsHtml)) !== null) {
-      const altText = match[1].trim();
-      // Skip generic/garbage alt texts
-      if (altText.length > 2 && altText.length < 60 &&
-          !/logo|image|photo|icon|banner|button|arrow|background/i.test(altText) &&
-          !/\.(jpg|png|gif|webp|svg)$/i.test(altText) &&
-          !/<|>|style=|href=/i.test(altText)) {
-        const cleaned = cleanCompanyName(altText);
-        if (cleaned && cleaned.length > 2 && cleaned.length < 50) {
-          customerNames.add(cleaned);
-        }
-      }
-    }
-  }
-
-  // Pattern 2: Extract from image filenames in client/customer directories
-  // e.g., /images/clients/sinarmas-logo.png → Sinarmas
-  // This is more reliable as directory structure indicates intent
-  const imgSrcPattern = /<img[^>]*src=["']([^"']+(?:client|customer|partner)[^"']+)["'][^>]*>/gi;
-  let match;
-  while ((match = imgSrcPattern.exec(rawHtml)) !== null) {
-    const src = match[1];
-    const filename = src.split('/').pop().split('.')[0];
-    if (filename) {
-      const name = filename
-        .replace(/-logo|-icon|-brand|-img|-image$/gi, '')
-        .replace(/[-_]/g, ' ')
-        .replace(/\d+$/g, '')
-        .trim();
-      if (name.length > 2 && name.length < 50 && !/removebg|preview|scaled|cover/i.test(name)) {
-        const capitalized = name.split(' ')
-          .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-          .join(' ');
-        const cleaned = cleanCompanyName(capitalized);
-        if (cleaned) {
-          customerNames.add(cleaned);
-        }
-      }
-    }
-  }
-
-  return Array.from(customerNames).slice(0, 30); // Limit to 30 names for exhaustive extraction
 }
 
 // Multilingual regex extraction for key metrics (deterministic, no AI hallucination)
@@ -5778,367 +5766,6 @@ If you cannot find more details, return: { "location": "" }`
   }
 }
 
-// ===== FIX #3: Extract product/project images for B2C and project-based companies =====
-// Returns array of { url, label } objects for display on right side of slide
-function extractProductProjectImages(rawHtml, businessType, websiteUrl) {
-  if (!rawHtml) return [];
-
-  const images = [];
-  const origin = websiteUrl?.startsWith('http') ? new URL(websiteUrl).origin : `https://${websiteUrl?.split('/')[0]}`;
-
-  // Define section patterns based on business type
-  const sectionPatterns = businessType === 'b2c' || businessType === 'consumer'
-    ? [
-        /class=["'][^"']*(?:product|menu|dish|food|item|catalog|gallery)[^"']*["']/gi,
-        /<section[^>]*(?:product|menu|gallery|catalog)[^>]*>([\s\S]*?)<\/section>/gi,
-        /id=["'][^"']*(?:product|menu|gallery)[^"']*["']/gi
-      ]
-    : [
-        /class=["'][^"']*(?:project|portfolio|work|case-study|showcase)[^"']*["']/gi,
-        /<section[^>]*(?:project|portfolio|work)[^>]*>([\s\S]*?)<\/section>/gi,
-        /id=["'][^"']*(?:project|portfolio|gallery)[^"']*["']/gi
-      ];
-
-  // Find images in product/project sections
-  // Pattern: <img> tags with meaningful src (not icons, sprites, placeholders)
-  const imgPattern = /<img[^>]*src=["']([^"']+)["'][^>]*(?:alt=["']([^"']*?)["'])?[^>]*>|<img[^>]*(?:alt=["']([^"']*?)["'])[^>]*src=["']([^"']+)["'][^>]*>/gi;
-
-  // Also look for figure elements with captions
-  const figurePattern = /<figure[^>]*>[\s\S]*?<img[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<figcaption[^>]*>([^<]+)<\/figcaption>[\s\S]*?<\/figure>/gi;
-
-  // Extract from figure elements first (they have captions)
-  let match;
-  while ((match = figurePattern.exec(rawHtml)) !== null && images.length < 6) {
-    const [, src, caption] = match;
-    if (src && !isIconOrPlaceholder(src)) {
-      let imgUrl = src;
-      if (imgUrl.startsWith('/')) imgUrl = origin + imgUrl;
-      if (imgUrl.startsWith('http')) {
-        images.push({
-          url: imgUrl,
-          label: cleanImageLabel(caption)
-        });
-      }
-    }
-  }
-
-  // Then extract from img tags in relevant sections
-  // Look for images in product/project/portfolio/menu sections
-  const relevantSectionHtml = extractRelevantSections(rawHtml, businessType);
-
-  while ((match = imgPattern.exec(relevantSectionHtml)) !== null && images.length < 6) {
-    const src = match[1] || match[4];
-    const alt = match[2] || match[3];
-
-    if (src && !isIconOrPlaceholder(src) && !images.some(i => i.url.includes(src))) {
-      let imgUrl = src;
-      if (imgUrl.startsWith('/')) imgUrl = origin + imgUrl;
-      if (imgUrl.startsWith('http')) {
-        images.push({
-          url: imgUrl,
-          label: cleanImageLabel(alt) || extractLabelFromFilename(src)
-        });
-      }
-    }
-  }
-
-  return images.slice(0, 6); // Max 6 images for slide layout (images-6 option)
-}
-
-// Verify and label product/project images using GPT-4o Vision
-// Similar approach to partner logo extraction - let AI see the actual images
-async function verifyProductImagesWithVision(images, businessType, openai) {
-  if (!images || images.length === 0) return [];
-
-  try {
-    // Fetch images as base64
-    const imageContents = [];
-    for (const img of images.slice(0, 6)) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-
-        const response = await fetch(img.url, {
-          signal: controller.signal,
-          headers: { 'User-Agent': 'Mozilla/5.0' }
-        });
-        clearTimeout(timeout);
-
-        if (!response.ok) continue;
-
-        const buffer = await response.buffer();
-        if (buffer.length < 5000) continue; // Skip tiny images
-
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        const base64 = buffer.toString('base64');
-        imageContents.push({
-          url: img.url,
-          base64,
-          mimeType: contentType.split(';')[0],
-          originalLabel: img.label
-        });
-      } catch {
-        continue;
-      }
-    }
-
-    if (imageContents.length === 0) {
-      console.log('    Vision (products): No images could be fetched');
-      return images; // Return original if Vision fails
-    }
-
-    console.log(`    Vision (products): Verifying ${imageContents.length} images...`);
-
-    // Build Vision API request
-    const imageType = businessType === 'project' ? 'project/portfolio' : 'product/service';
-    const visionContent = [
-      {
-        type: 'text',
-        text: `Analyze these images from a company website. For each image, determine if it's a legitimate ${imageType} photo or junk (icon, banner, stock photo, UI element, etc.).
-
-Return a JSON array with one object per image in order:
-[
-  {"isValid": true, "label": "Brief descriptive label for the image", "reason": "actual product photo"},
-  {"isValid": false, "label": "", "reason": "generic stock photo"},
-  ...
-]
-
-Rules:
-- "isValid": true ONLY for actual product photos, project photos, facility photos, or service demonstrations
-- "isValid": false for: icons, banners, hero images, stock photos, decorative images, UI elements, logos, team photos
-- "label": Short descriptive label (2-5 words) for valid images. Be specific about what's shown.
-- Keep labels professional and concise
-- Return ONLY valid JSON array, no explanation`
-      }
-    ];
-
-    // Add images
-    for (const img of imageContents) {
-      visionContent.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${img.mimeType};base64,${img.base64}`,
-          detail: 'low'
-        }
-      });
-    }
-
-    const visionResponse = await withRetry(async () => {
-      return await openai.chat.completions.create({
-        model: 'gpt-5.1',
-        messages: [{ role: 'user', content: visionContent }],
-        max_tokens: 800,
-        temperature: 0.1
-      });
-    }, 2, 3000);
-
-    if (visionResponse.usage) {
-      recordTokens('gpt-5.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
-    }
-    const responseText = visionResponse.choices[0]?.message?.content || '[]';
-
-    // Parse response
-    let parsed = [];
-    try {
-      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
-      }
-    } catch {
-      console.log('    Vision (products): Failed to parse response');
-      return images;
-    }
-
-    // Build verified images list
-    const verifiedImages = [];
-    for (let i = 0; i < imageContents.length && i < parsed.length; i++) {
-      const result = parsed[i];
-      if (result?.isValid) {
-        verifiedImages.push({
-          url: imageContents[i].url,
-          label: result.label || imageContents[i].originalLabel || 'Product'
-        });
-      }
-    }
-
-    console.log(`    Vision (products): ${verifiedImages.length}/${imageContents.length} images verified as valid`);
-    return verifiedImages.length > 0 ? verifiedImages : images.slice(0, 4);
-
-  } catch (error) {
-    console.log(`    Vision (products): Error - ${error.message}`);
-    return images; // Return original if Vision fails
-  }
-}
-
-// Helper: Check if image is an icon, placeholder, or junk
-function isIconOrPlaceholder(src) {
-  const skipPatterns = [
-    // Icons and UI elements
-    /icon/i, /sprite/i, /placeholder/i, /1x1/i, /blank/i, /spacer/i,
-    /logo/i, /favicon/i, /avatar/i, /profile/i, /user/i,
-    /arrow/i, /button/i, /bg[-_]/i, /background/i,
-    /\.svg$/i, /data:image/i,
-    // Social media
-    /social/i, /facebook/i, /twitter/i, /linkedin/i, /instagram/i, /youtube/i,
-    /\d+x\d+/,  // Dimension patterns like 16x16
-    // Stock photo sites
-    /shutterstock/i, /istockphoto/i, /gettyimages/i, /unsplash/i, /pexels/i,
-    /stock[-_]?photo/i, /depositphotos/i, /dreamstime/i, /123rf/i,
-    // Common junk patterns
-    /banner/i, /hero[-_]?image/i, /slider/i, /carousel/i,
-    /header[-_]?bg/i, /footer/i, /sidebar/i,
-    /thumbnail[-_]?placeholder/i, /loading/i, /spinner/i,
-    /badge/i, /certificate/i, /award[-_]?icon/i,
-    // Tracking pixels
-    /pixel/i, /tracking/i, /analytics/i, /beacon/i
-  ];
-  return skipPatterns.some(p => p.test(src));
-}
-
-// Helper: Extract HTML sections relevant to products/projects
-// Multilingual keywords for SEA, Korea, Taiwan, India
-function extractRelevantSections(rawHtml, businessType) {
-  let keywords;
-  if (businessType === 'b2c' || businessType === 'consumer') {
-    keywords = [
-      // English
-      'product', 'menu', 'dish', 'food', 'item', 'catalog', 'gallery', 'offering', 'service', 'retail', 'shop', 'store',
-      // Indonesian
-      'produk', 'layanan', 'katalog', 'menu', 'makanan', 'toko', 'gerai', 'warung', 'kedai',
-      // Thai
-      'สินค้า', 'ผลิตภัณฑ์', 'บริการ', 'เมนู', 'ร้านค้า', 'ร้านอาหาร', 'อาหาร',
-      // Vietnamese
-      'sản phẩm', 'dịch vụ', 'thực đơn', 'cửa hàng', 'quán', 'món ăn',
-      // Korean
-      '제품', '상품', '서비스', '메뉴', '매장', '음식',
-      // Chinese/Taiwanese
-      '產品', '商品', '服務', '菜單', '店鋪', '美食',
-      // Japanese
-      '製品', '商品', 'サービス', 'メニュー', '店舗',
-      // Malay
-      'produk', 'perkhidmatan', 'kedai', 'menu', 'makanan',
-      // Filipino
-      'produkto', 'serbisyo', 'menu', 'pagkain', 'tindahan',
-      // Burmese
-      'ထုတ်ကုန်', 'ဝန်ဆောင်မှု', 'စာရင်း',
-      // Khmer
-      'ផលិតផល', 'សេវាកម្ម', 'ម៉ឺនុយ',
-      // Lao
-      'ຜະລິດຕະພັນ', 'ບໍລິການ', 'ເມນູ'
-    ];
-  } else if (businessType === 'project') {
-    keywords = [
-      // English
-      'project', 'portfolio', 'work', 'case', 'showcase', 'gallery', 'client-work', 'completed', 'track-record', 'reference', 'achievement',
-      // Indonesian
-      'proyek', 'portofolio', 'pengalaman', 'prestasi', 'karya', 'referensi', 'hasil kerja',
-      // Thai
-      'โครงการ', 'ผลงาน', 'โปรเจกต์', 'อ้างอิง', 'ประวัติงาน', 'งานที่เสร็จ',
-      // Vietnamese
-      'dự án', 'công trình', 'danh mục dự án', 'tham khảo', 'thành tựu', 'công trình hoàn thành',
-      // Korean
-      '프로젝트', '포트폴리오', '실적', '수행실적', '레퍼런스', '준공',
-      // Chinese/Taiwanese
-      '專案', '案例', '工程實績', '實績', '參考', '完工',
-      // Japanese
-      'プロジェクト', '事例', '実績', '施工実績', '参考',
-      // Malay
-      'projek', 'portfolio', 'kerja', 'rujukan', 'pencapaian',
-      // Filipino
-      'proyekto', 'portfolio', 'gawa', 'sanggunian', 'nagawa',
-      // Burmese
-      'စီမံကိန်း', 'လုပ်ငန်း', 'ရည်ညွှန်း',
-      // Khmer
-      'គម្រោង', 'ស្នាដៃ', 'ឯកសារយោង',
-      // Lao
-      'ໂຄງການ', 'ຜົນງານ', 'ອ້າງອີງ'
-    ];
-  } else {
-    // Industrial: manufacturing, equipment, capabilities, facilities
-    keywords = [
-      // English
-      'product', 'equipment', 'machinery', 'manufacturing', 'capability', 'facility', 'solution', 'gallery', 'showcase', 'factory', 'plant', 'production',
-      // Indonesian
-      'produk', 'peralatan', 'mesin', 'fasilitas', 'solusi', 'pabrik', 'manufaktur', 'produksi', 'kapasitas',
-      // Thai
-      'สินค้า', 'ผลิตภัณฑ์', 'อุปกรณ์', 'เครื่องจักร', 'โรงงาน', 'การผลิต', 'กำลังการผลิต', 'โซลูชัน',
-      // Vietnamese
-      'sản phẩm', 'thiết bị', 'máy móc', 'giải pháp', 'nhà máy', 'sản xuất', 'công suất', 'năng lực',
-      // Korean
-      '제품', '장비', '설비', '솔루션', '사업분야', '공장', '제조', '생산', '시설',
-      // Chinese/Taiwanese
-      '產品', '設備', '機械', '解決方案', '工廠', '製造', '生產', '設施',
-      // Japanese
-      '製品', '設備', '機械', 'ソリューション', '工場', '製造', '生産', '施設',
-      // Malay
-      'produk', 'peralatan', 'jentera', 'kilang', 'penyelesaian', 'pembuatan', 'pengeluaran',
-      // Filipino
-      'produkto', 'kagamitan', 'makinarya', 'pabrika', 'solusyon', 'paggawa', 'produksyon',
-      // Burmese
-      'ထုတ်ကုန်', 'စက်ပစ္စည်း', 'စက်ရုံ', 'ထုတ်လုပ်မှု',
-      // Khmer
-      'ផលិតផល', 'ឧបករណ៍', 'រោងចក្រ', 'ផលិតកម្ម',
-      // Lao
-      'ຜະລິດຕະພັນ', 'ອຸປະກອນ', 'ໂຮງງານ', 'ການຜະລິດ'
-    ];
-  }
-
-  let relevantHtml = '';
-
-  // Extract sections/divs that contain these keywords in class/id
-  for (const keyword of keywords) {
-    const sectionRegex = new RegExp(
-      `<(?:section|div|article)[^>]*(?:class|id)=["'][^"']*${keyword}[^"']*["'][^>]*>[\\s\\S]*?<\\/(?:section|div|article)>`,
-      'gi'
-    );
-    const matches = rawHtml.match(sectionRegex) || [];
-    relevantHtml += matches.join('\n');
-  }
-
-  // If no sections found, try main content (but limit to avoid random images)
-  if (!relevantHtml) {
-    const mainContent = rawHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)?.[1] ||
-                        rawHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)?.[1];
-    // Only use main content if it exists, don't fall back to random HTML chunk
-    return mainContent || '';
-  }
-
-  return relevantHtml;
-}
-
-// Helper: Clean image label (decode HTML entities, remove tags)
-function cleanImageLabel(text) {
-  if (!text) return '';
-  return text
-    // Decode common HTML entities first
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
-    .replace(/&#x([a-fA-F\d]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-    // Remove remaining HTML tags
-    .replace(/<[^>]+>/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .substring(0, 50); // Limit length
-}
-
-// Helper: Extract label from filename
-function extractLabelFromFilename(src) {
-  const filename = src.split('/').pop()?.split('?')[0]?.split('.')[0] || '';
-  return filename
-    .replace(/[-_]/g, ' ')
-    .replace(/\d+$/g, '')
-    .split(' ')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ')
-    .trim()
-    .substring(0, 50);
-}
-
 // ===== FIX #5: Extract categorized business relationships from section context =====
 // Returns: { customers: [], suppliers: [], principals: [], brands: [] }
 function extractBusinessRelationships(rawHtml) {
@@ -6271,6 +5898,20 @@ function extractBusinessRelationships(rawHtml) {
       }
     }
 
+    // Method 8: Anchor text (logos are often wrapped with links)
+    const anchorPattern = /<a[^>]*>([^<]{2,50})<\/a>/gi;
+    while ((match = anchorPattern.exec(sectionHtml)) !== null) {
+      const name = cleanCustomerName(match[1]);
+      if (name) names.add(name);
+    }
+
+    // Method 9: data-* attributes used by JS logo sliders/carousels
+    const dataAttrPattern = /<(?:img|a|div|li)[^>]*(?:data-name|data-title|data-company|data-brand)=["']([^"']+)["'][^>]*>/gi;
+    while ((match = dataAttrPattern.exec(sectionHtml)) !== null) {
+      const name = cleanCustomerName(match[1]);
+      if (name) names.add(name);
+    }
+
     return names;
   }
 
@@ -6287,7 +5928,7 @@ function extractBusinessRelationships(rawHtml) {
 
     // Find sections by heading
     const headingPattern = new RegExp(
-      `<h[1-6][^>]*>[^<]*(?:${keywordPattern})[^<]*<\\/h[1-6]>([\\s\\S]{0,5000}?)(?=<h[1-6]|<\\/section|<\\/main|$)`,
+      `<h[1-6][^>]*>[^<]*(?:${keywordPattern})[^<]*<\\/h[1-6]>([\\s\\S]{0,10000}?)(?=<h[1-6]|<\\/section|<\\/main|$)`,
       'gi'
     );
 
@@ -6326,277 +5967,929 @@ function extractCustomersFromSections(rawHtml) {
   ])].slice(0, 30);
 }
 
-// ===== GPT-4o Vision-based Logo Reading =====
-// Extracts company/brand names by actually reading logo images with GPT-4o vision
-async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
-  if (!rawHtml) return { customers: [], brands: [], principals: [] };
+// Normalize relationship name arrays (dedupe + cleaning)
+function uniqueRelationshipNames(names) {
+  if (!Array.isArray(names)) return [];
+  const normalized = names
+    .map(name => cleanCustomerName(ensureString(name)))
+    .filter(Boolean);
+  return Array.from(new Set(normalized)).slice(0, 30);
+}
 
-  try {
-    // Step 1: Find images in customer/client/partner/brand sections
-    // Includes English + Indonesian + Thai + Vietnamese + Chinese keywords
-    const sectionKeywords = [
-      // English
-      'client', 'customer', 'partner', 'brand', 'principal', 'supplier',
-      'trusted', 'work with', 'served', 'portfolio', 'logo',
-      // Indonesian
-      'mitra', 'pelanggan', 'klien', 'merek', 'pemasok',
-      // Thai
-      'พันธมิตร', 'ลูกค้า', 'แบรนด์',
-      // Vietnamese
-      'đối tác', 'khách hàng',
-      // Chinese
-      '合作', '客户', '品牌'
-    ];
-    const keywordPattern = sectionKeywords.join('|');
+// Extract relationship names from already-verified key metrics text
+// Example: "6 suppliers including Hikvision, Dahua, ZKTeco"
+function extractRelationshipsFromMetrics(keyMetrics) {
+  const extracted = { customers: [], suppliers: [], principals: [], brands: [] };
+  if (!Array.isArray(keyMetrics) || keyMetrics.length === 0) return extracted;
 
-    // Find relevant sections
-    const sectionPattern = new RegExp(
-      `<(?:section|div|ul|article)[^>]*(?:class|id)=["'][^"']*(?:${keywordPattern})[^"']*["'][^>]*>([\\s\\S]*?)<\\/(?:section|div|ul|article)>`,
-      'gi'
-    );
-    const headingPattern = new RegExp(
-      `<h[1-6][^>]*>[^<]*(?:${keywordPattern})[^<]*<\\/h[1-6]>([\\s\\S]{0,5000}?)(?=<h[1-6]|<\\/section|<\\/main|$)`,
-      'gi'
-    );
+  const genericTerms = new Set([
+    'customer', 'customers', 'client', 'clients', 'supplier', 'suppliers', 'vendor', 'vendors',
+    'principal', 'principals', 'partner', 'partners', 'brand', 'brands',
+    'nationwide', 'domestic', 'international', 'global', 'regional', 'various', 'multiple'
+  ]);
 
-    let relevantHtml = '';
-    let match;
-    while ((match = sectionPattern.exec(rawHtml)) !== null) {
-      relevantHtml += match[0] + '\n';
+  const parseNames = (value) => {
+    if (!value) return [];
+    let text = ensureString(value)
+      .replace(/^[\s\-■•▪]+/gm, '')
+      .replace(/\b(?:including|includes|include|such as|namely)\b/gi, ',')
+      .replace(/\b\d{1,3}(?:,\d{3})*\+?\s*(?:customers?|clients?|suppliers?|vendors?|partners?|principals?|brands?)\b/gi, '')
+      .replace(/[;|]/g, ',');
+
+    const rawParts = text.split(/,|\n|\/|\band\b/gi);
+    const parsed = [];
+
+    for (const rawPart of rawParts) {
+      let part = rawPart.trim();
+      if (!part) continue;
+
+      if (part.includes(':')) {
+        part = part.split(':').slice(1).join(':').trim() || part;
+      }
+      part = part
+        .replace(/^[-\s]+/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!part) continue;
+      if (part.length < 2 || part.length > 40) continue;
+      if (!/[A-Za-z]/.test(part)) continue;
+      if (/^\d+$/.test(part)) continue;
+
+      const lower = part.toLowerCase();
+      if (genericTerms.has(lower)) continue;
+      if (part.split(/\s+/).length > 5) continue;
+      if (/^(over|more than|around|approximately)\s+\d+/i.test(lower)) continue;
+
+      const cleaned = cleanCustomerName(part);
+      if (cleaned) parsed.push(cleaned);
     }
-    while ((match = headingPattern.exec(rawHtml)) !== null) {
-      relevantHtml += match[0] + '\n';
+
+    return Array.from(new Set(parsed)).slice(0, 20);
+  };
+
+  for (const metric of keyMetrics) {
+    const label = ensureString(metric?.label).toLowerCase();
+    const value = ensureString(metric?.value);
+    if (!label || !value) continue;
+
+    const names = parseNames(value);
+    if (names.length === 0) continue;
+
+    if (label.includes('customer') || label.includes('client')) {
+      extracted.customers.push(...names);
     }
+    if (label.includes('supplier') || label.includes('vendor')) {
+      extracted.suppliers.push(...names);
+    }
+    if (label.includes('principal') || label.includes('partner')) {
+      extracted.principals.push(...names);
+    }
+    if (label.includes('brand')) {
+      extracted.brands.push(...names);
+    }
+  }
 
-    // If no relevant sections found, check for logo grids/carousels anywhere
-    // Extended patterns for various carousel libraries and implementations
-    if (!relevantHtml) {
-      const carouselPatterns = [
-        // Class-based patterns (swiper, owl, slick, splide, flickity, glide, etc.)
-        /<(?:div|ul|section)[^>]*class=["'][^"']*(?:logo|grid|carousel|slider|swiper|owl|slick|splide|flickity|glide|embla|keen|marquee|scroll)[^"']*["'][^>]*>[\s\S]{0,30000}?<\/(?:div|ul|section)>/gi,
-        // ID-based patterns
-        /<(?:div|ul|section)[^>]*id=["'][^"']*(?:logo|partner|client|brand|carousel|slider)[^"']*["'][^>]*>[\s\S]{0,30000}?<\/(?:div|ul|section)>/gi,
-        // Data attribute patterns (many libraries use data-*)
-        /<(?:div|ul)[^>]*data-(?:slick|swiper|carousel|slider|owl)[^>]*>[\s\S]{0,30000}?<\/(?:div|ul)>/gi,
-      ];
+  return {
+    customers: uniqueRelationshipNames(extracted.customers),
+    suppliers: uniqueRelationshipNames(extracted.suppliers),
+    principals: uniqueRelationshipNames(extracted.principals),
+    brands: uniqueRelationshipNames(extracted.brands)
+  };
+}
 
-      for (const pattern of carouselPatterns) {
-        while ((match = pattern.exec(rawHtml)) !== null) {
-          relevantHtml += match[0] + '\n';
-        }
+// Extract relationship names from scraped page URLs.
+// Useful for e-commerce "shop-by-brand" pages where brand names appear in URL slugs.
+function extractRelationshipsFromPageUrls(pagesScraped = []) {
+  const extracted = {
+    customers: new Set(),
+    suppliers: new Set(),
+    principals: new Set(),
+    brands: new Set()
+  };
+
+  if (!Array.isArray(pagesScraped) || pagesScraped.length === 0) {
+    return { customers: [], suppliers: [], principals: [], brands: [] };
+  }
+
+  const categoryHints = {
+    customers: ['customer', 'customers', 'client', 'clients', 'trusted-by', 'our-customers', 'our-clients', 'khach-hang', 'pelanggan', 'klien'],
+    suppliers: ['supplier', 'suppliers', 'vendor', 'vendors', 'our-supplier', 'our-suppliers'],
+    principals: ['principal', 'principals', 'partner', 'partners', 'principal-partners', 'distributor', 'distributors', 'dealer', 'dealers', 'mitra', 'doi-tac'],
+    brands: ['brand', 'brands', 'shop-by-brand', 'brand-portfolio', 'our-brands', 'merek', 'thuong-hieu']
+  };
+
+  const allHintTokens = new Set(Object.values(categoryHints).flat());
+  const genericSegments = new Set([
+    'about', 'about-us', 'aboutus', 'contact', 'contact-us', 'contactus',
+    'products', 'product', 'services', 'service', 'company', 'profile', 'home',
+    'our', 'us', 'en', 'en-us', 'en-nz', 'en-au', 'en-gb', 'page', 'pages',
+    'category', 'categories', 'tag', 'tags', 'value', 'shop', 'shop-by-brand',
+    'our-services', 'our-company', 'our-supplier', 'suppliers-list', 'registration',
+    'new', 'special', 'featured', 'all', 'index', 'wholesale'
+  ]);
+
+  const detectCategory = (normalizedSegment) => {
+    if (!normalizedSegment) return null;
+    for (const [category, hints] of Object.entries(categoryHints)) {
+      if (hints.some(hint => normalizedSegment.includes(hint))) {
+        return category;
       }
     }
+    return null;
+  };
 
-    // AGGRESSIVE FALLBACK: If still nothing, extract ALL images from page
-    // Don't limit to sections - many sites have logos scattered
-    if (!relevantHtml || relevantHtml.length < 1000) {
-      console.log('    Vision: No keyword sections found, extracting ALL images from page...');
-      // Just use the entire HTML to extract all images
-      relevantHtml = rawHtml;
-    }
+  const normalizeSlugCandidate = (rawSegment) => {
+    if (!rawSegment) return '';
 
-    // Step 2: Extract image URLs from relevant sections
-    // Handle both regular src and lazy-loaded images (data-src, data-lazy-src, data-original)
-    const imageUrls = new Set();
+    let candidate = ensureString(rawSegment)
+      .replace(/\?.*$/, '')
+      .replace(/#.*$/, '')
+      .replace(/\.(html?|php|aspx?)$/i, '')
+      .replace(/^(\d+[-_])+/g, '')
+      .replace(/[-_+]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
-    // Pattern 1: Regular src attribute
-    const srcPattern = /<img[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi;
-    while ((match = srcPattern.exec(relevantHtml)) !== null) {
-      const url = match[1];
-      if (!url.startsWith('data:')) imageUrls.add(url);
-    }
+    if (!candidate) return '';
 
-    // Pattern 2: Lazy-loaded data-src attribute
-    const dataSrcPattern = /<img[^>]*\sdata-src=["']([^"']+)["'][^>]*>/gi;
-    while ((match = dataSrcPattern.exec(relevantHtml)) !== null) {
-      imageUrls.add(match[1]);
-    }
+    const lower = candidate.toLowerCase();
+    if (lower.length < 2 || lower.length > 40) return '';
+    if (genericSegments.has(lower) || allHintTokens.has(lower)) return '';
+    if (/^shop by brands?$/.test(lower)) return '';
+    if (/^our (brands?|partners?|customers?|clients?)$/.test(lower)) return '';
+    if (!/[a-z]/i.test(lower)) return '';
 
-    // Pattern 3: Lazy-loaded data-lazy-src attribute
-    const dataLazySrcPattern = /<img[^>]*\sdata-lazy-src=["']([^"']+)["'][^>]*>/gi;
-    while ((match = dataLazySrcPattern.exec(relevantHtml)) !== null) {
-      imageUrls.add(match[1]);
-    }
+    return cleanCustomerName(candidate);
+  };
 
-    // Pattern 4: data-original (common in jQuery lazy load)
-    const dataOriginalPattern = /<img[^>]*\sdata-original=["']([^"']+)["'][^>]*>/gi;
-    while ((match = dataOriginalPattern.exec(relevantHtml)) !== null) {
-      imageUrls.add(match[1]);
-    }
+  const addCandidate = (category, rawSegment) => {
+    if (!category || !Object.hasOwn(extracted, category)) return;
+    const candidate = normalizeSlugCandidate(rawSegment);
+    if (candidate) extracted[category].add(candidate);
+  };
 
-    // Pattern 5: Background images in style attributes (common for logo carousels)
-    const bgImagePattern = /style=["'][^"']*background(?:-image)?:\s*url\(['"]?([^"')]+)['"]?\)/gi;
-    while ((match = bgImagePattern.exec(relevantHtml)) !== null) {
-      const url = match[1];
-      if (!url.startsWith('data:')) imageUrls.add(url);
-    }
+  const addFromParam = (key, value) => {
+    const normalizedKey = ensureString(key).toLowerCase();
+    const category = detectCategory(normalizedKey);
+    if (!category || !value) return;
+    ensureString(value)
+      .split(/,|\/|;|\|/)
+      .map(v => v.trim())
+      .filter(Boolean)
+      .forEach(part => addCandidate(category, part));
+  };
 
-    // Process and filter URLs
-    const processedUrls = [];
-    for (let imgUrl of imageUrls) {
-      // Skip tiny images, icons, data URIs, and SVG (not supported by Vision API)
-      if (imgUrl.startsWith('data:')) continue;
-      if (/icon|favicon|pixel|spacer|1x1|loading|placeholder/i.test(imgUrl)) continue;
-      if (/\.svg(\?|$)/i.test(imgUrl)) continue;  // SVG not supported by GPT-4o Vision
-
-      // Convert relative URLs to absolute
-      if (!imgUrl.startsWith('http')) {
-        try {
-          const base = new URL(websiteUrl);
-          imgUrl = new URL(imgUrl, base.origin).href;
-        } catch {
-          continue;
-        }
-      }
-
-      processedUrls.push(imgUrl);
-    }
-
-    // Limit to 30 images to capture ALL logos exhaustively
-    // Critical for carousels/sliders that show many partner logos
-    const limitedUrls = processedUrls.slice(0, 30);
-
-    if (limitedUrls.length === 0) {
-      console.log('    Vision: No logo images found in sections');
-      return { customers: [], brands: [], principals: [] };
-    }
-
-    console.log(`    Vision: Found ${limitedUrls.length} logo images to analyze`);
-
-    // Step 3: Fetch images as base64 (parallel, with timeout)
-    const imageContents = [];
-    const fetchPromises = limitedUrls.map(async (url) => {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout per image
-
-        const response = await fetch(url, {
-          signal: controller.signal,
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ProfileBot/1.0)' }
-        });
-        clearTimeout(timeout);
-
-        if (!response.ok) return null;
-
-        const contentType = response.headers.get('content-type') || '';
-        if (!contentType.includes('image')) return null;
-
-        const buffer = await response.buffer();
-        if (buffer.length < 500) return null; // Skip tiny images
-        if (buffer.length > 2 * 1024 * 1024) return null; // Skip > 2MB
-
-        const base64 = buffer.toString('base64');
-        const mimeType = contentType.split(';')[0] || 'image/jpeg';
-
-        return { url, base64, mimeType };
-      } catch {
-        return null;
-      }
-    });
-
-    const results = await Promise.all(fetchPromises);
-    const validImages = results.filter(r => r !== null);
-
-    if (validImages.length === 0) {
-      console.log('    Vision: Failed to fetch any logo images');
-      return { customers: [], brands: [], principals: [] };
-    }
-
-    console.log(`    Vision: Successfully fetched ${validImages.length} images, sending to GPT-4o...`);
-
-    // Step 4: Send to GPT-4o Vision (single API call with all images)
-    const visionContent = [
-      {
-        type: 'text',
-        text: `These are logo images from a company website's "clients", "partners", "principals", or "brands" section.
-For EVERY logo image, identify the company or brand name shown. BE EXHAUSTIVE - extract ALL visible logos.
-
-Return ONLY a JSON object with this exact format:
-{"customers": ["Company A", "Company B"], "brands": ["Brand X", "Brand Y"], "principals": ["Principal1", "Principal2"]}
-
-Rules:
-- "customers" = companies that appear to be clients/customers (usually corporate logos)
-- "brands" = product brands or consumer brands (usually product logos)
-- "principals" = brands/companies this company distributes for or represents (supplier/vendor brands)
-- CRITICAL: Be EXHAUSTIVE - extract EVERY logo you can identify, not just a few. If you see 20 logos, list all 20!
-- Security industry principals: Gallagher, Hikvision, Dahua, Axis, Hanwha, Wisenet, Samsung, Honeywell, Bosch, HID, ZKTeco, Genetec, Milestone, Suprema, Paxton, ASSA ABLOY, dormakaba, Allegion, Verkada, Avigilon, IDEMIA, NEC, Lenel, Inner Range, SALTO, SimonsVoss, Vanderbilt, Commend, Comelit, 2N, BioStar, Virdi, ANVIZ, ESSL, Mantra, Realtime, Matrix, eSSL, Fingertec, Seagate, Western Digital, QNAP, Synology
-- Access control: Gallagher, Paxton, Genetec, Inner Range, SALTO, Suprema, HID, ASSA ABLOY
-- If you can't read a logo clearly, still try to identify it from shape/colors
-- Do NOT include generic words like "logo", "image", "client"
-- Return ONLY the JSON, no explanation`
-      }
-    ];
-
-    // Add all images to the content
-    for (const img of validImages) {
-      visionContent.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${img.mimeType};base64,${img.base64}`,
-          detail: 'low' // Use low detail to reduce tokens and speed up
-        }
-      });
-    }
-
-    const visionResponse = await withRetry(async () => {
-      return await openai.chat.completions.create({
-        model: 'gpt-5.1',
-        messages: [{ role: 'user', content: visionContent }],
-        max_tokens: 1200,  // Increased for exhaustive extraction (30+ logos)
-        temperature: 0.1
-      });
-    }, 2, 3000); // 2 retries, 3s base delay for rate limits
-
-    if (visionResponse.usage) {
-      recordTokens('gpt-5.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
-    }
-    const responseText = visionResponse.choices[0]?.message?.content || '{}';
-
-    // Parse JSON response
-    let parsed = { customers: [], brands: [], principals: [] };
+  for (const rawUrl of pagesScraped) {
     try {
-      // Extract JSON from response (handle markdown code blocks)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
+      const normalizedUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+      const parsed = new URL(normalizedUrl);
+      const decodedPath = decodeURIComponent(parsed.pathname || '');
+      const lowerPath = decodedPath.toLowerCase();
+
+      // Common e-commerce pattern: /.../value/5-itoen => "itoen"
+      const valueSlugMatches = lowerPath.matchAll(/\/value\/\d+-([a-z0-9-]{2,})/gi);
+      for (const match of valueSlugMatches) {
+        addCandidate('brands', match[1]);
       }
-    } catch (parseErr) {
-      console.log(`    Vision: Failed to parse response: ${responseText.substring(0, 100)}`);
+
+      const rawSegments = decodedPath
+        .split('/')
+        .map(s => s.trim())
+        .filter(Boolean);
+      const normalizedSegments = rawSegments.map(segment =>
+        ensureString(segment)
+          .toLowerCase()
+          .replace(/\.(html?|php|aspx?)$/i, '')
+      );
+
+      for (let i = 0; i < normalizedSegments.length; i++) {
+        const normalizedSegment = normalizedSegments[i];
+        const category = detectCategory(normalizedSegment);
+        if (!category) continue;
+
+        addCandidate(category, rawSegments[i - 1]);
+        addCandidate(category, rawSegments[i + 1]);
+
+        // If current segment encodes an id + name, extract the name piece.
+        if (/^\d+-[a-z0-9-]+$/i.test(rawSegments[i])) {
+          addCandidate(category, rawSegments[i].replace(/^\d+-/, ''));
+        }
+      }
+
+      if (/shop[-_]?by[-_]?brand/i.test(lowerPath) && rawSegments.length > 0) {
+        addCandidate('brands', rawSegments[rawSegments.length - 1]);
+      }
+
+      for (const [key, value] of parsed.searchParams.entries()) {
+        addFromParam(key, value);
+      }
+    } catch {
+      // Ignore invalid URLs
+    }
+  }
+
+  return {
+    customers: uniqueRelationshipNames(Array.from(extracted.customers)),
+    suppliers: uniqueRelationshipNames(Array.from(extracted.suppliers)),
+    principals: uniqueRelationshipNames(Array.from(extracted.principals)),
+    brands: uniqueRelationshipNames(Array.from(extracted.brands))
+  };
+}
+
+// Extract relationship names from JSON-LD blocks in raw HTML.
+// E-commerce pages often expose brand/manufacturer/vendor in structured data.
+function extractRelationshipsFromStructuredData(rawHtml) {
+  if (!rawHtml || typeof rawHtml !== 'string') {
+    return { customers: [], suppliers: [], principals: [], brands: [] };
+  }
+
+  const extracted = {
+    customers: new Set(),
+    suppliers: new Set(),
+    principals: new Set(),
+    brands: new Set()
+  };
+
+  const scriptPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+
+  const collectNames = (value, targetSet) => {
+    if (!value || !targetSet) return;
+
+    if (typeof value === 'string') {
+      const cleaned = cleanCustomerName(value);
+      if (cleaned) targetSet.add(cleaned);
+      return;
     }
 
-    // Clean and validate names
-    const cleanNames = (arr) => {
-      if (!Array.isArray(arr)) return [];
-      return arr
-        .map(name => cleanCustomerName(String(name)))
-        .filter(name => name && name.length >= 2);
-    };
+    if (Array.isArray(value)) {
+      value.forEach(item => collectNames(item, targetSet));
+      return;
+    }
 
-    const result = {
-      customers: cleanNames(parsed.customers),
-      brands: cleanNames(parsed.brands),
-      principals: cleanNames(parsed.principals || [])
-    };
+    if (typeof value === 'object') {
+      if (typeof value.name === 'string') {
+        const cleaned = cleanCustomerName(value.name);
+        if (cleaned) targetSet.add(cleaned);
+      }
+      if (typeof value.legalName === 'string') {
+        const cleaned = cleanCustomerName(value.legalName);
+        if (cleaned) targetSet.add(cleaned);
+      }
+      if (typeof value.alternateName === 'string') {
+        const cleaned = cleanCustomerName(value.alternateName);
+        if (cleaned) targetSet.add(cleaned);
+      }
+    }
+  };
 
-    console.log(`    Vision: Identified ${result.customers.length} customers, ${result.brands.length} brands, ${result.principals.length} principals`);
+  const walk = (node) => {
+    if (!node) return;
 
-    return result;
+    if (Array.isArray(node)) {
+      node.forEach(item => walk(item));
+      return;
+    }
 
-  } catch (error) {
-    console.log(`    Vision: Error - ${error.message}`);
-    return { customers: [], brands: [], principals: [] };
+    if (typeof node !== 'object') return;
+
+    const typeValue = ensureString(node['@type']).toLowerCase();
+    if (typeValue.includes('brand') || typeValue.includes('organization')) {
+      collectNames(node, extracted.brands);
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      const keyLower = key.toLowerCase();
+
+      if (keyLower === 'brand' || keyLower === 'brands') {
+        collectNames(value, extracted.brands);
+      } else if (keyLower === 'manufacturer' || keyLower === 'vendor' || keyLower === 'maker') {
+        collectNames(value, extracted.brands);
+      } else if (keyLower === 'supplier' || keyLower === 'suppliers') {
+        collectNames(value, extracted.suppliers);
+        collectNames(value, extracted.principals);
+      } else if (keyLower === 'distributor' || keyLower === 'principal' || keyLower === 'partner') {
+        collectNames(value, extracted.principals);
+      } else if (keyLower === 'client' || keyLower === 'customer') {
+        collectNames(value, extracted.customers);
+      }
+
+      walk(value);
+    }
+  };
+
+  let match;
+  while ((match = scriptPattern.exec(rawHtml)) !== null) {
+    const block = ensureString(match[1]).trim();
+    if (!block || block.length > 500000) continue;
+
+    try {
+      const parsed = JSON.parse(block);
+      walk(parsed);
+    } catch {
+      // Ignore malformed JSON-LD blocks
+    }
+  }
+
+  return {
+    customers: uniqueRelationshipNames(Array.from(extracted.customers)),
+    suppliers: uniqueRelationshipNames(Array.from(extracted.suppliers)),
+    principals: uniqueRelationshipNames(Array.from(extracted.principals)),
+    brands: uniqueRelationshipNames(Array.from(extracted.brands))
+  };
+}
+
+// Extract relationship names from embedded JSON/script data (non-JSON-LD).
+// This helps when sites store brand/vendor data in JS state objects.
+function extractRelationshipsFromEmbeddedData(rawHtml) {
+  if (!rawHtml || typeof rawHtml !== 'string') {
+    return { customers: [], suppliers: [], principals: [], brands: [] };
+  }
+
+  const extracted = {
+    customers: new Set(),
+    suppliers: new Set(),
+    principals: new Set(),
+    brands: new Set()
+  };
+
+  const addNames = (value, targetSet) => {
+    if (!value || !targetSet) return;
+
+    if (typeof value === 'string') {
+      const cleaned = cleanCustomerName(value);
+      if (cleaned) targetSet.add(cleaned);
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(item => addNames(item, targetSet));
+      return;
+    }
+
+    if (typeof value === 'object') {
+      for (const key of ['name', 'title', 'vendor', 'manufacturer', 'brand']) {
+        if (typeof value[key] === 'string') {
+          const cleaned = cleanCustomerName(value[key]);
+          if (cleaned) targetSet.add(cleaned);
+        }
+      }
+    }
+  };
+
+  const walkObject = (node) => {
+    if (!node) return;
+
+    if (Array.isArray(node)) {
+      node.forEach(item => walkObject(item));
+      return;
+    }
+
+    if (typeof node !== 'object') return;
+
+    for (const [key, value] of Object.entries(node)) {
+      const keyLower = ensureString(key).toLowerCase();
+
+      if (keyLower.includes('brand') || keyLower.includes('vendor') || keyLower.includes('manufacturer') || keyLower.includes('productbrand')) {
+        addNames(value, extracted.brands);
+      } else if (keyLower.includes('supplier') || keyLower.includes('vendors')) {
+        addNames(value, extracted.suppliers);
+        addNames(value, extracted.principals);
+      } else if (keyLower.includes('principal') || keyLower.includes('partner') || keyLower.includes('distributor') || keyLower.includes('dealer')) {
+        addNames(value, extracted.principals);
+      } else if (keyLower.includes('customer') || keyLower.includes('client')) {
+        addNames(value, extracted.customers);
+      }
+
+      walkObject(value);
+    }
+  };
+
+  // 1) Parse application/json script blocks
+  const jsonScriptPattern = /<script[^>]*type=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = jsonScriptPattern.exec(rawHtml)) !== null) {
+    const block = ensureString(match[1]).trim();
+    if (!block || block.length > 500000) continue;
+    try {
+      walkObject(JSON.parse(block));
+    } catch {
+      // Ignore malformed JSON blocks
+    }
+  }
+
+  // 2) Extract from JS object literals (key: "value")
+  const simpleKeyValuePatterns = [
+    { regex: /["'](?:brand|product_brand|vendor|manufacturer)["']\s*:\s*["']([^"']{2,80})["']/gi, target: 'brands' },
+    { regex: /["'](?:supplier|principal|partner|distributor|dealer)["']\s*:\s*["']([^"']{2,80})["']/gi, target: 'principals' },
+    { regex: /["'](?:customer|client)["']\s*:\s*["']([^"']{2,80})["']/gi, target: 'customers' }
+  ];
+
+  for (const patternDef of simpleKeyValuePatterns) {
+    let kvMatch;
+    while ((kvMatch = patternDef.regex.exec(rawHtml)) !== null) {
+      const cleaned = cleanCustomerName(kvMatch[1]);
+      if (!cleaned) continue;
+      extracted[patternDef.target].add(cleaned);
+      if (patternDef.target === 'principals') extracted.suppliers.add(cleaned);
+    }
+  }
+
+  // 3) Data attributes on elements
+  const dataAttributePatterns = [
+    { regex: /data-(?:brand|vendor|manufacturer)=["']([^"']{2,80})["']/gi, target: 'brands' },
+    { regex: /data-(?:principal|partner|supplier|distributor|dealer)=["']([^"']{2,80})["']/gi, target: 'principals' },
+    { regex: /data-(?:customer|client)=["']([^"']{2,80})["']/gi, target: 'customers' }
+  ];
+
+  for (const patternDef of dataAttributePatterns) {
+    let attrMatch;
+    while ((attrMatch = patternDef.regex.exec(rawHtml)) !== null) {
+      const cleaned = cleanCustomerName(attrMatch[1]);
+      if (!cleaned) continue;
+      extracted[patternDef.target].add(cleaned);
+      if (patternDef.target === 'principals') extracted.suppliers.add(cleaned);
+    }
+  }
+
+  return {
+    customers: uniqueRelationshipNames(Array.from(extracted.customers)),
+    suppliers: uniqueRelationshipNames(Array.from(extracted.suppliers)),
+    principals: uniqueRelationshipNames(Array.from(extracted.principals)),
+    brands: uniqueRelationshipNames(Array.from(extracted.brands))
+  };
+}
+
+async function readResponseBuffer(response) {
+  if (!response) return Buffer.from('');
+  if (typeof response.buffer === 'function') {
+    return response.buffer();
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+function decodeMaybeCompressedBuffer(buffer, contentEncoding = '') {
+  let payload = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || '');
+  if (!payload || payload.length === 0) return Buffer.from('');
+
+  const encoding = ensureString(contentEncoding).toLowerCase();
+  try {
+    if (encoding.includes('br')) {
+      payload = zlib.brotliDecompressSync(payload);
+    } else if (encoding.includes('gzip')) {
+      payload = zlib.gunzipSync(payload);
+    } else if (encoding.includes('deflate')) {
+      payload = zlib.inflateSync(payload);
+    } else if (payload.length >= 2 && payload[0] === 0x1f && payload[1] === 0x8b) {
+      payload = zlib.gunzipSync(payload);
+    }
+  } catch {
+    // Keep original payload if decompression fails.
+  }
+
+  return payload;
+}
+
+async function fetchJsonResource(url, timeoutMs = 15000) {
+  if (!url) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json,text/plain,*/*'
+      },
+      redirect: 'follow',
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) return null;
+
+    const rawBuffer = await readResponseBuffer(response);
+    const decodedBuffer = decodeMaybeCompressedBuffer(rawBuffer, response.headers?.get?.('content-encoding') || '');
+    const text = ensureString(decodedBuffer.toString('utf8')).trim();
+    if (!text) return null;
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  } catch {
+    clearTimeout(timeout);
+    return null;
   }
 }
 
+function normalizeProductTitle(title) {
+  return ensureString(title)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractBrandFromProductTitle(title) {
+  let normalized = normalizeProductTitle(title);
+  if (!normalized) return '';
+
+  normalized = normalized
+    .replace(/\([^)]{0,24}\)\s*$/g, '')
+    .replace(/\b\d+(?:[xX]\d+)?\s*(?:g|kg|mg|ml|l|oz|lb|mm|cm|m)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const tailMatch = normalized.match(/([A-Za-z][A-Za-z&'\/-]{1,})$/);
+  if (!tailMatch) return '';
+
+  const rawCandidate = tailMatch[1].replace(/[-_]+/g, ' ').trim();
+  const candidate = cleanCustomerName(rawCandidate);
+  if (!candidate) return '';
+
+  const lower = candidate.toLowerCase();
+  const stopWords = new Set([
+    'original', 'frozen', 'gluten free', 'free', 'pre order', 'pack', 'value pack',
+    'new', 'classic', 'premium', 'regular', 'assorted', 'mixed',
+    'mm', 'cm', 'm', 'g', 'kg', 'mg', 'ml', 'l', 'x'
+  ]);
+  if (stopWords.has(lower)) return '';
+  if (candidate.split(/\s+/).length > 2) return '';
+  if (candidate.length < 3) return '';
+  if (/\d/.test(candidate)) return '';
+  return candidate;
+}
+
+function normalizeProductDisplayName(title) {
+  const normalized = normalizeProductTitle(title);
+  if (!normalized) return '';
+  if (normalized.length < 3 || normalized.length > 120) return '';
+  return normalized;
+}
+
+// Extract relationship and product names from machine-readable product feeds (Shopify/WP).
+// This is more reliable than OCR for tiny logos/text on long pages.
+async function extractRelationshipsFromProductFeeds(baseUrl) {
+  const empty = { customers: [], suppliers: [], principals: [], brands: [], products: [] };
+  if (!baseUrl) return empty;
+
+  let origin = '';
+  try {
+    const normalized = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+    origin = new URL(normalized).origin;
+  } catch {
+    return empty;
+  }
+
+  const brandSet = new Set();
+  const productSet = new Set();
+  let shopifyDetected = false;
+
+  // Shopify storefront feed
+  for (let page = 1; page <= 2; page++) {
+    const shopifyProducts = await fetchJsonResource(`${origin}/products.json?limit=250&page=${page}`);
+    if (!shopifyProducts || !Array.isArray(shopifyProducts.products)) break;
+    shopifyDetected = true;
+
+    for (const product of shopifyProducts.products) {
+      const vendor = cleanCustomerName(ensureString(product?.vendor));
+      if (vendor) brandSet.add(vendor);
+
+      const productName = normalizeProductDisplayName(product?.title);
+      if (productName) productSet.add(productName);
+    }
+
+    if (shopifyProducts.products.length < 250) break;
+  }
+
+  if (shopifyDetected) {
+    const collections = await fetchJsonResource(`${origin}/collections.json?limit=250&page=1`);
+    if (collections && Array.isArray(collections.collections)) {
+      const genericCollectionTitles = new Set(['all', 'all products', 'products', 'featured', 'new arrivals', 'sale']);
+      for (const collection of collections.collections) {
+        const title = cleanCustomerName(ensureString(collection?.title));
+        if (title && !genericCollectionTitles.has(title.toLowerCase())) brandSet.add(title);
+      }
+    }
+  }
+
+  // WordPress/WooCommerce product feed
+  if (!shopifyDetected || brandSet.size < 2) {
+    for (let page = 1; page <= 2; page++) {
+      const wpProducts = await fetchJsonResource(`${origin}/wp-json/wp/v2/product?per_page=100&page=${page}`);
+      if (!Array.isArray(wpProducts) || wpProducts.length === 0) break;
+
+      for (const product of wpProducts) {
+        const title = normalizeProductTitle(product?.title?.rendered || product?.title);
+        if (!title) continue;
+
+        const productName = normalizeProductDisplayName(title);
+        if (productName) productSet.add(productName);
+
+        const brandFromTitle = extractBrandFromProductTitle(title);
+        if (brandFromTitle) brandSet.add(brandFromTitle);
+      }
+
+      if (wpProducts.length < 100) break;
+    }
+  }
+
+  const brands = uniqueRelationshipNames(Array.from(brandSet));
+  const products = Array.from(new Set(
+    Array.from(productSet)
+      .map(name => ensureString(name).trim())
+      .filter(name => name.length >= 3 && name.length <= 120)
+  )).slice(0, 40);
+
+  if (brands.length > 0 || products.length > 0) {
+    console.log(`    Product feed extraction: ${brands.length} brands, ${products.length} products`);
+  }
+
+  return {
+    customers: [],
+    suppliers: [],
+    principals: brands,
+    brands,
+    products
+  };
+}
+
+// AI fallback for relationship extraction when deterministic/screenshot coverage is still low.
+// This reads plain scraped text and returns only names explicitly present in content.
+async function extractRelationshipsFromContentAI(scrapedContent, options = {}) {
+  const emptyResult = { customers: [], suppliers: [], principals: [], brands: [] };
+  const content = ensureString(scrapedContent);
+  if (!content || content.length < 500) return emptyResult;
+
+  const companyName = ensureString(options.company_name);
+  const companyNormalized = companyName.toLowerCase().replace(/\s+/g, '');
+  const normalizedSource = normalizeTextForComparison(content);
+
+  try {
+    const response = await withRetry(async () => {
+      return await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You extract business relationship names from website text.
+
+Return ONLY JSON with this shape:
+{
+  "principals": ["Name 1", "Name 2"],
+  "brands": ["Brand 1", "Brand 2"],
+  "customers": ["Customer 1", "Customer 2"]
+}
+
+Rules:
+- Extract only names explicitly present in the text input.
+- Focus on external names: principal partners, brands carried/distributed, key customers.
+- Do not invent names.
+- Do not return generic phrases, menu labels, or action text.
+- Keep each list concise and clean.`
+          },
+          {
+            role: 'user',
+            content: `Company name to exclude: ${companyName || '(unknown)'}
+
+Website text:
+${content.substring(0, 60000)}`
+          }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 1200
+      });
+    }, 2, 3000);
+
+    if (response.usage) {
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
+
+    const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
+
+    const verifyNames = (arr) => {
+      if (!Array.isArray(arr)) return [];
+      const verified = [];
+
+      for (const rawName of arr) {
+        const cleaned = cleanCustomerName(ensureString(rawName));
+        if (!cleaned) continue;
+
+        const normalizedName = cleaned.toLowerCase().replace(/\s+/g, '');
+        if (companyNormalized && normalizedName && (
+          normalizedName.includes(companyNormalized) ||
+          companyNormalized.includes(normalizedName)
+        )) {
+          continue;
+        }
+
+        const normalizedCandidate = normalizeTextForComparison(cleaned);
+        if (!normalizedCandidate || normalizedCandidate.length < 2) continue;
+        if (!normalizedSource.includes(normalizedCandidate)) continue;
+
+        verified.push(cleaned);
+      }
+
+      return uniqueRelationshipNames(verified);
+    };
+
+    const result = {
+      customers: verifyNames(parsed.customers),
+      suppliers: [],
+      principals: verifyNames(parsed.principals),
+      brands: verifyNames(parsed.brands)
+    };
+
+    console.log(`    Relationship AI fallback: ${result.principals.length} principals, ${result.customers.length} customers, ${result.brands.length} brands`);
+    return result;
+  } catch (error) {
+    console.log(`    Relationship AI fallback error: ${error.message}`);
+    return emptyResult;
+  }
+}
+
+// If product/application rows are empty, use relationship data as fallback for right-side content.
+function applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelationships) {
+  const base = (productsBreakdown && typeof productsBreakdown === 'object') ? { ...productsBreakdown } : {};
+  const breakdownItems = Array.isArray(base.breakdown_items) ? base.breakdown_items : [];
+  const hasBreakdownRows = breakdownItems.some(item => {
+    const label = ensureString(item?.label).trim();
+    const value = ensureString(item?.value).trim();
+    return label && value;
+  });
+
+  if (hasBreakdownRows) {
+    return {
+      ...base,
+      breakdown_title: ensureString(base.breakdown_title) || 'Products and Applications',
+      breakdown_items: breakdownItems
+    };
+  }
+
+  const relationships = businessRelationships || {};
+  const principalBrands = uniqueRelationshipNames([
+    ...(relationships.brands || []),
+    ...(relationships.principals || [])
+  ]);
+  if (principalBrands.length > 0) {
+    return {
+      ...base,
+      breakdown_title: 'Principal Brands',
+      breakdown_items: []
+    };
+  }
+
+  const customers = uniqueRelationshipNames(relationships.customers || []);
+  if (customers.length > 0) {
+    return {
+      ...base,
+      breakdown_title: 'Key Customers',
+      breakdown_items: []
+    };
+  }
+
+  return {
+    ...base,
+    breakdown_title: ensureString(base.breakdown_title) || 'Products and Applications',
+    breakdown_items: []
+  };
+}
+
+function normalizeUrlForDedup(rawUrl) {
+  try {
+    const normalized = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    const u = new URL(normalized);
+    const path = u.pathname.replace(/\/+$/, '') || '/';
+    return `${u.origin}${path}`.toLowerCase();
+  } catch {
+    return ensureString(rawUrl).trim().toLowerCase();
+  }
+}
+
+function scoreScreenshotPage(url) {
+  let path = ensureString(url).toLowerCase();
+  try {
+    const normalized = path.startsWith('http') ? path : `https://${path}`;
+    path = decodeURIComponent(new URL(normalized).pathname.toLowerCase());
+  } catch {
+    // Keep raw path if URL parsing fails
+  }
+
+  // Lower score = higher priority
+  const highPriority = [
+    'partner', 'principal', 'supplier', 'brand', 'client', 'customer', 'trusted', 'distributor', 'dealer',
+    'mitra', 'klien', 'pelanggan', 'merek', 'doi-tac', 'khach-hang', 'thuong-hieu',
+    'products', 'product', 'collections', 'collection', 'wholesale', 'catalog', 'catalogue', 'range', 'linecard'
+  ];
+  const mediumPriority = ['portfolio', 'reference', 'project', 'case', 'company', 'profile', 'service'];
+  const fallbackOnly = ['about', 'contact'];
+  const lowPriority = ['blog', 'news', 'career', 'privacy', 'terms', 'policy', 'legal', 'faq', 'help'];
+
+  if (highPriority.some(k => path.includes(k))) return 0;
+  if (mediumPriority.some(k => path.includes(k))) return 2;
+  if (fallbackOnly.some(k => path.includes(k))) return 6;
+  if (lowPriority.some(k => path.includes(k))) return 9;
+  return 5;
+}
+
+function buildScreenshotFallbackCandidates(baseUrl) {
+  if (!baseUrl) return [];
+
+  try {
+    const normalized = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+    const origin = new URL(normalized).origin;
+    const fallbackPaths = [
+      '/partners', '/partner', '/our-partners',
+      '/principals', '/principal', '/principal-partners',
+      '/brands', '/brand', '/our-brands', '/brand-portfolio',
+      '/clients', '/client', '/our-clients',
+      '/customers', '/customer', '/our-customers', '/trusted-by',
+      '/suppliers', '/supplier', '/vendors', '/distributors', '/dealers',
+      '/products', '/product', '/our-products', '/collections', '/catalogue', '/catalog', '/wholesale', '/range',
+      '/portfolio', '/references', '/case-studies',
+      '/mitra', '/klien', '/pelanggan', '/merek', '/partner-kami', '/klien-kami',
+      '/doi-tac', '/khach-hang', '/thuong-hieu'
+    ];
+    return fallbackPaths.map(path => `${origin}${path}`);
+  } catch {
+    return [];
+  }
+}
+
+function buildScreenshotPageQueue(baseUrl, pagesScraped = []) {
+  const maxPagesRaw = parseInt(process.env.SCREENSHOT_MAX_PAGES || '12', 10);
+  const maxPages = Math.max(1, Math.min(Number.isFinite(maxPagesRaw) ? maxPagesRaw : 12, 16));
+  const fallbackCandidates = buildScreenshotFallbackCandidates(baseUrl);
+  const homepageCandidate = (() => {
+    try {
+      const normalized = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+      return `${new URL(normalized).origin}/`;
+    } catch {
+      return '';
+    }
+  })();
+
+  // Prioritize URLs that were successfully scraped first.
+  // Fallback candidates are appended only if there is remaining capacity.
+  const verifiedCandidates = [baseUrl, homepageCandidate, ...(Array.isArray(pagesScraped) ? pagesScraped : [])]
+    .map(url => ensureString(url).trim())
+    .filter(Boolean);
+
+  const verifiedDedup = new Map();
+  for (const url of verifiedCandidates) {
+    const key = normalizeUrlForDedup(url);
+    if (!verifiedDedup.has(key)) verifiedDedup.set(key, url);
+  }
+
+  const verifiedUrls = Array.from(verifiedDedup.values());
+  const primary = verifiedUrls[0];
+  const verifiedRest = verifiedUrls.slice(1).sort((a, b) => {
+    const scoreDiff = scoreScreenshotPage(a) - scoreScreenshotPage(b);
+    if (scoreDiff !== 0) return scoreDiff;
+    return ensureString(a).length - ensureString(b).length;
+  });
+
+  const fallbackDedup = new Map();
+  for (const url of fallbackCandidates) {
+    const clean = ensureString(url).trim();
+    if (!clean) continue;
+    const key = normalizeUrlForDedup(clean);
+    if (verifiedDedup.has(key)) continue;
+    if (!fallbackDedup.has(key)) fallbackDedup.set(key, clean);
+  }
+
+  const fallbackUrls = Array.from(fallbackDedup.values()).sort((a, b) => {
+    const scoreDiff = scoreScreenshotPage(a) - scoreScreenshotPage(b);
+    if (scoreDiff !== 0) return scoreDiff;
+    return ensureString(a).length - ensureString(b).length;
+  });
+
+  const queue = [];
+  if (primary) queue.push(primary);
+  queue.push(...verifiedRest);
+
+  const remainingSlots = Math.max(0, maxPages - queue.length);
+  if (remainingSlots > 0) {
+    queue.push(...fallbackUrls.slice(0, remainingSlots));
+  }
+
+  return queue.slice(0, maxPages);
+}
+
 // ===== Full-Page Screenshot + Vision Analysis =====
-// Takes a screenshot of the entire page and uses GPT-4o Vision to identify partner/customer logos
-// This bypasses all HTML parsing issues - sees what humans see
-async function extractPartnersFromScreenshot(websiteUrl) {
+// Uses a full-page screenshot to identify partner/customer/brand names visually.
+// This does NOT render images in slides; it only enriches extracted relationship text.
+async function extractPartnersFromScreenshot(websiteUrl, options = {}) {
   if (!websiteUrl) return { customers: [], brands: [], principals: [] };
 
-  // Check if screenshot API is configured
   const screenshotApiKey = process.env.SCREENSHOT_API_KEY;
   const screenshotApiUrl = process.env.SCREENSHOT_API_URL || 'https://shot.screenshotapi.net/screenshot';
+  const width = Math.max(1024, Math.min(parseInt(options.width || '1280', 10), 2560));
+  const delayMs = Math.max(2000, Math.min(parseInt(options.delayMs || '3000', 10), 10000));
 
   if (!screenshotApiKey) {
     console.log('    Screenshot: Skipped (SCREENSHOT_API_KEY not configured)');
@@ -6606,23 +6899,20 @@ async function extractPartnersFromScreenshot(websiteUrl) {
   try {
     console.log('    Screenshot: Taking full-page screenshot...');
 
-    // Normalize URL
     let url = websiteUrl;
     if (!url.startsWith('http')) {
       url = 'https://' + url;
     }
 
-    // Take screenshot using external API
-    // Supports: screenshotapi.net, screenshotone.com, or similar services
     const screenshotParams = new URLSearchParams({
       token: screenshotApiKey,
       url: url,
       output: 'image',
       file_type: 'png',
       wait_for_event: 'load',
-      delay: 3000,  // Wait 3s for JS to render (carousels need time)
-      full_page: 'true',  // FULL PAGE to capture partner logos at bottom!
-      width: 1280
+      delay: delayMs,
+      full_page: 'true',
+      width
     });
 
     const controller = new AbortController();
@@ -6647,7 +6937,6 @@ async function extractPartnersFromScreenshot(websiteUrl) {
     const base64Image = imageBuffer.toString('base64');
     console.log(`    Screenshot: Got ${Math.round(imageBuffer.length / 1024)}KB image, analyzing with Vision...`);
 
-    // Send to GPT-4o Vision
     const visionResponse = await withRetry(async () => {
       return await openai.chat.completions.create({
         model: 'gpt-5.1',
@@ -6658,45 +6947,35 @@ async function extractPartnersFromScreenshot(websiteUrl) {
               type: 'image_url',
               image_url: {
                 url: `data:image/png;base64,${base64Image}`,
-                detail: 'high'  // Use high detail for better logo recognition
+                detail: 'high'
               }
             },
             {
               type: 'text',
               text: `Analyze this FULL-PAGE company website screenshot. Scan the ENTIRE image from top to bottom.
 
-IMPORTANT: Partner/client logos are typically at the BOTTOM of the page, often in carousels or grids.
+Look for sections such as:
+- Our Partners / Principal Partners / Partners / Suppliers
+- Our Clients / Customers / Trusted By
+- Our Brands / Brands We Carry
 
-Look for ANY of these sections:
-- "Our Partners" / "Partners" / "Principal Partners" / "Mitra" (Indonesian)
-- "Our Clients" / "Clients" / "Customers" / "Trusted By" / "Pelanggan" (Indonesian)
-- "Our Brands" / "Brands We Carry" / "Merek" (Indonesian)
-- Horizontal rows of company logos
-- Carousel/slider sections with logos
-- Footer sections with partner logos
+Extract all visible logo/company/brand names you can identify.
 
-CRITICAL: Be EXHAUSTIVE - extract EVERY logo/company name you can identify. Count them - there may be 10-20+ logos.
-
-Return ONLY a JSON object:
+Return ONLY valid JSON:
 {
-  "principals": ["Brand A", "Brand B", "Brand C", ...],
-  "customers": ["Customer 1", "Customer 2", "Customer 3", ...],
-  "brands": ["Brand X", "Brand Y", "Brand Z", ...]
+  "principals": ["Brand A", "Brand B"],
+  "customers": ["Customer A", "Customer B"],
+  "brands": ["Brand X", "Brand Y"]
 }
 
 Rules:
-- SCAN THE ENTIRE IMAGE - logos are often near the bottom!
-- EXTRACT ALL visible logos - if you see 15 logos, list all 15. If you see 30, list all 30!
-- Security industry logos to look for: Gallagher, Hanwha, Wisenet, Samsung, Honeywell, Axis, Hikvision, Dahua, Bosch, HID, ZKTeco, NxWitness, Hitron, Genetec, Milestone, Suprema, Paxton, ASSA ABLOY, dormakaba, Allegion, Verkada, Avigilon, IDEMIA, NEC, Lenel, Inner Range, SALTO, SimonsVoss, Vanderbilt, Commend, Comelit, 2N, BioStar, Virdi, ANVIZ, Seagate, Western Digital, QNAP, Synology
-- "principals" = supplier/vendor brands this company distributes for
-- "customers" = companies that buy from this company
-- "brands" = product brands
-- Skip section headers like "Our Partners", just extract the actual logo names
-- Return ONLY valid JSON, no explanation`
+- Be exhaustive: list all readable names
+- Do not include section headers or generic words like "logo"
+- Return JSON only, no explanation`
             }
           ]
         }],
-        max_tokens: 1500,  // Increased for exhaustive extraction (30+ logos)
+        max_tokens: 1200,
         temperature: 0.1
       });
     }, 2, 3000);
@@ -6706,18 +6985,14 @@ Rules:
     }
     const responseText = visionResponse.choices[0]?.message?.content || '{}';
 
-    // Parse JSON response
     let parsed = { customers: [], brands: [], principals: [] };
     try {
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
-      }
-    } catch (parseErr) {
-      console.log(`    Screenshot: Failed to parse response`);
+      if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+    } catch {
+      console.log('    Screenshot: Failed to parse response');
     }
 
-    // Clean names
     const cleanNames = (arr) => {
       if (!Array.isArray(arr)) return [];
       return arr
@@ -6731,15 +7006,296 @@ Rules:
       principals: cleanNames(parsed.principals)
     };
 
-    const total = result.customers.length + result.brands.length + result.principals.length;
     console.log(`    Screenshot: Found ${result.principals.length} principals, ${result.customers.length} customers, ${result.brands.length} brands`);
-
     return result;
-
   } catch (error) {
     console.log(`    Screenshot: Error - ${error.message}`);
     return { customers: [], brands: [], principals: [] };
   }
+}
+
+async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], options = {}) {
+  if (!baseUrl) return { customers: [], brands: [], principals: [] };
+  const deepMode = options.deepMode !== false;
+
+  const queue = buildScreenshotPageQueue(baseUrl, pagesScraped);
+  if (queue.length === 0) return { customers: [], brands: [], principals: [] };
+  console.log(`    Screenshot queue: ${queue.length} page(s)`);
+  const queueKeys = new Set(queue.map(url => normalizeUrlForDedup(url)));
+  const triedPages = new Set(queueKeys);
+
+  const merged = {
+    customers: new Set(),
+    brands: new Set(),
+    principals: new Set()
+  };
+
+  for (let i = 0; i < queue.length; i++) {
+    const pageUrl = queue[i];
+    console.log(`    Screenshot sweep ${i + 1}/${queue.length}: ${pageUrl}`);
+    const pageResult = await extractPartnersFromScreenshot(pageUrl);
+    (pageResult.customers || []).forEach(v => merged.customers.add(v));
+    (pageResult.brands || []).forEach(v => merged.brands.add(v));
+    (pageResult.principals || []).forEach(v => merged.principals.add(v));
+  }
+
+  let totalFound = merged.customers.size + merged.brands.size + merged.principals.size;
+  let principalBrandFound = merged.brands.size + merged.principals.size;
+  const retriedPages = new Set();
+
+  // If first pass found little, retry top pages in higher resolution.
+  if ((totalFound < 3 || principalBrandFound < 2) && queue.length > 0) {
+    const retryPages = queue.slice(0, Math.min(3, queue.length));
+    console.log(`    Screenshot sweep retry: low coverage (total=${totalFound}, principals+brands=${principalBrandFound}), trying high-resolution capture...`);
+    for (const pageUrl of retryPages) {
+      retriedPages.add(normalizeUrlForDedup(pageUrl));
+      triedPages.add(normalizeUrlForDedup(pageUrl));
+      const retryResult = await extractPartnersFromScreenshot(pageUrl, { width: 1920, delayMs: 5000 });
+      (retryResult.customers || []).forEach(v => merged.customers.add(v));
+      (retryResult.brands || []).forEach(v => merged.brands.add(v));
+      (retryResult.principals || []).forEach(v => merged.principals.add(v));
+    }
+    totalFound = merged.customers.size + merged.brands.size + merged.principals.size;
+    principalBrandFound = merged.brands.size + merged.principals.size;
+  }
+
+  // If principals/brands are still weak, target relationship-heavy URLs not retried yet.
+  if (principalBrandFound < 2 && queue.length > 0) {
+    const targetedPages = queue
+      .filter(url => scoreScreenshotPage(url) <= 1)
+      .filter(url => !retriedPages.has(normalizeUrlForDedup(url)))
+      .slice(0, 2);
+
+    if (targetedPages.length > 0) {
+      console.log(`    Screenshot targeted retry: principals/brands still low (${principalBrandFound}), probing relationship pages...`);
+      for (const pageUrl of targetedPages) {
+        triedPages.add(normalizeUrlForDedup(pageUrl));
+        const retryResult = await extractPartnersFromScreenshot(pageUrl, { width: 2160, delayMs: 6000 });
+        (retryResult.customers || []).forEach(v => merged.customers.add(v));
+        (retryResult.brands || []).forEach(v => merged.brands.add(v));
+        (retryResult.principals || []).forEach(v => merged.principals.add(v));
+      }
+      totalFound = merged.customers.size + merged.brands.size + merged.principals.size;
+      principalBrandFound = merged.brands.size + merged.principals.size;
+    }
+  }
+
+  // If still weak, probe additional scraped pages outside the queue cap.
+  if (principalBrandFound < 2 && Array.isArray(pagesScraped) && pagesScraped.length > 0) {
+    const extraPages = pagesScraped
+      .map(url => ensureString(url).trim())
+      .filter(Boolean)
+      .filter(url => !triedPages.has(normalizeUrlForDedup(url)))
+      .sort((a, b) => {
+        const scoreDiff = scoreScreenshotPage(a) - scoreScreenshotPage(b);
+        if (scoreDiff !== 0) return scoreDiff;
+        return ensureString(a).length - ensureString(b).length;
+      })
+      .slice(0, 3);
+
+    if (extraPages.length > 0) {
+      console.log(`    Screenshot overflow retry: principals/brands still low (${principalBrandFound}), checking extra scraped pages...`);
+      for (const pageUrl of extraPages) {
+        triedPages.add(normalizeUrlForDedup(pageUrl));
+        const retryResult = await extractPartnersFromScreenshot(pageUrl, { width: 1920, delayMs: 5000 });
+        (retryResult.customers || []).forEach(v => merged.customers.add(v));
+        (retryResult.brands || []).forEach(v => merged.brands.add(v));
+        (retryResult.principals || []).forEach(v => merged.principals.add(v));
+      }
+      totalFound = merged.customers.size + merged.brands.size + merged.principals.size;
+      principalBrandFound = merged.brands.size + merged.principals.size;
+    }
+  }
+
+  // Deep mode: scan more scraped pages with slower/high-resolution capture.
+  if (deepMode && principalBrandFound < 2 && Array.isArray(pagesScraped) && pagesScraped.length > 0) {
+    const deepPages = pagesScraped
+      .map(url => ensureString(url).trim())
+      .filter(Boolean)
+      .filter(url => !triedPages.has(normalizeUrlForDedup(url)))
+      .sort((a, b) => {
+        const scoreDiff = scoreScreenshotPage(a) - scoreScreenshotPage(b);
+        if (scoreDiff !== 0) return scoreDiff;
+        return ensureString(a).length - ensureString(b).length;
+      })
+      .slice(0, 6);
+
+    if (deepPages.length > 0) {
+      console.log(`    Screenshot deep retry: principals/brands still low (${principalBrandFound}), running extended sweep...`);
+      for (const pageUrl of deepPages) {
+        triedPages.add(normalizeUrlForDedup(pageUrl));
+        const retryResult = await extractPartnersFromScreenshot(pageUrl, { width: 2300, delayMs: 7000 });
+        (retryResult.customers || []).forEach(v => merged.customers.add(v));
+        (retryResult.brands || []).forEach(v => merged.brands.add(v));
+        (retryResult.principals || []).forEach(v => merged.principals.add(v));
+      }
+      totalFound = merged.customers.size + merged.brands.size + merged.principals.size;
+      principalBrandFound = merged.brands.size + merged.principals.size;
+    }
+  }
+
+  console.log(`    Screenshot sweep total: ${merged.principals.size} principals, ${merged.customers.size} customers, ${merged.brands.size} brands`);
+  return {
+    customers: Array.from(merged.customers),
+    brands: Array.from(merged.brands),
+    principals: Array.from(merged.principals)
+  };
+}
+
+function isBlockedScrapeError(errorMessage) {
+  const msg = ensureString(errorMessage).toLowerCase();
+  return (
+    msg.includes('http 401') ||
+    msg.includes('http 403') ||
+    msg.includes('forbidden') ||
+    msg.includes('access denied') ||
+    msg.includes('captcha') ||
+    msg.includes('cloudflare')
+  );
+}
+
+async function extractBasicInfoFromScreenshot(websiteUrl, options = {}) {
+  if (!websiteUrl || !process.env.SCREENSHOT_API_KEY) {
+    return { company_name: '', established_year: '', location: '' };
+  }
+
+  const screenshotApiKey = process.env.SCREENSHOT_API_KEY;
+  const screenshotApiUrl = process.env.SCREENSHOT_API_URL || 'https://shot.screenshotapi.net/screenshot';
+  const width = Math.max(1100, Math.min(parseInt(options.width || '1400', 10), 2400));
+  const delayMs = Math.max(2500, Math.min(parseInt(options.delayMs || '4500', 10), 12000));
+
+  try {
+    let url = websiteUrl;
+    if (!url.startsWith('http')) url = `https://${url}`;
+
+    console.log('    Screenshot fallback: capturing website for HQ extraction...');
+
+    const screenshotParams = new URLSearchParams({
+      token: screenshotApiKey,
+      url,
+      output: 'image',
+      file_type: 'png',
+      wait_for_event: 'load',
+      delay: delayMs,
+      full_page: 'true',
+      width
+    });
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const response = await fetch(`${screenshotApiUrl}?${screenshotParams}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      console.log(`    Screenshot fallback: API returned ${response.status}`);
+      return { company_name: '', established_year: '', location: '' };
+    }
+
+    const imageBuffer = await response.buffer();
+    if (!imageBuffer || imageBuffer.length < 10000) {
+      console.log('    Screenshot fallback: image too small');
+      return { company_name: '', established_year: '', location: '' };
+    }
+
+    const base64Image = imageBuffer.toString('base64');
+    const visionResponse = await withRetry(async () => {
+      return await openai.chat.completions.create({
+        model: 'gpt-5.1',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`,
+                detail: 'high'
+              }
+            },
+            {
+              type: 'text',
+              text: `Extract company basic info from this full-page website screenshot.
+
+Return ONLY valid JSON:
+{
+  "company_name": "...",
+  "established_year": "YYYY or empty",
+  "location": "State/Province, Country"
+}
+
+Rules:
+- Use only clearly visible evidence in the screenshot.
+- If not visible, return empty string for that field.
+- location must be HQ-style and concise (state/province + country).
+- For Singapore use "Area, Singapore" only when area is visible.
+- For Australia, prefer full state name + "Australia" if state abbreviation is visible.
+- Return JSON only, no explanation.`
+            }
+          ]
+        }],
+        max_tokens: 500,
+        temperature: 0.1
+      });
+    }, 2, 3000);
+
+    if (visionResponse.usage) {
+      recordTokens('gpt-5.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+    }
+
+    const content = visionResponse.choices[0]?.message?.content || '{}';
+    let parsed = { company_name: '', established_year: '', location: '' };
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+    } catch {
+      console.log('    Screenshot fallback: failed to parse model response');
+    }
+
+    return {
+      company_name: ensureString(parsed.company_name),
+      established_year: ensureString(parsed.established_year),
+      location: ensureString(parsed.location)
+    };
+  } catch (error) {
+    console.log(`    Screenshot fallback: error - ${error.message}`);
+    return { company_name: '', established_year: '', location: '' };
+  }
+}
+
+function buildScreenshotFallbackCompanyData(websiteUrl, scrapeError, basicInfo = {}) {
+  const extractedName = cleanCompanyName(ensureString(basicInfo.company_name), websiteUrl);
+  const fallbackName = extractedName || extractCompanyNameFromUrl(websiteUrl);
+  const rawLocation = ensureString(basicInfo.location);
+  const normalizedLocation = validateAndFixHQFormat(rawLocation, websiteUrl) || rawLocation;
+
+  return {
+    website: websiteUrl,
+    company_name: fallbackName,
+    title: fallbackName,
+    established_year: ensureString(basicInfo.established_year),
+    location: normalizedLocation,
+    business: 'Website blocks direct text scraping; profile uses screenshot-based extraction.',
+    message: '',
+    footnote: '',
+    key_metrics: [],
+    business_type: 'industrial',
+    breakdown_title: 'Products and Applications',
+    breakdown_items: [],
+    projects: [],
+    products: [],
+    metrics: '',
+    _logo: null,
+    _businessRelationships: { customers: [], suppliers: [], principals: [], brands: [] },
+    _customerSegments: null,
+    _supplierSegments: null,
+    _principalSegments: null,
+    _brandSegments: null,
+    _relationshipCoverageStatus: 'needs_manual_review',
+    _partialExtraction: true,
+    _screenshotFallbackUsed: true,
+    _sourceError: `Failed to scrape: ${ensureString(scrapeError)}`
+  };
 }
 
 // Segment customers by industry using AI (for cleaner display)
@@ -6794,6 +7350,148 @@ Rules:
     console.log(`    Customer segmentation failed: ${err.message}`);
   }
   return null;
+}
+
+function chunkArray(items, chunkSize) {
+  const size = Math.max(1, chunkSize || 1);
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function buildDeterministicSegments(names, options = {}) {
+  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
+  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const parsedChunkSize = Number.parseInt(String(options.chunkSize ?? 3), 10);
+  const chunkSize = Number.isFinite(parsedChunkSize) ? Math.max(2, parsedChunkSize) : 3;
+  const cleaned = uniqueRelationshipNames(names || []);
+  if (cleaned.length < minCount) return null;
+
+  const grouped = chunkArray(cleaned, chunkSize);
+  const result = {};
+  for (let i = 0; i < grouped.length; i++) {
+    result[`Segment ${i + 1}`] = grouped[i];
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function normalizeSegmentMap(segmentMap) {
+  if (!segmentMap || typeof segmentMap !== 'object') return {};
+  const normalized = {};
+  for (const [label, names] of Object.entries(segmentMap)) {
+    const cleanLabel = ensureString(label).trim();
+    if (!cleanLabel || !Array.isArray(names)) continue;
+    const cleanNames = uniqueRelationshipNames(names);
+    if (cleanNames.length > 0) normalized[cleanLabel] = cleanNames;
+  }
+  return normalized;
+}
+
+async function buildCustomerSegments(customers, openai, options = {}) {
+  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
+  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const cleaned = uniqueRelationshipNames(customers || []);
+  if (cleaned.length < minCount) return null;
+
+  if (openai) {
+    const aiSegments = await segmentCustomersByIndustry(cleaned, openai);
+    const normalizedAi = normalizeSegmentMap(aiSegments);
+    if (Object.keys(normalizedAi).length > 0) return normalizedAi;
+  }
+
+  return buildDeterministicSegments(cleaned, { minCount });
+}
+
+function buildBrandSegments(brands, options = {}) {
+  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
+  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const cleaned = uniqueRelationshipNames(brands || []);
+  if (cleaned.length < minCount) return null;
+  return buildDeterministicSegments(cleaned, { minCount });
+}
+
+function buildPrincipalSegments(principals, options = {}) {
+  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
+  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const cleaned = uniqueRelationshipNames(principals || []);
+  if (cleaned.length < minCount) return null;
+  return buildDeterministicSegments(cleaned, { minCount });
+}
+
+function buildSupplierSegments(suppliers, options = {}) {
+  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
+  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const cleaned = uniqueRelationshipNames(suppliers || []);
+  if (cleaned.length < minCount) return null;
+  return buildDeterministicSegments(cleaned, { minCount });
+}
+
+function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = '') {
+  const label = ensureString(metricLabel);
+  const value = ensureString(metricValue);
+  const labelLower = label.toLowerCase();
+  const valueLower = value.toLowerCase();
+  const hasRelationshipSignal = /(customer|client|supplier|vendor|principal|partner|brand|distributor)/.test(labelLower) ||
+    /(customer|client|supplier|vendor|principal|partner|brand|distributor)/.test(valueLower);
+  if (!hasRelationshipSignal) {
+    return value;
+  }
+
+  // If already grouped into lines, keep the original grouping.
+  if (value.includes('\n') && value.includes(':')) {
+    return fixAcronymCasing(value);
+  }
+
+  const extracted = extractRelationshipsFromMetrics([{ label, value }]);
+  const parsedNames = uniqueRelationshipNames([
+    ...(extracted.customers || []),
+    ...(extracted.suppliers || []),
+    ...(extracted.principals || []),
+    ...(extracted.brands || [])
+  ]);
+  const filteredNames = filterGarbageNames(parsedNames, companyName);
+
+  if (filteredNames.length < RELATIONSHIP_SEGMENT_MIN_COUNT) {
+    return value;
+  }
+
+  const segmented = buildDeterministicSegments(filteredNames, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+  const lines = buildSegmentDisplayLines(segmented, { maxLines: 4, maxNamesPerLine: 4, forceNumbered: true });
+  if (lines.length === 0) return value;
+  return fixAcronymCasing(lines.join('\n'));
+}
+
+function buildSegmentDisplayLines(segmentMap, options = {}) {
+  const maxLines = Math.max(1, parseInt(options.maxLines || '6', 10));
+  const maxNamesPerLine = Math.max(1, parseInt(options.maxNamesPerLine || '4', 10));
+  const forceNumbered = options.forceNumbered === true;
+  const normalized = normalizeSegmentMap(segmentMap);
+  const entries = Object.entries(normalized);
+  if (entries.length === 0) return [];
+
+  const lines = [];
+  const totalNames = entries.reduce((sum, [, arr]) => sum + arr.length, 0);
+  let shownCount = 0;
+
+  outer:
+  for (let idx = 0; idx < entries.length; idx++) {
+    const [label, names] = entries[idx];
+    const displayLabel = forceNumbered ? `Segment ${idx + 1}` : label;
+    const chunks = chunkArray(names, maxNamesPerLine);
+    for (const chunk of chunks) {
+      if (lines.length >= maxLines) break outer;
+      lines.push(`${displayLabel}: ${chunk.join(', ')}`);
+      shownCount += chunk.length;
+    }
+  }
+
+  if (shownCount < totalNames && lines.length < maxLines + 1) {
+    lines.push(`+${totalNames - shownCount} more`);
+  }
+
+  return lines;
 }
 
 // ===== Business Type Detection =====
@@ -6972,9 +7670,20 @@ function cleanCustomerName(text) {
     'view', 'click', 'here', 'more', 'read', 'learn', 'see', 'our', 'the', 'and',
     'trusted', 'brands', 'companies', 'clients', 'partners', 'customers'
   ];
+  const navigationTerms = [
+    'become a customer', 'order online', 'shipping & returns', 'terms & conditions',
+    'privacy policy', 'my account', 'login', 'forgot password', 'reviews',
+    'download application form', 'contact us'
+  ];
 
   const lowerName = name.toLowerCase();
   if (skipTerms.some(term => lowerName === term || lowerName.startsWith(term + ' '))) {
+    return '';
+  }
+  if (navigationTerms.includes(lowerName)) {
+    return '';
+  }
+  if (/(download|application form|login|sign in|sign up|order online|privacy policy|terms|returns|my account|reviews?)/i.test(lowerName)) {
     return '';
   }
 
@@ -7029,6 +7738,11 @@ function cleanCustomerName(text) {
   // Skip if looks like a sentence (too many words for a company name)
   const wordCount = name.split(/\s+/).length;
   if (wordCount > 8) {
+    return '';
+  }
+
+  // Skip likely personal names (common false positives in testimonial sections)
+  if (/^[A-Z][a-z]+-[A-Z][a-z]+$/.test(name)) {
     return '';
   }
 
@@ -7125,6 +7839,63 @@ Content: ${scrapedContent.substring(0, 25000)}`
   }
 }
 
+function inferCountryFromWebsite(websiteUrl) {
+  if (!websiteUrl) return '';
+  try {
+    const normalized = websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`;
+    const host = new URL(normalized).hostname.toLowerCase();
+    if (host.endsWith('.com.au') || host.endsWith('.au')) return 'Australia';
+    if (host.endsWith('.co.nz') || host.endsWith('.nz')) return 'New Zealand';
+  } catch {
+    return '';
+  }
+  return '';
+}
+
+function normalizeAuStateValue(value) {
+  const v = ensureString(value).toLowerCase().replace(/\./g, '').trim();
+  return AU_STATE_MAP[v] || '';
+}
+
+function extractRegionalLocationHint(content, websiteUrl) {
+  const text = ensureString(content);
+  if (!text) return '';
+
+  const country = inferCountryFromWebsite(websiteUrl);
+  const lower = text.toLowerCase();
+  if (!country) return '';
+
+  if (country === 'Australia') {
+    const postalStateMatch = lower.match(/\b(nsw|vic|qld|wa|sa|tas|act|nt)\b\s*\d{4}\b/i);
+    if (postalStateMatch) {
+      const normalized = normalizeAuStateValue(postalStateMatch[1]);
+      if (normalized) return `${normalized}, Australia`;
+    }
+
+    for (const stateName of Object.values(AU_STATE_MAP)) {
+      if (lower.includes(stateName.toLowerCase())) {
+        return `${stateName}, Australia`;
+      }
+    }
+
+    for (const [city, state] of Object.entries(AU_CITY_REGION_MAP)) {
+      if (lower.includes(city)) {
+        return `${state}, Australia`;
+      }
+    }
+  }
+
+  if (country === 'New Zealand') {
+    for (const [token, region] of Object.entries(NZ_REGION_MAP)) {
+      if (lower.includes(token)) {
+        return `${region}, New Zealand`;
+      }
+    }
+  }
+
+  return '';
+}
+
 // Post-process and validate HQ location format
 // ALL countries: EXACTLY 2 levels (State/Province, Country)
 // Singapore: "Area, Singapore" preferred, "Singapore" as fallback
@@ -7187,6 +7958,7 @@ function validateAndFixHQFormat(location, websiteUrl) {
 
   const parts = loc.split(',').map(p => p.trim()).filter(p => p);
   const lastPart = parts[parts.length - 1]?.toLowerCase() || '';
+  const inferredCountry = inferCountryFromWebsite(websiteUrl);
 
   // Check if Singapore
   const isSingapore = lastPart === 'singapore' || loc.toLowerCase() === 'singapore';
@@ -7201,6 +7973,14 @@ function validateAndFixHQFormat(location, websiteUrl) {
     return 'Singapore';
   }
 
+  // Australia: normalize state abbreviations and recover missing country when possible.
+  if (parts.length >= 2) {
+    const lastAuState = normalizeAuStateValue(parts[parts.length - 1]);
+    if (lastAuState) {
+      return `${lastAuState}, Australia`;
+    }
+  }
+
   // Non-Singapore: must be exactly 2 levels (State/Province, Country)
   if (parts.length > 2) {
     // Too many levels, keep last 2 only
@@ -7209,6 +7989,21 @@ function validateAndFixHQFormat(location, websiteUrl) {
     return fixed;
   }
   if (parts.length === 1) {
+    const only = parts[0];
+    const onlyAuState = normalizeAuStateValue(only);
+    if (onlyAuState) {
+      return `${onlyAuState}, Australia`;
+    }
+
+    // If domain strongly indicates country, avoid dropping to empty.
+    if (inferredCountry) {
+      if (only.toLowerCase() === inferredCountry.toLowerCase()) {
+        console.log(`  [HQ Warning] Location missing province: "${loc}"`);
+        return '';
+      }
+      return `${only}, ${inferredCountry}`;
+    }
+
     // Only country name - incomplete
     console.log(`  [HQ Warning] Location missing province: "${loc}"`);
     return ''; // Return empty
@@ -7586,12 +8381,10 @@ async function extractProductsBreakdown(scrapedContent, previousData) {
 
 FIRST: Determine the BUSINESS TYPE:
 1. PROJECT-BASED: Construction, building materials, engineering, architecture, contractors
-   - These companies showcase PROJECTS with photos on their website
-   - Look for: "Projects", "Portfolio", "Case Studies", "Our Work", project galleries
+   - Look for: "Projects", "Portfolio", "Case Studies", "Our Work"
 
 2. CONSUMER-FACING: Consumer products, retail, F&B, cosmetics, fashion
-   - These companies showcase PRODUCTS with photos
-   - Look for: Product catalogs, product images, consumer goods
+   - Look for: Product catalogs, product families, consumer goods
 
 3. INDUSTRIAL B2B: Manufacturing, chemicals, inks, coatings, industrial supplies
    - These companies have product lines for different applications/industries
@@ -7599,34 +8392,22 @@ FIRST: Determine the BUSINESS TYPE:
 
 OUTPUT FORMAT based on business type:
 
-FOR PROJECT-BASED (construction, building, engineering):
+FOR PROJECT-BASED (construction, building, engineering), return table-friendly rows:
 {
   "business_type": "project",
   "breakdown_title": "Past Projects",
-  "projects": [
-    {
-      "name": "Metrojet Hangar at Clark Philippines",
-      "image_url": "https://example.com/project1.jpg",
-      "metrics": ["Area: 7,400m²", "Material: Pre-painted Steel"]
-    },
-    {
-      "name": "Al Rayyan Stadium Qatar",
-      "image_url": "https://example.com/project2.jpg",
-      "metrics": ["Area: 26,400m²", "Material: Aluminium PVDF"]
-    }
+  "breakdown_items": [
+    {"label": "Metrojet Hangar (Philippines)", "value": "Area: 7,400 sqm; Material: pre-painted steel"},
+    {"label": "Al Rayyan Stadium (Qatar)", "value": "Area: 26,400 sqm; Material: aluminium PVDF"}
   ]
 }
 
-FOR CONSUMER-FACING (consumer products):
+FOR CONSUMER-FACING (consumer products), return table-friendly rows:
 {
   "business_type": "consumer",
   "breakdown_title": "Product Range",
-  "products": [
-    {
-      "name": "Premium Ink Series",
-      "image_url": "https://example.com/product1.jpg",
-      "description": "High-quality printing inks"
-    }
+  "breakdown_items": [
+    {"label": "Premium Ink Series", "value": "High-durability inks for packaging and labels"}
   ]
 }
 
@@ -7659,8 +8440,9 @@ CRITICAL RULES FOR INDUSTRIAL B2B TABLE:
   - GOOD: "Biometric attendance and access control terminals"
 - If you can't be more specific than "X for Y applications", look deeper in the website content
 
-CRITICAL: For projects/products, extract ACTUAL image URLs from the website content!
-Look for: <img src="...">, background-image: url(...), data-src="...", srcset="..."
+CRITICAL:
+- Output must be TABLE-READY text only (label + value).
+- Do NOT output image URLs or image-related fields.
 
 Return ONLY valid JSON.`
         },
@@ -7682,7 +8464,7 @@ ${scrapedContent.substring(0, 35000)}`
     }
     const result = JSON.parse(response.choices[0].message.content);
 
-    // Validate based on business type
+    // Validate based on business type (table-first)
     if (result.business_type === 'project' && result.projects) {
       result.projects = result.projects
         .filter(p => p && typeof p === 'object' && p.name)
@@ -7692,6 +8474,13 @@ ${scrapedContent.substring(0, 35000)}`
           metrics: Array.isArray(p.metrics) ? p.metrics.map(m => String(m)) : []
         }))
         .slice(0, 4); // Max 4 projects
+      result.breakdown_title = ensureString(result.breakdown_title) || 'Past Projects';
+      result.breakdown_items = result.projects
+        .map(project => ({
+          label: project.name,
+          value: (project.metrics || []).join('; ').trim() || 'Project reference'
+        }))
+        .filter(item => item.label && item.value);
     } else if (result.business_type === 'consumer' && result.products) {
       result.products = result.products
         .filter(p => p && typeof p === 'object' && p.name)
@@ -7701,6 +8490,13 @@ ${scrapedContent.substring(0, 35000)}`
           description: String(p.description || '')
         }))
         .slice(0, 4); // Max 4 products
+      result.breakdown_title = ensureString(result.breakdown_title) || 'Product Range';
+      result.breakdown_items = result.products
+        .map(product => ({
+          label: product.name,
+          value: product.description || 'Product offering'
+        }))
+        .filter(item => item.label && item.value);
     } else {
       // Default to industrial/table format
       result.business_type = 'industrial';
@@ -8442,6 +9238,17 @@ async function processSingleWebsite(website, index, total) {
 
     if (!scraped.success) {
       console.log(`  [${index + 1}] Failed to scrape: ${scraped.error}`);
+
+      if (isBlockedScrapeError(scraped.error) && process.env.SCREENSHOT_API_KEY) {
+        console.log(`  [${index + 1}] Step 1b: Blocked by website, attempting screenshot fallback for company/location...`);
+        const screenshotBasicInfo = await extractBasicInfoFromScreenshot(trimmedWebsite);
+        if (screenshotBasicInfo.company_name || screenshotBasicInfo.location || screenshotBasicInfo.established_year) {
+          console.log(`  [${index + 1}] Screenshot fallback succeeded (name/location recovered)`);
+          return buildScreenshotFallbackCompanyData(trimmedWebsite, scraped.error, screenshotBasicInfo);
+        }
+        console.log(`  [${index + 1}] Screenshot fallback did not recover enough data`);
+      }
+
       // Mark as inaccessible - will appear on summary slide but not individual profile
       const companyName = extractCompanyNameFromUrl(trimmedWebsite);
       return {
@@ -8473,18 +9280,16 @@ async function processSingleWebsite(website, index, total) {
     if (structuredAddress) {
       console.log(`  [${index + 1}] Found JSON-LD address: ${structuredAddress.formatted}`);
     }
+    const regionalLocationHint = extractRegionalLocationHint(scraped.content, trimmedWebsite);
+    if (regionalLocationHint) {
+      console.log(`  [${index + 1}] Regional location hint: ${regionalLocationHint}`);
+    }
 
     // Step 1c: Extract logo using cascade (Clearbit → og:image → apple-touch-icon → img[logo] → favicon)
     console.log(`  [${index + 1}] Step 1c: Extracting company logo...`);
     const logoResult = await extractLogoFromWebsite(trimmedWebsite, scraped.rawHtml);
     if (logoResult) {
       console.log(`  [${index + 1}] Logo found via ${logoResult.source}`);
-    }
-
-    // Step 1d: Extract customer/partner names from image alt texts
-    const customerNamesFromImages = extractCustomerNamesFromImages(scraped.rawHtml);
-    if (customerNamesFromImages.length > 0) {
-      console.log(`  [${index + 1}] Customer names from images: ${customerNamesFromImages.slice(0, 5).join(', ')}${customerNamesFromImages.length > 5 ? '...' : ''}`);
     }
 
     // Step 2: Run Marker AI to identify important content (avoids truncation blind spots)
@@ -8698,25 +9503,54 @@ async function processSingleWebsite(website, index, total) {
 
     console.log(`  [${index + 1}] Merged metrics: ${regexBasedMetrics.length} from regex + ${mergedMetrics.length - regexBasedMetrics.length} from AI = ${mergedMetrics.length} total`);
 
-    // Determine location: prefer AI extraction, fallback to JSON-LD structured address
-    let finalLocation = ensureString(basicInfo.location || searchedInfo.location);
+    // Determine location priority: website extraction -> structured data -> web search fallback.
+    let finalLocation = ensureString(basicInfo.location);
     if (!finalLocation && structuredAddress?.formatted) {
       finalLocation = structuredAddress.formatted;
       console.log(`  [${index + 1}] Using JSON-LD address as fallback: ${finalLocation}`);
+    }
+    if (!finalLocation && regionalLocationHint) {
+      finalLocation = regionalLocationHint;
+      console.log(`  [${index + 1}] Using regional hint fallback: ${finalLocation}`);
+    }
+    if (!finalLocation) {
+      finalLocation = ensureString(searchedInfo.location);
+      if (finalLocation) {
+        console.log(`  [${index + 1}] Using searched location fallback: ${finalLocation}`);
+      }
     }
 
     // Validate and fix HQ format
     let validatedLocation = validateAndFixHQFormat(finalLocation, trimmedWebsite);
 
-    // FIX #1: If location is incomplete (< 2 levels), retry with focused extraction
-    if (validatedLocation) {
-      const locParts = validatedLocation.split(',').map(p => p.trim()).filter(p => p);
-      const requiredLevels = 2; // 2 levels for all countries (state/province, country)
-      if (locParts.length < requiredLevels) {
-        console.log(`  [${index + 1}] Step 6b: HQ incomplete (${locParts.length}/${requiredLevels} levels), retrying...`);
-        const improvedLocation = await extractFullAddress(scraped.content, trimmedWebsite, validatedLocation);
-        if (improvedLocation && improvedLocation !== validatedLocation) {
-          validatedLocation = validateAndFixHQFormat(improvedLocation, trimmedWebsite);
+    // Retry extraction when HQ is missing/incomplete after validation.
+    const validatedParts = ensureString(validatedLocation).split(',').map(p => p.trim()).filter(p => p);
+    const requiredLevels = 2; // 2 levels for all countries (state/province, country)
+    const needsLocationRetry = !!finalLocation && (validatedParts.length < requiredLevels);
+    if (needsLocationRetry) {
+      console.log(`  [${index + 1}] Step 6b: HQ incomplete (${validatedParts.length}/${requiredLevels} levels), retrying...`);
+      const retrySeed = validatedLocation || finalLocation;
+      const improvedLocation = await extractFullAddress(scraped.content, trimmedWebsite, retrySeed);
+      if (improvedLocation) {
+        validatedLocation = validateAndFixHQFormat(improvedLocation, trimmedWebsite) || ensureString(improvedLocation).trim();
+      }
+    }
+    if (!validatedLocation && regionalLocationHint) {
+      validatedLocation = regionalLocationHint;
+      console.log(`  [${index + 1}] Using regional hint after HQ validation: ${validatedLocation}`);
+    } else if (validatedLocation && regionalLocationHint) {
+      const inferredCountry = inferCountryFromWebsite(trimmedWebsite);
+      if (inferredCountry === 'Australia') {
+        const hasState = Object.values(AU_STATE_MAP).some(state => validatedLocation.toLowerCase().includes(state.toLowerCase()));
+        if (!hasState) {
+          validatedLocation = regionalLocationHint;
+          console.log(`  [${index + 1}] Replacing city-level location with AU regional hint: ${validatedLocation}`);
+        }
+      } else if (inferredCountry === 'New Zealand') {
+        const hasRegion = Object.values(NZ_REGION_MAP).some(region => validatedLocation.toLowerCase().includes(region.toLowerCase()));
+        if (!hasRegion) {
+          validatedLocation = regionalLocationHint;
+          console.log(`  [${index + 1}] Replacing city-level location with NZ regional hint: ${validatedLocation}`);
         }
       }
     }
@@ -8730,75 +9564,112 @@ async function processSingleWebsite(website, index, total) {
       businessType = detectedType;
     }
 
-    // FIX #3: Extract product/project images for ALL business types
-    // Images are only displayed if user selects an image layout option
-    let productProjectImages = [];
-    console.log(`  [${index + 1}] Step 6c: Extracting product/project images...`);
-    const rawProductImages = extractProductProjectImages(scraped.rawHtml, businessType, trimmedWebsite);
-    if (rawProductImages.length > 0) {
-      console.log(`  [${index + 1}] Found ${rawProductImages.length} candidate images, verifying with Vision...`);
-      // Use GPT-4o Vision to verify images are actual products/projects (not junk)
-      productProjectImages = await verifyProductImagesWithVision(rawProductImages, businessType, openai);
-    }
-
-    // FIX #5: Extract categorized business relationships (customers, suppliers, principals, brands)
-    console.log(`  [${index + 1}] Step 6d: Extracting business relationships (metadata)...`);
+    // Step 6c: Extract business relationships from page metadata/text
+    console.log(`  [${index + 1}] Step 6c: Extracting business relationships...`);
     const businessRelationships = extractBusinessRelationships(scraped.rawHtml);
-
-    // Step 6e: Use GPT-4o Vision to read logo images (more accurate than metadata)
-    console.log(`  [${index + 1}] Step 6e: Reading logos with GPT-4o Vision...`);
-    const visionResults = await extractNamesFromLogosWithVision(scraped.rawHtml, trimmedWebsite);
-
-    // Step 6f: Screenshot fallback - if vision/metadata extraction found few partners, use full-page screenshot
+    const metricRelationships = extractRelationshipsFromMetrics(mergedMetrics);
+    const urlRelationships = extractRelationshipsFromPageUrls(scraped.pagesScraped || []);
+    const structuredRelationships = extractRelationshipsFromStructuredData(scraped.rawHtml);
+    const embeddedRelationships = extractRelationshipsFromEmbeddedData(scraped.rawHtml);
+    const catalogFeedRelationships = await extractRelationshipsFromProductFeeds(trimmedWebsite);
     let screenshotResults = { customers: [], brands: [], principals: [] };
-    const totalFromVision = visionResults.customers.length + visionResults.brands.length + (visionResults.principals?.length || 0);
-    const totalFromMeta = businessRelationships.customers.length + businessRelationships.principals.length + businessRelationships.brands.length;
-
-    if (totalFromVision + totalFromMeta < 3 && process.env.SCREENSHOT_API_KEY) {
-      console.log(`  [${index + 1}] Step 6f: Few partners found (${totalFromVision + totalFromMeta}), trying screenshot analysis...`);
-      screenshotResults = await extractPartnersFromScreenshot(trimmedWebsite);
+    if (process.env.SCREENSHOT_API_KEY) {
+      console.log(`  [${index + 1}] Step 6d: Reading partner/client logos from website screenshots...`);
+      screenshotResults = await extractPartnersFromScreenshots(trimmedWebsite, scraped.pagesScraped || [], { deepMode: true });
+    }
+    businessRelationships.customers = uniqueRelationshipNames([
+      ...(businessRelationships.customers || []),
+      ...(metricRelationships.customers || []),
+      ...(urlRelationships.customers || []),
+      ...(structuredRelationships.customers || []),
+      ...(embeddedRelationships.customers || []),
+      ...(catalogFeedRelationships.customers || []),
+      ...(screenshotResults.customers || [])
+    ]);
+    businessRelationships.suppliers = uniqueRelationshipNames([
+      ...(businessRelationships.suppliers || []),
+      ...(metricRelationships.suppliers || []),
+      ...(urlRelationships.suppliers || []),
+      ...(structuredRelationships.suppliers || []),
+      ...(embeddedRelationships.suppliers || [])
+    ]);
+    businessRelationships.principals = uniqueRelationshipNames([
+      ...(businessRelationships.principals || []),
+      ...(metricRelationships.principals || []),
+      ...(urlRelationships.principals || []),
+      ...(structuredRelationships.principals || []),
+      ...(embeddedRelationships.principals || []),
+      ...(catalogFeedRelationships.principals || []),
+      ...(screenshotResults.principals || [])
+    ]);
+    businessRelationships.brands = uniqueRelationshipNames([
+      ...(businessRelationships.brands || []),
+      ...(metricRelationships.brands || []),
+      ...(urlRelationships.brands || []),
+      ...(structuredRelationships.brands || []),
+      ...(embeddedRelationships.brands || []),
+      ...(catalogFeedRelationships.brands || []),
+      ...(screenshotResults.brands || [])
+    ]);
+    let principalBrandCoverage = businessRelationships.principals.length + businessRelationships.brands.length;
+    if (principalBrandCoverage < 2) {
+      console.log(`  [${index + 1}] Step 6e: Relationship coverage low (${principalBrandCoverage}), running AI text fallback...`);
+      const aiRelationships = await extractRelationshipsFromContentAI(scraped.content, {
+        company_name: basicInfo.company_name
+      });
+      businessRelationships.customers = uniqueRelationshipNames([
+        ...(businessRelationships.customers || []),
+        ...(aiRelationships.customers || [])
+      ]);
+      businessRelationships.principals = uniqueRelationshipNames([
+        ...(businessRelationships.principals || []),
+        ...(aiRelationships.principals || [])
+      ]);
+      businessRelationships.brands = uniqueRelationshipNames([
+        ...(businessRelationships.brands || []),
+        ...(aiRelationships.brands || [])
+      ]);
+      principalBrandCoverage = businessRelationships.principals.length + businessRelationships.brands.length;
+      console.log(`  [${index + 1}] Step 6e: Coverage after AI fallback = ${principalBrandCoverage}`);
+    }
+    const relationshipCoverageStatus = principalBrandCoverage < 2 ? 'needs_manual_review' : 'ok';
+    if (relationshipCoverageStatus === 'needs_manual_review') {
+      console.log(`  [${index + 1}] Step 6f: Principal/brand coverage still low (${principalBrandCoverage}) - marking manual review required`);
     }
 
-    // Merge results with CONFIDENCE-BASED prioritization
-    // HIGH confidence: Vision API, Screenshot analysis (AI actually sees images)
-    // LOW confidence: Alt text extraction, metadata regex (prone to garbage)
-    // Strategy: Only use low-confidence sources if high-confidence found < 3 items
-
-    const highConfidenceCustomers = [...new Set([
-      ...visionResults.customers,
-      ...screenshotResults.customers
-    ])];
-
-    const lowConfidenceCustomers = [...new Set([
-      ...customerNamesFromImages,
-      ...businessRelationships.customers
-    ])];
-
-    // Only add low-confidence customers if we don't have enough from high-confidence
-    const allCustomers = highConfidenceCustomers.length >= 3
-      ? highConfidenceCustomers
-      : [...new Set([...highConfidenceCustomers, ...lowConfidenceCustomers])];
-
-    const allBrands = [...new Set([
-      ...visionResults.brands,
-      ...screenshotResults.brands,
-      ...businessRelationships.brands
-    ])];
-    const allPrincipals = [...new Set([
-      ...(visionResults.principals || []),
-      ...screenshotResults.principals,
-      ...businessRelationships.principals
-    ])];
-
-    businessRelationships.customers = allCustomers;
-    businessRelationships.brands = allBrands;
-    businessRelationships.principals = allPrincipals;
-
-    // Segment customers by industry for cleaner display (if we have enough)
-    let customerSegments = null;
-    if (allCustomers.length >= 3) {
-      customerSegments = await segmentCustomersByIndustry(allCustomers, openai);
+    let finalBreakdown = applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelationships);
+    if ((!Array.isArray(finalBreakdown.breakdown_items) || finalBreakdown.breakdown_items.length === 0) &&
+        Array.isArray(catalogFeedRelationships.products) &&
+        catalogFeedRelationships.products.length > 0) {
+      finalBreakdown = {
+        ...finalBreakdown,
+        breakdown_title: 'Products and Applications',
+        breakdown_items: catalogFeedRelationships.products.slice(0, 8).map(name => ({
+          label: 'Product',
+          value: name
+        }))
+      };
+      console.log(`  [${index + 1}] Using product feed fallback for right table (${finalBreakdown.breakdown_items.length} items)`);
     }
+
+    // Build display-ready relationship segments so large customer/brand lists are readable.
+    const segmentNameFilter = basicInfo.company_name || businessInfo.title || '';
+    const cleanedCustomersForSegments = filterGarbageNames(businessRelationships.customers || [], segmentNameFilter);
+    const cleanedSuppliersForSegments = filterGarbageNames(businessRelationships.suppliers || [], segmentNameFilter);
+    const cleanedPrincipalsForSegments = filterGarbageNames(businessRelationships.principals || [], segmentNameFilter);
+    const cleanedBrandsForSegments = filterGarbageNames(businessRelationships.brands || [], segmentNameFilter);
+    const customerSegments = await buildCustomerSegments(cleanedCustomersForSegments, openai, {
+      minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
+    });
+    const supplierSegments = buildSupplierSegments(cleanedSuppliersForSegments, {
+      minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
+    });
+    const principalSegments = buildPrincipalSegments(cleanedPrincipalsForSegments, {
+      minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
+    });
+    const brandSegments = buildBrandSegments(cleanedBrandsForSegments, {
+      minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
+    });
 
     const relationshipCounts = Object.entries(businessRelationships)
       .filter(([, arr]) => arr.length > 0)
@@ -8822,8 +9693,8 @@ async function processSingleWebsite(website, index, total) {
       key_metrics: mergedMetrics,  // Merged: AI + regex (ground truth)
       // Right-side content (varies by business type)
       business_type: businessType,
-      breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
-      breakdown_items: productsBreakdown.breakdown_items || [],
+      breakdown_title: ensureString(finalBreakdown.breakdown_title) || 'Products and Applications',
+      breakdown_items: finalBreakdown.breakdown_items || [],
       projects: productsBreakdown.projects || [],  // For project-based businesses
       products: productsBreakdown.products || [],  // For consumer-facing businesses
       metrics: ensureString(metricsInfo.metrics),  // Fallback for old format
@@ -8833,8 +9704,14 @@ async function processSingleWebsite(website, index, total) {
       _businessRelationships: businessRelationships,
       // Customers segmented by industry (for display)
       _customerSegments: customerSegments,
-      // Product/project images for right side (B2C and project-based)
-      _productProjectImages: productProjectImages
+      // Suppliers segmented for display when supplier lists are long
+      _supplierSegments: supplierSegments,
+      // Principals segmented for display when principal lists are long
+      _principalSegments: principalSegments,
+      // Brands segmented for display when brand lists are long
+      _brandSegments: brandSegments,
+      // Relationship coverage quality gate (used to fail loudly in slide output)
+      _relationshipCoverageStatus: relationshipCoverageStatus
     };
 
     // Log metrics count before review
@@ -8975,7 +9852,7 @@ async function processWebsitesInParallel(websites) {
 }
 
 // Valid layout options (whitelist to prevent XSS/injection)
-const VALID_LAYOUTS = ['table-6', 'table-unlimited', 'table-half', 'images', 'images-4', 'images-6', 'images-vertical', 'images-labeled', 'empty'];
+const VALID_LAYOUTS = ['table-6', 'table-unlimited', 'table-half', 'empty'];
 
 // Main profile slides endpoint
 app.post('/api/profile-slides', async (req, res) => {
@@ -9091,7 +9968,8 @@ app.post('/api/profile-slides', async (req, res) => {
 // ============ GENERATE PPT ENDPOINT (returns content, no email) ============
 // Used by v6 search to generate PPT and attach to its own email
 app.post('/api/generate-ppt', async (req, res) => {
-  const { websites, targetDescription, rightLayout } = req.body;
+  const { websites, targetDescription, rightLayout: rawLayout } = req.body;
+  const rightLayout = VALID_LAYOUTS.includes(rawLayout) ? rawLayout : 'table-6';
 
   if (!websites || !Array.isArray(websites) || websites.length === 0) {
     return res.status(400).json({ error: 'Please provide an array of website URLs' });
@@ -9124,6 +10002,18 @@ app.post('/api/generate-ppt', async (req, res) => {
 
         if (!scraped.success) {
           console.log(`  Failed to scrape: ${scraped.error}`);
+
+          if (isBlockedScrapeError(scraped.error) && process.env.SCREENSHOT_API_KEY) {
+            console.log('  Step 1b: Blocked by website, attempting screenshot fallback for company/location...');
+            const screenshotBasicInfo = await extractBasicInfoFromScreenshot(website);
+            if (screenshotBasicInfo.company_name || screenshotBasicInfo.location || screenshotBasicInfo.established_year) {
+              console.log('  Screenshot fallback succeeded (name/location recovered)');
+              results.push(buildScreenshotFallbackCompanyData(website, scraped.error, screenshotBasicInfo));
+              continue;
+            }
+            console.log('  Screenshot fallback did not recover enough data');
+          }
+
           // Mark as inaccessible - will appear on summary slide but not individual profile
           const companyName = extractCompanyNameFromUrl(website);
           results.push({
@@ -9153,18 +10043,16 @@ app.post('/api/generate-ppt', async (req, res) => {
         if (structuredAddress) {
           console.log(`  Found JSON-LD address: ${structuredAddress.formatted}`);
         }
+        const regionalLocationHint = extractRegionalLocationHint(scraped.content, website);
+        if (regionalLocationHint) {
+          console.log(`  Regional location hint: ${regionalLocationHint}`);
+        }
 
         // Step 1c: Extract logo using cascade
         console.log('  Step 1c: Extracting company logo...');
         const logoResult = await extractLogoFromWebsite(website, scraped.rawHtml);
         if (logoResult) {
           console.log(`  Logo found via ${logoResult.source}`);
-        }
-
-        // Step 1d: Extract customer/partner names from image alt texts
-        const customerNamesFromImages = extractCustomerNamesFromImages(scraped.rawHtml);
-        if (customerNamesFromImages.length > 0) {
-          console.log(`  Customer names from images: ${customerNamesFromImages.slice(0, 5).join(', ')}${customerNamesFromImages.length > 5 ? '...' : ''}`);
         }
 
         // Step 2: Extract basic info
@@ -9232,25 +10120,54 @@ app.post('/api/generate-ppt', async (req, res) => {
           if (!alreadyCovered) { mergedMetrics.push(aiMetric); }
         }
 
-        // Determine location: prefer AI extraction, fallback to JSON-LD
-        let finalLocation = ensureString(basicInfo.location || searchedInfo.location);
+        // Determine location priority: website extraction -> structured data -> web search fallback.
+        let finalLocation = ensureString(basicInfo.location);
         if (!finalLocation && structuredAddress?.formatted) {
           finalLocation = structuredAddress.formatted;
           console.log(`  Using JSON-LD address as fallback: ${finalLocation}`);
+        }
+        if (!finalLocation && regionalLocationHint) {
+          finalLocation = regionalLocationHint;
+          console.log(`  Using regional hint fallback: ${finalLocation}`);
+        }
+        if (!finalLocation) {
+          finalLocation = ensureString(searchedInfo.location);
+          if (finalLocation) {
+            console.log(`  Using searched location fallback: ${finalLocation}`);
+          }
         }
 
         // Validate and fix HQ format
         let validatedLocation = validateAndFixHQFormat(finalLocation, website);
 
-        // FIX #1: If location is incomplete (< 2 levels), retry with focused extraction
-        if (validatedLocation) {
-          const locParts = validatedLocation.split(',').map(p => p.trim()).filter(p => p);
-          const requiredLevels = 2; // 2 levels for all countries (state/province, country)
-          if (locParts.length < requiredLevels) {
-            console.log(`  HQ incomplete (${locParts.length}/${requiredLevels} levels), retrying...`);
-            const improvedLocation = await extractFullAddress(scraped.content, website, validatedLocation);
-            if (improvedLocation && improvedLocation !== validatedLocation) {
-              validatedLocation = validateAndFixHQFormat(improvedLocation, website);
+        // Retry extraction when HQ is missing/incomplete after validation.
+        const validatedParts = ensureString(validatedLocation).split(',').map(p => p.trim()).filter(p => p);
+        const requiredLevels = 2; // 2 levels for all countries (state/province, country)
+        const needsLocationRetry = !!finalLocation && (validatedParts.length < requiredLevels);
+        if (needsLocationRetry) {
+          console.log(`  HQ incomplete (${validatedParts.length}/${requiredLevels} levels), retrying...`);
+          const retrySeed = validatedLocation || finalLocation;
+          const improvedLocation = await extractFullAddress(scraped.content, website, retrySeed);
+          if (improvedLocation) {
+            validatedLocation = validateAndFixHQFormat(improvedLocation, website) || ensureString(improvedLocation).trim();
+          }
+        }
+        if (!validatedLocation && regionalLocationHint) {
+          validatedLocation = regionalLocationHint;
+          console.log(`  Using regional hint after HQ validation: ${validatedLocation}`);
+        } else if (validatedLocation && regionalLocationHint) {
+          const inferredCountry = inferCountryFromWebsite(website);
+          if (inferredCountry === 'Australia') {
+            const hasState = Object.values(AU_STATE_MAP).some(state => validatedLocation.toLowerCase().includes(state.toLowerCase()));
+            if (!hasState) {
+              validatedLocation = regionalLocationHint;
+              console.log(`  Replacing city-level location with AU regional hint: ${validatedLocation}`);
+            }
+          } else if (inferredCountry === 'New Zealand') {
+            const hasRegion = Object.values(NZ_REGION_MAP).some(region => validatedLocation.toLowerCase().includes(region.toLowerCase()));
+            if (!hasRegion) {
+              validatedLocation = regionalLocationHint;
+              console.log(`  Replacing city-level location with NZ regional hint: ${validatedLocation}`);
             }
           }
         }
@@ -9264,66 +10181,113 @@ app.post('/api/generate-ppt', async (req, res) => {
           businessType = detectedType;
         }
 
-        // FIX #3: Extract product/project images for ALL business types
-        let productProjectImages = [];
-        const rawProductImages = extractProductProjectImages(scraped.rawHtml, businessType, website);
-        if (rawProductImages.length > 0) {
-          console.log(`  Found ${rawProductImages.length} candidate images, verifying with Vision...`);
-          productProjectImages = await verifyProductImagesWithVision(rawProductImages, businessType, openai);
-        }
-
-        // FIX #5: Extract categorized business relationships (customers, suppliers, principals, brands)
-        console.log('  Step 5b: Extracting business relationships (metadata)...');
+        // Step 5b: Extract business relationships from page metadata/text
+        console.log('  Step 5b: Extracting business relationships...');
         const businessRelationships = extractBusinessRelationships(scraped.rawHtml);
 
-        // Step 5c: Use GPT-4o Vision to read logo images
-        console.log('  Step 5c: Reading logos with GPT-4o Vision...');
-        const visionResults = await extractNamesFromLogosWithVision(scraped.rawHtml, website);
-
-        // Step 5d: Screenshot fallback - if vision/metadata extraction found few partners, use full-page screenshot
+        const metricRelationships = extractRelationshipsFromMetrics(mergedMetrics);
+        const urlRelationships = extractRelationshipsFromPageUrls(scraped.pagesScraped || []);
+        const structuredRelationships = extractRelationshipsFromStructuredData(scraped.rawHtml);
+        const embeddedRelationships = extractRelationshipsFromEmbeddedData(scraped.rawHtml);
+        const catalogFeedRelationships = await extractRelationshipsFromProductFeeds(website);
         let screenshotResults = { customers: [], brands: [], principals: [] };
-        const totalFromVision = visionResults.customers.length + visionResults.brands.length + (visionResults.principals?.length || 0);
-        const totalFromMeta = businessRelationships.customers.length + businessRelationships.principals.length + businessRelationships.brands.length;
-
-        if (totalFromVision + totalFromMeta < 3 && process.env.SCREENSHOT_API_KEY) {
-          console.log(`  Step 5d: Few partners found (${totalFromVision + totalFromMeta}), trying screenshot analysis...`);
-          screenshotResults = await extractPartnersFromScreenshot(website);
+        if (process.env.SCREENSHOT_API_KEY) {
+          console.log('  Step 5c: Reading partner/client logos from website screenshots...');
+          screenshotResults = await extractPartnersFromScreenshots(website, scraped.pagesScraped || [], { deepMode: true });
+        }
+        businessRelationships.customers = uniqueRelationshipNames([
+          ...(businessRelationships.customers || []),
+          ...(metricRelationships.customers || []),
+          ...(urlRelationships.customers || []),
+          ...(structuredRelationships.customers || []),
+          ...(embeddedRelationships.customers || []),
+          ...(catalogFeedRelationships.customers || []),
+          ...(screenshotResults.customers || [])
+        ]);
+        businessRelationships.suppliers = uniqueRelationshipNames([
+          ...(businessRelationships.suppliers || []),
+          ...(metricRelationships.suppliers || []),
+          ...(urlRelationships.suppliers || []),
+          ...(structuredRelationships.suppliers || []),
+          ...(embeddedRelationships.suppliers || [])
+        ]);
+        businessRelationships.principals = uniqueRelationshipNames([
+          ...(businessRelationships.principals || []),
+          ...(metricRelationships.principals || []),
+          ...(urlRelationships.principals || []),
+          ...(structuredRelationships.principals || []),
+          ...(embeddedRelationships.principals || []),
+          ...(catalogFeedRelationships.principals || []),
+          ...(screenshotResults.principals || [])
+        ]);
+        businessRelationships.brands = uniqueRelationshipNames([
+          ...(businessRelationships.brands || []),
+          ...(metricRelationships.brands || []),
+          ...(urlRelationships.brands || []),
+          ...(structuredRelationships.brands || []),
+          ...(embeddedRelationships.brands || []),
+          ...(catalogFeedRelationships.brands || []),
+          ...(screenshotResults.brands || [])
+        ]);
+        let principalBrandCoverage = businessRelationships.principals.length + businessRelationships.brands.length;
+        if (principalBrandCoverage < 2) {
+          console.log(`  Step 5d: Relationship coverage low (${principalBrandCoverage}), running AI text fallback...`);
+          const aiRelationships = await extractRelationshipsFromContentAI(scraped.content, {
+            company_name: basicInfo.company_name
+          });
+          businessRelationships.customers = uniqueRelationshipNames([
+            ...(businessRelationships.customers || []),
+            ...(aiRelationships.customers || [])
+          ]);
+          businessRelationships.principals = uniqueRelationshipNames([
+            ...(businessRelationships.principals || []),
+            ...(aiRelationships.principals || [])
+          ]);
+          businessRelationships.brands = uniqueRelationshipNames([
+            ...(businessRelationships.brands || []),
+            ...(aiRelationships.brands || [])
+          ]);
+          principalBrandCoverage = businessRelationships.principals.length + businessRelationships.brands.length;
+          console.log(`  Step 5d: Coverage after AI fallback = ${principalBrandCoverage}`);
+        }
+        const relationshipCoverageStatus = principalBrandCoverage < 2 ? 'needs_manual_review' : 'ok';
+        if (relationshipCoverageStatus === 'needs_manual_review') {
+          console.log(`  Step 5e: Principal/brand coverage still low (${principalBrandCoverage}) - marking manual review required`);
         }
 
-        // Merge results with CONFIDENCE-BASED prioritization
-        const highConfidenceCustomers = [...new Set([
-          ...visionResults.customers,
-          ...screenshotResults.customers
-        ])];
-        const lowConfidenceCustomers = [...new Set([
-          ...customerNamesFromImages,
-          ...businessRelationships.customers
-        ])];
-        // Only add low-confidence if high-confidence found < 3
-        const allCustomers = highConfidenceCustomers.length >= 3
-          ? highConfidenceCustomers
-          : [...new Set([...highConfidenceCustomers, ...lowConfidenceCustomers])];
-
-        const allBrands = [...new Set([
-          ...visionResults.brands,
-          ...screenshotResults.brands,
-          ...businessRelationships.brands
-        ])];
-        const allPrincipals = [...new Set([
-          ...(visionResults.principals || []),
-          ...screenshotResults.principals,
-          ...businessRelationships.principals
-        ])];
-
-        businessRelationships.customers = allCustomers;
-        businessRelationships.brands = allBrands;
-        businessRelationships.principals = allPrincipals;
-
-        // Segment customers by industry for cleaner display
-        let customerSegments = null;
-        if (allCustomers.length >= 3) {
-          customerSegments = await segmentCustomersByIndustry(allCustomers, openai);
+        let finalBreakdown = applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelationships);
+        if ((!Array.isArray(finalBreakdown.breakdown_items) || finalBreakdown.breakdown_items.length === 0) &&
+            Array.isArray(catalogFeedRelationships.products) &&
+            catalogFeedRelationships.products.length > 0) {
+          finalBreakdown = {
+            ...finalBreakdown,
+            breakdown_title: 'Products and Applications',
+            breakdown_items: catalogFeedRelationships.products.slice(0, 8).map(name => ({
+              label: 'Product',
+              value: name
+            }))
+          };
+          console.log(`  Using product feed fallback for right table (${finalBreakdown.breakdown_items.length} items)`);
         }
+
+        // Build display-ready relationship segments so large customer/brand lists are readable.
+        const segmentNameFilter = basicInfo.company_name || businessInfo.title || '';
+        const cleanedCustomersForSegments = filterGarbageNames(businessRelationships.customers || [], segmentNameFilter);
+        const cleanedSuppliersForSegments = filterGarbageNames(businessRelationships.suppliers || [], segmentNameFilter);
+        const cleanedPrincipalsForSegments = filterGarbageNames(businessRelationships.principals || [], segmentNameFilter);
+        const cleanedBrandsForSegments = filterGarbageNames(businessRelationships.brands || [], segmentNameFilter);
+        const customerSegments = await buildCustomerSegments(cleanedCustomersForSegments, openai, {
+          minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
+        });
+        const supplierSegments = buildSupplierSegments(cleanedSuppliersForSegments, {
+          minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
+        });
+        const principalSegments = buildPrincipalSegments(cleanedPrincipalsForSegments, {
+          minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
+        });
+        const brandSegments = buildBrandSegments(cleanedBrandsForSegments, {
+          minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
+        });
 
         const relationshipCounts = Object.entries(businessRelationships)
           .filter(([, arr]) => arr.length > 0)
@@ -9345,8 +10309,8 @@ app.post('/api/generate-ppt', async (req, res) => {
           key_metrics: mergedMetrics,
           // Right-side content (varies by business type)
           business_type: businessType,
-          breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
-          breakdown_items: productsBreakdown.breakdown_items || [],
+          breakdown_title: ensureString(finalBreakdown.breakdown_title) || 'Products and Applications',
+          breakdown_items: finalBreakdown.breakdown_items || [],
           projects: productsBreakdown.projects || [],  // For project-based businesses
           products: productsBreakdown.products || [],  // For consumer-facing businesses
           metrics: ensureString(metricsInfo.metrics),
@@ -9356,12 +10320,19 @@ app.post('/api/generate-ppt', async (req, res) => {
           _businessRelationships: businessRelationships,
           // Customers segmented by industry (for display)
           _customerSegments: customerSegments,
-          // Product/project images
-          _productProjectImages: productProjectImages
+          // Suppliers segmented for display when supplier lists are long
+          _supplierSegments: supplierSegments,
+          // Principals segmented for display when principal lists are long
+          _principalSegments: principalSegments,
+          // Brands segmented for display when brand lists are long
+          _brandSegments: brandSegments,
+          // Relationship coverage quality gate (used to fail loudly in slide output)
+          _relationshipCoverageStatus: relationshipCoverageStatus
         };
 
         // Step 6: Run AI validator to compare extraction vs source and fix issues
-        companyData = await reviewAndCleanData(companyData, scraped.content);
+        const validatorResult = await reviewAndCleanData(companyData, scraped.content);
+        companyData = validatorResult.data;
 
         // Step 7: Filter empty metrics
         const metricsBefore = companyData.key_metrics?.length || 0;
