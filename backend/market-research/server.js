@@ -17,6 +17,8 @@ const {
   validateSynthesisQuality,
   validatePptData,
 } = require('./quality-gates');
+const { semanticReadinessGate } = require('./semantic-quality-engine');
+const { checkCoherence } = require('./semantic-coherence-checker');
 const {
   validatePPTX,
   readPPTX,
@@ -876,6 +878,65 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             };
           }
         }
+      }
+
+      // Quality Gate 2b: Semantic readiness gate (hard threshold >= 80).
+      // Per-section scorecard with shallow content detection and contradiction analysis.
+      const semanticGate = semanticReadinessGate(finalSynthesis, {
+        threshold: 80,
+        industry: scope.industry,
+        coherenceChecker: checkCoherence,
+      });
+      console.log(
+        '[Quality Gate] Semantic readiness:',
+        JSON.stringify({
+          pass: semanticGate.pass,
+          overallScore: semanticGate.overallScore,
+          threshold: semanticGate.threshold,
+          shallowSections: semanticGate.shallowSections,
+          contradictions: semanticGate.contradictions.length,
+          failedSections: semanticGate.sectionScorecard
+            .filter((s) => !s.pass)
+            .map((s) => `${s.section}(${s.score})`),
+        })
+      );
+      if (!semanticGate.pass && !draftPptMode) {
+        const failedSections = semanticGate.sectionScorecard
+          .filter((s) => !s.pass)
+          .map((s) => `${s.section}=${s.score}: ${s.reasons.slice(0, 2).join('; ')}`)
+          .slice(0, 5)
+          .join(' | ');
+        const actions = semanticGate.improvementActions.slice(0, 5).join(' | ');
+        if (lastRunDiagnostics) {
+          lastRunDiagnostics.stage = 'semantic_readiness_failed';
+          lastRunDiagnostics.semanticGate = {
+            overallScore: semanticGate.overallScore,
+            threshold: semanticGate.threshold,
+            sectionScorecard: semanticGate.sectionScorecard,
+            shallowSections: semanticGate.shallowSections,
+            contradictions: semanticGate.contradictions.length,
+            improvementActions: semanticGate.improvementActions,
+          };
+          lastRunDiagnostics.error = `Semantic readiness gate failed (${semanticGate.overallScore}/${semanticGate.threshold}): ${failedSections}`;
+        }
+        throw new Error(
+          `Semantic readiness gate failed (${semanticGate.overallScore}/${semanticGate.threshold}). Failed sections: ${failedSections}. Actions: ${actions}`
+        );
+      }
+      if (!semanticGate.pass && draftPptMode) {
+        console.warn(
+          `[Quality Gate] Draft PPT mode bypassed semantic readiness gate (${semanticGate.overallScore}/${semanticGate.threshold})`
+        );
+      }
+      if (lastRunDiagnostics) {
+        lastRunDiagnostics.semanticGate = {
+          pass: semanticGate.pass,
+          overallScore: semanticGate.overallScore,
+          threshold: semanticGate.threshold,
+          sectionScorecard: semanticGate.sectionScorecard,
+          shallowSections: semanticGate.shallowSections,
+          contradictions: semanticGate.contradictions.length,
+        };
       }
 
       // Quality Gate 3: Validate PPT data completeness before rendering.
