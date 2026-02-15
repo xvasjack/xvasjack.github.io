@@ -3643,7 +3643,6 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       // Metrics to exclude (worthless or duplicate)
       const EXCLUDED_METRICS = [
         'market position', 'market share', 'market leader',
-        'number of branches', 'branches', 'number of locations', 'locations',
         'operating hours', 'business hours', 'office hours',
         'years of experience', 'experience', 'years in business',
         'awards', 'recognitions', 'achievements',
@@ -8332,7 +8331,8 @@ RULES:
 - Labels should be 1-3 words
 - Be specific with numbers when available
 - For Shareholding: ONLY include if EXPLICITLY stated on website (e.g., "family-owned", "publicly traded", "PE-backed"). NEVER assume ownership structure.
-- DO NOT include: years of experience, awards, recognitions, market position, operating hours, number of branches/locations (not useful for M&A)
+- DO NOT include: years of experience, awards, recognitions, market position, operating hours
+- Branch/office network IS useful for footprint: include branch count and branch locations when explicitly stated
 - DO NOT include: corporate vision, mission statement, company values, slogans, taglines
 - DO NOT include garbage metrics like: "Quality Standards", "Innovation Focus", "Customer Service", "Technical Support", "R&D Focus", "Quality Assurance", "Service Excellence" - these are meaningless fluff
 - DO NOT include vague phrases like "High standards in customer service", "Constant innovation", "Focus on quality" - these have no concrete value
