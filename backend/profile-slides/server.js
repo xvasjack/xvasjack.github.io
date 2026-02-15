@@ -5652,6 +5652,14 @@ function extractMetricsFromText(text) {
 function extractBranchLocationSummary(content, officeCount = null) {
   const text = ensureString(content).replace(/\s+/g, ' ').trim();
   if (!text) return '';
+  const branchEvidenceSnippets = [];
+  const branchEvidencePattern = /[^.!?;|]{0,120}\b(?:branches?|offices?|locations?|depots?|warehouses?)\b[^.!?;|]{0,160}/gi;
+  let branchEvidenceMatch;
+  while ((branchEvidenceMatch = branchEvidencePattern.exec(text)) !== null) {
+    const snippet = ensureString(branchEvidenceMatch[0]).replace(/\s+/g, ' ').trim();
+    if (snippet) branchEvidenceSnippets.push(snippet);
+  }
+  const branchEvidenceText = branchEvidenceSnippets.join(' | ');
 
   const numberWordMap = {
     one: 1,
@@ -5678,18 +5686,22 @@ function extractBranchLocationSummary(content, officeCount = null) {
 
   const parseCount = (value) => {
     const parsed = Number.parseInt(String(value || '').replace(/,/g, ''), 10);
-    if (!Number.isFinite(parsed) || parsed < 2 || parsed > 500) return 0;
+    if (!Number.isFinite(parsed) || parsed < 2 || parsed > 80) return 0;
     return parsed;
   };
 
-  let extractedCount = parseCount(officeCount);
+  let extractedCount = 0;
   if (!extractedCount) {
-    const countMatch = text.match(/(?:over|more than|around|approximately|about|at least)?\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:branches?|offices?|locations?|depots?|warehouses?)/i);
+    const countMatch = branchEvidenceText.match(/(?:over|more than|around|approximately|about|at least)?\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:branches?|offices?|locations?|depots?|warehouses?)/i);
     if (countMatch) extractedCount = parseCount(countMatch[1]);
   }
   if (!extractedCount) {
-    const wordCountMatch = text.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b\s*(?:branches?|offices?|locations?|depots?|warehouses?)/i);
+    const wordCountMatch = branchEvidenceText.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b\s*(?:branches?|offices?|locations?|depots?|warehouses?)/i);
     if (wordCountMatch) extractedCount = numberWordMap[wordCountMatch[1].toLowerCase()] || 0;
+  }
+  const officeCountFallback = parseCount(officeCount);
+  if (!extractedCount && officeCountFallback > 0 && officeCountFallback <= 40 && branchEvidenceSnippets.length > 0) {
+    extractedCount = officeCountFallback;
   }
 
   const extractedTokens = [];
@@ -5741,10 +5753,11 @@ function extractBranchLocationSummary(content, officeCount = null) {
     const lower = token.toLowerCase();
     if (stopTokens.has(lower)) continue;
     if (!/[A-Za-z]/.test(token)) continue;
+    if (/\d/.test(token)) continue;
     if (token.length < 3 || token.length > 45) continue;
     const tokenWords = token.split(' ').filter(Boolean);
     if (tokenWords.length > 4) continue;
-    if (/\b(service|services|servicing|provide|providing|supply|supplying|support|supporting|products?|industry|nationally|foodservice|distribution|network)\b/i.test(lower)) continue;
+    if (/\b(service|services|servicing|provide|providing|supply|supplying|support|supporting|products?|industry|nationally|foodservice|distribution|network|allow|while|studying|delivery|region|regions|website|about|story)\b/i.test(lower)) continue;
 
     const normalizedKey = lower.replace(/\s+/g, ' ');
     if (dedup.has(normalizedKey)) continue;
