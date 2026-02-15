@@ -2,11 +2,13 @@
 
 const {
   enforce,
+  enforceStrict,
   getMetrics,
   getFailures,
   resetMetrics,
   auditAllRoutes,
   RouteGeometryError,
+  ERROR_CODES,
   BLOCK_TEMPLATE_PATTERN_MAP,
   BLOCK_TEMPLATE_SLIDE_MAP,
   __test: {
@@ -508,5 +510,231 @@ describe('enforce() provenance', () => {
     expect(result.provenance.length).toBeGreaterThan(1);
     const last = result.provenance[result.provenance.length - 1];
     expect(last).toContain(':OK');
+  });
+});
+
+// ===========================================================================
+// 16. enforceStrict() — strict mode: no fallback, immediate hard fail
+// ===========================================================================
+describe('enforceStrict()', () => {
+  test('passes when primary slide geometry matches required geometry', () => {
+    const result = enforceStrict({
+      blockKey: 'foundationalActs',
+      dataType: 'table',
+      data: {},
+      tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+      chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+    });
+    expect(result.recovered).toBe(false);
+    expect(result.requiredGeometry).toBe(GEOMETRY_TABLE);
+    expect(result.strictMode).toBe(true);
+    expect(result.fallbackDepth).toBe(0);
+    expect(result.resolved.selectedSlide).toBe(BLOCK_TEMPLATE_SLIDE_MAP.foundationalActs);
+  });
+
+  test('chart context passes in strict mode when geometry matches', () => {
+    const result = enforceStrict({
+      blockKey: 'marketSizeAndGrowth',
+      dataType: 'chart',
+      data: {},
+      tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+      chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+    });
+    expect(result.recovered).toBe(false);
+    expect(result.requiredGeometry).toBe(GEOMETRY_CHART);
+    expect(result.strictMode).toBe(true);
+  });
+
+  test('throws RouteGeometryError with RGE004 code on geometry mismatch', () => {
+    // Override to cover slide (slide 1) which has no table geometry
+    expect(() => {
+      enforceStrict({
+        blockKey: 'foundationalActs',
+        dataType: 'table',
+        data: {},
+        templateSelection: 1, // cover slide, no table
+        tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+        chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+      });
+    }).toThrow(RouteGeometryError);
+
+    try {
+      enforceStrict({
+        blockKey: 'foundationalActs',
+        dataType: 'table',
+        data: {},
+        templateSelection: 1,
+        tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+        chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+      });
+    } catch (err) {
+      expect(err.code).toBe(ERROR_CODES.RGE004_STRICT_MODE_MISMATCH);
+      expect(err.blockKey).toBe('foundationalActs');
+      expect(err.expectedGeometry).toBe(GEOMETRY_TABLE);
+      expect(err.message).toContain('Strict mode');
+      expect(err.message).toContain('no fallback allowed');
+    }
+  });
+
+  test('does NOT recover — no fallback chain walked in strict mode', () => {
+    // enforce() would recover here; enforceStrict() should throw instead
+    let enforceResult;
+    try {
+      enforceResult = enforce({
+        blockKey: 'foundationalActs',
+        dataType: 'table',
+        data: {},
+        templateSelection: 1,
+        tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+        chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+      });
+    } catch (_) {
+      // enforce might also throw if no fallback exists
+    }
+
+    // enforceStrict always throws on mismatch, never recovers
+    let strictThrew = false;
+    try {
+      enforceStrict({
+        blockKey: 'foundationalActs',
+        dataType: 'table',
+        data: {},
+        templateSelection: 1,
+        tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+        chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+      });
+    } catch (err) {
+      strictThrew = true;
+      expect(err).toBeInstanceOf(RouteGeometryError);
+    }
+    expect(strictThrew).toBe(true);
+
+    // If enforce recovered, that proves enforceStrict is stricter
+    if (enforceResult) {
+      expect(enforceResult.recovered).toBe(true);
+    }
+  });
+
+  test('increments hardFailCount metric on strict mode mismatch', () => {
+    const beforeMetrics = getMetrics();
+    const beforeHardFails = beforeMetrics.hardFailCount;
+    try {
+      enforceStrict({
+        blockKey: 'foundationalActs',
+        dataType: 'table',
+        data: {},
+        templateSelection: 1,
+        tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+        chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+      });
+    } catch (_) {
+      // expected
+    }
+    const afterMetrics = getMetrics();
+    expect(afterMetrics.hardFailCount).toBe(beforeHardFails + 1);
+  });
+
+  test('stores failure in getFailures() on strict mode mismatch', () => {
+    const beforeCount = getFailures().length;
+    try {
+      enforceStrict({
+        blockKey: 'foundationalActs',
+        dataType: 'table',
+        data: {},
+        templateSelection: 1,
+        tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+        chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+      });
+    } catch (_) {
+      // expected
+    }
+    const failures = getFailures();
+    expect(failures.length).toBe(beforeCount + 1);
+    const lastFailure = failures[failures.length - 1];
+    expect(lastFailure.blockKey).toBe('foundationalActs');
+    expect(lastFailure.errorCode).toBe(ERROR_CODES.RGE004_STRICT_MODE_MISMATCH);
+  });
+
+  test('provenanceChain includes strict mode marker', () => {
+    const result = enforceStrict({
+      blockKey: 'foundationalActs',
+      dataType: 'table',
+      data: {},
+      tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+      chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+    });
+    expect(result.provenanceChain).toBeDefined();
+    expect(result.provenanceChain.length).toBe(1);
+    expect(result.provenanceChain[0].mode).toBe('strict');
+    expect(result.provenanceChain[0].result).toBe('OK');
+  });
+});
+
+// ===========================================================================
+// 17. enforce() vs enforceStrict() behavior comparison
+// ===========================================================================
+describe('enforce() vs enforceStrict() behavior', () => {
+  test('enforce recovers while enforceStrict throws for same bad override', () => {
+    // enforce() with override to wrong-geometry slide should recover
+    const enforceResult = enforce({
+      blockKey: 'foundationalActs',
+      dataType: 'table',
+      data: {},
+      templateSelection: 1,
+      tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+      chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+    });
+    expect(enforceResult.recovered).toBe(true);
+    expect(enforceResult.reasonCode).toBe('geometry_recovery');
+
+    // enforceStrict() should throw hard
+    expect(() => {
+      enforceStrict({
+        blockKey: 'foundationalActs',
+        dataType: 'table',
+        data: {},
+        templateSelection: 1,
+        tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+        chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+      });
+    }).toThrow(RouteGeometryError);
+  });
+
+  test('both pass for correctly-mapped blocks', () => {
+    const normalResult = enforce({
+      blockKey: 'nationalPolicy',
+      dataType: 'table',
+      data: {},
+      tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+      chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+    });
+    const strictResult = enforceStrict({
+      blockKey: 'nationalPolicy',
+      dataType: 'table',
+      data: {},
+      tableContextKeys: TABLE_TEMPLATE_CONTEXTS,
+      chartContextKeys: CHART_TEMPLATE_CONTEXTS,
+    });
+    expect(normalResult.recovered).toBe(false);
+    expect(strictResult.recovered).toBe(false);
+    expect(normalResult.resolved.selectedSlide).toBe(strictResult.resolved.selectedSlide);
+  });
+});
+
+// ===========================================================================
+// 18. ERROR_CODES are frozen and complete
+// ===========================================================================
+describe('ERROR_CODES', () => {
+  test('ERROR_CODES object is frozen', () => {
+    expect(Object.isFrozen(ERROR_CODES)).toBe(true);
+  });
+
+  test('all expected error codes exist', () => {
+    expect(ERROR_CODES.RGE001_NO_TABLE_GEOMETRY).toBe('RGE001_NO_TABLE_GEOMETRY');
+    expect(ERROR_CODES.RGE002_NO_CHART_GEOMETRY).toBe('RGE002_NO_CHART_GEOMETRY');
+    expect(ERROR_CODES.RGE003_FALLBACK_EXHAUSTED).toBe('RGE003_FALLBACK_EXHAUSTED');
+    expect(ERROR_CODES.RGE004_STRICT_MODE_MISMATCH).toBe('RGE004_STRICT_MODE_MISMATCH');
+    expect(ERROR_CODES.RGE005_UNKNOWN_BLOCK).toBe('RGE005_UNKNOWN_BLOCK');
+    expect(ERROR_CODES.RGE006_NO_SLIDE_LAYOUT).toBe('RGE006_NO_SLIDE_LAYOUT');
   });
 });

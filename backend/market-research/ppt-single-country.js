@@ -1477,6 +1477,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const country = countryAnalysis.country || (synthesis || {}).country;
   const templateSlideSelections =
     (scope && (scope.templateSlideSelections || scope.templateSelections)) || {};
+  // Per-request strict geometry mode: when true, geometry recovery/table recovery
+  // are hard failures instead of warn+continue. Defaults to STRICT_TEMPLATE_FIDELITY env var.
+  const strictGeometryMode = Boolean(
+    scope && typeof scope.templateStrictMode === 'boolean'
+      ? scope.templateStrictMode
+      : STRICT_TEMPLATE_FIDELITY
+  );
   const templateUsageStats = {
     resolved: [],
     nonTemplatePatterns: [],
@@ -2653,6 +2660,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         );
       }
       if (violations.length > 0) {
+        if (strictGeometryMode) {
+          throw new Error(
+            `[STRICT GEOMETRY] Hard fail: table flexibility exceeded in strict mode. Block "${context}": ${violations.join('; ')}. Table recovery not allowed in strict geometry mode.`
+          );
+        }
         console.warn(
           `[PPT TEMPLATE] ${context}: bounded table flexibility exceeded — attempting recovery (${violations.join('; ')})`
         );
@@ -2866,6 +2878,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const fitScoreRect = { w: Number(addOptions?.w) || 8.5, h: Number(addOptions?.h) || 3.5 };
     const fitResult = computeTableFitScore(tableRows, fitScoreRect);
     if (fitResult.recommendation === 'fallback') {
+      if (strictGeometryMode) {
+        throw new Error(
+          `[STRICT GEOMETRY] Hard fail: table fit score=${fitResult.score} (${fitResult.recommendation}) for block "${resolvedContext}". Table recovery not allowed in strict geometry mode. Breakdown: rows=${fitResult.breakdown?.rowScore}, cols=${fitResult.breakdown?.colScore}, density=${fitResult.breakdown?.densityScore}, geometry=${fitResult.breakdown?.geometryScore}.`
+        );
+      }
       console.warn(
         `[PPT] ${resolvedContext}: table fit score=${fitResult.score} (${fitResult.recommendation}) — applying aggressive recovery`
       );
@@ -2894,6 +2911,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         breakdown: fitResult.breakdown,
       });
     } else if (fitResult.recommendation === 'truncate') {
+      if (strictGeometryMode) {
+        throw new Error(
+          `[STRICT GEOMETRY] Hard fail: table fit score=${fitResult.score} (${fitResult.recommendation}) for block "${resolvedContext}". Table truncation not allowed in strict geometry mode. Breakdown: rows=${fitResult.breakdown?.rowScore}, cols=${fitResult.breakdown?.colScore}, density=${fitResult.breakdown?.densityScore}, geometry=${fitResult.breakdown?.geometryScore}.`
+        );
+      }
       console.log(
         `[PPT] ${resolvedContext}: table fit score=${fitResult.score} (${fitResult.recommendation}) — applying truncation`
       );
@@ -3009,6 +3031,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             }
           }
           if (severe.length > 0) {
+            if (strictGeometryMode) {
+              const preview = severe
+                .slice(0, 4)
+                .map((entry) => `r${entry.row}c${entry.col}:${entry.len}>${entry.cap}`)
+                .join(', ');
+              throw new Error(
+                `[STRICT GEOMETRY] Hard fail: density-overflow in block "${resolvedContext}". ${severe.length} severe cell(s) exceed density budget: ${preview}. Cell truncation not allowed in strict geometry mode.`
+              );
+            }
             // Recovery: hard-truncate remaining severe cells to their cap
             for (const entry of severe) {
               if (
@@ -3413,9 +3444,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const resolved = routeDecision.resolved;
     const layout = routeDecision.layout;
     if (routeDecision.recovered) {
-      console.warn(
-        `[PPT TEMPLATE] ${block.key}: recovered ${routeDecision.requiredGeometry || 'template'} route from slide ${routeDecision.fromSlide || 'n/a'} to ${routeDecision.toSlide || 'n/a'} (${routeDecision.reason || 'compatibility'})`
-      );
+      const recoveryMsg = `[PPT TEMPLATE] ${block.key}: recovered ${routeDecision.requiredGeometry || 'template'} route from slide ${routeDecision.fromSlide || 'n/a'} to ${routeDecision.toSlide || 'n/a'} (${routeDecision.reason || 'compatibility'})`;
+      if (strictGeometryMode) {
+        throw new Error(
+          `[STRICT GEOMETRY] Hard fail: geometry recovery not allowed in strict mode. Block "${block.key}" required ${routeDecision.requiredGeometry || 'template'} geometry on slide ${routeDecision.fromSlide || 'n/a'} but had to recover to slide ${routeDecision.toSlide || 'n/a'}. Fix the template mapping or slide geometry.`
+        );
+      }
+      console.warn(recoveryMsg);
     }
     const sourceLabel = ensureString(resolved.source, '').toLowerCase();
     const hasFallbackSource = sourceLabel.includes('fallback');
@@ -7093,6 +7128,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ),
     ].join(', ');
     const totalResolvedBlocks = Math.max(templateUsageStats.resolved.length, 1);
+    if (strictGeometryMode) {
+      throw new Error(
+        `[STRICT GEOMETRY] Hard fail: ${templateUsageStats.slideRenderFailures.length} slide rendering failure(s) for blocks: ${failKeys}. Any render failure is a hard fail in strict geometry mode.`
+      );
+    }
     console.warn(
       `[PPT TEMPLATE] Recoverable rendering failures (${templateUsageStats.slideRenderFailures.length}/${totalResolvedBlocks}): ${failKeys}`
     );
@@ -7107,8 +7147,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const recoveredKeys = [...new Set(templateUsageStats.tableRecoveries.map((r) => r.key))].join(
       ', '
     );
+    if (strictGeometryMode) {
+      throw new Error(
+        `[STRICT GEOMETRY] Hard fail: ${templateUsageStats.tableRecoveries.length} table recovery/recoveries used for blocks: ${recoveredKeys}. Table recovery not allowed in strict geometry mode.`
+      );
+    }
     console.warn(
-      `[PPT TEMPLATE] Table recoveries used (${templateUsageStats.tableRecoveries.length}): ${recoveredKeys}${STRICT_TEMPLATE_FIDELITY ? ' (fidelity warning — would have thrown)' : ''}`
+      `[PPT TEMPLATE] Table recoveries used (${templateUsageStats.tableRecoveries.length}): ${recoveredKeys}`
     );
   }
   const geometryIssues = [
@@ -7119,7 +7164,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     ),
   ];
   if (geometryIssues.length > 0) {
-    if (STRICT_TEMPLATE_FIDELITY) {
+    if (strictGeometryMode || STRICT_TEMPLATE_FIDELITY) {
       throw new Error(
         `Template fidelity violation: geometry issues (${geometryIssues.length}): ${geometryIssues.slice(0, 10).join(', ')}`
       );
@@ -7353,6 +7398,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const templateCoverage =
     templateTotal > 0 ? Math.round((templateBackedCount / templateTotal) * 100) : 100;
   const pptMetrics = {
+    strictGeometryMode,
     templateCoverage,
     templateBackedCount,
     templateTotal,
