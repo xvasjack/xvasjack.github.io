@@ -6471,7 +6471,7 @@ async function fetchJsonResource(url, timeoutMs = 15000) {
 
     const rawBuffer = await readResponseBuffer(response);
     const decodedBuffer = decodeMaybeCompressedBuffer(rawBuffer, response.headers?.get?.('content-encoding') || '');
-    const text = ensureString(decodedBuffer.toString('utf8')).trim();
+    const text = ensureString(decodedBuffer.toString('utf8')).replace(/^\uFEFF/, '').trim();
     if (!text) return null;
 
     try {
