@@ -899,6 +899,104 @@ function generateDriftReport(options = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// verifyMappingParity() — cross-module drift lock
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify that a consumer module's mappings are identical to the canonical
+ * source defined here. Call this at startup or in tests to guarantee no
+ * copy-paste drift has crept in.
+ *
+ * @param {object} consumerMappings - { name, blockPatterns?, blockSlides?, tableContexts?, chartContexts?, sectionDividers?, dataTypePatterns? }
+ * @returns {object} { ok: boolean, errors: string[] }
+ */
+function verifyMappingParity(consumerMappings) {
+  if (!consumerMappings || typeof consumerMappings !== 'object') {
+    return { ok: false, errors: ['consumerMappings must be a non-null object'] };
+  }
+
+  const name = consumerMappings.name || 'unknown';
+  const errors = [];
+
+  function compareObject(label, canonical, consumer) {
+    if (!consumer) return; // skip if consumer didn't provide this mapping
+    const canonicalKeys = Object.keys(canonical).sort();
+    const consumerKeys = Object.keys(consumer).sort();
+
+    // Check for missing keys
+    for (const k of canonicalKeys) {
+      if (!(k in consumer)) {
+        errors.push(`[${name}] ${label}: missing key "${k}"`);
+      } else if (JSON.stringify(canonical[k]) !== JSON.stringify(consumer[k])) {
+        errors.push(
+          `[${name}] ${label}: value mismatch for "${k}": canonical=${JSON.stringify(canonical[k])} consumer=${JSON.stringify(consumer[k])}`
+        );
+      }
+    }
+
+    // Check for extra keys
+    for (const k of consumerKeys) {
+      if (!(k in canonical)) {
+        errors.push(`[${name}] ${label}: extra key "${k}" not in canonical source`);
+      }
+    }
+  }
+
+  function compareSet(label, canonical, consumer) {
+    if (!consumer) return;
+    const consumerSet = consumer instanceof Set ? consumer : new Set(consumer);
+    for (const k of canonical) {
+      if (!consumerSet.has(k)) {
+        errors.push(`[${name}] ${label}: missing entry "${k}"`);
+      }
+    }
+    for (const k of consumerSet) {
+      if (!canonical.has(k)) {
+        errors.push(`[${name}] ${label}: extra entry "${k}" not in canonical source`);
+      }
+    }
+  }
+
+  if (consumerMappings.blockPatterns) {
+    compareObject('BLOCK_TEMPLATE_PATTERN_MAP', BLOCK_TEMPLATE_PATTERN_MAP, consumerMappings.blockPatterns);
+  }
+  if (consumerMappings.blockSlides) {
+    compareObject('BLOCK_TEMPLATE_SLIDE_MAP', BLOCK_TEMPLATE_SLIDE_MAP, consumerMappings.blockSlides);
+  }
+  if (consumerMappings.tableContexts) {
+    compareSet('TABLE_TEMPLATE_CONTEXTS', TABLE_TEMPLATE_CONTEXTS, consumerMappings.tableContexts);
+  }
+  if (consumerMappings.chartContexts) {
+    compareSet('CHART_TEMPLATE_CONTEXTS', CHART_TEMPLATE_CONTEXTS, consumerMappings.chartContexts);
+  }
+  if (consumerMappings.sectionDividers) {
+    compareObject('SECTION_DIVIDER_TEMPLATE_SLIDES', SECTION_DIVIDER_TEMPLATE_SLIDES, consumerMappings.sectionDividers);
+  }
+  if (consumerMappings.dataTypePatterns) {
+    compareObject('DATA_TYPE_PATTERN_MAP', DATA_TYPE_PATTERN_MAP, consumerMappings.dataTypePatterns);
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+/**
+ * Assert that consumer mappings match canonical source. Throws on drift.
+ * Use in tests or CI to block release when mappings diverge.
+ *
+ * @param {object} consumerMappings - Same as verifyMappingParity
+ * @throws {Error} if any drift is detected
+ */
+function assertMappingParity(consumerMappings) {
+  const result = verifyMappingParity(consumerMappings);
+  if (!result.ok) {
+    throw new Error(
+      `Template contract drift detected!\n${result.errors.join('\n')}\n\nAll mapping constants must be imported from template-contract-compiler.js (the canonical source).`
+    );
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // CLI: --doctor, --compile, --drift, --audit
 // ---------------------------------------------------------------------------
 
@@ -1004,7 +1102,9 @@ module.exports = {
   auditCoverage,
   checkSparseContent,
   generateDriftReport,
-  // Exposed for testing
+  verifyMappingParity,
+  assertMappingParity,
+  // Canonical mapping constants — import from HERE, never duplicate
   CONTRACT_VERSION,
   BLOCK_TEMPLATE_PATTERN_MAP,
   BLOCK_TEMPLATE_SLIDE_MAP,

@@ -15,90 +15,10 @@
  */
 
 const templatePatterns = require('./template-patterns.json');
-
-// ---------------------------------------------------------------------------
-// Re-implement minimal versions of ppt-utils helpers we need, avoiding import
-// ---------------------------------------------------------------------------
-
-/**
- * BLOCK_TEMPLATE_PATTERN_MAP — deterministic block -> pattern key mapping.
- * Mirrors the frozen map in ppt-utils.js.
- */
-const BLOCK_TEMPLATE_PATTERN_MAP = Object.freeze({
-  foundationalActs: 'regulatory_table',
-  nationalPolicy: 'regulatory_table',
-  investmentRestrictions: 'regulatory_table',
-  keyIncentives: 'regulatory_table',
-  regulatorySummary: 'regulatory_table',
-  marketSizeAndGrowth: 'chart_insight_panels',
-  supplyAndDemandDynamics: 'chart_with_grid',
-  supplyAndDemandData: 'chart_with_grid',
-  pricingAndTariffStructures: 'chart_insight_panels',
-  pricingAndEconomics: 'chart_insight_panels',
-  pricingAndCostBenchmarks: 'chart_insight_panels',
-  infrastructureAndGrid: 'chart_with_grid',
-  tpes: 'chart_insight_panels',
-  finalDemand: 'chart_insight_panels',
-  electricity: 'chart_insight_panels',
-  gasLng: 'chart_with_grid',
-  pricing: 'chart_insight_panels',
-  escoMarket: 'chart_insight_panels',
-  japanesePlayers: 'company_comparison',
-  localMajor: 'company_comparison',
-  foreignPlayers: 'company_comparison',
-  caseStudy: 'case_study_rows',
-  maActivity: 'company_comparison',
-  dealEconomics: 'regulatory_table',
-  partnerAssessment: 'company_comparison',
-  entryStrategy: 'regulatory_table',
-  implementation: 'case_study_rows',
-  targetSegments: 'company_comparison',
-  goNoGo: 'regulatory_table',
-  opportunitiesObstacles: 'regulatory_table',
-  keyInsights: 'regulatory_table',
-  timingIntelligence: 'regulatory_table',
-  lessonsLearned: 'regulatory_table',
-});
-
-/**
- * BLOCK_TEMPLATE_SLIDE_MAP — deterministic block -> template slide mapping.
- * Mirrors the frozen map in ppt-utils.js.
- */
-const BLOCK_TEMPLATE_SLIDE_MAP = Object.freeze({
-  foundationalActs: 7,
-  nationalPolicy: 8,
-  investmentRestrictions: 9,
-  keyIncentives: 10,
-  regulatorySummary: 6,
-  marketSizeAndGrowth: 13,
-  supplyAndDemandDynamics: 14,
-  supplyAndDemandData: 14,
-  pricingAndTariffStructures: 16,
-  pricingAndEconomics: 16,
-  pricingAndCostBenchmarks: 16,
-  infrastructureAndGrid: 17,
-  tpes: 13,
-  finalDemand: 14,
-  electricity: 15,
-  gasLng: 17,
-  pricing: 16,
-  escoMarket: 18,
-  japanesePlayers: 22,
-  localMajor: 22,
-  foreignPlayers: 22,
-  caseStudy: 23,
-  maActivity: 24,
-  dealEconomics: 12,
-  partnerAssessment: 22,
-  entryStrategy: 12,
-  implementation: 28,
-  targetSegments: 22,
-  goNoGo: 12,
-  opportunitiesObstacles: 12,
-  keyInsights: 12,
-  timingIntelligence: 12,
-  lessonsLearned: 12,
-});
+const {
+  BLOCK_TEMPLATE_PATTERN_MAP,
+  BLOCK_TEMPLATE_SLIDE_MAP,
+} = require('./template-contract-compiler');
 
 /**
  * Minimal getTemplateSlideLayout — extracts layout from template-patterns.json slideDetails.

@@ -84,6 +84,11 @@ const {
   createSanitizationContext,
   logSanitizationResult,
 } = require('./transient-key-sanitizer');
+const {
+  TABLE_TEMPLATE_CONTEXTS: _TABLE_TEMPLATE_CONTEXTS,
+  CHART_TEMPLATE_CONTEXTS: _CHART_TEMPLATE_CONTEXTS,
+  SECTION_DIVIDER_TEMPLATE_SLIDES: _SECTION_DIVIDER_TEMPLATE_SLIDES,
+} = require('./template-contract-compiler');
 
 const STRICT_TEMPLATE_FIDELITY = !/^(0|false|no|off)$/i.test(
   String(process.env.STRICT_TEMPLATE_FIDELITY || 'true').trim()
@@ -1485,13 +1490,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     tableFallbacks: [],
   };
   const templateCloneSlideMap = [];
-  const SECTION_DIVIDER_TEMPLATE_SLIDES = {
-    1: 5,
-    2: 11,
-    3: 20,
-    4: 30,
-    5: 30,
-  };
+  // Canonical source: template-contract-compiler.js
+  const SECTION_DIVIDER_TEMPLATE_SLIDES = _SECTION_DIVIDER_TEMPLATE_SLIDES;
   const activeTemplateContext = { blockKey: null, slideNumber: null, layout: null };
   const layoutFidelityStats = {
     checks: 0,
@@ -1499,41 +1499,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     maxDelta: 0,
     missingGeometry: [],
   };
-  const TABLE_TEMPLATE_CONTEXTS = new Set([
-    'foundationalActs',
-    'nationalPolicy',
-    'investmentRestrictions',
-    'keyIncentives',
-    'regulatorySummary',
-    'japanesePlayers',
-    'localMajor',
-    'foreignPlayers',
-    'partnerAssessment',
-    'caseStudy',
-    'maActivity',
-    'entryStrategy',
-    'implementation',
-    'targetSegments',
-    'goNoGo',
-    'timingIntelligence',
-    'lessonsLearned',
-    'dealEconomics',
-  ]);
-  const CHART_TEMPLATE_CONTEXTS = new Set([
-    'marketSizeAndGrowth',
-    'supplyAndDemandDynamics',
-    'supplyAndDemandData',
-    'pricingAndTariffStructures',
-    'pricingAndEconomics',
-    'pricingAndCostBenchmarks',
-    'infrastructureAndGrid',
-    'tpes',
-    'finalDemand',
-    'electricity',
-    'gasLng',
-    'pricing',
-    'escoMarket',
-  ]);
+  const TABLE_TEMPLATE_CONTEXTS = _TABLE_TEMPLATE_CONTEXTS;
+  const CHART_TEMPLATE_CONTEXTS = _CHART_TEMPLATE_CONTEXTS;
   const templateTableStyleCache = new Map();
 
   function schemeToHexColor(scheme) {
