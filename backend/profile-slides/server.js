@@ -7900,6 +7900,19 @@ function cleanCustomerName(text) {
     .replace(/\s+/g, ' ')
     .trim();
 
+  // Normalize JSON-like wrappers from feed/screenshot extraction.
+  name = name
+    .replace(/\\+"/g, '"')
+    .replace(/^\[+/, '')
+    .replace(/\]+$/, '')
+    .replace(/^"+/, '')
+    .replace(/"+$/, '')
+    .replace(/^\'+/, '')
+    .replace(/\'+$/, '')
+    .replace(/\s*\((?=[^)]*\d)[^)]*\)\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
   // Skip generic terms
   const skipTerms = [
     'logo', 'image', 'photo', 'icon', 'banner', 'client', 'customer', 'partner',
