@@ -1495,6 +1495,331 @@ function analyze(synthesis, industry) {
   };
 }
 
+// ============ SHALLOW CONTENT DETECTION ============
+
+/**
+ * Detect shallow content patterns: very short sections, generic/template-like text,
+ * low information density, and repetitive phrasing.
+ *
+ * @param {string} text - Section text content
+ * @returns {{ isShallow: boolean, reasons: string[], density: number }}
+ */
+function detectShallowContent(text) {
+  if (!text || typeof text !== 'string') {
+    return { isShallow: true, reasons: ['No content provided'], density: 0 };
+  }
+
+  const words = countWords(text);
+  const reasons = [];
+
+  // Very short sections are inherently shallow
+  if (words < 30) {
+    reasons.push(`Section too short (${words} words, minimum 30)`);
+  }
+
+  // Check for template-like/placeholder text
+  const templatePatterns = [
+    /\b(TBD|TBA|to be determined|to be announced|placeholder|lorem ipsum)\b/gi,
+    /\b(insert|add|fill in|update|replace)\s+(here|later|with|this)\b/gi,
+    /\[[\w\s]*\]/g, // [placeholder] patterns
+    /\{[\w\s]*\}/g, // {placeholder} patterns
+  ];
+  let templateMatchCount = 0;
+  for (const pattern of templatePatterns) {
+    const matches = text.match(pattern) || [];
+    templateMatchCount += matches.length;
+  }
+  if (templateMatchCount > 0) {
+    reasons.push(`Template/placeholder text detected (${templateMatchCount} instance(s))`);
+  }
+
+  // Check information density: ratio of specific facts to total words
+  const specificPatterns = [
+    /\$\d/g, // dollar amounts
+    /\d+(?:\.\d+)?%/g, // percentages
+    /(?:20[2-9]\d)/g, // recent years
+    /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Corp|Ltd|Inc|Co|Group)/g, // company names
+    /\d[\d,.]+\s*(?:million|billion|M|B|K|GW|MW|TWh)/gi, // quantities
+  ];
+  let specificCount = 0;
+  for (const pattern of specificPatterns) {
+    specificCount += (text.match(pattern) || []).length;
+  }
+  const density = words > 0 ? specificCount / (words / 100) : 0;
+  if (words >= 50 && density < 1) {
+    reasons.push(`Low information density (${density.toFixed(1)} specifics per 100 words)`);
+  }
+
+  // Check for repetitive phrasing: same sentence starter appearing 3+ times
+  const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 15);
+  if (sentences.length >= 4) {
+    const starters = sentences.map((s) => s.trim().split(/\s+/).slice(0, 3).join(' ').toLowerCase());
+    const starterCounts = {};
+    for (const s of starters) {
+      starterCounts[s] = (starterCounts[s] || 0) + 1;
+    }
+    const repetitive = Object.entries(starterCounts).filter(([, count]) => count >= 3);
+    if (repetitive.length > 0) {
+      reasons.push(`Repetitive phrasing: "${repetitive[0][0]}" appears ${repetitive[0][1]} times`);
+    }
+  }
+
+  return {
+    isShallow: reasons.length > 0,
+    reasons,
+    density: Math.round(density * 100) / 100,
+  };
+}
+
+// ============ SEMANTIC READINESS GATE ============
+
+/**
+ * Hard readiness gate requiring overall semantic score >= threshold (default 80).
+ * Returns per-section scorecard with specific reasons for low scores.
+ * Integrates: decision-usefulness, anti-shallow checks, contradiction detection,
+ * plausibility checks, and coherence (if checker is available).
+ *
+ * @param {object} synthesis - Full synthesis object
+ * @param {object} [options] - Options
+ * @param {number} [options.threshold=80] - Minimum overall score to pass
+ * @param {string} [options.industry] - Industry context for anti-shallow
+ * @param {function} [options.coherenceChecker] - Optional checkCoherence function
+ * @returns {{
+ *   pass: boolean,
+ *   overallScore: number,
+ *   threshold: number,
+ *   sectionScorecard: Array<{ section: string, score: number, pass: boolean, reasons: string[] }>,
+ *   shallowSections: string[],
+ *   contradictions: Array,
+ *   plausibilityIssues: Array,
+ *   improvementActions: string[]
+ * }}
+ */
+function semanticReadinessGate(synthesis, options = {}) {
+  const threshold = options.threshold || 80;
+  const industry = options.industry || null;
+  const coherenceChecker = options.coherenceChecker || null;
+
+  // Per-section pass thresholds calibrated for scoreDecisionUsefulness output range.
+  // Top-level sections are prose (threshold 30) while depth sections contain structured
+  // financial/strategy data that scores lower on prose-oriented metrics (threshold 15).
+  const SECTION_PASS_THRESHOLD = 30;
+  const DEPTH_SECTION_PASS_THRESHOLD = 15;
+
+  if (!synthesis || typeof synthesis !== 'object') {
+    return {
+      pass: false,
+      overallScore: 0,
+      threshold,
+      sectionScorecard: [],
+      shallowSections: [],
+      contradictions: [],
+      plausibilityIssues: [],
+      improvementActions: ['No synthesis data provided — cannot assess readiness'],
+    };
+  }
+
+  // 1. Run full analysis
+  const report = analyze(synthesis, industry);
+
+  // 2. Build per-section scorecard
+  const sectionScorecard = [];
+  const shallowSections = [];
+  const improvementActions = [];
+
+  const allSections = [
+    'executiveSummary',
+    'marketOpportunityAssessment',
+    'competitivePositioning',
+    'regulatoryPathway',
+    'keyInsights',
+  ];
+
+  // Score each section with specific reasons
+  for (const section of allSections) {
+    const val = synthesis[section];
+    const sectionEntry = { section, score: 0, pass: false, reasons: [] };
+
+    if (!val) {
+      sectionEntry.reasons.push('Section missing');
+      sectionScorecard.push(sectionEntry);
+      improvementActions.push(`Add content for ${section}`);
+      continue;
+    }
+
+    // Decision-usefulness score — use extractTextValues for objects to avoid JSON key noise
+    const text = typeof val === 'string' ? val : extractTextValues(val);
+    const duScore = scoreDecisionUsefulness(text);
+    sectionEntry.score = duScore.score;
+
+    if (duScore.score < SECTION_PASS_THRESHOLD) {
+      const factors = duScore.factors || {};
+      if (factors.tooShort) {
+        sectionEntry.reasons.push('Content too short for meaningful analysis');
+      }
+      if ((factors.namedCompanies || 0) === 0) {
+        sectionEntry.reasons.push('No named companies — add specific company references');
+      }
+      if ((factors.specificNumbers || 0) === 0) {
+        sectionEntry.reasons.push('No specific numbers — add market data, percentages, financials');
+      }
+      if ((factors.actionVerbs || 0) === 0) {
+        sectionEntry.reasons.push('No actionable recommendations — add "should", "recommend", "target" statements');
+      }
+      if ((factors.causalLinks || 0) === 0) {
+        sectionEntry.reasons.push('No causal reasoning — add "because", "therefore", "resulting in" chains');
+      }
+      if (sectionEntry.reasons.length === 0) {
+        sectionEntry.reasons.push(`Score ${duScore.score}/${SECTION_PASS_THRESHOLD} — needs more specifics and analysis`);
+      }
+    }
+
+    // Shallow content check
+    const shallowCheck = detectShallowContent(text);
+    if (shallowCheck.isShallow) {
+      shallowSections.push(section);
+      sectionEntry.reasons.push(...shallowCheck.reasons);
+    }
+
+    // Anti-shallow checks
+    const asResult = report.antiShallowResults[section];
+    if (asResult && !asResult.pass) {
+      sectionEntry.reasons.push(...asResult.issues);
+    }
+
+    sectionEntry.pass = sectionEntry.score >= SECTION_PASS_THRESHOLD && !shallowCheck.isShallow;
+
+    if (!sectionEntry.pass) {
+      improvementActions.push(
+        `Improve ${section}: ${sectionEntry.reasons.slice(0, 2).join('; ')}`
+      );
+    }
+
+    sectionScorecard.push(sectionEntry);
+  }
+
+  // Score depth sections
+  if (synthesis.depth && typeof synthesis.depth === 'object') {
+    for (const [key, val] of Object.entries(synthesis.depth)) {
+      if (!val) continue;
+      const depthSection = `depth.${key}`;
+      const text = typeof val === 'string' ? val : extractTextValues(val);
+      const duScore = scoreDecisionUsefulness(text);
+      const shallowCheck = detectShallowContent(text);
+      const reasons = [];
+
+      if (duScore.score < DEPTH_SECTION_PASS_THRESHOLD) {
+        const factors = duScore.factors || {};
+        if ((factors.specificNumbers || 0) === 0) {
+          reasons.push('Missing specific numbers');
+        }
+        if ((factors.actionVerbs || 0) === 0) {
+          reasons.push('Missing actionable content');
+        }
+        if (reasons.length === 0) {
+          reasons.push(`Score ${duScore.score}/${DEPTH_SECTION_PASS_THRESHOLD}`);
+        }
+      }
+      if (shallowCheck.isShallow) {
+        shallowSections.push(depthSection);
+        reasons.push(...shallowCheck.reasons);
+      }
+
+      const sectionPass = duScore.score >= DEPTH_SECTION_PASS_THRESHOLD && !shallowCheck.isShallow;
+      sectionScorecard.push({
+        section: depthSection,
+        score: duScore.score,
+        pass: sectionPass,
+        reasons,
+      });
+
+      if (!sectionPass) {
+        improvementActions.push(
+          `Improve ${depthSection}: ${reasons.slice(0, 2).join('; ')}`
+        );
+      }
+    }
+  }
+
+  // 3. Contradictions
+  const contradictions = report.contradictions;
+  if (contradictions.length > 0) {
+    for (const c of contradictions) {
+      improvementActions.push(`Resolve contradiction: ${c.message}`);
+    }
+  }
+
+  // 4. Plausibility issues
+  const plausibilityIssues = report.plausibility;
+  const plausibilityErrors = plausibilityIssues.filter((p) => p.severity === 'error');
+  if (plausibilityErrors.length > 0) {
+    for (const p of plausibilityErrors) {
+      improvementActions.push(`Fix implausible value: ${p.issue}`);
+    }
+  }
+
+  // 5. Coherence check (if checker provided)
+  let coherenceScore = 100;
+  if (coherenceChecker) {
+    const coherenceResult = coherenceChecker(synthesis);
+    coherenceScore = coherenceResult.score;
+    if (coherenceResult.issues && coherenceResult.issues.length > 0) {
+      for (const issue of coherenceResult.issues.slice(0, 3)) {
+        improvementActions.push(`Fix coherence: ${issue}`);
+      }
+    }
+  }
+
+  // 6. Calculate overall readiness score (0-100 scale targeting threshold of 80).
+  //
+  // Components:
+  //   - Section quality (50%): proportion of sections passing their threshold, scaled to 50 pts
+  //   - Content depth (20%): average section score normalized to 0-100 scale (decision-usefulness
+  //     scores cap around 85 for excellent content; we scale proportionally)
+  //   - Coherence (15%): cross-section coherence score
+  //   - Penalty budget (15%): deductions for contradictions, plausibility errors, shallow sections
+  //
+  // This ensures good content with all sections passing and no issues reaches 85+, while
+  // content with shallow/missing sections or contradictions drops below 80.
+
+  const passingSections = sectionScorecard.filter((s) => s.pass).length;
+  const totalSections = sectionScorecard.length || 1;
+  const sectionPassRate = passingSections / totalSections;
+  const sectionQualityPts = sectionPassRate * 50;
+
+  const sectionScores = sectionScorecard.map((s) => s.score);
+  const avgSectionScore = sectionScores.length > 0
+    ? sectionScores.reduce((a, b) => a + b, 0) / sectionScores.length
+    : 0;
+  // Normalize: scoreDecisionUsefulness ranges 0-100 but typical good content is 40-70.
+  // Scale so that avgScore=50 maps to ~14/20 and avgScore=65 maps to ~18/20.
+  const contentDepthPts = Math.min(20, (avgSectionScore / 70) * 20);
+
+  const coherencePts = (coherenceScore / 100) * 15;
+
+  let penaltyBudget = 15;
+  penaltyBudget -= plausibilityErrors.length * 3;
+  penaltyBudget -= contradictions.length * 3;
+  penaltyBudget -= shallowSections.length * 2;
+  const penaltyPts = Math.max(0, penaltyBudget);
+
+  let overallScore = sectionQualityPts + contentDepthPts + coherencePts + penaltyPts;
+  overallScore = Math.max(0, Math.min(100, Math.round(overallScore)));
+
+  return {
+    pass: overallScore >= threshold,
+    overallScore,
+    threshold,
+    sectionScorecard,
+    shallowSections,
+    contradictions,
+    plausibilityIssues,
+    improvementActions: improvementActions.length > 0
+      ? improvementActions
+      : ['All checks passed — content meets readiness threshold'],
+  };
+}
+
 // ============ EXPORTS ============
 
 module.exports = {
@@ -1505,6 +1830,7 @@ module.exports = {
   checkCrossSectionContradictions,
   antiShallow,
   runDecisionGate,
+  semanticReadinessGate,
 
   // Semantic parsers
   parseDealEconomics,
@@ -1526,6 +1852,7 @@ module.exports = {
   detectMacroPadding,
   detectEmptyCalories,
   detectConsultantFiller,
+  detectShallowContent,
   scoreDecisionUsefulness,
   extractClaims,
 };
