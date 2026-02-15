@@ -853,6 +853,70 @@ async function findText(zip, searchText) {
   return { found: matches.length > 0, matchCount: matches.length, matches };
 }
 
+/**
+ * Classify whether a slide is a divider/section-intent slide vs a content slide.
+ * Divider slides are intentionally sparse — they carry only a title or section label.
+ * They should NOT be flagged as "empty" or "sparse" because they serve structural purpose.
+ *
+ * @param {string} fullText - The full extracted text of the slide
+ * @param {number} charCount - Character count of the slide
+ * @returns {{ isDivider: boolean, reason: string }}
+ */
+function classifySlideIntent(fullText, charCount) {
+  const normalized = String(fullText || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  // Completely empty slides are NOT dividers — they are genuinely empty
+  if (!normalized) {
+    return { isDivider: false, reason: 'empty' };
+  }
+
+  // TOC slides (may include section labels alongside "table of contents")
+  if (normalized.startsWith('table of contents') || normalized.includes('table of contents')) {
+    return { isDivider: true, reason: 'toc' };
+  }
+
+  // Appendix header slides
+  if (/^appendix\b/.test(normalized)) {
+    return { isDivider: true, reason: 'appendix_header' };
+  }
+
+  // Known section divider titles — slides with only a section heading
+  // These are structurally intentional and should not be penalized.
+  const SECTION_DIVIDER_PATTERNS = [
+    /^policy\s*[&]\s*regulatory$/,
+    /^market\s+overview$/,
+    /^competitive\s+landscape$/,
+    /^strategic\s+analysis$/,
+    /^recommendations$/,
+    /^appendix$/,
+    /^executive\s+summary$/,
+    /^key\s+findings$/,
+    /^opportunities\s*[&]\s*obstacles$/,
+  ];
+
+  for (const pattern of SECTION_DIVIDER_PATTERNS) {
+    if (pattern.test(normalized)) {
+      return { isDivider: true, reason: 'section_divider' };
+    }
+  }
+
+  // Heuristic: if the slide has very few chars (under threshold) and consists
+  // of only 1-3 short text fragments that look like titles/labels (no sentences),
+  // classify as divider-intent.
+  if (charCount < 80) {
+    const words = normalized.split(/\s+/);
+    const hasSentenceStructure = /[.!?;]/.test(normalized);
+    if (words.length <= 6 && !hasSentenceStructure) {
+      return { isDivider: true, reason: 'title_only' };
+    }
+  }
+
+  return { isDivider: false, reason: 'content' };
+}
+
 async function countImages(zip) {
   const imageFiles = Object.keys(zip.files).filter((f) =>
     /^ppt\/media\/(image|picture)\d+\.(png|jpg|jpeg|gif|svg)$/i.test(f)
@@ -1092,10 +1156,30 @@ async function validatePPTX(input, exp = {}) {
 
     if (exp.noEmptySlides !== false) {
       const textData = await extractAllText(zip);
-      const empty = textData.slides.filter((s) => s.charCount < 50);
-      if (empty.length > 0)
-        warn('Empty slides', `Slides with <50 chars: ${empty.map((s) => s.slideNum).join(', ')}`);
-      else pass('No empty slides', 'All slides have content');
+      const sparseThreshold = 50;
+      const sparseSlides = textData.slides.filter((s) => s.charCount < sparseThreshold);
+      const genuinelySparse = [];
+      const dividerSlides = [];
+      for (const s of sparseSlides) {
+        const intent = classifySlideIntent(s.fullText, s.charCount);
+        if (intent.isDivider) {
+          dividerSlides.push({ slideNum: s.slideNum, reason: intent.reason });
+        } else {
+          genuinelySparse.push(s);
+        }
+      }
+      if (genuinelySparse.length > 0) {
+        fail(
+          'Sparse content slides',
+          'All content slides have >= 50 chars',
+          `${genuinelySparse.length} sparse content slide(s): ${genuinelySparse.map((s) => `slide ${s.slideNum} (${s.charCount} chars)`).join(', ')}`
+        );
+      } else {
+        pass(
+          'No sparse content slides',
+          `All content slides have sufficient text${dividerSlides.length > 0 ? ` (${dividerSlides.length} divider slide(s) excluded)` : ''}`
+        );
+      }
     }
 
     if (exp.requiredText) {
@@ -1257,6 +1341,7 @@ module.exports = {
   normalizeSlideNonVisualIds,
   scanPackageConsistency,
   reconcileContentTypesAndPackage,
+  classifySlideIntent,
   countSlides,
   extractSlideText,
   extractAllText,
