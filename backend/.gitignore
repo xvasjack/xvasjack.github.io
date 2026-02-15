@@ -3,3 +3,4 @@ node_modules/
 *.log
 coverage/
 preflight-reports/
+market-research/reports/latest/

@@ -60,9 +60,10 @@ function checkDirtyTree() {
     pass: dirty.length === 0,
     dirty,
     restricted: false,
-    remediation: dirty.length > 0
-      ? "Run 'git stash' or 'git add -A && git commit -m \"pre-deploy\"' to clean the working tree."
-      : null,
+    remediation:
+      dirty.length > 0
+        ? "Run 'git stash' or 'git add -A && git commit -m \"pre-deploy\"' to clean the working tree."
+        : null,
   };
 }
 
@@ -121,7 +122,7 @@ function checkGitBranch(expectedBranch) {
       branch: 'unknown',
       error: String(err?.message || err || ''),
       remediation:
-        "Could not determine current branch. Ensure you are inside a git repository. " +
+        'Could not determine current branch. Ensure you are inside a git repository. ' +
         "Run 'git status' to verify.",
     };
   }
@@ -142,7 +143,7 @@ function checkHeadSha() {
         pass: false,
         sha: null,
         remediation:
-          "HEAD SHA could not be resolved. Ensure the repository has at least one commit. " +
+          'HEAD SHA could not be resolved. Ensure the repository has at least one commit. ' +
           "Run 'git log --oneline -1' to verify.",
       };
     }
@@ -175,7 +176,7 @@ function checkHeadSha() {
       sha: null,
       error: String(err?.message || err || ''),
       remediation:
-        "Could not read HEAD SHA. Ensure git is available and you are in a valid repository. " +
+        'Could not read HEAD SHA. Ensure git is available and you are in a valid repository. ' +
         "Run 'git status' to verify.",
     };
   }
@@ -210,10 +211,14 @@ function checkGitDivergence(remoteBranch) {
       };
     }
 
-    const revList = execFileSync('git', ['rev-list', '--left-right', '--count', `${target}...HEAD`], {
-      cwd: GIT_ROOT,
-      encoding: 'utf8',
-    }).trim();
+    const revList = execFileSync(
+      'git',
+      ['rev-list', '--left-right', '--count', `${target}...HEAD`],
+      {
+        cwd: GIT_ROOT,
+        encoding: 'utf8',
+      }
+    ).trim();
 
     const [behind, ahead] = revList.split(/\s+/).map(Number);
 
@@ -464,6 +469,7 @@ function parseArgs(argv) {
   let strict = false;
   let gateMode = 'dev';
   let expectedBranch = 'main';
+  let deckDir = null;
 
   for (const arg of argv) {
     if (arg === '--help' || arg === '-h') {
@@ -484,10 +490,12 @@ function parseArgs(argv) {
       }
     } else if (arg.startsWith('--expected-branch=')) {
       expectedBranch = arg.split('=')[1];
+    } else if (arg.startsWith('--deck-dir=')) {
+      deckDir = arg.split('=')[1];
     }
   }
 
-  return { stressSeeds, reportDir, help, strict, gateMode, expectedBranch };
+  return { stressSeeds, reportDir, help, strict, gateMode, expectedBranch, deckDir };
 }
 
 // ---------------------------------------------------------------------------
@@ -694,7 +702,9 @@ Examples:
         details: branchResult.remediation,
         remediation: branchResult.remediation,
       });
-      console.log(`[FAIL] Wrong branch: '${branchResult.branch}' (expected '${args.expectedBranch}')`);
+      console.log(
+        `[FAIL] Wrong branch: '${branchResult.branch}' (expected '${args.expectedBranch}')`
+      );
       console.log(`  Remediation: ${branchResult.remediation}`);
     }
 
@@ -817,8 +827,8 @@ Examples:
   const head = verifyHeadContent(DEFAULT_HEAD_CHECKS);
   const d2 = Date.now() - t2;
   const headRemediation =
-    "Commit your changes with 'git add -A && git commit -m \"fix\"'. " +
-    "Then re-run preflight to verify HEAD contains all required patterns.";
+    'Commit your changes with \'git add -A && git commit -m "fix"\'. ' +
+    'Then re-run preflight to verify HEAD contains all required patterns.';
   if (head.pass) {
     const status = head.degradedMode ? 'WARN' : 'PASS';
 
@@ -831,7 +841,7 @@ Examples:
         durationMs: d2,
         details: 'Strict mode: degraded HEAD check treated as failure',
         remediation:
-          "git is blocked — HEAD content could not be verified against the actual commit. " +
+          'git is blocked — HEAD content could not be verified against the actual commit. ' +
           "Ensure git is available and the repository is valid. Run 'git show HEAD:backend/market-research/server.js' to test.",
       });
       console.log('[FAIL] HEAD content verified in degraded mode (strict mode rejects warnings)');
@@ -938,6 +948,66 @@ Examples:
         details: reason,
       });
       console.log(`[FAIL] Regression tests failed (${reason})`);
+    }
+  }
+
+  // --- 4b. Real output validation ---
+  {
+    const { checkRealOutputValidation } = require(path.join(PROJECT_ROOT, 'preflight-gates.js'));
+    if (anyFail) {
+      checkResults.push({
+        name: 'Real output validation',
+        pass: true,
+        status: 'SKIP',
+        durationMs: 0,
+        details: 'Skipped due to earlier failures',
+      });
+      console.log('[SKIP] Real output validation (skipped — fix above failures first)');
+    } else {
+      console.log('[....] Running real output validation...');
+      const t4b = Date.now();
+      const realOutputResult = checkRealOutputValidation({
+        deckDir: args.deckDir,
+      });
+      const d4b = Date.now() - t4b;
+
+      if (realOutputResult.status === 'PASS') {
+        checkResults.push({
+          name: 'Real output validation',
+          pass: true,
+          status: 'PASS',
+          durationMs: d4b,
+          details: realOutputResult.details,
+        });
+        console.log(
+          `[PASS] Real output validation (${(d4b / 1000).toFixed(1)}s) — ${realOutputResult.details}`
+        );
+      } else if (realOutputResult.severity === 'INFO') {
+        checkResults.push({
+          name: 'Real output validation',
+          pass: true,
+          status: 'SKIP',
+          durationMs: d4b,
+          details: realOutputResult.details,
+        });
+        console.log(`[SKIP] Real output validation — ${realOutputResult.details}`);
+      } else {
+        anyFail = true;
+        checkResults.push({
+          name: 'Real output validation',
+          pass: false,
+          status: 'FAIL',
+          durationMs: d4b,
+          details: realOutputResult.details,
+          evidence: realOutputResult.evidence,
+        });
+        console.log(`[FAIL] Real output validation — ${realOutputResult.details}`);
+        if (realOutputResult.evidence) {
+          for (const e of realOutputResult.evidence.slice(0, 10)) {
+            console.log(`  ${e}`);
+          }
+        }
+      }
     }
   }
 

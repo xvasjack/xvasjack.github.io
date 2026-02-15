@@ -5,6 +5,15 @@ const { execFileSync, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// Lazy-load validate-real-output to avoid circular deps at require time
+let _validateRealOutput;
+function getValidateRealOutput() {
+  if (!_validateRealOutput) {
+    _validateRealOutput = require('./validate-real-output');
+  }
+  return _validateRealOutput;
+}
+
 const PROJECT_ROOT = path.resolve(__dirname);
 const GIT_ROOT = path.resolve(PROJECT_ROOT, '..', '..');
 
@@ -51,6 +60,11 @@ const REMEDIATION_MAP = {
   'Sparse slide gate':
     'Review PPTX output for slides with < 3 content elements. Check ppt-single-country.js',
   'Source coverage gate': 'Increase source citations in research output. Check research-agents.js',
+  'Real output validation':
+    'Fix PPTX output issues. Run: node validate-real-output.js <deck.pptx> to see failures. ' +
+    'Check ppt-single-country.js and ppt-utils.js for rendering bugs.',
+  'Formatting audit':
+    'Review formatting audit results in preflight-reports/. Fix drift/mismatch issues in ppt-single-country.js or template-patterns.json',
 };
 
 // ---------------------------------------------------------------------------
@@ -116,6 +130,8 @@ const ENVIRONMENT_CONTRACTS = {
       'Module function signatures',
       'Sparse slide gate',
       'Source coverage gate',
+      'Real output validation',
+      'Formatting audit',
     ],
   },
   test: {
@@ -131,6 +147,8 @@ const ENVIRONMENT_CONTRACTS = {
       'Schema firewall availability',
       'Integrity pipeline availability',
       'Module function signatures',
+      'Real output validation',
+      'Formatting audit',
     ],
     skip: ['Stress test', 'Schema compatibility', 'Sparse slide gate', 'Source coverage gate'],
   },
@@ -149,6 +167,8 @@ const ENVIRONMENT_CONTRACTS = {
       'Schema compatibility',
       'Sparse slide gate',
       'Source coverage gate',
+      'Real output validation',
+      'Formatting audit',
     ],
     optional: [],
     skip: [],
@@ -1059,6 +1079,289 @@ function checkSourceCoverageGate(threshold) {
 }
 
 // ---------------------------------------------------------------------------
+// Gate 13: Real Output Validation
+// ---------------------------------------------------------------------------
+/**
+ * Run validate-real-output checks against PPTX deck files.
+ * Looks for .pptx files in `deckDir` (default: preflight-reports/decks/).
+ * Returns PASS if all decks pass, FAIL if any fail, SKIP if no decks found.
+ *
+ * @param {Object} options
+ * @param {string} [options.deckDir] - Directory containing .pptx files to validate
+ * @param {string} [options.country] - Country for expectations (default: 'Vietnam')
+ * @param {string} [options.industry] - Industry for expectations (default: 'Energy Services')
+ * @returns {Object} Check result with real-output details
+ */
+function checkRealOutputValidation(options = {}) {
+  const elapsed = timer();
+  const deckDir = options.deckDir || path.join(PROJECT_ROOT, 'preflight-reports', 'decks');
+
+  // Skip if no deck directory exists
+  if (!fs.existsSync(deckDir)) {
+    return makeCheckResult(
+      'Real output validation',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      `No deck directory found at ${deckDir} — skipped`
+    );
+  }
+
+  // Find .pptx files
+  let pptxFiles;
+  try {
+    pptxFiles = fs.readdirSync(deckDir).filter((f) => f.toLowerCase().endsWith('.pptx'));
+  } catch (err) {
+    return makeCheckResult(
+      'Real output validation',
+      false,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `Failed to read deck directory: ${err.message}`
+    );
+  }
+
+  if (pptxFiles.length === 0) {
+    return makeCheckResult(
+      'Real output validation',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      `No .pptx files found in ${deckDir} — skipped`
+    );
+  }
+
+  // Load validator
+  let validator;
+  try {
+    validator = getValidateRealOutput();
+  } catch (err) {
+    return makeCheckResult(
+      'Real output validation',
+      false,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `Failed to load validate-real-output.js: ${err.message}`
+    );
+  }
+
+  // Run validation synchronously via subprocess to avoid async issues in gate runner
+  const country = options.country || 'Vietnam';
+  const industry = options.industry || 'Energy Services';
+  const deckResults = [];
+  const evidence = [];
+  let anyFailed = false;
+
+  for (const file of pptxFiles) {
+    const filePath = path.join(deckDir, file);
+    const result = spawnSync(
+      'node',
+      [
+        '-e',
+        `const v=require('./validate-real-output');const e=v.getRealExpectations(${JSON.stringify(country)},${JSON.stringify(industry)});v.validateRealOutput(${JSON.stringify(filePath)},e).then(r=>{process.stdout.write(JSON.stringify({valid:r.valid,error:r.error||null,passed:r.results?r.results.passed.length:0,failed:r.results?r.results.failed.length:0,warnings:r.results?r.results.warnings.length:0,failedChecks:r.results?r.results.failed:[]}));process.exit(r.valid?0:1)}).catch(e=>{process.stdout.write(JSON.stringify({valid:false,error:e.message,passed:0,failed:1,warnings:0,failedChecks:[]}));process.exit(1)})`,
+      ],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: 'utf8',
+        timeout: 2 * 60 * 1000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+
+    let parsed;
+    try {
+      parsed = JSON.parse(result.stdout);
+    } catch {
+      parsed = {
+        valid: result.status === 0,
+        error: result.stderr || 'Could not parse validation output',
+        passed: 0,
+        failed: result.status === 0 ? 0 : 1,
+        warnings: 0,
+        failedChecks: [],
+      };
+    }
+
+    deckResults.push({ file, ...parsed });
+    if (!parsed.valid) {
+      anyFailed = true;
+      const failedNames = (parsed.failedChecks || []).map(
+        (f) => `${f.check}: expected ${f.expected}, got ${f.actual}`
+      );
+      evidence.push(
+        `${file}: FAILED (${parsed.failed} check(s)) — ${failedNames.join('; ') || parsed.error || 'unknown'}`
+      );
+    } else {
+      evidence.push(`${file}: PASSED (${parsed.passed} checks, ${parsed.warnings} warnings)`);
+    }
+  }
+
+  const totalPassed = deckResults.filter((d) => d.valid).length;
+  const totalDecks = deckResults.length;
+  const summary = `${totalPassed}/${totalDecks} deck(s) passed real-output validation`;
+
+  return makeCheckResult(
+    'Real output validation',
+    !anyFailed,
+    SEVERITY.BLOCKING,
+    elapsed(),
+    summary,
+    evidence
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Gate 14: Formatting Audit (drift/mismatch detection)
+// ---------------------------------------------------------------------------
+
+/**
+ * Known formatting audit warning codes that indicate drift/mismatch.
+ * These are emitted by auditGeneratedPptFormatting() in ppt-single-country.js.
+ */
+const FORMATTING_AUDIT_WARNING_CODES = [
+  'header_footer_line_drift',
+  'line_width_signature_mismatch',
+  'table_margin_drift',
+  'table_anchor_top_heavy',
+  'table_outer_border_missing',
+  'long_text_run_density',
+  'long_table_cell_density',
+  'slide_size_mismatch',
+  'missing_main_layout',
+  'missing_line_geometry',
+  'table_margin_runaway',
+  'missing_presentation_xml',
+  'slide_size_missing',
+  'format_audit_exception',
+];
+
+/**
+ * Check formatting audit results from preflight-reports/ directory.
+ * Scans for formatting audit data inside gate reports or standalone audit files.
+ *
+ * In non-strict mode, drift/mismatch codes produce DEGRADED (warning).
+ * In strict mode, they are promoted to BLOCKING (hard fail) via applyModePolicy.
+ *
+ * The failure message lists exact blocking slide keys.
+ */
+function checkFormattingAudit() {
+  const elapsed = timer();
+  const reportsDir = path.join(PROJECT_ROOT, 'preflight-reports');
+
+  if (!fs.existsSync(reportsDir)) {
+    return makeCheckResult(
+      'Formatting audit',
+      true,
+      SEVERITY.INFO,
+      elapsed(),
+      'No preflight-reports directory — skipped'
+    );
+  }
+
+  try {
+    const reportFiles = fs.readdirSync(reportsDir).filter((f) => f.endsWith('.json'));
+    const foundIssues = [];
+    const blockingSlideKeys = [];
+
+    for (const file of reportFiles) {
+      try {
+        const content = JSON.parse(fs.readFileSync(path.join(reportsDir, file), 'utf8'));
+
+        // Check for formatting audit data in gate reports
+        if (content.checks && Array.isArray(content.checks)) {
+          for (const check of content.checks) {
+            if (check.name === 'Formatting audit' && !check.pass) {
+              if (Array.isArray(check.evidence)) {
+                foundIssues.push(...check.evidence);
+              }
+            }
+          }
+        }
+
+        // Check for direct formatting audit fields (from pptMetrics)
+        if (content.formattingAuditIssueCodes && Array.isArray(content.formattingAuditIssueCodes)) {
+          const warningCodes = content.formattingAuditIssueCodes.filter((code) =>
+            FORMATTING_AUDIT_WARNING_CODES.includes(code)
+          );
+          if (warningCodes.length > 0) {
+            foundIssues.push(`${file}: warning codes: ${warningCodes.join(', ')}`);
+            blockingSlideKeys.push(...warningCodes.map((c) => `${file}:${c}`));
+          }
+        }
+
+        // Check for drift detection results from template-contract-compiler
+        if (
+          content.driftDetected === true ||
+          (content.summary && content.summary.warningCount > 0)
+        ) {
+          const issueCount = content.summary?.totalIssues || 0;
+          const warnCount = content.summary?.warningCount || 0;
+          const errCount = content.summary?.errorCount || 0;
+          if (warnCount > 0 || errCount > 0) {
+            foundIssues.push(
+              `${file}: drift detected (${errCount} errors, ${warnCount} warnings, ${issueCount} total)`
+            );
+            if (Array.isArray(content.allIssues)) {
+              for (const issue of content.allIssues.slice(0, 20)) {
+                blockingSlideKeys.push(issue.blockKey || issue.code || issue.type || 'unknown');
+              }
+            }
+          }
+        }
+
+        // Check formattingWarnings array from server diagnostics
+        if (Array.isArray(content.formattingWarnings) && content.formattingWarnings.length > 0) {
+          foundIssues.push(
+            `${file}: server formatting warnings: ${content.formattingWarnings.join(', ')}`
+          );
+          blockingSlideKeys.push(...content.formattingWarnings);
+        }
+      } catch {
+        // skip unparseable report files
+      }
+    }
+
+    if (foundIssues.length > 0) {
+      const uniqueKeys = [...new Set(blockingSlideKeys)];
+      const details =
+        `${foundIssues.length} formatting drift/mismatch issue(s) detected. ` +
+        `Blocking slide keys: ${uniqueKeys.join(', ') || '(none extracted)'}`;
+      const rootCauses = foundIssues.map((i) => `  - ${i}`);
+      const evidence = [
+        ...foundIssues.slice(0, 15),
+        '',
+        'Root causes:',
+        ...rootCauses.slice(0, 15),
+      ];
+      return makeCheckResult(
+        'Formatting audit',
+        false,
+        SEVERITY.DEGRADED,
+        elapsed(),
+        details,
+        evidence
+      );
+    }
+
+    return makeCheckResult(
+      'Formatting audit',
+      true,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `No formatting drift/mismatch issues found (scanned ${reportFiles.length} report(s))`
+    );
+  } catch (err) {
+    return makeCheckResult(
+      'Formatting audit',
+      false,
+      SEVERITY.DEGRADED,
+      elapsed(),
+      `Formatting audit check failed: ${err.message}`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Readiness Score Calculator
 // ---------------------------------------------------------------------------
 function computeReadinessScore(results, options) {
@@ -1148,6 +1451,8 @@ const FULL_GATES = [
   'Schema compatibility',
   'Sparse slide gate',
   'Source coverage gate',
+  'Real output validation',
+  'Formatting audit',
 ];
 
 function validateModeParity() {
@@ -1309,6 +1614,22 @@ function runFull(options = {}) {
     applyModePolicy(checkSourceCoverageGate(options.sourceCoverageThreshold), mode, strict)
   );
 
+  // Real output validation
+  results.push(
+    applyModePolicy(
+      checkRealOutputValidation({
+        deckDir: options.deckDir,
+        country: options.country,
+        industry: options.industry,
+      }),
+      mode,
+      strict
+    )
+  );
+
+  // Formatting audit (drift/mismatch detection)
+  results.push(applyModePolicy(checkFormattingAudit(), mode, strict));
+
   // Only run regression/stress if quick checks passed
   const hasBlockingFailure = results.some((r) => !r.pass && r.severity === SEVERITY.BLOCKING);
 
@@ -1366,6 +1687,7 @@ function parseArgs(argv) {
   let strict = false;
   let gateMode = GATE_MODES.DEV;
   let sourceCoverageThreshold = 70;
+  let deckDir = null;
 
   for (const arg of argv) {
     if (arg === '--help' || arg === '-h') {
@@ -1394,10 +1716,12 @@ function parseArgs(argv) {
       if (Number.isFinite(val) && val > 0) {
         sourceCoverageThreshold = val;
       }
+    } else if (arg.startsWith('--deck-dir=')) {
+      deckDir = arg.split('=')[1];
     }
   }
 
-  return { mode, stressSeeds, reportDir, help, strict, gateMode, sourceCoverageThreshold };
+  return { mode, stressSeeds, reportDir, help, strict, gateMode, sourceCoverageThreshold, deckDir };
 }
 
 // ---------------------------------------------------------------------------
@@ -1416,6 +1740,7 @@ Options:
   --strict                   Treat any non-pass as BLOCKING failure
   --stress-seeds=N           Run stress test with N seeds (full mode only, max 200)
   --source-coverage=N        Source coverage threshold percentage (default: 70)
+  --deck-dir=PATH            Directory containing .pptx decks for real-output validation
   --report-dir=PATH          Output directory for reports
   --help                     Show this help
 
@@ -1438,6 +1763,7 @@ Examples:
     strict: args.strict,
     stressSeeds: args.stressSeeds,
     sourceCoverageThreshold: args.sourceCoverageThreshold,
+    deckDir: args.deckDir,
   });
 
   // Print results
@@ -1541,6 +1867,8 @@ module.exports = {
   checkSchemaCompatibility,
   checkSparseSlideGate,
   checkSourceCoverageGate,
+  checkRealOutputValidation,
+  checkFormattingAudit,
   // Mode & policy
   applyModePolicy,
   getEnvironmentContract,
@@ -1560,5 +1888,6 @@ module.exports = {
   QUICK_GATES,
   FULL_GATES,
   REMEDIATION_MAP,
+  FORMATTING_AUDIT_WARNING_CODES,
   isReportSlideDivider,
 };

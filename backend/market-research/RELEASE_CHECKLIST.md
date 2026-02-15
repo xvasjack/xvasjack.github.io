@@ -89,6 +89,33 @@ In strict mode, the following are **HARD FAILURES** (not warnings):
 | Clean tree (degraded) | Git is accessible for tree check | Ensure git is in PATH |
 | Clean tree (dirty) | No uncommitted .js/.json changes | `git stash` or `git add -A && git commit` |
 
+## Strict Mode Formatting Audit (--strict)
+
+In strict mode, **all formatting warnings are promoted to hard failures**:
+
+| Warning Code | What it detects | Behavior |
+|-------------|----------------|----------|
+| `header_footer_line_drift` | Header/footer Y-position drift > 2500 EMU | Non-strict: WARN, Strict: FAIL |
+| `line_width_signature_mismatch` | Expected line thickness (57150, 28575) not present | Non-strict: WARN, Strict: FAIL |
+| `table_margin_drift` | Table margins deviate from template baseline | Non-strict: WARN, Strict: FAIL |
+| `table_anchor_top_heavy` | Most cells top-anchored vs expected center | Non-strict: WARN, Strict: FAIL |
+| `table_outer_border_missing` | No 3pt table borders detected | Non-strict: WARN, Strict: FAIL |
+| `long_text_run_density` | Very long text runs (>900 chars) | Non-strict: WARN, Strict: FAIL |
+| `long_table_cell_density` | Overly long table cells (>620 chars) | Non-strict: WARN, Strict: FAIL |
+| `slide_size_mismatch` | Slide dimensions differ from template | Always: FAIL (critical) |
+| `table_margin_runaway` | Extreme margin values detected | Always: FAIL (critical) |
+
+Failure messages list **exact blocking slide keys** with root causes:
+```
+PPT formatting audit strict-mode failure: 2 warning(s) promoted to hard fail.
+Blocking slide keys: header_footer_line_drift, table_margin_drift
+Root causes:
+  - [header_footer_line_drift] Header/footer line drift detected (delta EMU: top=3200)
+  - [table_margin_drift] Table margins drift from template baseline (near-expected ratio=0.65)
+```
+
+Both the PPT renderer (`ppt-single-country.js` via `strictGeometryMode`) and the server pipeline (`server.js` via `scope.templateStrictMode`) enforce this behavior at runtime. The preflight gate (`Formatting audit`) also enforces it from stored report data.
+
 ## If Preflight Fails
 
 - **Git not available**: Install git and ensure it's in PATH. Run `which git` to verify.
@@ -100,6 +127,7 @@ In strict mode, the following are **HARD FAILURES** (not warnings):
 - **Module import failure**: A required file is missing or has a syntax error. Check the reported module.
 - **Regression test failure**: A code change broke existing behavior. Fix the regression before deploying.
 - **Stress test failure**: Runtime crashes found — there are unguarded code paths. Fix before deploying.
+- **Formatting audit failure (strict)**: Formatting drift/mismatch detected and strict mode is active. The failure message lists exact blocking slide keys and root causes. Fix the drift in `ppt-single-country.js` or update `template-patterns.json`. In non-strict mode, these are warnings only.
 - **WARN (degraded mode, non-strict)**: Git execution was blocked. Preflight validated local files but cannot guarantee HEAD parity. Use `--strict` to make this a hard failure.
 
 ## Exit Codes

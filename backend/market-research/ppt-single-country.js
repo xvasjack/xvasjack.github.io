@@ -89,6 +89,10 @@ const {
   CHART_TEMPLATE_CONTEXTS: _CHART_TEMPLATE_CONTEXTS,
   SECTION_DIVIDER_TEMPLATE_SLIDES: _SECTION_DIVIDER_TEMPLATE_SLIDES,
 } = require('./template-contract-compiler');
+const {
+  scanDrift: scanHeaderFooterDrift,
+  writeReport: writeHeaderFooterDriftReport,
+} = require('./header-footer-drift-diagnostics');
 
 const STRICT_TEMPLATE_FIDELITY = !/^(0|false|no|off)$/i.test(
   String(process.env.STRICT_TEMPLATE_FIDELITY || 'true').trim()
@@ -837,7 +841,7 @@ async function normalizeChartRelationshipTargets(pptxBuffer) {
 // Deep formatting audit against extracted template metadata.
 // This catches silent regressions (slide size drift, runaway margins, line geometry drift)
 // before a deck is shipped.
-async function auditGeneratedPptFormatting(pptxBuffer) {
+async function auditGeneratedPptFormatting(pptxBuffer, { strictMode = false } = {}) {
   const issues = [];
   const checks = {};
 
@@ -877,14 +881,58 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
       }
     }
 
-    const mainLayoutXml = await zip.file('ppt/slideLayouts/slideLayout3.xml')?.async('string');
-    if (!mainLayoutXml) {
-      issues.push({
-        severity: 'warning',
-        code: 'missing_main_layout',
-        message: 'ppt/slideLayouts/slideLayout3.xml not found; skipping line-geometry audit',
-      });
-    } else {
+    // Derive expected line widths from template contract (1 pt = 12700 EMU).
+    const EMU_PER_PT = 12700;
+    const expectedLineWidthsEmu = [...(templatePatterns.style?.expectedLineWidthsEmu || [])];
+    // If template-patterns.json does not have an explicit list, compute from
+    // the header/footer thickness values in the contract.
+    if (expectedLineWidthsEmu.length === 0) {
+      const thicknesses = [
+        templatePatterns.style?.headerLines?.top?.thickness,
+        templatePatterns.style?.headerLines?.bottom?.thickness,
+        templatePatterns.pptxPositions?.footerLine?.thickness,
+      ].filter((v) => Number.isFinite(Number(v)));
+      for (const pt of thicknesses) {
+        const emu = Math.round(Number(pt) * EMU_PER_PT);
+        if (emu > 0 && !expectedLineWidthsEmu.includes(emu)) {
+          expectedLineWidthsEmu.push(emu);
+        }
+      }
+    }
+    expectedLineWidthsEmu.sort((a, b) => a - b);
+
+    // Collect line widths from ALL slide layouts AND slide masters.
+    // The Escort template carries header/footer connector lines in slideLayout1
+    // and slide masters, NOT in slideLayout3. Searching only slideLayout3 was
+    // the root cause of the false-positive line_width_signature_mismatch warning.
+    const allLineWidths = new Set();
+    const lineGeometryXmlSources = [];
+
+    const layoutAndMasterFiles = Object.keys(zip.files).filter(
+      (name) =>
+        /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(name) ||
+        /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(name)
+    );
+
+    let primaryLineGeometryXml = null;
+    for (const partName of layoutAndMasterFiles) {
+      const partEntry = zip.file(partName);
+      if (!partEntry) continue;
+      const partXml = await partEntry.async('string');
+      const widths = [...partXml.matchAll(/<a:ln w="(\d+)"/g)].map((m) => Number(m[1]));
+      for (const w of widths) allLineWidths.add(w);
+      if (widths.length > 0) {
+        lineGeometryXmlSources.push(partName);
+        // Prefer the first layout/master that contains line geometry for Y-position checks
+        if (!primaryLineGeometryXml) primaryLineGeometryXml = partXml;
+      }
+    }
+
+    checks.lineGeometrySources = lineGeometryXmlSources;
+    checks.headerFooterLineWidths = [...allLineWidths].sort((a, b) => a - b);
+
+    // Y-position drift checks use the first layout/master that has line geometry
+    if (primaryLineGeometryXml) {
       const expectedTopY = Math.round(
         Number(templatePatterns.style?.headerLines?.top?.y || 1.0208) * 914400
       );
@@ -894,7 +942,7 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
       const expectedFooterY = Math.round(
         Number(templatePatterns.pptxPositions?.footerLine?.y || 7.2361) * 914400
       );
-      const yMatches = [...mainLayoutXml.matchAll(/<a:off x="0" y="(\d+)"/g)].map((m) =>
+      const yMatches = [...primaryLineGeometryXml.matchAll(/<a:off x="0" y="(\d+)"/g)].map((m) =>
         Number(m[1])
       );
       const nearest = (target) => {
@@ -925,21 +973,77 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
       };
 
       if ((top?.delta || 0) > 2500 || (bottom?.delta || 0) > 2500 || (footer?.delta || 0) > 2500) {
+        const layoutDriftDetails = [];
+        if (top?.delta > 500) {
+          layoutDriftDetails.push({
+            role: 'header_top',
+            expectedY: expectedTopY,
+            actualY: top.y,
+            deltaEmu: top.delta,
+            severity: top.delta > 2500 ? 'error' : 'warning',
+          });
+        }
+        if (bottom?.delta > 500) {
+          layoutDriftDetails.push({
+            role: 'header_bottom',
+            expectedY: expectedBottomY,
+            actualY: bottom.y,
+            deltaEmu: bottom.delta,
+            severity: bottom.delta > 2500 ? 'error' : 'warning',
+          });
+        }
+        if (footer?.delta > 500) {
+          layoutDriftDetails.push({
+            role: 'footer',
+            expectedY: expectedFooterY,
+            actualY: footer.y,
+            deltaEmu: footer.delta,
+            severity: footer.delta > 2500 ? 'error' : 'warning',
+          });
+        }
+        const blockingSeverity = layoutDriftDetails.some((d) => d.severity === 'error')
+          ? 'error'
+          : 'warning';
         issues.push({
-          severity: 'warning',
+          severity: blockingSeverity === 'error' ? 'critical' : 'warning',
           code: 'header_footer_line_drift',
           message: `Header/footer line drift detected (delta EMU: top=${top?.delta}, bottom=${bottom?.delta}, footer=${footer?.delta})`,
+          slideKey: '_layout',
+          slideNumber: 0,
+          details: layoutDriftDetails,
         });
       }
+    } else if (lineGeometryXmlSources.length === 0) {
+      // No layouts or masters had any line geometry at all
+      issues.push({
+        severity: 'warning',
+        code: 'missing_line_geometry',
+        message:
+          'No slide layouts or slide masters contain line geometry; skipping Y-position audit',
+      });
+    }
 
-      const lineWidths = [...mainLayoutXml.matchAll(/<a:ln w="(\d+)"/g)].map((m) => Number(m[1]));
-      checks.headerFooterLineWidths = [...new Set(lineWidths)].sort((a, b) => a - b);
-      if (!lineWidths.includes(57150) || !lineWidths.includes(28575)) {
+    // Line-width signature check: verify expected widths from template contract
+    // are present SOMEWHERE across layouts/masters.
+    if (expectedLineWidthsEmu.length > 0) {
+      const missingWidths = expectedLineWidthsEmu.filter((emu) => !allLineWidths.has(emu));
+      if (missingWidths.length > 0) {
+        const blockingSlideKeys =
+          lineGeometryXmlSources.length > 0
+            ? lineGeometryXmlSources.join(', ')
+            : '(no line geometry sources found)';
+        const severity = strictMode ? 'critical' : 'warning';
         issues.push({
-          severity: 'warning',
+          severity,
           code: 'line_width_signature_mismatch',
           message:
-            'Expected header/footer line thickness signature (57150, 28575) not fully present',
+            `Expected header/footer line thickness signature (${expectedLineWidthsEmu.join(', ')} EMU) not fully present. ` +
+            `Missing: ${missingWidths.join(', ')} EMU. ` +
+            `Searched: ${lineGeometryXmlSources.length} layout/master file(s). ` +
+            `Found widths: [${[...allLineWidths].sort((a, b) => a - b).join(', ')}]. ` +
+            (strictMode ? `Blocking slide keys: ${blockingSlideKeys}` : ''),
+          slideKey: '_line_width',
+          ...(strictMode ? { blockingSlideKeys } : {}),
         });
       }
     }
@@ -1115,6 +1219,43 @@ async function auditGeneratedPptFormatting(pptxBuffer) {
         code: 'long_table_cell_density',
         message: `Overly long table cells detected (len>${LONG_TABLE_CELL_WARNING_LEN} chars), e.g. ${examples}`,
       });
+    }
+
+    // Per-slide header/footer drift scan using dedicated diagnostics module
+    try {
+      const driftReport = await scanHeaderFooterDrift(pptxBuffer);
+      checks.headerFooterDrift = driftReport;
+
+      if (driftReport.summary && !driftReport.summary.pass) {
+        const blockingKeys = driftReport.blockingSlideKeys || [];
+        const blockingNumbers = driftReport.blockingSlideNumbers || [];
+        for (const entry of (driftReport.slides || []).filter((s) => s.hasBlockingDrift)) {
+          for (const drift of entry.driftEntries.filter((d) => d.severity === 'error')) {
+            issues.push({
+              severity: 'critical',
+              code: 'header_footer_line_drift_per_slide',
+              slideKey: drift.slideKey || entry.slideKey || `slide${entry.slideNumber}`,
+              slideNumber: entry.slideNumber,
+              message: `Slide ${entry.slideNumber} (${drift.slideKey || entry.slideKey || 'unknown'}): ${drift.role} line drift ${drift.delta.yEmu} EMU (expected y=${drift.expected.y}, actual y=${drift.actual.y})`,
+              details: drift,
+            });
+          }
+        }
+        if (blockingKeys.length > 0) {
+          console.error(
+            `[PPT TEMPLATE] Header/footer drift: ${blockingKeys.length} blocking slide(s): ${blockingKeys.slice(0, 10).join(', ')}`
+          );
+        }
+      }
+
+      // Write drift report to disk for diagnostics
+      try {
+        writeHeaderFooterDriftReport(driftReport);
+      } catch (writeErr) {
+        console.warn(`[PPT TEMPLATE] Failed to write drift report: ${writeErr.message}`);
+      }
+    } catch (driftErr) {
+      console.warn(`[PPT TEMPLATE] Per-slide drift scan failed: ${driftErr.message}`);
     }
   } catch (err) {
     issues.push({
@@ -7225,7 +7366,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     ].length;
     console.log(`[PPT] Reconciled content types (${touched} adjustment(s))`);
   }
-  const formattingAudit = await auditGeneratedPptFormatting(pptxBuffer);
+  const formattingAudit = await auditGeneratedPptFormatting(pptxBuffer, {
+    strictMode: strictGeometryMode,
+  });
   if (!formattingAudit.pass) {
     const criticalIssues = formattingAudit.issues
       .filter((i) => i.severity === 'critical')
@@ -7251,10 +7394,22 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     throw new Error(`PPT formatting audit failed: critical issues detected (${criticalCodes})`);
   }
   if (formattingAudit.warningCount > 0) {
-    const warningCodes = formattingAudit.issues
-      .filter((i) => i.severity === 'warning')
-      .map((i) => i.code)
-      .join(', ');
+    const warningIssues = formattingAudit.issues.filter((i) => i.severity === 'warning');
+    const warningCodes = warningIssues.map((i) => i.code).join(', ');
+    if (strictGeometryMode) {
+      // Strict mode: formatting warnings (drift/mismatch) are hard failures.
+      // Extract blocking slide keys from each warning issue for precise diagnostics.
+      const blockingSlideKeys = warningIssues.map((i) => {
+        const slideMatch = (i.message || '').match(/slide\S*\s*(\S+)/i);
+        return i.code + (slideMatch ? `:${slideMatch[1]}` : '');
+      });
+      const rootCauses = warningIssues.map((i) => `[${i.code}] ${i.message}`);
+      throw new Error(
+        `PPT formatting audit strict-mode failure: ${formattingAudit.warningCount} warning(s) promoted to hard fail.\n` +
+          `Blocking slide keys: ${blockingSlideKeys.join(', ')}\n` +
+          `Root causes:\n${rootCauses.map((r) => `  - ${r}`).join('\n')}`
+      );
+    }
     console.warn(
       `[PPT TEMPLATE] Formatting audit warnings (${formattingAudit.warningCount}): ${warningCodes}`
     );
@@ -7440,6 +7595,7 @@ function _dedupeGlobalCompanyList(arr, seenSet) {
 
 module.exports = {
   generateSingleCountryPPT,
+  auditGeneratedPptFormatting,
   __test: {
     shouldAllowCompetitiveOptionalGroupGap,
     resolveTemplateRouteWithGeometryGuard,

@@ -53,9 +53,20 @@ const THAILAND_SCRIPT = path.join(ROOT, 'test-ppt-generation.js');
 const VIETNAM_PPT = path.join(ROOT, 'vietnam-output.pptx');
 const THAILAND_PPT = path.join(ROOT, 'test-output.pptx');
 const ROUND_ARTIFACT_PATHS = [VIETNAM_PPT, THAILAND_PPT];
+
+// NEW DEFAULT: Fresh generated artifacts persist after each round.
+// Set RESTORE_OLD_ARTIFACTS=1 to revert to legacy behavior (snapshot + restore) for debugging.
+// PRESERVE_GENERATED_PPTS is kept as a legacy alias for backward compat (both disable restore).
+const RESTORE_OLD_ARTIFACTS = /^(1|true|yes|on)$/i.test(
+  String(process.env.RESTORE_OLD_ARTIFACTS || '').trim()
+);
 const PRESERVE_GENERATED_PPTS = /^(1|true|yes|on)$/i.test(
   String(process.env.PRESERVE_GENERATED_PPTS || '').trim()
 );
+// Artifacts persist by default. Only restore if explicitly opted in AND legacy preserve is NOT set.
+const SHOULD_RESTORE_ARTIFACTS = RESTORE_OLD_ARTIFACTS && !PRESERVE_GENERATED_PPTS;
+
+const REPORTS_LATEST_DIR = path.join(ROOT, 'reports', 'latest');
 
 function parseRounds(argv) {
   const match = argv.find((arg) => arg.startsWith('--rounds='));
@@ -1244,11 +1255,76 @@ function runStressLabRuntimeModeChecks() {
   assert.strictEqual(DEEP_SEEDS, 300, 'DEEP_SEEDS should be 300 for deep/nightly mode');
 }
 
+/**
+ * Write latest validation summary to reports/latest/ as both JSON and markdown.
+ * Called after each round completes validation.
+ */
+function writeValidationSummary(round, validationResults) {
+  try {
+    fs.mkdirSync(REPORTS_LATEST_DIR, { recursive: true });
+
+    const summary = {
+      timestamp: new Date().toISOString(),
+      round,
+      artifactPersistence: SHOULD_RESTORE_ARTIFACTS ? 'restored' : 'persisted',
+      results: validationResults,
+    };
+
+    // Write JSON
+    const jsonPath = path.join(REPORTS_LATEST_DIR, 'validation-summary.json');
+    fs.writeFileSync(jsonPath, JSON.stringify(summary, null, 2));
+
+    // Write markdown
+    const mdPath = path.join(REPORTS_LATEST_DIR, 'validation-summary.md');
+    const mdLines = [
+      `# Validation Summary`,
+      ``,
+      `**Timestamp:** ${summary.timestamp}`,
+      `**Round:** ${round}`,
+      `**Artifact Persistence:** ${summary.artifactPersistence}`,
+      ``,
+      `## Results`,
+      ``,
+      `| Deck | Country | Status | Details |`,
+      `|------|---------|--------|---------|`,
+    ];
+
+    for (const result of validationResults) {
+      const status = result.pass ? 'PASS' : 'FAIL';
+      const details = result.error || result.details || 'OK';
+      mdLines.push(`| ${result.deck} | ${result.country} | ${status} | ${details} |`);
+    }
+
+    // Template fidelity gate section
+    const failures = validationResults.filter((r) => !r.pass);
+    if (failures.length > 0) {
+      mdLines.push('');
+      mdLines.push('## Template Fidelity Gate VIOLATIONS');
+      mdLines.push('');
+      for (const f of failures) {
+        mdLines.push(`- **${f.deck}** (${f.country}): ${f.error || f.details}`);
+      }
+    }
+
+    mdLines.push('');
+    fs.writeFileSync(mdPath, mdLines.join('\n'));
+
+    console.log(`[Regression] Validation summary written to ${REPORTS_LATEST_DIR}/`);
+  } catch (err) {
+    console.error(`[Regression] Warning: failed to write validation summary: ${err.message}`);
+  }
+}
+
 async function runRound(round, total) {
   console.log(`\n[Regression] Round ${round}/${total}`);
-  const artifactSnapshot = PRESERVE_GENERATED_PPTS
-    ? null
-    : snapshotArtifactState(ROUND_ARTIFACT_PATHS);
+  console.log(
+    `[Regression] Artifact mode: ${SHOULD_RESTORE_ARTIFACTS ? 'RESTORE (debug opt-in)' : 'PERSIST (default — fresh output kept)'}`
+  );
+  const artifactSnapshot = SHOULD_RESTORE_ARTIFACTS
+    ? snapshotArtifactState(ROUND_ARTIFACT_PATHS)
+    : null;
+
+  const validationResults = [];
 
   try {
     runTemplateCloneUnitChecks();
@@ -1282,31 +1358,51 @@ async function runRound(round, total) {
     if (!fs.existsSync(VIETNAM_PPT)) throw new Error(`Missing generated file: ${VIETNAM_PPT}`);
     if (!fs.existsSync(THAILAND_PPT)) throw new Error(`Missing generated file: ${THAILAND_PPT}`);
 
-    await validateDeck(VIETNAM_PPT, 'Vietnam', 'Energy Services');
-    await validateDeck(THAILAND_PPT, 'Thailand', 'Energy Services');
+    // Validate decks and collect results
+    for (const { pptxPath, country, industry, wrongCountry, deck } of [
+      {
+        pptxPath: VIETNAM_PPT,
+        country: 'Vietnam',
+        industry: 'Energy Services',
+        wrongCountry: 'Thailand',
+        deck: 'vietnam-output.pptx',
+      },
+      {
+        pptxPath: THAILAND_PPT,
+        country: 'Thailand',
+        industry: 'Energy Services',
+        wrongCountry: 'Vietnam',
+        deck: 'test-output.pptx',
+      },
+    ]) {
+      try {
+        await validateDeck(pptxPath, country, industry);
+        await ensureCountryIntegrity({ pptxPath, country, wrongCountry });
+        await ensureSparseSlideDiscipline(pptxPath);
+        await ensureNoRepairNeeded(pptxPath);
+        validationResults.push({ deck, country, pass: true, details: 'All checks passed' });
+      } catch (err) {
+        validationResults.push({ deck, country, pass: false, error: err.message });
+        // Template fidelity gate violation — fail loudly
+        console.error(
+          `\n[Regression] TEMPLATE FIDELITY GATE VIOLATION: ${deck} (${country})\n  ${err.message}\n`
+        );
+        throw err;
+      }
+    }
 
-    await ensureCountryIntegrity({
-      pptxPath: VIETNAM_PPT,
-      country: 'Vietnam',
-      wrongCountry: 'Thailand',
-    });
-    await ensureCountryIntegrity({
-      pptxPath: THAILAND_PPT,
-      country: 'Thailand',
-      wrongCountry: 'Vietnam',
-    });
     console.log('[Regression] Country integrity PASS (cover + TOC country checks)');
-
-    await ensureSparseSlideDiscipline(VIETNAM_PPT);
-    await ensureSparseSlideDiscipline(THAILAND_PPT);
     console.log('[Regression] Sparse-slide discipline PASS (non-divider sparse slides blocked)');
-
-    await ensureNoRepairNeeded(VIETNAM_PPT);
-    await ensureNoRepairNeeded(THAILAND_PPT);
     console.log('[Regression] Package normalization PASS (no repair transforms needed)');
   } finally {
-    if (!PRESERVE_GENERATED_PPTS && artifactSnapshot) {
+    // Write validation summary regardless of pass/fail
+    writeValidationSummary(round, validationResults);
+
+    if (SHOULD_RESTORE_ARTIFACTS && artifactSnapshot) {
       restoreArtifactState(artifactSnapshot);
+      console.log('[Regression] Artifacts restored (RESTORE_OLD_ARTIFACTS=1 debug mode)');
+    } else if (!SHOULD_RESTORE_ARTIFACTS) {
+      console.log('[Regression] Fresh artifacts persisted on disk (default behavior)');
     }
   }
 }
@@ -1388,7 +1484,23 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(`\n[Regression] FAIL: ${err.message}`);
-  process.exit(1);
-});
+// Export internals for testing
+module.exports = {
+  __test: {
+    snapshotArtifactState,
+    restoreArtifactState,
+    writeValidationSummary,
+    SHOULD_RESTORE_ARTIFACTS,
+    RESTORE_OLD_ARTIFACTS,
+    PRESERVE_GENERATED_PPTS,
+    ROUND_ARTIFACT_PATHS,
+    REPORTS_LATEST_DIR,
+  },
+};
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(`\n[Regression] FAIL: ${err.message}`);
+    process.exit(1);
+  });
+}

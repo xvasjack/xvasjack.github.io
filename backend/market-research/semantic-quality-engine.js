@@ -1553,7 +1553,9 @@ function detectShallowContent(text) {
   // Check for repetitive phrasing: same sentence starter appearing 3+ times
   const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 15);
   if (sentences.length >= 4) {
-    const starters = sentences.map((s) => s.trim().split(/\s+/).slice(0, 3).join(' ').toLowerCase());
+    const starters = sentences.map((s) =>
+      s.trim().split(/\s+/).slice(0, 3).join(' ').toLowerCase()
+    );
     const starterCounts = {};
     for (const s of starters) {
       starterCounts[s] = (starterCounts[s] || 0) + 1;
@@ -1571,13 +1573,307 @@ function detectShallowContent(text) {
   };
 }
 
+// ============ EVIDENCE GROUNDING SCORING ============
+
+/**
+ * Score evidence grounding in a text block (0-100).
+ * Checks for: cited sources, specific data points, named evidence, attribution markers.
+ */
+function scoreEvidenceGrounding(text) {
+  if (!text || typeof text !== 'string') return { score: 0, factors: {} };
+  const words = countWords(text);
+  if (words < 10) return { score: 0, factors: { tooShort: true } };
+
+  const factors = {};
+
+  // Source attribution markers (20 pts)
+  const sourcePatterns =
+    /\b(according to|source[d]?|cited|reported by|data from|based on|per\s+\w+\s+report|survey|study|analysis by)\b/gi;
+  const sourceMatches = text.match(sourcePatterns) || [];
+  factors.sourceAttributions = sourceMatches.length;
+  const sourcePts = Math.min(20, sourceMatches.length * 7);
+
+  // Specific data points: dollar amounts, percentages, dates (25 pts)
+  const dataPointPatterns = [
+    /(?:\$|€|£|¥)\d[\d,.]*(?:\s*(?:million|billion|M|B|K|%))?/gi,
+    /\d+(?:\.\d+)?%/g,
+    /(?:Q[1-4]|H[12])\s*20\d{2}/gi,
+    /20[2-9]\d/g,
+  ];
+  let dataPointCount = 0;
+  for (const pat of dataPointPatterns) {
+    dataPointCount += (text.match(pat) || []).length;
+  }
+  factors.dataPoints = dataPointCount;
+  const dataPts = Math.min(25, dataPointCount * 3);
+
+  // Named entities as evidence anchors (20 pts)
+  const entityPattern =
+    /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Corp|Ltd|Inc|Co|Group|GmbH|SA|AG|PLC|LLC|Sdn\s+Bhd)/g;
+  const entityMatches = text.match(entityPattern) || [];
+  factors.namedEntities = entityMatches.length;
+  const entityPts = Math.min(20, entityMatches.length * 5);
+
+  // Quantified claims: "X resulted in Y% increase" patterns (20 pts)
+  const quantifiedClaimPatterns =
+    /\b(?:resulted in|led to|caused|drove|produced|achieved|generated)\s+[^.]*\d/gi;
+  const quantifiedMatches = text.match(quantifiedClaimPatterns) || [];
+  factors.quantifiedClaims = quantifiedMatches.length;
+  const quantifiedPts = Math.min(20, quantifiedMatches.length * 7);
+
+  // Completeness bonus for sufficient length (15 pts)
+  const lengthPts = words >= 80 ? 15 : Math.round((words / 80) * 15);
+  factors.wordCount = words;
+
+  const score = sourcePts + dataPts + entityPts + quantifiedPts + lengthPts;
+  return { score: Math.min(100, score), factors };
+}
+
+// ============ INSIGHT DEPTH SCORING ============
+
+/**
+ * Score the depth of keyInsights using validateInsightStructure.
+ * Returns 0-100 based on how many insights have all required components.
+ */
+function scoreInsightDepth(keyInsights) {
+  if (!keyInsights)
+    return { score: 0, validCount: 0, totalCount: 0, issues: ['No keyInsights provided'] };
+
+  const insights = Array.isArray(keyInsights) ? keyInsights : [keyInsights];
+  if (insights.length === 0)
+    return { score: 0, validCount: 0, totalCount: 0, issues: ['keyInsights array is empty'] };
+
+  let totalInsightScore = 0;
+  let validCount = 0;
+  const issues = [];
+
+  for (let i = 0; i < insights.length; i++) {
+    const insight = insights[i];
+    if (!insight || typeof insight !== 'object') {
+      issues.push(`Insight ${i + 1}: not a valid object`);
+      continue;
+    }
+    const validation = validateInsightStructure(insight);
+    totalInsightScore += validation.score;
+    if (validation.valid) validCount++;
+    if (validation.missing.length > 0) {
+      issues.push(`Insight ${i + 1} missing: ${validation.missing.join(', ')}`);
+    }
+  }
+
+  const avgScore = insights.length > 0 ? Math.round(totalInsightScore / insights.length) : 0;
+  return { score: avgScore, validCount, totalCount: insights.length, issues };
+}
+
+// ============ ACTIONABILITY SCORING ============
+
+/**
+ * Score actionability of a synthesis (0-100).
+ * Checks for: timing recommendations, specific next steps, who/what/when, risk mitigations.
+ */
+function scoreActionability(synthesis) {
+  if (!synthesis || typeof synthesis !== 'object') return { score: 0, factors: {} };
+
+  const fullText = extractTextValues(synthesis);
+  const words = countWords(fullText);
+  if (words < 20) return { score: 0, factors: { tooShort: true } };
+
+  const factors = {};
+
+  // Timing specificity: "by Q2 2026", "within 6 months", etc. (25 pts)
+  const timingPatterns =
+    /\b(by Q[1-4]\s*20\d{2}|within \d+ (?:months?|weeks?|years?)|by (?:end of |mid-?)20\d{2}|before Q[1-4]|next quarter|this year)\b/gi;
+  const timingMatches = fullText.match(timingPatterns) || [];
+  factors.timingReferences = timingMatches.length;
+  const timingPts = Math.min(25, timingMatches.length * 8);
+
+  // Action verbs / recommendations (25 pts)
+  const actionPatterns =
+    /\b(recommend|should|target|prioritize|pursue|avoid|consider|focus on|invest in|partner with|acquire|enter|launch|deploy)\b/gi;
+  const actionMatches = fullText.match(actionPatterns) || [];
+  factors.actionDirectives = actionMatches.length;
+  const actionPts = Math.min(25, actionMatches.length * 5);
+
+  // Who/what specificity: named targets, segments, geographies (25 pts)
+  const specificTargets =
+    /\b(target(?:ing)?|focus(?:ing)? on|prioritize)\s+(?:[A-Z][\w\s]+|mid-tier|enterprise|SME|industrial|provincial|Eastern|Western|Northern|Southern)\b/gi;
+  const targetMatches = fullText.match(specificTargets) || [];
+  factors.specificTargets = targetMatches.length;
+  const targetPts = Math.min(25, targetMatches.length * 8);
+
+  // Risk mitigation / contingency (25 pts)
+  const mitigationPatterns =
+    /\b(mitigat(?:e|ion)|contingency|fallback|plan B|hedge|if .{5,30} then|alternative approach|worst case|downside protection)\b/gi;
+  const mitigationMatches = fullText.match(mitigationPatterns) || [];
+  // Also check for "however" + suggestion patterns
+  const howeverPatterns = /\bhowever\b[^.]*\b(should|recommend|consider)\b/gi;
+  const howeverMatches = fullText.match(howeverPatterns) || [];
+  factors.riskMitigations = mitigationMatches.length + howeverMatches.length;
+  const mitigationPts = Math.min(25, (mitigationMatches.length + howeverMatches.length) * 8);
+
+  const score = timingPts + actionPts + targetPts + mitigationPts;
+  return { score: Math.min(100, score), factors };
+}
+
+// ============ ROOT-CAUSE ANALYSIS DETECTION ============
+
+/**
+ * Check if the synthesis contains root-cause analysis.
+ * Looks for causal chains, "because" reasoning, driver identification.
+ * Returns { hasRootCause: boolean, evidence: string[], score: number }
+ */
+function detectRootCauseAnalysis(synthesis) {
+  if (!synthesis || typeof synthesis !== 'object') {
+    return { hasRootCause: false, evidence: [], score: 0 };
+  }
+
+  const fullText = extractTextValues(synthesis);
+  const evidence = [];
+
+  // Causal chain patterns
+  const causalPatterns = [
+    /\bbecause\b[^.]{10,}/gi,
+    /\bdriven by\b[^.]{10,}/gi,
+    /\bresulting in\b[^.]{10,}/gi,
+    /\bthis (?:means|implies|suggests)\b[^.]{10,}/gi,
+    /\btherefore\b[^.]{10,}/gi,
+    /\bconsequently\b[^.]{10,}/gi,
+    /\broot cause\b[^.]{5,}/gi,
+    /\bthe reason\b[^.]{10,}/gi,
+    /\bdue to\b[^.]{10,}/gi,
+    /\bwhich (?:means|leads to|causes|drives|results in)\b[^.]{10,}/gi,
+  ];
+
+  for (const pattern of causalPatterns) {
+    const matches = fullText.match(pattern) || [];
+    for (const m of matches) {
+      evidence.push(m.trim().slice(0, 80));
+    }
+  }
+
+  // Multi-step reasoning: A because B, therefore C
+  const multiStepPattern =
+    /\bbecause\b[^.]*(?:\.\s*(?:this means|therefore|consequently|as a result))\b/gi;
+  const multiStepMatches = fullText.match(multiStepPattern) || [];
+  const multiStepBonus = multiStepMatches.length * 10;
+
+  // Deduplicate evidence
+  const uniqueEvidence = [...new Set(evidence)].slice(0, 10);
+
+  // Score: need at least 3 causal chains for a passing score
+  const baseScore = Math.min(70, uniqueEvidence.length * 10);
+  const score = Math.min(100, baseScore + multiStepBonus);
+
+  return {
+    hasRootCause: uniqueEvidence.length >= 3,
+    evidence: uniqueEvidence,
+    score,
+  };
+}
+
+// ============ STORYLINE COHERENCE SCORING (BUILT-IN) ============
+
+/**
+ * Lightweight built-in storyline coherence scoring.
+ * Checks that executive summary themes are echoed in subsequent sections.
+ * Does NOT require the external coherence checker.
+ */
+function scoreStorylineCoherence(synthesis) {
+  if (!synthesis || typeof synthesis !== 'object') return { score: 0, issues: [] };
+
+  const issues = [];
+  let score = 100;
+
+  // Extract key themes from executive summary
+  const execText = synthesis.executiveSummary
+    ? typeof synthesis.executiveSummary === 'string'
+      ? synthesis.executiveSummary
+      : extractTextValues(synthesis.executiveSummary)
+    : '';
+
+  if (!execText || countWords(execText) < 20) {
+    return {
+      score: 0,
+      issues: ['Executive summary missing or too short for storyline assessment'],
+    };
+  }
+
+  // Extract key numerical claims from exec summary
+  const execNumbers = [];
+  const numPattern = /(?:\$|€|£|¥)?\d[\d,.]*(?:\s*(?:million|billion|M|B|K|%|GW|MW))/gi;
+  let match;
+  const numRe = new RegExp(numPattern.source, numPattern.flags);
+  while ((match = numRe.exec(execText)) !== null) {
+    execNumbers.push(match[0]);
+  }
+
+  // Check that at least some exec summary numbers appear in other sections
+  if (execNumbers.length > 0) {
+    const otherSections = ['marketOpportunityAssessment', 'competitivePositioning', 'keyInsights'];
+    let echoedCount = 0;
+    for (const section of otherSections) {
+      const val = synthesis[section];
+      if (!val) continue;
+      const sectionText = typeof val === 'string' ? val : extractTextValues(val);
+      for (const num of execNumbers) {
+        if (sectionText.includes(num)) {
+          echoedCount++;
+          break;
+        }
+      }
+    }
+    if (echoedCount === 0 && execNumbers.length >= 2) {
+      issues.push('Executive summary data points not echoed in any subsequent section');
+      score -= 20;
+    }
+  }
+
+  // Check that key action words from exec summary are reinforced
+  const execActions = execText.match(/\b(recommend|should|target|prioritize|focus)\b/gi) || [];
+  if (execActions.length > 0) {
+    const insightsText = synthesis.keyInsights ? extractTextValues(synthesis.keyInsights) : '';
+    const hasActionReinforcement = /\b(recommend|should|target|prioritize|focus)\b/i.test(
+      insightsText
+    );
+    if (!hasActionReinforcement && insightsText.length > 0) {
+      issues.push('Executive summary recommendations not reinforced in keyInsights');
+      score -= 15;
+    }
+  }
+
+  // Check that competitive section exists if companies are named in exec summary
+  const companyPattern =
+    /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Corp|Ltd|Inc|Co|Group|GmbH|SA|AG|PLC|LLC)/g;
+  const execCompanies = execText.match(companyPattern) || [];
+  if (execCompanies.length > 0 && !synthesis.competitivePositioning) {
+    issues.push(
+      'Executive summary names competitors but competitivePositioning section is missing'
+    );
+    score -= 25;
+  }
+
+  return { score: Math.max(0, score), issues };
+}
+
 // ============ SEMANTIC READINESS GATE ============
 
 /**
  * Hard readiness gate requiring overall semantic score >= threshold (default 80).
  * Returns per-section scorecard with specific reasons for low scores.
+ *
+ * Scoring rubric (4 dimensions):
+ *   - Insight Depth (25%): keyInsight structure completeness (finding + implication + action + risk)
+ *   - Evidence Grounding (25%): source citations, data points, named entities, quantified claims
+ *   - Storyline Coherence (25%): cross-section consistency, theme reinforcement, numeric alignment
+ *   - Actionability (25%): timing, directives, specific targets, risk mitigations
+ *
+ * Additional hard blocks:
+ *   - Root-cause analysis required (score 0 if absent)
+ *   - Major section coherence failure blocks "ready" even if score >= threshold
+ *   - Contradictions and plausibility errors penalize score
+ *
  * Integrates: decision-usefulness, anti-shallow checks, contradiction detection,
- * plausibility checks, and coherence (if checker is available).
+ * plausibility checks, coherence, insight validation, evidence grounding, actionability.
  *
  * @param {object} synthesis - Full synthesis object
  * @param {object} [options] - Options
@@ -1588,11 +1884,14 @@ function detectShallowContent(text) {
  *   pass: boolean,
  *   overallScore: number,
  *   threshold: number,
+ *   rubric: { insightDepth: number, evidenceGrounding: number, storylineCoherence: number, actionability: number },
  *   sectionScorecard: Array<{ section: string, score: number, pass: boolean, reasons: string[] }>,
  *   shallowSections: string[],
  *   contradictions: Array,
  *   plausibilityIssues: Array,
- *   improvementActions: string[]
+ *   rootCauseAnalysis: { hasRootCause: boolean, evidence: string[], score: number },
+ *   improvementActions: string[],
+ *   remediationHints: Array<{ dimension: string, currentScore: number, target: number, hint: string }>
  * }}
  */
 function semanticReadinessGate(synthesis, options = {}) {
@@ -1611,11 +1910,21 @@ function semanticReadinessGate(synthesis, options = {}) {
       pass: false,
       overallScore: 0,
       threshold,
+      rubric: { insightDepth: 0, evidenceGrounding: 0, storylineCoherence: 0, actionability: 0 },
       sectionScorecard: [],
       shallowSections: [],
       contradictions: [],
       plausibilityIssues: [],
+      rootCauseAnalysis: { hasRootCause: false, evidence: [], score: 0 },
       improvementActions: ['No synthesis data provided — cannot assess readiness'],
+      remediationHints: [
+        {
+          dimension: 'all',
+          currentScore: 0,
+          target: threshold,
+          hint: 'Provide a complete synthesis object with executiveSummary, marketOpportunityAssessment, competitivePositioning, keyInsights, and depth sections.',
+        },
+      ],
     };
   }
 
@@ -1664,13 +1973,19 @@ function semanticReadinessGate(synthesis, options = {}) {
         sectionEntry.reasons.push('No specific numbers — add market data, percentages, financials');
       }
       if ((factors.actionVerbs || 0) === 0) {
-        sectionEntry.reasons.push('No actionable recommendations — add "should", "recommend", "target" statements');
+        sectionEntry.reasons.push(
+          'No actionable recommendations — add "should", "recommend", "target" statements'
+        );
       }
       if ((factors.causalLinks || 0) === 0) {
-        sectionEntry.reasons.push('No causal reasoning — add "because", "therefore", "resulting in" chains');
+        sectionEntry.reasons.push(
+          'No causal reasoning — add "because", "therefore", "resulting in" chains'
+        );
       }
       if (sectionEntry.reasons.length === 0) {
-        sectionEntry.reasons.push(`Score ${duScore.score}/${SECTION_PASS_THRESHOLD} — needs more specifics and analysis`);
+        sectionEntry.reasons.push(
+          `Score ${duScore.score}/${SECTION_PASS_THRESHOLD} — needs more specifics and analysis`
+        );
       }
     }
 
@@ -1690,9 +2005,7 @@ function semanticReadinessGate(synthesis, options = {}) {
     sectionEntry.pass = sectionEntry.score >= SECTION_PASS_THRESHOLD && !shallowCheck.isShallow;
 
     if (!sectionEntry.pass) {
-      improvementActions.push(
-        `Improve ${section}: ${sectionEntry.reasons.slice(0, 2).join('; ')}`
-      );
+      improvementActions.push(`Improve ${section}: ${sectionEntry.reasons.slice(0, 2).join('; ')}`);
     }
 
     sectionScorecard.push(sectionEntry);
@@ -1734,9 +2047,7 @@ function semanticReadinessGate(synthesis, options = {}) {
       });
 
       if (!sectionPass) {
-        improvementActions.push(
-          `Improve ${depthSection}: ${reasons.slice(0, 2).join('; ')}`
-        );
+        improvementActions.push(`Improve ${depthSection}: ${reasons.slice(0, 2).join('; ')}`);
       }
     }
   }
@@ -1758,65 +2069,164 @@ function semanticReadinessGate(synthesis, options = {}) {
     }
   }
 
-  // 5. Coherence check (if checker provided)
-  let coherenceScore = 100;
+  // 5. Coherence check (external checker if provided)
+  let externalCoherenceScore = 100;
+  let externalCoherenceIssues = [];
   if (coherenceChecker) {
     const coherenceResult = coherenceChecker(synthesis);
-    coherenceScore = coherenceResult.score;
-    if (coherenceResult.issues && coherenceResult.issues.length > 0) {
-      for (const issue of coherenceResult.issues.slice(0, 3)) {
+    externalCoherenceScore = coherenceResult.score;
+    externalCoherenceIssues = coherenceResult.issues || [];
+    if (externalCoherenceIssues.length > 0) {
+      for (const issue of externalCoherenceIssues.slice(0, 3)) {
         improvementActions.push(`Fix coherence: ${issue}`);
       }
     }
   }
 
-  // 6. Calculate overall readiness score (0-100 scale targeting threshold of 80).
+  // 6. RUBRIC SCORING: 4 dimensions, each 0-100, weighted equally (25% each)
+
+  // 6a. Insight Depth (25%)
+  const insightDepthResult = scoreInsightDepth(synthesis.keyInsights);
+  const insightDepthScore = insightDepthResult.score;
+  if (insightDepthResult.issues.length > 0 && insightDepthScore < 50) {
+    for (const issue of insightDepthResult.issues.slice(0, 3)) {
+      improvementActions.push(`Improve insight depth: ${issue}`);
+    }
+  }
+
+  // 6b. Evidence Grounding (25%)
+  const fullText = extractTextValues(synthesis);
+  const evidenceResult = scoreEvidenceGrounding(fullText);
+  const evidenceGroundingScore = evidenceResult.score;
+
+  // 6c. Storyline Coherence (25%)
+  const builtInCoherence = scoreStorylineCoherence(synthesis);
+  // Blend external checker (if available) with built-in: external gets 60% weight, built-in 40%
+  const blendedCoherenceScore = coherenceChecker
+    ? Math.round(externalCoherenceScore * 0.6 + builtInCoherence.score * 0.4)
+    : builtInCoherence.score;
+  if (builtInCoherence.issues.length > 0) {
+    for (const issue of builtInCoherence.issues) {
+      improvementActions.push(`Storyline issue: ${issue}`);
+    }
+  }
+
+  // 6d. Actionability (25%)
+  const actionabilityResult = scoreActionability(synthesis);
+  const actionabilityScore = actionabilityResult.score;
+
+  // 7. Root-cause analysis check (hard requirement)
+  const rootCauseResult = detectRootCauseAnalysis(synthesis);
+  if (!rootCauseResult.hasRootCause) {
+    improvementActions.push(
+      'Root-cause analysis required: add "because", "driven by", "resulting in" causal chains (need at least 3)'
+    );
+  }
+
+  // 8. Calculate overall readiness score using the 4-dimension rubric
   //
-  // Components:
-  //   - Section quality (50%): proportion of sections passing their threshold, scaled to 50 pts
-  //   - Content depth (20%): average section score normalized to 0-100 scale (decision-usefulness
-  //     scores cap around 85 for excellent content; we scale proportionally)
-  //   - Coherence (15%): cross-section coherence score
-  //   - Penalty budget (15%): deductions for contradictions, plausibility errors, shallow sections
-  //
-  // This ensures good content with all sections passing and no issues reaches 85+, while
-  // content with shallow/missing sections or contradictions drops below 80.
+  // Base rubric score (70%): weighted average of 4 dimensions
+  //   - Each dimension contributes 25% (equal weight)
+  // Section quality bonus (15%): proportion of sections passing
+  // Penalty budget (15%): deductions for contradictions, plausibility, shallow, missing root cause
+
+  const rubricBase =
+    (insightDepthScore + evidenceGroundingScore + blendedCoherenceScore + actionabilityScore) / 4;
+  const rubricPts = (rubricBase / 100) * 70;
 
   const passingSections = sectionScorecard.filter((s) => s.pass).length;
   const totalSections = sectionScorecard.length || 1;
   const sectionPassRate = passingSections / totalSections;
-  const sectionQualityPts = sectionPassRate * 50;
-
-  const sectionScores = sectionScorecard.map((s) => s.score);
-  const avgSectionScore = sectionScores.length > 0
-    ? sectionScores.reduce((a, b) => a + b, 0) / sectionScores.length
-    : 0;
-  // Normalize: scoreDecisionUsefulness ranges 0-100 but typical good content is 40-70.
-  // Scale so that avgScore=50 maps to ~14/20 and avgScore=65 maps to ~18/20.
-  const contentDepthPts = Math.min(20, (avgSectionScore / 70) * 20);
-
-  const coherencePts = (coherenceScore / 100) * 15;
+  const sectionQualityPts = sectionPassRate * 15;
 
   let penaltyBudget = 15;
   penaltyBudget -= plausibilityErrors.length * 3;
   penaltyBudget -= contradictions.length * 3;
   penaltyBudget -= shallowSections.length * 2;
+  if (!rootCauseResult.hasRootCause) penaltyBudget -= 5;
   const penaltyPts = Math.max(0, penaltyBudget);
 
-  let overallScore = sectionQualityPts + contentDepthPts + coherencePts + penaltyPts;
+  let overallScore = rubricPts + sectionQualityPts + penaltyPts;
   overallScore = Math.max(0, Math.min(100, Math.round(overallScore)));
 
+  // Major coherence failure hard-blocks ready even if score >= threshold.
+  // If an external coherence checker is provided, its raw score is authoritative for hard-block.
+  const majorCoherenceFailure = coherenceChecker
+    ? externalCoherenceScore < 30 || blendedCoherenceScore < 30
+    : blendedCoherenceScore < 30;
+  if (majorCoherenceFailure) {
+    improvementActions.unshift(
+      'BLOCKING: Major storyline coherence failure — sections contradict or do not reinforce each other'
+    );
+  }
+
+  const rubric = {
+    insightDepth: insightDepthScore,
+    evidenceGrounding: evidenceGroundingScore,
+    storylineCoherence: blendedCoherenceScore,
+    actionability: actionabilityScore,
+  };
+
+  // 9. Build structured remediation hints for each dimension below target
+  const remediationHints = [];
+  const dimensionTarget = 60; // each dimension should aim for at least 60 to contribute to >= 80 overall
+
+  if (insightDepthScore < dimensionTarget) {
+    remediationHints.push({
+      dimension: 'insightDepth',
+      currentScore: insightDepthScore,
+      target: dimensionTarget,
+      hint: 'Each insight needs 4 components: a finding (factual observation with data), an implication (what it means for the client), an action (specific recommendation with timing), and a risk (what could go wrong). Add missing components to each insight.',
+    });
+  }
+  if (evidenceGroundingScore < dimensionTarget) {
+    remediationHints.push({
+      dimension: 'evidenceGrounding',
+      currentScore: evidenceGroundingScore,
+      target: dimensionTarget,
+      hint: 'Add source attributions ("according to", "data from"), specific data points ($, %, dates), named entities (company names with suffixes), and quantified claims ("resulted in X% increase").',
+    });
+  }
+  if (blendedCoherenceScore < dimensionTarget) {
+    remediationHints.push({
+      dimension: 'storylineCoherence',
+      currentScore: blendedCoherenceScore,
+      target: dimensionTarget,
+      hint: 'Ensure executive summary themes, numbers, and recommendations are echoed in subsequent sections. Companies named in the summary should appear in competitive positioning. Market size figures should be consistent across sections.',
+    });
+  }
+  if (actionabilityScore < dimensionTarget) {
+    remediationHints.push({
+      dimension: 'actionability',
+      currentScore: actionabilityScore,
+      target: dimensionTarget,
+      hint: 'Add specific timing ("by Q2 2026"), action directives ("recommend targeting X"), named targets ("focus on mid-tier factories in Eastern Seaboard"), and risk mitigations ("however, if X fails, consider Y").',
+    });
+  }
+  if (!rootCauseResult.hasRootCause) {
+    remediationHints.push({
+      dimension: 'rootCauseAnalysis',
+      currentScore: rootCauseResult.score,
+      target: 30,
+      hint: 'Add causal reasoning chains: "X is happening because Y, which means Z, therefore we recommend W." Need at least 3 such chains across the synthesis.',
+    });
+  }
+
   return {
-    pass: overallScore >= threshold,
+    pass: overallScore >= threshold && !majorCoherenceFailure,
     overallScore,
     threshold,
+    rubric,
     sectionScorecard,
     shallowSections,
     contradictions,
     plausibilityIssues,
-    improvementActions: improvementActions.length > 0
-      ? improvementActions
-      : ['All checks passed — content meets readiness threshold'],
+    rootCauseAnalysis: rootCauseResult,
+    improvementActions:
+      improvementActions.length > 0
+        ? improvementActions
+        : ['All checks passed — content meets readiness threshold'],
+    remediationHints,
   };
 }
 
@@ -1855,4 +2265,11 @@ module.exports = {
   detectShallowContent,
   scoreDecisionUsefulness,
   extractClaims,
+
+  // Readiness rubric sub-scores (exported for testing)
+  scoreEvidenceGrounding,
+  scoreInsightDepth,
+  scoreActionability,
+  detectRootCauseAnalysis,
+  scoreStorylineCoherence,
 };

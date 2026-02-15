@@ -1,28 +1,19 @@
 {
-  "timestamp": "2026-02-12T01:31:52.523Z",
+  "timestamp": "2026-02-15T08:09:51.254Z",
   "file": "test-output.pptx",
   "valid": true,
   "summary": {
-    "passed": 29,
+    "passed": 34,
     "failed": 0,
-    "warnings": 2
+    "warnings": 0
   },
   "failed": [],
-  "warnings": [
-    {
-      "check": "Empty slides",
-      "message": "Slides with <50 chars: 5, 9, 16, 22, 28"
-    },
-    {
-      "check": "Empty slides",
-      "message": "6 slides with <100 chars"
-    }
-  ],
+  "warnings": [],
   "structure": {
     "slides": 35,
     "charts": 6,
-    "tables": 78,
-    "text": 29738
+    "tables": 90,
+    "text": 29178
   },
   "sections": {
     "Energy Services Foundational Acts Thail": 1,
@@ -32,8 +23,8 @@
     "Final Energy Demand Source: YCP Analysi": 1,
     "Electricity &amp; Power Source: YCP Ana": 1,
     "Gas &amp; LNG Market Source: YCP Analys": 1,
-    "Energy Pricing Source: YCP Analysis Key": 1,
-    "ESCO Market Source: YCP Analysis Key In": 1,
+    "Energy Pricing Source: YCP Analysis Ind": 1,
+    "ESCO Market Source: YCP Analysis": 1,
     "Japanese Energy Services Companies Japa": 1,
     "Major Local Players Top": 1,
     "Foreign Energy Services Companies Europ": 1,
@@ -44,7 +35,7 @@
     "Entry Strategy Options Joint Venture wi": 1,
     "Implementation Roadmap Total: USD": 1,
     "Target Customer Segments Land-and-expan": 1,
-    "Go/No-Go Assessment CONDITIONAL GO Sour": 1,
+    "Go/No-Go Assessment Source: YCP Analysi": 1,
     "Opportunities &amp; Obstacles Proceed w": 1,
     "Key Insights Strategic implications for": 1,
     "Why Now? Critical": 1,

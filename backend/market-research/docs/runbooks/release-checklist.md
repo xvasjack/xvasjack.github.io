@@ -27,6 +27,21 @@ Includes everything from Release Check plus:
 - [ ] Stress test passes: `node stress-test-harness.js --quick`
 - [ ] Integrity pipeline module available
 
+## Strict Mode Formatting Audit
+
+When `strict: true` is passed (or `--strict` CLI flag):
+- All formatting warnings (drift/mismatch) become **hard failures**
+- Failure messages list **exact blocking slide keys** and root causes
+- No degraded/fallback formatting is allowed
+- Applies to: preflight gates, PPT renderer, and server pipeline
+
+Warning codes promoted to hard fail in strict mode:
+- `header_footer_line_drift`, `line_width_signature_mismatch`, `table_margin_drift`
+- `table_anchor_top_heavy`, `table_outer_border_missing`
+- `long_text_run_density`, `long_table_cell_density`
+
+In non-strict mode, these remain warnings (logged but not blocking).
+
 ## Safe-to-Run Verdict
 
 Before running a paid pipeline:

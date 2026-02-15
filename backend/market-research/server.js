@@ -1186,6 +1186,25 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         if (formattingFailures.length > 0) {
           throw new Error(`PPT formatting fidelity failed: ${formattingFailures.join(', ')}`);
         }
+        // Strict mode: promote formatting warnings (drift/mismatch) to hard failures.
+        const isStrictFormatting = Boolean(scope && scope.templateStrictMode);
+        if (formattingWarnings.length > 0 && isStrictFormatting) {
+          const blockingKeys = [];
+          if (Array.isArray(pptMetrics.formattingAuditIssueCodes)) {
+            blockingKeys.push(...pptMetrics.formattingAuditIssueCodes);
+          }
+          if (Array.isArray(pptMetrics.geometryIssueKeys)) {
+            blockingKeys.push(
+              ...pptMetrics.geometryIssueKeys.map((k) => (typeof k === 'string' ? k : k.key || k))
+            );
+          }
+          const uniqueKeys = [...new Set(blockingKeys)];
+          throw new Error(
+            `PPT formatting strict-mode failure: ${formattingWarnings.length} warning(s) promoted to hard fail.\n` +
+              `Blocking slide keys: ${uniqueKeys.join(', ') || '(none extracted)'}\n` +
+              `Root cause: ${formattingWarnings.join(', ')}`
+          );
+        }
         if (formattingWarnings.length > 0) {
           console.warn(`[Quality Gate] Formatting warnings: ${formattingWarnings.join(', ')}`);
         }

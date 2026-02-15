@@ -164,6 +164,7 @@
       "tocFirstRowFill": "99CBFF",
       "tocActiveSectionFill": "CCE5FF"
     },
+    "expectedLineWidthsEmu": [28575, 57150],
     "headerLines": {
       "top": {
         "y": 1.0208,
