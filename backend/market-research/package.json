@@ -8,7 +8,9 @@
     "dev": "node server.js",
     "preflight:release": "node scripts/preflight-release.js",
     "preflight:stress": "node scripts/preflight-release.js --stress-seeds=30",
-    "test:preflight": "node scripts/test-preflight.js"
+    "test:preflight": "node scripts/test-preflight.js",
+    "release:loop": "node scripts/release-loop.js",
+    "release:loop:deep": "node scripts/release-loop.js --stress-seeds=300"
   },
   "dependencies": {
     "cors": "^2.8.5",
