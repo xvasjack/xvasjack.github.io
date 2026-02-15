@@ -389,6 +389,120 @@ function generateReplayArtifact(clusterEntry) {
   };
 }
 
+// ============ STACK TRACE SIGNATURE ============
+
+/**
+ * Extract a normalized stack trace signature from a stack string.
+ * Keeps the first 2-3 meaningful frame locations, strips noise.
+ */
+function extractStackSignature(stack) {
+  if (!stack || typeof stack !== 'string') return '';
+  const lines = stack.split('\n');
+  const frames = [];
+  for (const line of lines) {
+    const match = line.match(/at\s+(?:(\S+)\s+)?\(?(\/[^:]+|[^:]+\.js):(\d+):\d+\)?/);
+    if (match) {
+      const fn = match[1] || 'anonymous';
+      const file = (match[2] || '').replace(/^.*\//, ''); // basename only
+      const lineNum = match[3];
+      frames.push(`${fn}@${file}:${lineNum}`);
+      if (frames.length >= 3) break;
+    }
+  }
+  return frames.join(' > ');
+}
+
+// ============ COMBINED SIGNATURE ============
+
+/**
+ * Create a combined signature from error message and stack trace
+ * for more precise clustering.
+ */
+function extractCombinedSignature(errorMessage, stack) {
+  const errSig = extractErrorSignature(errorMessage);
+  const stackSig = extractStackSignature(stack);
+  if (stackSig) return `${errSig} [${stackSig}]`;
+  return errSig;
+}
+
+// ============ CLUSTER SUMMARY ============
+
+/**
+ * Run full clustering pipeline and return a combined summary.
+ * Convenience function that combines cluster + topBlockers + formatted report.
+ *
+ * @param {Array} telemetryResults - Raw telemetry from stress lab
+ * @param {Object} [options] - Options
+ * @param {number} [options.topN=20] - Number of top blockers
+ * @param {boolean} [options.useStackSignatures=false] - Whether to use combined error+stack signatures
+ * @returns {Object} { clusters, topBlockers, report, stats }
+ */
+function clusterWithSummary(telemetryResults, options = {}) {
+  const { topN = 20, useStackSignatures = false } = options;
+
+  if (!Array.isArray(telemetryResults)) {
+    return { clusters: [], topBlockers: [], report: 'No data', stats: {} };
+  }
+
+  // If using stack signatures, re-cluster with combined signatures
+  let clusterResult;
+  if (useStackSignatures) {
+    const failures = telemetryResults.filter((t) => t && t.status === 'fail');
+    const bySignature = {};
+    for (const f of failures) {
+      const sig = extractCombinedSignature(f.error, f.stack);
+      if (!bySignature[sig]) {
+        bySignature[sig] = {
+          signature: sig,
+          seeds: [],
+          phases: new Set(),
+          mutationClasses: new Set(),
+          errorClasses: new Set(),
+          sampleError: f.error,
+          sampleStack: f.stack,
+          count: 0,
+        };
+      }
+      const entry = bySignature[sig];
+      entry.seeds.push(f.seed);
+      if (f.failedPhase) entry.phases.add(f.failedPhase);
+      for (const cls of f.mutationClasses || []) entry.mutationClasses.add(cls);
+      if (f.errorClass) entry.errorClasses.add(f.errorClass);
+      entry.count++;
+    }
+    const clusters = Object.values(bySignature).map((c) => ({
+      ...c,
+      phases: [...c.phases],
+      mutationClasses: [...c.mutationClasses],
+      errorClasses: [...c.errorClasses],
+    }));
+    clusters.sort((a, b) => b.count - a.count);
+    clusterResult = { clusters, bySignature, byPhase: {}, byMutationClass: {} };
+  } else {
+    clusterResult = cluster(telemetryResults);
+  }
+
+  const topBlockers = getTopBlockers(telemetryResults, topN);
+  const report = formatBlockersReport(topBlockers);
+
+  const totalFailures = telemetryResults.filter((t) => t && t.status === 'fail').length;
+  const runtimeCrashes = telemetryResults.filter(
+    (t) => t && t.status === 'fail' && t.errorClass === 'runtime-crash'
+  ).length;
+
+  return {
+    clusters: clusterResult.clusters,
+    topBlockers,
+    report,
+    stats: {
+      totalSeeds: telemetryResults.length,
+      totalFailures,
+      runtimeCrashes,
+      uniqueSignatures: clusterResult.clusters.length,
+    },
+  };
+}
+
 // ============ EXPORTS ============
 
 module.exports = {
@@ -399,7 +513,10 @@ module.exports = {
   trackCrashTrend,
   formatBlockersReport,
   generateReplayArtifact,
+  clusterWithSummary,
   __test: {
     extractErrorSignature,
+    extractStackSignature,
+    extractCombinedSignature,
   },
 };

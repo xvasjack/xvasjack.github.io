@@ -30,12 +30,65 @@ function mulberry32(seed) {
   };
 }
 
+// ============ SEED SCENARIO DIVERSITY ============
+
+const SEED_COUNTRIES = [
+  'Test Country',
+  'Emerging Market Alpha',
+  'Developed Market Beta',
+  'Frontier Market Gamma',
+  'Island Nation Delta',
+  'Landlocked Economy Epsilon',
+];
+
+const SEED_INDUSTRIES = [
+  'Test Industry',
+  'Renewable Energy',
+  'Healthcare Services',
+  'Fintech Solutions',
+  'Logistics & Supply Chain',
+  'Agricultural Technology',
+];
+
+const SEED_PROJECT_TYPES = [
+  'market-entry',
+  'market-expansion',
+  'competitive-assessment',
+  'due-diligence',
+];
+
+/**
+ * Deterministically select scenario metadata for a seed.
+ * Different seeds get different country/industry/project combinations,
+ * ensuring diversity across the full seed range.
+ */
+function getSeedScenario(seed) {
+  const rng = mulberry32(seed * 4217);
+  const country = SEED_COUNTRIES[Math.floor(rng() * SEED_COUNTRIES.length)];
+  const industry = SEED_INDUSTRIES[Math.floor(rng() * SEED_INDUSTRIES.length)];
+  const projectType = SEED_PROJECT_TYPES[Math.floor(rng() * SEED_PROJECT_TYPES.length)];
+  // Vary data shape: number of competitors, chart series length, etc.
+  const competitorCount = 1 + Math.floor(rng() * 5); // 1-5
+  const chartYears = 3 + Math.floor(rng() * 5); // 3-7
+  const actCount = 1 + Math.floor(rng() * 4); // 1-4
+  return { country, industry, projectType, competitorCount, chartYears, actCount };
+}
+
+// ============ DEFAULT SEED COUNTS ============
+
+const DEFAULT_SEEDS = 30;
+const DEEP_SEEDS = 300;
+
 // ============ BASE PAYLOAD ============
 
-function buildBasePayload() {
+function buildBasePayload(seed) {
+  const scenario = seed != null ? getSeedScenario(seed) : null;
+  const country = scenario ? scenario.country : 'Test Country';
+  const industry = scenario ? scenario.industry : 'Test Industry';
+  const projectType = scenario ? scenario.projectType : 'market-entry';
   const policy = {
     foundationalActs: {
-      slideTitle: 'Test Country - Foundational Acts',
+      slideTitle: `${country} - Foundational Acts`,
       keyMessage:
         'Regulatory framework supports industry investment with clear enforcement mechanisms',
       acts: [
@@ -72,9 +125,8 @@ function buildBasePayload() {
       ],
     },
     nationalPolicy: {
-      slideTitle: 'Test Country - National Policy',
-      policyDirection:
-        'Test Country targets 30% improvement by 2036 under the National Development Plan',
+      slideTitle: `${country} - National Policy`,
+      policyDirection: `${country} targets 30% improvement by 2036 under the National Development Plan`,
       targets: [
         {
           metric: 'Efficiency Improvement',
@@ -102,7 +154,7 @@ function buildBasePayload() {
       ],
     },
     investmentRestrictions: {
-      slideTitle: 'Test Country - Foreign Investment Rules',
+      slideTitle: `${country} - Foreign Investment Rules`,
       ownershipLimits: {
         general: '49% foreign ownership cap under Foreign Business Act',
         exceptions: 'Promoted projects may receive 100% foreign ownership',
@@ -128,7 +180,7 @@ function buildBasePayload() {
 
   const market = {
     tpes: {
-      slideTitle: 'Test Country - Total Primary Supply',
+      slideTitle: `${country} - Total Primary Supply`,
       keyInsight: 'Primary supply growing steadily with diversification trend',
       narrative: 'Total primary supply reached 137 units in 2023, growing 2.1% YoY',
       chartData: {
@@ -143,7 +195,7 @@ function buildBasePayload() {
       },
     },
     finalDemand: {
-      slideTitle: 'Test Country - Final Demand',
+      slideTitle: `${country} - Final Demand`,
       keyInsight: 'Industry accounts for 37% of final demand, presenting largest opportunity',
       chartData: {
         categories: ['2019', '2020', '2021', '2022', '2023'],
@@ -157,7 +209,7 @@ function buildBasePayload() {
       },
     },
     electricity: {
-      slideTitle: 'Test Country - Electricity & Power',
+      slideTitle: `${country} - Electricity & Power`,
       keyInsight: 'Peak demand growing 3.2% annually; capacity additions accelerating',
       demandGrowth: '3.2% CAGR 2020-2023',
       totalCapacity: '53.7 GW installed (2023)',
@@ -173,7 +225,7 @@ function buildBasePayload() {
       },
     },
     pricing: {
-      slideTitle: 'Test Country - Pricing',
+      slideTitle: `${country} - Pricing`,
       keyInsight: 'Industrial rates rising 12% in 2023',
       chartData: {
         categories: ['2019', '2020', '2021', '2022', '2023'],
@@ -186,7 +238,7 @@ function buildBasePayload() {
       },
     },
     escoMarket: {
-      slideTitle: 'Test Country - Services Market',
+      slideTitle: `${country} - Services Market`,
       keyInsight: 'Market growing 15% annually',
       marketSize: '8.5 billion (2023)',
       growthRate: '15% CAGR 2020-2023',
@@ -204,7 +256,7 @@ function buildBasePayload() {
 
   const competitors = {
     japanesePlayers: {
-      slideTitle: 'Test Country - Japanese Companies',
+      slideTitle: `${country} - Japanese Companies`,
       marketInsight: 'Japanese firms hold 22% of industrial market',
       players: [
         {
@@ -228,7 +280,7 @@ function buildBasePayload() {
       ],
     },
     localMajor: {
-      slideTitle: 'Test Country - Major Local Players',
+      slideTitle: `${country} - Major Local Players`,
       concentration: 'Top 5 local players hold 45% of domestic market',
       players: [
         {
@@ -252,7 +304,7 @@ function buildBasePayload() {
       ],
     },
     foreignPlayers: {
-      slideTitle: 'Test Country - Foreign Companies',
+      slideTitle: `${country} - Foreign Companies`,
       competitiveInsight: 'European players dominate technical consulting',
       players: [
         {
@@ -278,7 +330,7 @@ function buildBasePayload() {
       ],
     },
     caseStudy: {
-      slideTitle: 'Test Country - Market Entry Case Study',
+      slideTitle: `${country} - Market Entry Case Study`,
       company: 'Global Services Corp',
       entryYear: '2010',
       entryMode: 'Acquisition of local utility',
@@ -292,7 +344,7 @@ function buildBasePayload() {
       ],
     },
     maActivity: {
-      slideTitle: 'Test Country - M&A Activity',
+      slideTitle: `${country} - M&A Activity`,
       valuationMultiples: '8-12x EBITDA for services companies',
       recentDeals: [
         {
@@ -315,7 +367,7 @@ function buildBasePayload() {
 
   const depth = {
     dealEconomics: {
-      slideTitle: 'Test Country - Deal Economics',
+      slideTitle: `${country} - Deal Economics`,
       keyInsight: 'Average deal size 25M with 18-22% IRR',
       typicalDealSize: { min: '5M', max: '80M', average: '25M' },
       contractTerms: {
@@ -330,7 +382,7 @@ function buildBasePayload() {
       },
     },
     partnerAssessment: {
-      slideTitle: 'Test Country - Partner Assessment',
+      slideTitle: `${country} - Partner Assessment`,
       recommendedPartner: 'Partner Alpha',
       partners: [
         {
@@ -352,7 +404,7 @@ function buildBasePayload() {
       ],
     },
     entryStrategy: {
-      slideTitle: 'Test Country - Entry Strategy Options',
+      slideTitle: `${country} - Entry Strategy Options`,
       recommendation: 'Joint Venture with local partner recommended',
       options: [
         {
@@ -380,7 +432,7 @@ function buildBasePayload() {
       },
     },
     implementation: {
-      slideTitle: 'Test Country - Implementation Roadmap',
+      slideTitle: `${country} - Implementation Roadmap`,
       totalInvestment: 'USD 20-35M over 3 years',
       breakeven: '30-36 months',
       phases: [
@@ -399,7 +451,7 @@ function buildBasePayload() {
       ],
     },
     targetSegments: {
-      slideTitle: 'Test Country - Target Customer Segments',
+      slideTitle: `${country} - Target Customer Segments`,
       goToMarketApproach: 'Land-and-expand strategy starting with foreign manufacturers',
       segments: [
         {
@@ -489,7 +541,7 @@ function buildBasePayload() {
       ],
     },
     timingIntelligence: {
-      slideTitle: 'Test Country - Why Now?',
+      slideTitle: `${country} - Why Now?`,
       windowOfOpportunity: 'Critical 18-month window (Q2 2025 - Q4 2026)',
       triggers: [
         {
@@ -505,7 +557,7 @@ function buildBasePayload() {
       ],
     },
     lessonsLearned: {
-      slideTitle: 'Test Country - Lessons from Market',
+      slideTitle: `${country} - Lessons from Market`,
       failures: [
         {
           company: 'Failed Entrant Alpha (US)',
@@ -523,19 +575,18 @@ function buildBasePayload() {
       'Proceed with conditional market entry via Joint Venture with Local Corp Alpha.',
   };
 
-  const countryAnalysis = { country: 'Test Country', policy, market, competitors, depth, summary };
+  const countryAnalysis = { country, policy, market, competitors, depth, summary };
 
   const synthesis = {
     isSingleCountry: true,
-    country: 'Test Country',
-    executiveSummary:
-      'Test Country presents a compelling market entry opportunity for Test Industry services.',
+    country,
+    executiveSummary: `${country} presents a compelling market entry opportunity for ${industry} services.`,
   };
 
   const scope = {
-    industry: 'Test Industry',
-    projectType: 'market-entry',
-    targetMarkets: ['Test Country'],
+    industry,
+    projectType,
+    targetMarkets: [country],
   };
 
   return { synthesis, countryAnalysis, scope };
@@ -1085,9 +1136,15 @@ const PHASES = ['build-payload', 'budget-gate', 'render-ppt', 'validate-pptx'];
 async function runSeed(seed) {
   const startTime = Date.now();
   const mutationClasses = selectMutationsForSeed(seed);
+  const scenario = getSeedScenario(seed);
   const telemetry = {
     version: TELEMETRY_VERSION,
     seed,
+    scenario: {
+      country: scenario.country,
+      industry: scenario.industry,
+      projectType: scenario.projectType,
+    },
     mutationClasses,
     phases: {},
     status: 'pass',
@@ -1104,7 +1161,7 @@ async function runSeed(seed) {
   // Phase 1: Build & mutate payload
   const p1Start = Date.now();
   try {
-    const base = buildBasePayload();
+    const base = buildBasePayload(seed);
     synthesis = base.synthesis;
     countryAnalysis = base.countryAnalysis;
     scope = base.scope;
@@ -1423,6 +1480,31 @@ function buildReport(telemetryResults, stats) {
     lines.push('');
   }
 
+  // Top crash signatures (from failure clustering)
+  if (stats.topCrashSignatures && stats.topCrashSignatures.length > 0) {
+    lines.push('## Top Crash Signatures');
+    lines.push('| # | Risk | Count | Signature | Replay |');
+    lines.push('|---|------|-------|-----------|--------|');
+    for (let i = 0; i < stats.topCrashSignatures.length; i++) {
+      const sig = stats.topCrashSignatures[i];
+      const sigText = (sig.signature || '').substring(0, 60).replace(/\|/g, '\\|');
+      const cls = (sig.errorClasses || []).includes('runtime-crash') ? 'BUG' : 'gate';
+      lines.push(
+        `| ${i + 1} | ${sig.riskScore} (${cls}) | ${sig.count} | ${sigText} | \`${sig.replayCommand}\` |`
+      );
+    }
+    lines.push('');
+  }
+
+  // Scenario diversity coverage
+  if (stats.scenarioCoverage) {
+    lines.push('## Scenario Coverage');
+    lines.push(`- Countries: ${stats.scenarioCoverage.countries.join(', ')}`);
+    lines.push(`- Industries: ${stats.scenarioCoverage.industries.join(', ')}`);
+    lines.push(`- Project Types: ${stats.scenarioCoverage.projectTypes.join(', ')}`);
+    lines.push('');
+  }
+
   const verdict = stats.runtimeCrashes === 0 ? 'PASS' : 'FAIL';
   lines.push(`## Result: ${verdict}`);
   if (stats.runtimeCrashes === 0 && stats.dataGateRejections > 0) {
@@ -1436,15 +1518,53 @@ function buildReport(telemetryResults, stats) {
 
 // ============ MAIN RUNNER ============
 
-async function runStressLab({ seeds = 300, reportPath = null } = {}) {
+async function runStressLab({
+  seeds = DEFAULT_SEEDS,
+  deep = false,
+  reportPath = null,
+  onProgress = null,
+} = {}) {
+  const seedCount = deep ? Math.max(seeds, DEEP_SEEDS) : seeds;
   const telemetryResults = [];
 
-  for (let seed = 1; seed <= seeds; seed++) {
+  for (let seed = 1; seed <= seedCount; seed++) {
     const telemetry = await runSeed(seed);
     telemetryResults.push(telemetry);
+    if (onProgress) onProgress(seed, seedCount, telemetry);
   }
 
   const stats = computeAggregateStats(telemetryResults);
+
+  // Integrate failure clustering
+  const clusterAnalyzer = require('./failure-cluster-analyzer');
+  const { clusters } = clusterAnalyzer.cluster(telemetryResults);
+  const topBlockers = clusterAnalyzer.getTopBlockers(telemetryResults, 20);
+  stats.topCrashSignatures = topBlockers.slice(0, 10).map((b) => ({
+    signature: b.signature,
+    count: b.count,
+    riskScore: b.riskScore,
+    representativeSeed: b.seeds[0],
+    replayCommand: b.replayCommand,
+    phases: b.phases,
+    errorClasses: b.errorClasses,
+  }));
+  stats.clusterCount = clusters.length;
+
+  // Compute scenario diversity coverage
+  const scenarioCoverage = { countries: new Set(), industries: new Set(), projectTypes: new Set() };
+  for (const t of telemetryResults) {
+    if (t.scenario) {
+      scenarioCoverage.countries.add(t.scenario.country);
+      scenarioCoverage.industries.add(t.scenario.industry);
+      scenarioCoverage.projectTypes.add(t.scenario.projectType);
+    }
+  }
+  stats.scenarioCoverage = {
+    countries: [...scenarioCoverage.countries],
+    industries: [...scenarioCoverage.industries],
+    projectTypes: [...scenarioCoverage.projectTypes],
+  };
+
   const report = buildReport(telemetryResults, stats);
 
   if (reportPath) {
@@ -1459,6 +1579,7 @@ async function runStressLab({ seeds = 300, reportPath = null } = {}) {
     telemetry: telemetryResults,
     stats,
     report,
+    topBlockers,
   };
 }
 
@@ -1485,6 +1606,8 @@ module.exports = {
   checkDeterminism,
   exportTelemetryJSON,
   TELEMETRY_VERSION,
+  DEFAULT_SEEDS,
+  DEEP_SEEDS,
   // Internals for testing
   __test: {
     mulberry32,
@@ -1494,8 +1617,12 @@ module.exports = {
     classifyError,
     computeAggregateStats,
     computePercentile,
+    getSeedScenario,
     MUTATION_CLASS_KEYS,
     PHASES,
+    SEED_COUNTRIES,
+    SEED_INDUSTRIES,
+    SEED_PROJECT_TYPES,
     deepClone,
     applyTransientKeyMutations,
     applySchemaCorruptionMutations,
@@ -1511,15 +1638,21 @@ module.exports = {
 
 if (require.main === module) {
   const args = process.argv.slice(2);
-  let seeds = 300;
+  let seeds = DEFAULT_SEEDS;
+  let deep = false;
   let singleSeed = null;
   let reportPath = null;
 
   for (const arg of args) {
-    if (arg.startsWith('--seeds=')) {
-      seeds = parseInt(arg.split('=')[1], 10) || 300;
+    if (arg.startsWith('--seeds=') || arg.startsWith('--stress-seeds=')) {
+      seeds = parseInt(arg.split('=')[1], 10) || DEFAULT_SEEDS;
     } else if (arg.startsWith('--seed=')) {
       singleSeed = parseInt(arg.split('=')[1], 10);
+    } else if (arg === '--deep' || arg === '--nightly') {
+      deep = true;
+    } else if (arg === '--quick') {
+      deep = false;
+      seeds = DEFAULT_SEEDS;
     } else if (arg.startsWith('--report=')) {
       reportPath = arg.split('=')[1];
     }
@@ -1537,14 +1670,27 @@ if (require.main === module) {
         process.exit(2);
       });
   } else {
+    const effectiveSeeds = deep ? Math.max(seeds, DEEP_SEEDS) : seeds;
     if (!reportPath) {
       reportPath = path.join(__dirname, 'stress-lab-report.md');
     }
 
-    console.log(`Running stress lab with ${seeds} seeds...`);
+    const mode = deep ? 'deep/nightly' : 'quick';
+    console.log(`Running stress lab in ${mode} mode with ${effectiveSeeds} seeds...`);
     const startTime = Date.now();
 
-    runStressLab({ seeds, reportPath })
+    runStressLab({
+      seeds,
+      deep,
+      reportPath,
+      onProgress: (current, total, t) => {
+        if (current % 50 === 0 || current === total) {
+          const pct = ((current / total) * 100).toFixed(0);
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`  [${pct}%] ${current}/${total} seeds (${elapsed}s) - ${t.status}`);
+        }
+      },
+    })
       .then((result) => {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
         console.log('');
@@ -1552,6 +1698,9 @@ if (require.main === module) {
         console.log('');
         console.log(`Completed in ${elapsed}s`);
         console.log(`Report written to: ${reportPath}`);
+        if (result.topBlockers && result.topBlockers.length > 0) {
+          console.log(`Top ${result.topBlockers.length} crash signatures identified`);
+        }
         process.exit(result.stats.runtimeCrashes > 0 ? 1 : 0);
       })
       .catch((err) => {
