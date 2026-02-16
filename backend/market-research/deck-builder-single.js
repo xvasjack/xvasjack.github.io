@@ -453,7 +453,7 @@ function compactRenderString(pathKey, value) {
   const limit = getRenderTextLimit(pathKey);
   if (str.length > limit) {
     console.warn(
-      `[PPT-CONTENT-SIZE] Field "${pathKey}" is ${str.length} chars (render budget ${limit}). Preserving full content — use font scaling or layout adjustment.`
+      `[PPT-CONTENT-SIZE] Field "${pathKey}" is ${str.length} chars (slide size guide ${limit}). Keeping full content — use smaller text or layout adjustment.`
     );
   }
   return str;
@@ -6696,7 +6696,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       resolveBlockTemplate(block);
     }
     const pptGate = validatePptData(blocks);
-    console.log('[Quality Gate] PPT data:', JSON.stringify(pptGate));
+    console.log('[Quality Check] PPT data:', JSON.stringify(pptGate));
     const allowCompetitiveOptionalGap = shouldAllowCompetitiveOptionalGroupGap(
       sectionName,
       pptGate,
@@ -6704,7 +6704,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
     if (pptGate.pass === false && allowCompetitiveOptionalGap) {
       console.warn(
-        `[Quality Gate] ${sectionName}: allowing optional competitor gaps (${(pptGate.nonRenderableGroups || []).join(', ')}) because core groups are buildable`
+        `[Quality Check] ${sectionName}: allowing optional competitor gaps (${(pptGate.nonRenderableGroups || []).join(', ')}) because core groups are usable`
       );
       pptGate.pass = true;
     }
@@ -6719,14 +6719,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         ? pptGate.chartIssues.slice(0, 4).join(' ; ')
         : '';
       const gateMessage =
-        `[PPT] Data gate failed for "${sectionName}"` +
-        `${groupSummary ? ` [not-buildable groups: ${groupSummary}]` : ''}` +
+        `[PPT] Data check failed for "${sectionName}"` +
+        `${groupSummary ? ` [not-usable groups: ${groupSummary}]` : ''}` +
         `${emptySummary ? ` [empty: ${emptySummary}]` : ''}` +
         `${chartSummary ? ` [charts: ${chartSummary}]` : ''}`;
       if (STRICT_TEMPLATE_FIDELITY) {
         throw new Error(gateMessage);
       }
-      console.warn(`${gateMessage}. Continuing because STRICT_TEMPLATE_FIDELITY is disabled.`);
+      console.warn(`${gateMessage}. Continuing because strict template style check is disabled.`);
     }
 
     if (!sectionHasContent(blocks)) {

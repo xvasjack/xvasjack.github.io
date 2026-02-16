@@ -1330,17 +1330,17 @@ async function runRound(round, total) {
     runTemplateCloneUnitChecks();
     console.log('[Regression] Unit checks PASS (template-clone filter behavior)');
     runPptGateUnitChecks();
-    console.log('[Regression] Unit checks PASS (pre-build PPT gate block shaping)');
+    console.log('[Regression] Unit checks PASS (pre-build PPT check block shaping)');
     runCompetitiveGateUnitChecks();
-    console.log('[Regression] Unit checks PASS (competitive optional-group gate override)');
+    console.log('[Regression] Unit checks PASS (competitive optional-group check override)');
     runTemplateRouteRecoveryUnitChecks();
     console.log('[Regression] Unit checks PASS (template route geometry recovery)');
     await runDynamicTimeoutUnitChecks();
     console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
     runPreRenderStructureUnitChecks();
-    console.log('[Regression] Unit checks PASS (pre-build structure gating)');
+    console.log('[Regression] Unit checks PASS (pre-build structure check)');
     runTransientKeySanitizerUnitChecks();
-    console.log('[Regression] Unit checks PASS (transient key sanitizer canonical module)');
+    console.log('[Regression] Unit checks PASS (temp key cleaner standard module)');
     runCrashSignatureRegressionChecks();
     console.log('[Regression] Unit checks PASS (crash signature type-mismatch guards)');
     runDividerAwareSparseUnitChecks();
@@ -1385,7 +1385,7 @@ async function runRound(round, total) {
         checkResults.push({ deck, country, pass: false, error: err.message });
         // Template styleMatch gate violation — fail loudly
         console.error(
-          `\n[Regression] TEMPLATE FIDELITY GATE VIOLATION: ${deck} (${country})\n  ${err.message}\n`
+          `\n[Regression] TEMPLATE STYLE CHECK FAILED: ${deck} (${country})\n  ${err.message}\n`
         );
         throw err;
       }
@@ -1489,6 +1489,8 @@ module.exports = {
   __test: {
     snapshotArtifactState,
     restoreArtifactState,
+    // Backward-compatible export name used by regression-persistence tests.
+    writeValidationSummary: writeCheckSummary,
     writeCheckSummary,
     SHOULD_RESTORE_ARTIFACTS,
     RESTORE_OLD_ARTIFACTS,

@@ -1060,6 +1060,7 @@ function buildPptGateBlocks(countryAnalysis) {
 function collectPreRenderStructureIssues(countryAnalyses) {
   const issues = [];
   const requiredObjectSections = ['policy', 'market', 'competitors', 'depth', 'summary'];
+  const requiredCompetitorSections = ['localMajor', 'foreignPlayers'];
   for (const ca of countryAnalyses || []) {
     const country = String(ca?.country || '').trim() || 'Unknown';
     const countryPrefix = `${country}:`;
@@ -1069,6 +1070,33 @@ function collectPreRenderStructureIssues(countryAnalyses) {
     for (const section of requiredObjectSections) {
       if (!isPlainObject(ca?.[section])) {
         issues.push(`${countryPrefix} section "${section}" must be an object`);
+      }
+    }
+
+    const competitors = ca?.competitors;
+    if (isPlainObject(competitors)) {
+      const missingCoreSections = requiredCompetitorSections.filter(
+        (name) => !isPlainObject(competitors?.[name])
+      );
+      if (missingCoreSections.length > 0) {
+        issues.push(
+          `${countryPrefix} competitors missing required sections: ${missingCoreSections.join(', ')}`
+        );
+      }
+
+      for (const name of requiredCompetitorSections) {
+        const sectionData = competitors?.[name];
+        if (!isPlainObject(sectionData)) continue;
+        const hasUsableData = Object.entries(sectionData).some(([key, value]) => {
+          if (String(key).startsWith('_')) return false;
+          if (Array.isArray(value)) return value.length > 0;
+          if (isPlainObject(value)) return Object.keys(value).length > 0;
+          if (typeof value === 'string') return value.trim().length > 0;
+          return value != null;
+        });
+        if (!hasUsableData) {
+          issues.push(`${countryPrefix} competitors section "${name}" has no usable content`);
+        }
       }
     }
   }
@@ -2827,6 +2855,9 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       // If an issue appears in 2+ rounds, accept it (stop trying to fix it).
       const issueOccurrenceCount = {};
       const ISSUE_ACCEPT_THRESHOLD = 2; // Accept an issue after it appears this many times.
+      const IDENTICAL_FEEDBACK_EARLY_EXIT_STREAK = 2;
+      let lastActiveIssueSignature = '';
+      let activeIssueSignatureStreak = 0;
 
       // Helper: normalize issue text for dedup/convergence (lowercase, collapse whitespace, trim).
       const normalizeIssueText = (text) =>
@@ -2995,6 +3026,23 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           priorRounds
         );
         const contradictoryCount = activeIssueMessages.length - nonContradictoryMessages.length;
+        const activeIssueSignature = [
+          ...new Set(
+            nonContradictoryMessages.map((msg) => normalizeIssueText(msg)).filter(Boolean)
+          ),
+        ]
+          .sort()
+          .join(' || ');
+        if (activeIssueSignature && activeIssueSignature === lastActiveIssueSignature) {
+          activeIssueSignatureStreak += 1;
+        } else {
+          lastActiveIssueSignature = activeIssueSignature;
+          activeIssueSignatureStreak = activeIssueSignature ? 1 : 0;
+        }
+        const repeatedIdenticalFeedback =
+          !ready &&
+          activeIssueSignature.length > 0 &&
+          activeIssueSignatureStreak >= IDENTICAL_FEEDBACK_EARLY_EXIT_STREAK;
 
         if (acceptedIssues.length > 0) {
           console.log(
@@ -3006,9 +3054,15 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             `[Stage 9a] Filtered ${contradictoryCount} contradictory issue(s) (conflict with prior locked decisions)`
           );
         }
+        if (repeatedIdenticalFeedback) {
+          console.log(
+            `[Stage 9a] Early exit: identical review feedback repeated ${activeIssueSignatureStreak} round(s)`
+          );
+        }
 
         // If all issues were either accepted or contradictory, treat as ready.
-        const effectiveReady = ready || nonContradictoryMessages.length === 0;
+        const effectiveReady =
+          ready || nonContradictoryMessages.length === 0 || repeatedIdenticalFeedback;
 
         const stage9aIssues = buildStageIssuesFromMessages(nonContradictoryMessages, {
           sourceStage: '9a',
@@ -3051,6 +3105,8 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           changeSummary: [],
           acceptedRecurringIssues: acceptedIssues.length,
           filteredContradictions: contradictoryCount,
+          repeatedIdenticalFeedback,
+          activeIssueSignatureStreak,
         };
         finalDeckReviewRounds.push(roundEntry);
 
@@ -3062,7 +3118,9 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             success: true,
             note: ready
               ? 'final deck reviewer marked ready'
-              : `accepted after filtering: ${acceptedIssues.length} recurring, ${contradictoryCount} contradictory`,
+              : repeatedIdenticalFeedback
+                ? `accepted after identical feedback repeated ${activeIssueSignatureStreak} round(s)`
+                : `accepted after filtering: ${acceptedIssues.length} recurring, ${contradictoryCount} contradictory`,
           });
           finalDeckReady = true;
           break;

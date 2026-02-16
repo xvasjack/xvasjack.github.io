@@ -6,7 +6,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { validatePPTX, generateReport, readPPTX, extractAllText } = require('./pptx-validator');
+const { validatePPTX, generateReport, readPPTX, extractAllText } = require('./deck-file-check');
 
 /**
  * Get expectations based on country and industry
@@ -164,5 +164,12 @@ async function main() {
   process.exit(result.valid ? 0 : 1);
 }
 
-module.exports = { EXPECTATIONS, getExpectations, generatePPT, runValidation, validateSlides };
+module.exports = {
+  EXPECTATIONS,
+  getExpectations,
+  generatePPT,
+  runValidation,
+  runCheck: runValidation,
+  validateSlides,
+};
 if (require.main === module) main();

@@ -336,25 +336,25 @@ const RESEARCH_TOPIC_GROUPS = {
   insights: ['insight_failures', 'insight_timing', 'insight_competitive', 'insight_regulatory'],
 };
 
-// ============ SCOPE PARSER ============
+// ============ REQUEST READER ============
 
-async function parseScope(userPrompt) {
-  console.log('\n=== STAGE 1: SCOPE PARSING ===');
+async function readRequestType(userPrompt) {
+  console.log('\n=== STAGE 1: READ REQUEST ===');
   console.log('User prompt:', userPrompt);
 
-  const systemPrompt = `You are a scope parser for market research requests. Extract structured parameters from the user's prompt.
+  const systemPrompt = `You read market research requests. Extract structured details from the user's prompt.
 
 Return a JSON object with these fields:
 - projectType: "market_entry" | "competitive_analysis" | "market_sizing" | "other"
 - industry: string (the industry/sector being researched)
-- targetMarkets: string[] (list of countries/regions to analyze)
+- targetMarkets: string[] (single item list with exactly one country to analyze)
 - clientContext: string (any context about the client making the request)
 - clientName: string (the client company name if mentioned, e.g. "Shizuoka Gas Company")
 - projectName: string (the project name if mentioned, e.g. "Project Escort")
 - focusAreas: string[] (specific aspects to emphasize)
 
-If countries are vague like "Southeast Asia" or "SEA", expand to: ["Thailand", "Vietnam", "Indonesia", "Malaysia", "Philippines"]
-If countries are vague like "ASEAN", expand to: ["Thailand", "Vietnam", "Indonesia", "Malaysia", "Philippines", "Singapore"]
+If the user gives multiple countries, pick the first one they mentioned.
+If the user gives only a region (e.g., "Southeast Asia" or "ASEAN"), pick one concrete country: "Thailand".
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
@@ -370,7 +370,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
       content: typeof geminiResult === 'string' ? geminiResult : geminiResult.content || '',
     };
   } catch (e) {
-    console.warn('Gemini failed for scope parsing, retrying:', e.message);
+    console.warn('Gemini failed while reading request, retrying:', e.message);
     try {
       const geminiRetry = await callGemini(userPrompt, {
         systemPrompt,
@@ -395,11 +395,22 @@ Return ONLY valid JSON, no markdown or explanation.`;
         .replace(/```/g, '')
         .trim();
     }
-    const scope = JSON.parse(jsonStr);
-    console.log('Parsed scope:', JSON.stringify(scope, null, 2));
-    return scope;
+    const request = JSON.parse(jsonStr);
+    const normalizedMarkets = Array.isArray(request?.targetMarkets)
+      ? request.targetMarkets.map((m) => String(m || '').trim()).filter(Boolean)
+      : [];
+    const selectedCountry = normalizedMarkets[0] || 'Thailand';
+    request.targetMarkets = [selectedCountry];
+    request.singleCountryMode = true;
+    if (normalizedMarkets.length > 1) {
+      console.warn(
+        `[Request] Single-country mode active. Keeping "${selectedCountry}" and skipping: ${normalizedMarkets.slice(1).join(', ')}`
+      );
+    }
+    console.log('Request details:', JSON.stringify(request, null, 2));
+    return request;
   } catch (error) {
-    console.error('Failed to parse scope:', error.message);
+    console.error('Failed to read request details:', error.message);
     // Try to extract useful info from raw prompt before falling back to generic
     const promptLower = userPrompt.toLowerCase();
 
@@ -461,10 +472,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
     return {
       projectType: 'market_entry',
       industry: detectedIndustry,
-      targetMarkets:
-        detectedCountries.length > 0
-          ? detectedCountries
-          : ['Thailand', 'Vietnam', 'Malaysia', 'Philippines', 'Indonesia'],
+      targetMarkets: [detectedCountries.length > 0 ? detectedCountries[0] : 'Thailand'],
+      singleCountryMode: true,
       clientContext: promptLower.includes('japanese')
         ? 'Japanese company'
         : 'international company',
@@ -763,7 +772,7 @@ Return ONLY valid JSON.`;
       framework = JSON.parse(jsonStr);
     } catch (parseErr) {
       // Attempt to repair truncated JSON by closing open brackets/braces
-      console.warn('JSON parse failed, attempting truncation repair...');
+      console.warn('Could not read JSON, trying to fix cut-off text...');
       let repaired = jsonStr;
       const openBraces = (repaired.match(/\{/g) || []).length;
       const closeBraces = (repaired.match(/\}/g) || []).length;
@@ -776,7 +785,7 @@ Return ONLY valid JSON.`;
       for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += ']';
       for (let i = 0; i < openBraces - closeBraces; i++) repaired += '}';
       framework = JSON.parse(repaired);
-      console.log('Truncation repair succeeded');
+      console.log('Cut-off text fix succeeded');
     }
 
     framework = sanitizeFrameworkOutput(scope, framework);
@@ -805,7 +814,7 @@ Return ONLY valid JSON.`;
 
     return framework;
   } catch (error) {
-    console.error('Failed to parse dynamic framework, using fallback:', error.message);
+    console.error('Could not read dynamic framework, using backup framework:', error.message);
     // Return a generic fallback framework
     return generateFallbackFramework(scope);
   }
@@ -1073,7 +1082,7 @@ async function getResearchFramework(country, scope) {
 module.exports = {
   RESEARCH_FRAMEWORK,
   RESEARCH_TOPIC_GROUPS,
-  parseScope,
+  readRequestType,
   generateResearchFramework,
   generateFallbackFramework,
   getResearchFramework,

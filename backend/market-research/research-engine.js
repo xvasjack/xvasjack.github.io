@@ -946,7 +946,7 @@ Return ONLY valid JSON.`;
 
     return gaps;
   } catch (error) {
-    console.error('  Failed to parse gaps:', error?.message);
+    console.error('  Could not read reviewer gap output:', error?.message);
     return {
       sectionScores: {},
       overallScore: 30,
@@ -2133,11 +2133,11 @@ async function synthesizeWithFallback(prompt, options = {}) {
       if (accepted) return objectCandidate;
       const reason = getRejectReason(gateResult);
       console.warn(
-        `  [${label}] ${tierName} rejected by content gate${reason ? `: ${reason}` : ''}`
+        `  [${label}] ${tierName} rejected by content check${reason ? `: ${reason}` : ''}`
       );
       return null;
     } catch (gateErr) {
-      console.warn(`  [${label}] ${tierName} acceptance check failed: ${gateErr?.message}`);
+      console.warn(`  [${label}] ${tierName} content check failed: ${gateErr?.message}`);
       return null;
     }
   }
@@ -2179,16 +2179,16 @@ async function synthesizeWithFallback(prompt, options = {}) {
       }
     } catch (parseErr) {
       // Tier 2: Truncation repair on raw text
-      console.warn(`  [${label}] Tier 1 parse failed: ${parseErr?.message}`);
+      console.warn(`  [${label}] Tier 1 JSON read failed: ${parseErr?.message}`);
       if (allowRawExtractionFallback && allowTruncationRepair && text && isJsonTruncated(text)) {
-        console.log(`  [${label}] Tier 2: Detected truncation, attempting repair...`);
+        console.log(`  [${label}] Tier 2: Detected cut-off JSON, trying auto-fix...`);
         try {
           const repaired = repairTruncatedJson(text);
           const extractResult = extractJsonFromContent(repaired);
           if (extractResult.status === 'success' && extractResult.data) {
             const accepted = applyContentGate(extractResult.data, 'Tier 2 (truncation repair)');
             if (accepted) {
-              console.log(`  [${label}] Tier 2 (truncation repair) succeeded`);
+              console.log(`  [${label}] Tier 2 (cut-off JSON fix) succeeded`);
               return accepted;
             }
           }
@@ -2231,14 +2231,14 @@ async function synthesizeWithFallback(prompt, options = {}) {
       try {
         const parsed = parseJsonResponse(text);
         if (parsed) {
-          const accepted = applyContentGate(parsed, 'Tier 3 (Gemini no-jsonMode strict parse)');
+          const accepted = applyContentGate(parsed, 'Tier 3 (Gemini no-jsonMode strict JSON read)');
           if (accepted) {
-            console.log(`  [${label}] Tier 3 (Gemini no-jsonMode strict parse) succeeded`);
+            console.log(`  [${label}] Tier 3 (Gemini no-jsonMode strict JSON read) succeeded`);
             return accepted;
           }
         }
       } catch (parseErr3) {
-        console.warn(`  [${label}] Tier 3 strict parse failed: ${parseErr3?.message}`);
+        console.warn(`  [${label}] Tier 3 strict JSON read failed: ${parseErr3?.message}`);
       }
       if (allowRawExtractionFallback) {
         const extractResult = extractJsonFromContent(text);
@@ -2298,7 +2298,7 @@ async function synthesizeWithFallback(prompt, options = {}) {
           }
         }
       } catch (parseErr4) {
-        console.warn(`  [${label}] Tier 4 parse failed: ${parseErr4?.message}`);
+        console.warn(`  [${label}] Tier 4 JSON read failed: ${parseErr4?.message}`);
         if (allowRawExtractionFallback) {
           const extractResult = extractJsonFromContent(text);
           if (extractResult.status === 'success' && extractResult.data) {
@@ -2328,14 +2328,17 @@ async function synthesizeWithFallback(prompt, options = {}) {
       try {
         const parsed = parseJsonResponse(text);
         if (parsed) {
-          const accepted = applyContentGate(parsed, 'Tier 5 (GeminiPro no-jsonMode strict parse)');
+          const accepted = applyContentGate(
+            parsed,
+            'Tier 5 (GeminiPro no-jsonMode strict JSON read)'
+          );
           if (accepted) {
-            console.log(`  [${label}] Tier 5 (GeminiPro no-jsonMode strict parse) succeeded`);
+            console.log(`  [${label}] Tier 5 (GeminiPro no-jsonMode strict JSON read) succeeded`);
             return accepted;
           }
         }
       } catch (parseErr5) {
-        console.warn(`  [${label}] Tier 5 strict parse failed: ${parseErr5?.message}`);
+        console.warn(`  [${label}] Tier 5 strict JSON read failed: ${parseErr5?.message}`);
       }
       if (allowRawExtractionFallback) {
         const extractResult = extractJsonFromContent(text);
@@ -2575,7 +2578,7 @@ Return ONLY valid JSON.`;
     const extracted = extractJsonFromContent(text);
 
     if (extracted.status !== 'success' || !extracted.data) {
-      console.warn('  [STORY] Failed to parse story plan, synthesis will use style guide only');
+      console.warn('  [STORY] Could not read story plan JSON, using style guide only');
       return null;
     }
 
@@ -5204,7 +5207,7 @@ Return ONLY valid JSON.`;
     const extracted = extractJsonFromContent(text);
 
     if (extracted.status !== 'success' || !extracted.data) {
-      console.warn('  [REVIEW] Failed to parse review output, skipping deepen stage');
+      console.warn('  [REVIEW] Could not read review JSON, skipping deepen stage');
       return {
         gapReport: null,
         reviewMeta: { timeMs: Date.now() - reviewStart, error: 'parse_failed' },
@@ -5563,7 +5566,7 @@ RULES:
     const extracted = extractJsonFromContent(text);
 
     if (extracted.status !== 'success' || !extracted.data) {
-      console.warn('  [FINAL REVIEW] Failed to parse review output');
+      console.warn('  [FINAL REVIEW] Could not read review JSON');
       return null;
     }
 

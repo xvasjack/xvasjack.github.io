@@ -6,8 +6,8 @@
  *
  * Workflow:
  *   1. Strict preflight (module contracts, HEAD content, template, git state)
- *   2. Local artifact validation (existing PPTX files — no paid API calls)
- *   3. Optional diagnostics checks (/api/diagnostics, /api/latest-ppt)
+ *   2. Local artifact check (existing PPTX files — no paid API calls)
+ *   3. Optional runInfo checks (/api/runInfo, /api/latest-ppt)
  *   4. Produce reports/smoke-readiness.json + .md with go/no-go verdict
  *
  * Usage:
@@ -158,12 +158,12 @@ function runStrictPreflight(verbose) {
       );
     }
 
-    // 1e. Integrity pipeline
+    // 1e. FileSafety pipeline
     if (typeof pg.checkIntegrityPipeline === 'function') {
       const ip = pg.checkIntegrityPipeline();
       subGates.push(
         gate(
-          'preflight/Integrity pipeline',
+          'preflight/FileSafety pipeline',
           ip.pass ? 'PASS' : ip.severity === 'INFO' ? 'SKIP' : 'WARN',
           ip.durationMs || 0,
           ip.details,
@@ -206,7 +206,7 @@ function runStrictPreflight(verbose) {
 }
 
 // ---------------------------------------------------------------------------
-// Gate 2: Artifact Validation (existing PPTX files)
+// Gate 2: Artifact Check (existing PPTX files)
 // ---------------------------------------------------------------------------
 function runArtifactValidation(verbose) {
   const elapsed = timer();
@@ -310,15 +310,15 @@ function runArtifactValidation(verbose) {
     if (valResult.error) {
       subGates.push(
         gate(
-          `artifact/${fileName}/validation`,
+          `artifact/${fileName}/check`,
           'FAIL',
           valElapsed(),
-          `Validation process error: ${valResult.error.message}`,
+          `Check process error: ${valResult.error.message}`,
           null,
           {
-            issue: 'PPTX validation subprocess crashed',
+            issue: 'PPTX check subprocess crashed',
             evidence: valResult.error.message,
-            fix: 'Check pptx-validator.js and validate-output.js',
+            fix: 'Check deck-file-check.js and validate-output.js',
           }
         )
       );
@@ -342,13 +342,10 @@ function runArtifactValidation(verbose) {
 
     if (!valData) {
       subGates.push(
-        gate(
-          `artifact/${fileName}/validation`,
-          'WARN',
-          valElapsed(),
-          'Could not parse validation output',
-          [valResult.stdout?.slice(0, 200) || 'empty', valResult.stderr?.slice(0, 200) || 'empty']
-        )
+        gate(`artifact/${fileName}/check`, 'WARN', valElapsed(), 'Could not parse check output', [
+          valResult.stdout?.slice(0, 200) || 'empty',
+          valResult.stderr?.slice(0, 200) || 'empty',
+        ])
       );
       continue;
     }
@@ -356,7 +353,7 @@ function runArtifactValidation(verbose) {
     if (valData.valid) {
       subGates.push(
         gate(
-          `artifact/${fileName}/validation`,
+          `artifact/${fileName}/check`,
           'PASS',
           valElapsed(),
           `Valid: ${valData.passed?.length || 0} checks passed, ${valData.slides || 0} slides, ${valData.charts || 0} charts, ${valData.tables || 0} tables`
@@ -369,15 +366,15 @@ function runArtifactValidation(verbose) {
         .join('; ');
       subGates.push(
         gate(
-          `artifact/${fileName}/validation`,
+          `artifact/${fileName}/check`,
           'FAIL',
           valElapsed(),
           `Failed: ${valData.failed?.length || 0} checks failed`,
           [failDetails || valData.error || 'unknown'],
           {
-            issue: `${fileName} failed validation`,
+            issue: `${fileName} failed check`,
             evidence: failDetails || valData.error,
-            fix: 'Regenerate PPTX or fix rendering in ppt-single-country.js',
+            fix: 'Regenerate PPTX or fix building in deck-builder-single.js',
           }
         )
       );
@@ -412,16 +409,16 @@ function runArtifactValidation(verbose) {
         'artifact/availability',
         'SKIP',
         0,
-        'No PPTX artifacts found locally — artifact validation skipped. Generate with: node test-ppt-generation.js'
+        'No PPTX artifacts found locally — artifact check skipped. Generate with: node test-ppt-generation.js'
       )
     );
   }
 
-  return { name: 'Artifact Validation', durationMs: elapsed(), subGates };
+  return { name: 'Artifact Check', durationMs: elapsed(), subGates };
 }
 
 // ---------------------------------------------------------------------------
-// Gate 3: Diagnostics Endpoint Checks (optional)
+// Gate 3: RunInfo Endpoint Checks (optional)
 // ---------------------------------------------------------------------------
 async function runDiagnosticsChecks(endpoint, verbose) {
   const elapsed = timer();
@@ -430,13 +427,13 @@ async function runDiagnosticsChecks(endpoint, verbose) {
   if (!endpoint) {
     subGates.push(
       gate(
-        'diagnostics/endpoint',
+        'runInfo/endpoint',
         'SKIP',
         0,
-        'No --endpoint provided — diagnostics checks skipped. Use --endpoint=http://localhost:3000 to enable.'
+        'No --endpoint provided — runInfo checks skipped. Use --endpoint=http://localhost:3000 to enable.'
       )
     );
-    return { name: 'Diagnostics Checks', durationMs: elapsed(), subGates };
+    return { name: 'RunInfo Checks', durationMs: elapsed(), subGates };
   }
 
   // Try /health
@@ -448,14 +445,14 @@ async function runDiagnosticsChecks(endpoint, verbose) {
     if (resp.ok) {
       const body = await resp.json().catch(() => ({}));
       subGates.push(
-        gate('diagnostics/health', 'PASS', healthElapsed(), `Health OK: status=${resp.status}`, [
+        gate('runInfo/health', 'PASS', healthElapsed(), `Health OK: status=${resp.status}`, [
           JSON.stringify(body).slice(0, 300),
         ])
       );
     } else {
       subGates.push(
         gate(
-          'diagnostics/health',
+          'runInfo/health',
           'FAIL',
           healthElapsed(),
           `Health endpoint returned ${resp.status}`,
@@ -471,7 +468,7 @@ async function runDiagnosticsChecks(endpoint, verbose) {
   } catch (err) {
     subGates.push(
       gate(
-        'diagnostics/health',
+        'runInfo/health',
         'SKIP',
         elapsed(),
         `Could not reach ${healthUrl}: ${err.message}`,
@@ -481,8 +478,8 @@ async function runDiagnosticsChecks(endpoint, verbose) {
     );
   }
 
-  // Try /api/diagnostics
-  const diagUrl = `${endpoint}/api/diagnostics`;
+  // Try /api/runInfo
+  const diagUrl = `${endpoint}/api/runInfo`;
   try {
     const fetch = require('node-fetch');
     const diagElapsed = timer();
@@ -490,37 +487,22 @@ async function runDiagnosticsChecks(endpoint, verbose) {
     if (resp.ok) {
       const body = await resp.json().catch(() => ({}));
       subGates.push(
-        gate('diagnostics/api-diagnostics', 'PASS', diagElapsed(), `Diagnostics OK`, [
+        gate('runInfo/api-runInfo', 'PASS', diagElapsed(), `RunInfo OK`, [
           JSON.stringify(body).slice(0, 500),
         ])
       );
     } else if (resp.status === 404) {
       subGates.push(
-        gate(
-          'diagnostics/api-diagnostics',
-          'SKIP',
-          diagElapsed(),
-          '/api/diagnostics endpoint not found (404)'
-        )
+        gate('runInfo/api-runInfo', 'SKIP', diagElapsed(), '/api/runInfo endpoint not found (404)')
       );
     } else {
       subGates.push(
-        gate(
-          'diagnostics/api-diagnostics',
-          'WARN',
-          diagElapsed(),
-          `Diagnostics returned ${resp.status}`
-        )
+        gate('runInfo/api-runInfo', 'WARN', diagElapsed(), `RunInfo returned ${resp.status}`)
       );
     }
   } catch (err) {
     subGates.push(
-      gate(
-        'diagnostics/api-diagnostics',
-        'SKIP',
-        elapsed(),
-        `Could not reach ${diagUrl}: ${err.message}`
-      )
+      gate('runInfo/api-runInfo', 'SKIP', elapsed(), `Could not reach ${diagUrl}: ${err.message}`)
     );
   }
 
@@ -533,7 +515,7 @@ async function runDiagnosticsChecks(endpoint, verbose) {
     if (resp.ok) {
       subGates.push(
         gate(
-          'diagnostics/api-latest-ppt',
+          'runInfo/api-latest-ppt',
           'PASS',
           pptElapsed(),
           `Latest PPT endpoint reachable (${resp.status})`
@@ -542,7 +524,7 @@ async function runDiagnosticsChecks(endpoint, verbose) {
     } else if (resp.status === 404) {
       subGates.push(
         gate(
-          'diagnostics/api-latest-ppt',
+          'runInfo/api-latest-ppt',
           'SKIP',
           pptElapsed(),
           '/api/latest-ppt endpoint not found (404)'
@@ -550,26 +532,16 @@ async function runDiagnosticsChecks(endpoint, verbose) {
       );
     } else {
       subGates.push(
-        gate(
-          'diagnostics/api-latest-ppt',
-          'WARN',
-          pptElapsed(),
-          `Latest PPT returned ${resp.status}`
-        )
+        gate('runInfo/api-latest-ppt', 'WARN', pptElapsed(), `Latest PPT returned ${resp.status}`)
       );
     }
   } catch (err) {
     subGates.push(
-      gate(
-        'diagnostics/api-latest-ppt',
-        'SKIP',
-        elapsed(),
-        `Could not reach ${pptUrl}: ${err.message}`
-      )
+      gate('runInfo/api-latest-ppt', 'SKIP', elapsed(), `Could not reach ${pptUrl}: ${err.message}`)
     );
   }
 
-  return { name: 'Diagnostics Checks', durationMs: elapsed(), subGates };
+  return { name: 'RunInfo Checks', durationMs: elapsed(), subGates };
 }
 
 // ---------------------------------------------------------------------------
@@ -620,10 +592,10 @@ function runEnvironmentChecks() {
   // Check critical files exist
   const criticalFiles = [
     'server.js',
-    'ppt-single-country.js',
-    'pptx-validator.js',
-    'quality-gates.js',
-    'research-orchestrator.js',
+    'deck-builder-single.js',
+    'deck-file-check.js',
+    'content-gates.js',
+    'research-engine.js',
     'template-patterns.json',
   ];
   for (const file of criticalFiles) {
@@ -799,9 +771,9 @@ async function main() {
 Usage: node scripts/smoke-release-readiness.js [options]
 
 Options:
-  --endpoint=URL      Check diagnostics endpoints (e.g. http://localhost:3000)
+  --endpoint=URL      Check runInfo endpoints (e.g. http://localhost:3000)
   --verbose, -v       Show detailed output
-  --skip-artifacts    Skip PPTX artifact validation
+  --skip-artifacts    Skip PPTX artifact check
   --help              Show this help
 
 Output:
@@ -842,16 +814,16 @@ Examples:
     `      ${pfFails === 0 ? 'PASS' : 'FAIL'}: ${preflightSection.subGates.filter((g) => g.status === 'PASS').length} pass, ${pfFails} fail, ${preflightSection.subGates.filter((g) => g.status === 'SKIP').length} skip (${preflightSection.durationMs}ms)`
   );
 
-  // Step 3: Artifact validation
+  // Step 3: Artifact check
   if (args.skipArtifacts) {
     sections.push({
-      name: 'Artifact Validation',
+      name: 'Artifact Check',
       durationMs: 0,
       subGates: [gate('artifact/skipped', 'SKIP', 0, 'Skipped via --skip-artifacts flag')],
     });
-    console.log('[3/4] Artifact validation... SKIP (--skip-artifacts)');
+    console.log('[3/4] Artifact check... SKIP (--skip-artifacts)');
   } else {
-    console.log('[3/4] Artifact validation...');
+    console.log('[3/4] Artifact check...');
     const artifactSection = runArtifactValidation(args.verbose);
     sections.push(artifactSection);
     const artFails = artifactSection.subGates.filter((g) => g.status === 'FAIL').length;
@@ -860,8 +832,8 @@ Examples:
     );
   }
 
-  // Step 4: Diagnostics
-  console.log('[4/4] Diagnostics checks...');
+  // Step 4: RunInfo
+  console.log('[4/4] RunInfo checks...');
   const diagSection = await runDiagnosticsChecks(args.endpoint, args.verbose);
   sections.push(diagSection);
   const diagFails = diagSection.subGates.filter((g) => g.status === 'FAIL').length;
@@ -900,7 +872,7 @@ Examples:
   // Final verdict
   console.log('');
   console.log(
-    `Gates: ${verdict.summary.pass} PASS / ${verdict.summary.fail} FAIL / ${verdict.summary.skip} SKIP / ${verdict.summary.warn} WARN`
+    `Checks: ${verdict.summary.pass} PASS / ${verdict.summary.fail} FAIL / ${verdict.summary.skip} SKIP / ${verdict.summary.warn} WARN`
   );
   console.log('');
 
@@ -910,14 +882,14 @@ Examples:
       console.log(`  (${verdict.summary.warn} warning(s) — review recommended)`);
     }
     if (verdict.summary.skip > 0) {
-      console.log(`  (${verdict.summary.skip} gate(s) skipped — see report for reasons)`);
+      console.log(`  (${verdict.summary.skip} check(s) skipped — see report for reasons)`);
     }
   } else {
-    console.log(`=== VERDICT: NO-GO — ${verdict.summary.fail} gate(s) failed ===`);
+    console.log(`=== VERDICT: NO-GO — ${verdict.summary.fail} check(s) failed ===`);
     console.log('');
     console.log('Root causes:');
     for (const rc of verdict.rootCauses) {
-      console.log(`  [${rc.gate}]`);
+      console.log(`  [check: ${rc.gate}]`);
       console.log(`    Issue: ${rc.issue}`);
       console.log(`    Fix:   ${rc.fix}`);
     }
