@@ -5,31 +5,31 @@
 ### PPT_STRUCTURAL_VALIDATION (Critical)
 **Symptom:** Generated PPTX file is malformed, opens with repair prompt.
 **Steps:**
-1. Run integrity pipeline: `node -e "require('./pptx-integrity-pipeline').runIntegrityPipeline(require('fs').readFileSync('output.pptx')).then(r => console.log(JSON.stringify(r, null, 2)))"`
+1. Run file safety check: `node -e "require('./pptx-file safety-pipeline').runIntegrityPipeline(require('fs').readFileSync('output.pptx')).then(r => console.log(JSON.stringify(r, null, 2)))"`
 2. Check for duplicate slide IDs or broken relationship refs
 3. Run repair: `node repair-pptx.js output.pptx`
-4. If repair fails, check template clone postprocess in `ppt-single-country.js`
+4. If repair fails, check template clone post-processing in `deck-builder-single.js`
 
-### PPT_RENDERING_QUALITY (High)
-**Symptom:** Too many slide blocks failed to render. templateCoverage < 95%.
+### PPT_BUILDING_QUALITY (High)
+**Symptom:** Too many slide blocks failed to build. templateCoverage < 95%.
 **Steps:**
-1. Check PPT metrics: `curl -s http://localhost:3010/api/diagnostics | jq .ppt`
+1. Check PPT metrics: `curl -s http://localhost:3010/api/runInfo | jq .ppt`
 2. Review template-patterns.json for missing patterns
 3. Regenerate: `node build-template-patterns.js`
 
-### QUALITY_GATE_FAILED (High)
+### QUALITY_CHECK_FAILED (High)
 **Symptom:** Research output did not meet readiness thresholds.
 **Steps:**
-1. Check diagnostics: `curl -s http://localhost:3010/api/diagnostics | jq "{synthesisGate, notReadyCountries}"`
+1. Check runInfo: `curl -s http://localhost:3010/api/runInfo | jq "{synthesisGate, notReadyCountries}"`
 2. Check per-country scores
 3. If borderline (50-70), use `SOFT_READINESS_GATE=true`
 
-### BUDGET_GATE (Medium)
-**Symptom:** Fields or tables exceed size budgets.
+### CONTENT_SIZE_CHECK (Medium)
+**Symptom:** Fields or tables exceed size limits.
 **Steps:**
-1. Check budget gate: `curl -s http://localhost:3010/api/diagnostics | jq .budgetGate`
-2. Review `FIELD_CHAR_BUDGETS` in `budget-gate.js`
-3. Increase limits if compaction is too aggressive
+1. Check content size: `curl -s http://localhost:3010/api/runInfo | jq .contentSizeCheck`
+2. Review `FIELD_CHAR_BUDGETS` in `content-size-check.js`
+3. Increase limits if shortening is too aggressive
 
 ### GEMINI_API_ERROR (High)
 **Symptom:** Gemini API call failed (rate limit, quota, or transient).
@@ -45,8 +45,8 @@
 2. Run with GC: `node --expose-gc --max-old-space-size=450 server.js`
 3. Reduce batch size: `COUNTRY_BATCH_SIZE=1`
 
-### PIPELINE_ABORT (Medium)
-**Symptom:** Pipeline was aborted (timeout or manual).
+### RUN_ABORT (Medium)
+**Symptom:** Run was stopped (timeout or manual).
 **Steps:**
 1. Check `PIPELINE_TIMEOUT_SECONDS` env var
 2. Disable timeout: `DISABLE_PIPELINE_TIMEOUT=true`
@@ -62,7 +62,7 @@
 
 ## General Triage Process
 
-1. Check `/api/diagnostics` for the `stage` and `error` fields
+1. Check `/api/runInfo` for the `stage` and `error` fields
 2. Match error message against known patterns using: `node ops-runbook.js --triage "error message"`
 3. Follow the matched runbook steps above
 4. If no match, check server logs for the full stack trace
@@ -71,7 +71,7 @@
 ## Escalation
 
 If automated triage does not resolve the issue:
-1. Capture full diagnostics: `curl -s http://localhost:3010/api/diagnostics > diag.json`
-2. Capture perf metrics: `node -e "console.log(JSON.stringify(require('./perf-profiler').getStageMetrics(), null, 2))" > perf.json`
+1. Capture full runInfo: `curl -s http://localhost:3010/api/runInfo > diag.json`
+2. Capture performance metrics: `node -e "console.log(JSON.stringify(require('./perf-profiler').getStageMetrics(), null, 2))" > perf.json`
 3. Check Railway logs for container-level errors
-4. Review recent commits for template or schema changes
+4. Review recent commits for template or data-structure changes

@@ -13,9 +13,9 @@
    ```
    This checks:
    - No uncommitted changes in critical files
-   - Required fix patterns present in HEAD commit
-   - All modules import without errors
-   - Regression tests pass (unit + structural)
+   - Required fix patterns present in latest commit
+   - All modules load without errors
+   - Tests pass (unit + structural)
 
    Reports are written to `preflight-reports/` (JSON + markdown).
 
@@ -27,10 +27,10 @@
    - **Git available**: git binary must be reachable (no degraded mode)
    - **Branch check**: must be on expected branch (default: `main`)
    - **HEAD SHA**: must resolve to a valid, trackable commit
-   - **Divergence**: local must not be behind `origin/main`
+   - **Out of date**: local must not be behind `origin/main`
    - **Clean tree**: git-unavailable is a hard FAIL, not a warning
 
-   Each failure includes a remediation message with the exact command to run.
+   Each failure includes a fix suggestion with the exact command to run.
 
 4. **Run with stress test (optional, recommended before major releases)**
    ```bash
@@ -85,7 +85,7 @@ In strict mode, the following are **HARD FAILURES** (not warnings):
 | Git available | `git --version` succeeds | `apt-get install git` or `brew install git` |
 | Branch | On expected branch (default: main) | `git checkout main` |
 | HEAD SHA | HEAD resolves to a commit on a branch | `git log --oneline -3` to inspect |
-| Divergence | Not behind origin/main | `git pull origin main --rebase` |
+| Out of date | Not behind origin/main | `git pull origin main --rebase` |
 | Clean tree (degraded) | Git is accessible for tree check | Ensure git is in PATH |
 | Clean tree (dirty) | No uncommitted .js/.json changes | `git stash` or `git add -A && git commit` |
 
@@ -114,21 +114,21 @@ Root causes:
   - [table_margin_drift] Table margins drift from template baseline (near-expected ratio=0.65)
 ```
 
-Both the PPT renderer (`ppt-single-country.js` via `strictGeometryMode`) and the server pipeline (`server.js` via `scope.templateStrictMode`) enforce this behavior at runtime. The preflight gate (`Formatting audit`) also enforces it from stored report data.
+Both the PPT builder (`deck-builder-single.js` via `strictGeometryMode`) and the server pipeline (`server.js` via `scope.templateStrictMode`) enforce this behavior at runtime. The preflight gate (`Formatting audit`) also enforces it from stored report data.
 
 ## If Preflight Fails
 
 - **Git not available**: Install git and ensure it's in PATH. Run `which git` to verify.
 - **Wrong branch**: Run `git checkout main` (or your expected branch).
-- **HEAD SHA not trackable**: Your HEAD may be detached or orphaned. Run `git checkout main`.
-- **Diverged from origin/main**: Run `git pull origin main --rebase` to sync.
+- **HEAD not trackable**: Your HEAD may be detached or orphaned. Run `git checkout main`.
+- **Behind origin/main**: Run `git pull origin main --rebase` to sync.
 - **Uncommitted changes**: Commit or stash before deploying. The deployed commit won't include uncommitted work. Run `git stash` or `git add -A && git commit -m "pre-deploy"`.
 - **HEAD content missing**: Your latest fixes aren't committed. Run `git diff` to see what's staged vs unstaged, then `git add -A && git commit`.
-- **Module import failure**: A required file is missing or has a syntax error. Check the reported module.
-- **Regression test failure**: A code change broke existing behavior. Fix the regression before deploying.
+- **Module load failure**: A required file is missing or has a syntax error. Check the reported module.
+- **Test failure**: A code change broke existing behavior. Fix the problem before deploying.
 - **Stress test failure**: Runtime crashes found — there are unguarded code paths. Fix before deploying.
-- **Formatting audit failure (strict)**: Formatting drift/mismatch detected and strict mode is active. The failure message lists exact blocking slide keys and root causes. Fix the drift in `ppt-single-country.js` or update `template-patterns.json`. In non-strict mode, these are warnings only.
-- **WARN (degraded mode, non-strict)**: Git execution was blocked. Preflight validated local files but cannot guarantee HEAD parity. Use `--strict` to make this a hard failure.
+- **Formatting check failure (strict)**: Formatting mismatch detected and strict mode is active. The failure message lists exact blocking slide keys and root causes. Fix the mismatch in `deck-builder-single.js` or update `template-patterns.json`. In non-strict mode, these are warnings only.
+- **WARN (degraded mode, non-strict)**: Git could not run. Preflight checked local files but cannot confirm they match your latest commit. Use `--strict` to make this a hard failure.
 
 ## Exit Codes
 

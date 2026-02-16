@@ -4,7 +4,7 @@
  *
  * Focus:
  * 1) Root-cause unit checks for template-clone token filtering.
- * 2) End-to-end generation + validation for Vietnam/Thailand outputs.
+ * 2) End-to-end generation + check for Vietnam/Thailand outputs.
  * 3) Country-leak checks on TOC/cover text.
  * 4) "No repair needed" package normalization checks.
  *
@@ -25,18 +25,18 @@ const {
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
   classifySlideIntent,
-} = require('./pptx-validator');
-const { getExpectations, runValidation } = require('./validate-output');
-const { __test: cloneTest } = require('./template-clone-postprocess');
-const { validatePptData } = require('./quality-gates');
+} = require('./deck-file-check');
+const { getExpectations, runCheck } = require('./validate-output');
+const { __test: cloneTest } = require('./template-fill');
+const { validatePptData } = require('./content-gates');
 const { __test: serverTest } = require('./server');
-const { __test: orchestratorTest } = require('./research-orchestrator');
-const { __test: singlePptTest } = require('./ppt-single-country');
+const { __test: flowManagerTest } = require('./research-engine');
+const { __test: singlePptTest } = require('./deck-builder-single');
 const {
   isTransientKey,
   sanitizeTransientKeys,
   createSanitizationContext,
-} = require('./transient-key-sanitizer');
+} = require('./cleanup-temp-fields');
 const { runStressTest } = require('./stress-test-harness');
 const {
   runStressLab,
@@ -161,7 +161,7 @@ function assertNotRegex(text, re, message) {
   }
 }
 
-async function ensureCountryIntegrity({ pptxPath, country, wrongCountry }) {
+async function ensureCountryFileSafety({ pptxPath, country, wrongCountry }) {
   const { zip } = await readPPTX(pptxPath);
   const textData = await extractAllText(zip);
   const slideCount = Number(textData.slideCount || 0);
@@ -208,7 +208,7 @@ async function ensureNoRepairNeeded(pptxPath) {
   const buffer = fs.readFileSync(pptxPath);
   if (typeof normalizeAbsoluteRelationshipTargets !== 'function') {
     throw new Error(
-      'pptx-validator contract broken: normalizeAbsoluteRelationshipTargets export is missing'
+      'deck-file-check contract broken: normalizeAbsoluteRelationshipTargets export is missing'
     );
   }
   const absRel = await normalizeAbsoluteRelationshipTargets(buffer);
@@ -319,21 +319,21 @@ function runPptGateUnitChecks() {
   assert.strictEqual(
     marketBlock.chartData,
     null,
-    'Underfilled section-level chart preview should not hard-fail pre-render gate'
+    'Underfilled section-level chart preview should not hard-fail pre-build gate'
   );
 
   const gate = validatePptData(blocks);
   assert.strictEqual(
     gate.pass,
     true,
-    `Expected pre-render PPT gate pass; got ${JSON.stringify(gate)}`
+    `Expected pre-build PPT gate pass; got ${JSON.stringify(gate)}`
   );
 }
 
 function runCompetitiveGateUnitChecks() {
   assert(
     singlePptTest && typeof singlePptTest.shouldAllowCompetitiveOptionalGroupGap === 'function',
-    'ppt-single-country __test helper missing: shouldAllowCompetitiveOptionalGroupGap'
+    'deck-builder-single __test helper missing: shouldAllowCompetitiveOptionalGroupGap'
   );
 
   const coreContent =
@@ -384,7 +384,7 @@ function runCompetitiveGateUnitChecks() {
 function runTemplateRouteRecoveryUnitChecks() {
   assert(
     singlePptTest && typeof singlePptTest.resolveTemplateRouteWithGeometryGuard === 'function',
-    'ppt-single-country __test helper missing: resolveTemplateRouteWithGeometryGuard'
+    'deck-builder-single __test helper missing: resolveTemplateRouteWithGeometryGuard'
   );
 
   // dealEconomics with financial_performance routes to chart slides (26,29).
@@ -453,15 +453,15 @@ function runTemplateRouteRecoveryUnitChecks() {
 
 async function runDynamicTimeoutUnitChecks() {
   assert(
-    orchestratorTest && typeof orchestratorTest.runInBatchesUntilDeadline === 'function',
-    'research-orchestrator __test helper missing: runInBatchesUntilDeadline'
+    flowManagerTest && typeof flowManagerTest.runInBatchesUntilDeadline === 'function',
+    'research-engine __test helper missing: runInBatchesUntilDeadline'
   );
   assert(
-    orchestratorTest && typeof orchestratorTest.computeDynamicResearchTimeoutMs === 'function',
-    'research-orchestrator __test helper missing: computeDynamicResearchTimeoutMs'
+    flowManagerTest && typeof flowManagerTest.computeDynamicResearchTimeoutMs === 'function',
+    'research-engine __test helper missing: computeDynamicResearchTimeoutMs'
   );
 
-  const fullOutcome = await orchestratorTest.runInBatchesUntilDeadline(
+  const fullOutcome = await flowManagerTest.runInBatchesUntilDeadline(
     [1, 2, 3],
     1,
     async (item) => {
@@ -477,7 +477,7 @@ async function runDynamicTimeoutUnitChecks() {
     `Expected all items without timeout; got ${fullOutcome.results.length}`
   );
 
-  const timeoutOutcome = await orchestratorTest.runInBatchesUntilDeadline(
+  const timeoutOutcome = await flowManagerTest.runInBatchesUntilDeadline(
     [1, 2, 3, 4],
     1,
     async (item) => {
@@ -492,8 +492,8 @@ async function runDynamicTimeoutUnitChecks() {
     `Timeout path should retain partial completed batches; got ${timeoutOutcome.results.length}`
   );
 
-  const tinyTimeout = orchestratorTest.computeDynamicResearchTimeoutMs(1);
-  const largerTimeout = orchestratorTest.computeDynamicResearchTimeoutMs(25);
+  const tinyTimeout = flowManagerTest.computeDynamicResearchTimeoutMs(1);
+  const largerTimeout = flowManagerTest.computeDynamicResearchTimeoutMs(25);
   assert(
     largerTimeout >= tinyTimeout,
     `Timeout should be non-decreasing with topic count (${tinyTimeout} -> ${largerTimeout})`
@@ -545,7 +545,7 @@ function runPreRenderStructureUnitChecks() {
   assert.strictEqual(
     issuesNoJapan.length,
     0,
-    `Missing japanesePlayers should not hard-fail pre-render structure gate: ${issuesNoJapan.join(' | ')}`
+    `Missing japanesePlayers should not hard-fail pre-build structure gate: ${issuesNoJapan.join(' | ')}`
   );
 
   const withFinalReviewMeta = {
@@ -562,7 +562,7 @@ function runPreRenderStructureUnitChecks() {
   assert.strictEqual(
     issuesWithFinalReviewMeta.length,
     0,
-    `Stable finalReview metadata should not hard-fail pre-render structure gate: ${issuesWithFinalReviewMeta.join(' | ')}`
+    `Stable finalReview metadata should not hard-fail pre-build structure gate: ${issuesWithFinalReviewMeta.join(' | ')}`
   );
 
   // Runtime flow: sanitize FIRST, then gate. finalReviewGap1 is transient and gets stripped.
@@ -600,7 +600,7 @@ function runPreRenderStructureUnitChecks() {
   const issuesMissingCore = serverTest.collectPreRenderStructureIssues([missingCore]);
   assert(
     issuesMissingCore.some((x) => /competitors missing required sections: localMajor/i.test(x)),
-    `Missing localMajor should still fail pre-render structure gate; got: ${issuesMissingCore.join(' | ')}`
+    `Missing localMajor should still fail pre-build structure gate; got: ${issuesMissingCore.join(' | ')}`
   );
 }
 
@@ -777,25 +777,25 @@ function runTransientKeySanitizerUnitChecks() {
 }
 
 async function validateDeck(pptxPath, country, industry) {
-  const result = await runValidation(pptxPath, getExpectations(country, industry));
+  const result = await runCheck(pptxPath, getExpectations(country, industry));
   if (!result.valid) {
     const preview = (result.results?.failed || [])
       .slice(0, 8)
       .map((f) => `${f.check}: expected ${f.expected}, got ${f.actual}`)
       .join(' | ');
     throw new Error(
-      `Validation failed for ${path.basename(pptxPath)} (${country}): ${preview || 'unknown'}`
+      `Check failed for ${path.basename(pptxPath)} (${country}): ${preview || 'unknown'}`
     );
   }
   console.log(
-    `[Regression] Validation PASS (${country}) slides=${result.report?.slides?.count || 0} visual=${result.visual?.score || 0}`
+    `[Regression] Check PASS (${country}) slides=${result.report?.slides?.count || 0} visual=${result.visual?.score || 0}`
   );
 }
 
 function runOversizedTextUnitChecks() {
   assert(
     singlePptTest && typeof singlePptTest.safeCell === 'function',
-    'ppt-single-country __test helper missing: safeCell'
+    'deck-builder-single __test helper missing: safeCell'
   );
 
   // 8k, 12k, 20k char strings — must not throw, must return bounded string
@@ -830,7 +830,7 @@ function runOversizedTextUnitChecks() {
 function runTableOverflowRecoveryUnitChecks() {
   assert(
     singlePptTest && typeof singlePptTest.computeTableFitScore === 'function',
-    'ppt-single-country __test helper missing: computeTableFitScore'
+    'deck-builder-single __test helper missing: computeTableFitScore'
   );
 
   // Build synthetic oversized table: 25 rows x 12 columns, 500+ char cells
@@ -1006,7 +1006,7 @@ function runDividerAwareSparseUnitChecks() {
     );
   }
 
-  // Title-only heuristic: short text, no sentence structure
+  // Title-only rule: short text, no sentence structure
   const titleOnly = classifySlideIntent('Vietnam Energy', 14);
   assert.strictEqual(
     titleOnly.isDivider,
@@ -1173,12 +1173,12 @@ function runFailureClusterAnalyzerChecks() {
 
   // extractStackSignature
   const stack = `Error: test
-    at renderSlide (/app/ppt-single-country.js:123:45)
-    at generatePPT (/app/ppt-single-country.js:456:12)
+    at buildSlide (/app/deck-builder-single.js:123:45)
+    at generatePPT (/app/deck-builder-single.js:456:12)
     at runSeed (/app/stress-lab.js:789:10)`;
   const stackSig = clusterTest.extractStackSignature(stack);
-  assert(stackSig.includes('renderSlide'), 'Stack signature should include function name');
-  assert(stackSig.includes('ppt-single-country.js'), 'Stack signature should include file name');
+  assert(stackSig.includes('buildSlide'), 'Stack signature should include function name');
+  assert(stackSig.includes('deck-builder-single.js'), 'Stack signature should include file name');
 
   // extractStackSignature handles null/empty
   assert.strictEqual(clusterTest.extractStackSignature(null), '');
@@ -1206,7 +1206,7 @@ function runFailureClusterAnalyzerChecks() {
       status: 'fail',
       error: 'Cannot read properties of null',
       errorClass: 'runtime-crash',
-      failedPhase: 'render-ppt',
+      failedPhase: 'build-ppt',
       mutationClasses: ['transient-keys'],
       stack: '',
     },
@@ -1215,7 +1215,7 @@ function runFailureClusterAnalyzerChecks() {
       status: 'fail',
       error: 'Cannot read properties of null',
       errorClass: 'runtime-crash',
-      failedPhase: 'render-ppt',
+      failedPhase: 'build-ppt',
       mutationClasses: ['schema-corruption'],
       stack: '',
     },
@@ -1224,7 +1224,7 @@ function runFailureClusterAnalyzerChecks() {
       status: 'fail',
       error: '[PPT] Data gate failed',
       errorClass: 'data-gate',
-      failedPhase: 'render-ppt',
+      failedPhase: 'build-ppt',
       mutationClasses: ['empty-null'],
       stack: '',
     },
@@ -1256,10 +1256,10 @@ function runStressLabRuntimeModeChecks() {
 }
 
 /**
- * Write latest validation summary to reports/latest/ as both JSON and markdown.
- * Called after each round completes validation.
+ * Write latest check summary to reports/latest/ as both JSON and markdown.
+ * Called after each round completes check.
  */
-function writeValidationSummary(round, validationResults) {
+function writeCheckSummary(round, checkResults) {
   try {
     fs.mkdirSync(REPORTS_LATEST_DIR, { recursive: true });
 
@@ -1267,17 +1267,17 @@ function writeValidationSummary(round, validationResults) {
       timestamp: new Date().toISOString(),
       round,
       artifactPersistence: SHOULD_RESTORE_ARTIFACTS ? 'restored' : 'persisted',
-      results: validationResults,
+      results: checkResults,
     };
 
     // Write JSON
-    const jsonPath = path.join(REPORTS_LATEST_DIR, 'validation-summary.json');
+    const jsonPath = path.join(REPORTS_LATEST_DIR, 'check-summary.json');
     fs.writeFileSync(jsonPath, JSON.stringify(summary, null, 2));
 
     // Write markdown
-    const mdPath = path.join(REPORTS_LATEST_DIR, 'validation-summary.md');
+    const mdPath = path.join(REPORTS_LATEST_DIR, 'check-summary.md');
     const mdLines = [
-      `# Validation Summary`,
+      `# Check Summary`,
       ``,
       `**Timestamp:** ${summary.timestamp}`,
       `**Round:** ${round}`,
@@ -1289,17 +1289,17 @@ function writeValidationSummary(round, validationResults) {
       `|------|---------|--------|---------|`,
     ];
 
-    for (const result of validationResults) {
+    for (const result of checkResults) {
       const status = result.pass ? 'PASS' : 'FAIL';
       const details = result.error || result.details || 'OK';
       mdLines.push(`| ${result.deck} | ${result.country} | ${status} | ${details} |`);
     }
 
-    // Template fidelity gate section
-    const failures = validationResults.filter((r) => !r.pass);
+    // Template styleMatch gate section
+    const failures = checkResults.filter((r) => !r.pass);
     if (failures.length > 0) {
       mdLines.push('');
-      mdLines.push('## Template Fidelity Gate VIOLATIONS');
+      mdLines.push('## Template StyleMatch Gate VIOLATIONS');
       mdLines.push('');
       for (const f of failures) {
         mdLines.push(`- **${f.deck}** (${f.country}): ${f.error || f.details}`);
@@ -1309,9 +1309,9 @@ function writeValidationSummary(round, validationResults) {
     mdLines.push('');
     fs.writeFileSync(mdPath, mdLines.join('\n'));
 
-    console.log(`[Regression] Validation summary written to ${REPORTS_LATEST_DIR}/`);
+    console.log(`[Regression] Check summary written to ${REPORTS_LATEST_DIR}/`);
   } catch (err) {
-    console.error(`[Regression] Warning: failed to write validation summary: ${err.message}`);
+    console.error(`[Regression] Warning: failed to write check summary: ${err.message}`);
   }
 }
 
@@ -1324,13 +1324,13 @@ async function runRound(round, total) {
     ? snapshotArtifactState(ROUND_ARTIFACT_PATHS)
     : null;
 
-  const validationResults = [];
+  const checkResults = [];
 
   try {
     runTemplateCloneUnitChecks();
     console.log('[Regression] Unit checks PASS (template-clone filter behavior)');
     runPptGateUnitChecks();
-    console.log('[Regression] Unit checks PASS (pre-render PPT gate block shaping)');
+    console.log('[Regression] Unit checks PASS (pre-build PPT gate block shaping)');
     runCompetitiveGateUnitChecks();
     console.log('[Regression] Unit checks PASS (competitive optional-group gate override)');
     runTemplateRouteRecoveryUnitChecks();
@@ -1338,7 +1338,7 @@ async function runRound(round, total) {
     await runDynamicTimeoutUnitChecks();
     console.log('[Regression] Unit checks PASS (dynamic timeout partial-result handling)');
     runPreRenderStructureUnitChecks();
-    console.log('[Regression] Unit checks PASS (pre-render structure gating)');
+    console.log('[Regression] Unit checks PASS (pre-build structure gating)');
     runTransientKeySanitizerUnitChecks();
     console.log('[Regression] Unit checks PASS (transient key sanitizer canonical module)');
     runCrashSignatureRegressionChecks();
@@ -1377,13 +1377,13 @@ async function runRound(round, total) {
     ]) {
       try {
         await validateDeck(pptxPath, country, industry);
-        await ensureCountryIntegrity({ pptxPath, country, wrongCountry });
+        await ensureCountryFileSafety({ pptxPath, country, wrongCountry });
         await ensureSparseSlideDiscipline(pptxPath);
         await ensureNoRepairNeeded(pptxPath);
-        validationResults.push({ deck, country, pass: true, details: 'All checks passed' });
+        checkResults.push({ deck, country, pass: true, details: 'All checks passed' });
       } catch (err) {
-        validationResults.push({ deck, country, pass: false, error: err.message });
-        // Template fidelity gate violation — fail loudly
+        checkResults.push({ deck, country, pass: false, error: err.message });
+        // Template styleMatch gate violation — fail loudly
         console.error(
           `\n[Regression] TEMPLATE FIDELITY GATE VIOLATION: ${deck} (${country})\n  ${err.message}\n`
         );
@@ -1391,12 +1391,12 @@ async function runRound(round, total) {
       }
     }
 
-    console.log('[Regression] Country integrity PASS (cover + TOC country checks)');
+    console.log('[Regression] Country fileSafety PASS (cover + TOC country checks)');
     console.log('[Regression] Sparse-slide discipline PASS (non-divider sparse slides blocked)');
     console.log('[Regression] Package normalization PASS (no repair transforms needed)');
   } finally {
-    // Write validation summary regardless of pass/fail
-    writeValidationSummary(round, validationResults);
+    // Write check summary regardless of pass/fail
+    writeCheckSummary(round, checkResults);
 
     if (SHOULD_RESTORE_ARTIFACTS && artifactSnapshot) {
       restoreArtifactState(artifactSnapshot);
@@ -1489,7 +1489,7 @@ module.exports = {
   __test: {
     snapshotArtifactState,
     restoreArtifactState,
-    writeValidationSummary,
+    writeCheckSummary,
     SHOULD_RESTORE_ARTIFACTS,
     RESTORE_OLD_ARTIFACTS,
     PRESERVE_GENERATED_PPTS,

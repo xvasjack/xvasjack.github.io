@@ -7,7 +7,7 @@ Run: `node ops-runbook.js --validate-local`
 Or programmatic: `require('./ops-runbook').runLocalReadiness({ mode: 'fast-check' })`
 
 - [ ] All required env vars set (GEMINI_API_KEY, SENDGRID_API_KEY, SENDER_EMAIL)
-- [ ] All key files present (server.js, budget-gate.js, quality-gates.js, etc.)
+- [ ] All key files present (server.js, content-size-check.js, content-gates.js, etc.)
 - [ ] All modules load without syntax errors
 - [ ] Template contract compiles with > 0 slides
 
@@ -25,7 +25,7 @@ Run: `require('./ops-runbook').runLocalReadiness({ mode: 'deep-audit' })`
 
 Includes everything from Release Check plus:
 - [ ] Stress test passes: `node stress-test-harness.js --quick`
-- [ ] Integrity pipeline module available
+- [ ] file safety check module available
 
 ## Strict Mode Formatting Audit
 
@@ -33,7 +33,7 @@ When `strict: true` is passed (or `--strict` CLI flag):
 - All formatting warnings (drift/mismatch) become **hard failures**
 - Failure messages list **exact blocking slide keys** and root causes
 - No degraded/fallback formatting is allowed
-- Applies to: preflight gates, PPT renderer, and server pipeline
+- Applies to: preflight gates, PPT builder, and server pipeline
 
 Warning codes promoted to hard fail in strict mode:
 - `header_footer_line_drift`, `line_width_signature_mismatch`, `table_margin_drift`
@@ -65,7 +65,7 @@ console.log(verdict.verdict);
 ## Post-Deploy Verification
 
 1. Run a test request with a small scope (1 country, known industry)
-2. Check `/api/diagnostics` for any warnings
+2. Check `/api/runInfo` for any warnings
 3. Check `/api/costs` to verify spend is within budget
 4. Verify email delivery with test recipient
 5. Download and inspect generated PPTX

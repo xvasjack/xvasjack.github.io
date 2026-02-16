@@ -210,13 +210,30 @@ async function callGemini(prompt, options = {}) {
     jsonMode = false,
     timeout = 90000,
     maxRetries = 3,
+    imageParts = [],
   } = options;
 
   return withRetry(
     async () => {
       await waitForModelCooldown('gemini-3-flash-preview');
       const contents = [];
-      contents.push({ role: 'user', parts: [{ text: prompt }] });
+      const userParts = [{ text: prompt }];
+      if (Array.isArray(imageParts) && imageParts.length > 0) {
+        for (const img of imageParts.slice(0, 12)) {
+          const mimeType = String(img?.mimeType || '')
+            .trim()
+            .toLowerCase();
+          const data = String(img?.data || '').trim();
+          if (!mimeType || !data) continue;
+          userParts.push({
+            inlineData: {
+              mimeType,
+              data,
+            },
+          });
+        }
+      }
+      contents.push({ role: 'user', parts: userParts });
 
       const generationConfig = {
         temperature,
@@ -354,6 +371,15 @@ Be specific. Cite sources. No fluff.`;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000); // 180s timeout
+      // Link pipeline abort signal to fetch controller so pipeline cancellation
+      // stops in-flight HTTP requests instead of waiting for the 180s timeout.
+      let pipelineAbortHandler = null;
+      if (pipelineSignal && !pipelineSignal.aborted) {
+        pipelineAbortHandler = () => controller.abort();
+        pipelineSignal.addEventListener('abort', pipelineAbortHandler, { once: true });
+      } else if (pipelineSignal?.aborted) {
+        controller.abort();
+      }
       try {
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -367,23 +393,21 @@ Be specific. Cite sources. No fluff.`;
 
         if (!response.ok) {
           const errText = await response.text();
-          if (response.status >= 500 || response.status === 429) {
-            const error = new Error(
-              `Gemini Research HTTP ${response.status}: ${errText.substring(0, 200)}`
-            );
-            error.status = response.status;
-            const retryAfterMs =
-              parseRetryAfterHeaderMs(response.headers?.get('retry-after')) ||
-              parseRetryDelayMsFromText(errText);
-            if (retryAfterMs) error.retryAfterMs = retryAfterMs;
-            setModelCooldown('gemini-2.5-flash', retryAfterMs, RETRY_BASE_DELAY_GEMINI_RESEARCH_MS);
-            throw error;
-          }
-          console.error(
-            `[Gemini Research] HTTP error ${response.status}:`,
-            errText.substring(0, 200)
+          const error = new Error(
+            `Gemini Research HTTP ${response.status}: ${errText.substring(0, 200)}`
           );
-          return { content: '', citations: [], researchQuality: 'failed' };
+          error.status = response.status;
+          const retryAfterMs =
+            parseRetryAfterHeaderMs(response.headers?.get('retry-after')) ||
+            parseRetryDelayMsFromText(errText);
+          if (retryAfterMs) error.retryAfterMs = retryAfterMs;
+          if (response.status === 429 || response.status >= 500) {
+            setModelCooldown('gemini-2.5-flash', retryAfterMs, RETRY_BASE_DELAY_GEMINI_RESEARCH_MS);
+          }
+          if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+            error.nonRetryable = true;
+          }
+          throw error;
         }
 
         let data;
@@ -465,6 +489,9 @@ Be specific. Cite sources. No fluff.`;
         };
       } finally {
         clearTimeout(timeoutId);
+        if (pipelineAbortHandler && pipelineSignal) {
+          pipelineSignal.removeEventListener('abort', pipelineAbortHandler);
+        }
       }
     },
     3,
