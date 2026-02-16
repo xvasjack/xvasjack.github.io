@@ -7600,6 +7600,52 @@ function chunkArray(items, chunkSize) {
   return chunks;
 }
 
+function inferSegmentTheme(names, relationshipType = 'group') {
+  const list = Array.isArray(names) ? names.map(name => ensureString(name).toLowerCase()) : [];
+  if (list.length === 0) return '';
+
+  const type = ensureString(relationshipType).toLowerCase();
+  const scoreThemes = (themeRules) => {
+    const scores = new Map();
+    for (const [label] of themeRules) scores.set(label, 0);
+    for (const name of list) {
+      for (const [label, pattern] of themeRules) {
+        if (pattern.test(name)) scores.set(label, (scores.get(label) || 0) + 1);
+      }
+    }
+    let bestLabel = '';
+    let bestScore = 0;
+    for (const [label, score] of scores.entries()) {
+      if (score > bestScore) {
+        bestLabel = label;
+        bestScore = score;
+      }
+    }
+    return bestScore > 0 ? bestLabel : '';
+  };
+
+  if (type === 'customer' || type === 'customers') {
+    return scoreThemes([
+      ['Retail', /\b(retail|supermarket|market|store|shop|mart|grocery|liquor)\b/i],
+      ['Wholesalers', /\b(wholesale|wholesaler|distributor|trading|import|export)\b/i],
+      ['Foodservice', /\b(restaurant|cafe|hotel|pizza|fast\s*food|cater|canteen|qsr|bakery|bar)\b/i],
+      ['Institutions', /\b(school|college|university|hospital|clinic|aged\s*care|retirement|office|corporate|venue|club|government)\b/i]
+    ]);
+  }
+
+  if (type === 'brand' || type === 'brands' || type === 'principal' || type === 'principals' || type === 'supplier' || type === 'suppliers') {
+    return scoreThemes([
+      ['Packaging', /\b(pack|packaging|container|wrap|utensil)\b/i],
+      ['Dairy', /\b(dairy|milk|cheese|cream|yogurt|butter)\b/i],
+      ['Frozen Foods', /\b(frozen|chilled|cold)\b/i],
+      ['Beverages', /\b(beverage|drink|juice|tea|coffee|wine|beer)\b/i],
+      ['Food Brands', /\b(food|snack|sauce|condiment|ingredient|bakery)\b/i]
+    ]);
+  }
+
+  return '';
+}
+
 function buildFallbackSegmentLabel(names, relationshipType = 'group', index = 0) {
   const type = ensureString(relationshipType).toLowerCase();
   const prefixMap = {
@@ -7613,6 +7659,8 @@ function buildFallbackSegmentLabel(names, relationshipType = 'group', index = 0)
     brands: 'Brand'
   };
   const prefix = prefixMap[type] || 'Group';
+  const thematicLabel = inferSegmentTheme(names, relationshipType);
+  if (thematicLabel) return thematicLabel;
   const initials = (Array.isArray(names) ? names : [])
     .map(name => ensureString(name).trim().charAt(0).toUpperCase())
     .filter(ch => /[A-Z]/.test(ch));
