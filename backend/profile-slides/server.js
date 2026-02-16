@@ -3731,8 +3731,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           : buildPrincipalSegments(cleanedPrincipals, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
         const principalSegmentLines = buildSegmentDisplayLines(principalSegments, {
           maxLines: 4,
-          maxNamesPerLine: 4,
-          forceNumbered: true
+          maxNamesPerLine: 4
         });
         const principalsList = fixAcronymCasing(
           principalSegmentLines.length > 0
@@ -3755,8 +3754,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           : buildSupplierSegments(cleanedSuppliers, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
         const supplierSegmentLines = buildSegmentDisplayLines(supplierSegments, {
           maxLines: 4,
-          maxNamesPerLine: 4,
-          forceNumbered: true
+          maxNamesPerLine: 4
         });
         const suppliersList = fixAcronymCasing(
           supplierSegmentLines.length > 0
@@ -3775,11 +3773,13 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const brandsToShow = brandOnly.length > 0 ? brandOnly : cleanedBrands;
         const brandSegments = (company._brandSegments && Object.keys(company._brandSegments).length > 0)
           ? company._brandSegments
-          : buildDeterministicSegments(brandsToShow, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+          : buildDeterministicSegments(brandsToShow, {
+            minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+            relationshipType: 'brands'
+          });
         const brandSegmentLines = buildSegmentDisplayLines(brandSegments, {
           maxLines: 4,
-          maxNamesPerLine: 4,
-          forceNumbered: true
+          maxNamesPerLine: 4
         });
         const brandsList = fixAcronymCasing(
           brandSegmentLines.length > 0
@@ -3811,17 +3811,18 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             let customersList;
             const aiSegmentLines = buildSegmentDisplayLines(company._customerSegments, {
               maxLines: 4,
-              maxNamesPerLine: 4,
-              forceNumbered: true
+              maxNamesPerLine: 4
             });
             if (aiSegmentLines.length > 0) {
               customersList = aiSegmentLines.join('\n');
             } else {
-              const deterministicSegments = buildDeterministicSegments(cleanedCustomers, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+              const deterministicSegments = buildDeterministicSegments(cleanedCustomers, {
+                minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+                relationshipType: 'customers'
+              });
               const fallbackSegmentLines = buildSegmentDisplayLines(deterministicSegments, {
                 maxLines: 4,
-                maxNamesPerLine: 4,
-                forceNumbered: true
+                maxNamesPerLine: 4
               });
               customersList = fallbackSegmentLines.length > 0
                 ? fallbackSegmentLines.join('\n')
@@ -3972,8 +3973,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           if (cleanedCustomers.length > 0) {
             const aiSegmentLines = buildSegmentDisplayLines(company._customerSegments, {
               maxLines: maxRows,
-              maxNamesPerLine: 4,
-              forceNumbered: true
+              maxNamesPerLine: 4
             });
             if (aiSegmentLines.length > 0) {
               aiSegmentLines.slice(0, maxRows).forEach(line => {
@@ -3981,11 +3981,13 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
               });
               console.log(`  Right side (Customers segmented): ${cleanedCustomers.length} items after filtering`);
             } else {
-              const deterministicSegments = buildDeterministicSegments(cleanedCustomers, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+              const deterministicSegments = buildDeterministicSegments(cleanedCustomers, {
+                minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+                relationshipType: 'customers'
+              });
               const fallbackSegmentLines = buildSegmentDisplayLines(deterministicSegments, {
                 maxLines: maxRows,
-                maxNamesPerLine: 4,
-                forceNumbered: true
+                maxNamesPerLine: 4
               });
               if (fallbackSegmentLines.length > 0) {
                 fallbackSegmentLines.slice(0, maxRows).forEach(line => {
@@ -4023,8 +4025,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           if (cleanedBrands.length > 0) {
             const aiBrandSegmentLines = buildSegmentDisplayLines(company._brandSegments, {
               maxLines: maxRows,
-              maxNamesPerLine: 4,
-              forceNumbered: true
+              maxNamesPerLine: 4
             });
             if (aiBrandSegmentLines.length > 0) {
               aiBrandSegmentLines.slice(0, maxRows).forEach(line => {
@@ -4032,11 +4033,13 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
               });
               console.log(`  Right side (Brands segmented): ${cleanedBrands.length} items after filtering`);
             } else {
-              const deterministicBrandSegments = buildDeterministicSegments(cleanedBrands, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
+              const deterministicBrandSegments = buildDeterministicSegments(cleanedBrands, {
+                minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+                relationshipType: 'brands'
+              });
               const fallbackBrandSegmentLines = buildSegmentDisplayLines(deterministicBrandSegments, {
                 maxLines: maxRows,
-                maxNamesPerLine: 4,
-                forceNumbered: true
+                maxNamesPerLine: 4
               });
               if (fallbackBrandSegmentLines.length > 0) {
                 fallbackBrandSegmentLines.slice(0, maxRows).forEach(line => {
@@ -7597,18 +7600,175 @@ function chunkArray(items, chunkSize) {
   return chunks;
 }
 
+function buildFallbackSegmentLabel(names, relationshipType = 'group', index = 0) {
+  const type = ensureString(relationshipType).toLowerCase();
+  const prefixMap = {
+    customer: 'Customer',
+    customers: 'Customer',
+    supplier: 'Supplier',
+    suppliers: 'Supplier',
+    principal: 'Principal',
+    principals: 'Principal',
+    brand: 'Brand',
+    brands: 'Brand'
+  };
+  const prefix = prefixMap[type] || 'Group';
+  const initials = (Array.isArray(names) ? names : [])
+    .map(name => ensureString(name).trim().charAt(0).toUpperCase())
+    .filter(ch => /[A-Z]/.test(ch));
+  if (initials.length > 0) {
+    const sorted = Array.from(new Set(initials)).sort();
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    if (first === last) return `${prefix} ${first}`;
+    return `${prefix} ${first}-${last}`;
+  }
+  return `${prefix} Group ${index + 1}`;
+}
+
+function normalizeSegmentLabel(label, names, relationshipType = 'group', index = 0) {
+  let cleanLabel = ensureString(label)
+    .replace(/[_\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleanLabel) {
+    return buildFallbackSegmentLabel(names, relationshipType, index);
+  }
+  if (/^(segment|group)\s*\d+$/i.test(cleanLabel) || /^(segment|group)$/i.test(cleanLabel)) {
+    return buildFallbackSegmentLabel(names, relationshipType, index);
+  }
+  if (/^others?$/i.test(cleanLabel)) {
+    return `Other ${toTitleCase(relationshipType)}`;
+  }
+  return cleanLabel;
+}
+
+function normalizeMeaningfulSegmentMap(segmentMap, relationshipType = 'group') {
+  const normalized = normalizeSegmentMap(segmentMap);
+  const result = {};
+  const entries = Object.entries(normalized);
+  for (let i = 0; i < entries.length; i++) {
+    const [label, names] = entries[i];
+    const cleanNames = uniqueRelationshipNames(names || []);
+    if (cleanNames.length === 0) continue;
+    let cleanLabel = normalizeSegmentLabel(label, cleanNames, relationshipType, i);
+    let dedupeIndex = 2;
+    while (Object.prototype.hasOwnProperty.call(result, cleanLabel)) {
+      cleanLabel = `${cleanLabel} ${dedupeIndex}`;
+      dedupeIndex += 1;
+    }
+    result[cleanLabel] = cleanNames;
+  }
+  return result;
+}
+
+async function segmentRelationshipNamesByAI(names, relationshipType, openai, options = {}) {
+  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
+  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const cleaned = uniqueRelationshipNames(names || []);
+  if (cleaned.length < minCount) return null;
+  if (!openai) return buildDeterministicSegments(cleaned, { minCount, relationshipType });
+
+  try {
+    const relationship = ensureString(relationshipType).toLowerCase() || 'relationships';
+    const promptNames = cleaned.slice(0, 40).join(', ');
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content: `Group these ${relationship} names into meaningful business categories for a slide.
+
+Names: ${promptNames}
+
+Return ONLY valid JSON object:
+{
+  "Category A": ["Name 1", "Name 2"],
+  "Category B": ["Name 3"]
+}
+
+Rules:
+- Labels must be meaningful categories (examples: "Retail", "Wholesalers", "Frozen Foods", "Dairy Brands", "Regional Distributors").
+- Do NOT use generic labels like "Segment 1", "Segment 2", "Group 1".
+- Maximum 5 categories.
+- Each name appears once only.
+- Use only names provided above.
+- Return JSON only, no explanation.`
+      }],
+      max_tokens: 600,
+      temperature: 0.1
+    });
+
+    if (response.usage) {
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
+
+    const responseText = response.choices[0]?.message?.content || '{}';
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return buildDeterministicSegments(cleaned, { minCount, relationshipType });
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!parsed || typeof parsed !== 'object') {
+      return buildDeterministicSegments(cleaned, { minCount, relationshipType });
+    }
+
+    // Keep only original names to avoid model hallucination.
+    const sourceLookup = new Map(cleaned.map(name => [name.toLowerCase(), name]));
+    const used = new Set();
+    const filteredMap = {};
+    const parsedEntries = Object.entries(parsed).slice(0, 8);
+    for (const [rawLabel, rawNames] of parsedEntries) {
+      if (!Array.isArray(rawNames)) continue;
+      const kept = [];
+      for (const rawName of rawNames) {
+        const cleanedName = cleanCustomerName(ensureString(rawName));
+        const key = cleanedName.toLowerCase();
+        if (!key || used.has(key)) continue;
+        const source = sourceLookup.get(key);
+        if (!source) continue;
+        used.add(key);
+        kept.push(source);
+      }
+      if (kept.length > 0) {
+        filteredMap[rawLabel] = kept;
+      }
+    }
+
+    // Add any missing names to a fallback bucket so all extracted names remain visible.
+    const missing = cleaned.filter(name => !used.has(name.toLowerCase()));
+    if (missing.length > 0) {
+      filteredMap[buildFallbackSegmentLabel(missing, relationship, Object.keys(filteredMap).length)] = missing;
+    }
+
+    const normalized = normalizeMeaningfulSegmentMap(filteredMap, relationship);
+    if (Object.keys(normalized).length > 0) return normalized;
+  } catch (err) {
+    console.log(`    ${toTitleCase(relationshipType)} segmentation failed: ${err.message}`);
+  }
+
+  return buildDeterministicSegments(cleaned, { minCount, relationshipType });
+}
+
 function buildDeterministicSegments(names, options = {}) {
   const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
   const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const parsedChunkSize = Number.parseInt(String(options.chunkSize ?? 3), 10);
   const chunkSize = Number.isFinite(parsedChunkSize) ? Math.max(2, parsedChunkSize) : 3;
+  const relationshipType = ensureString(options.relationshipType || 'group').toLowerCase();
   const cleaned = uniqueRelationshipNames(names || []);
   if (cleaned.length < minCount) return null;
 
   const grouped = chunkArray(cleaned, chunkSize);
   const result = {};
   for (let i = 0; i < grouped.length; i++) {
-    result[`Segment ${i + 1}`] = grouped[i];
+    let label = buildFallbackSegmentLabel(grouped[i], relationshipType, i);
+    let dedupeIndex = 2;
+    while (Object.prototype.hasOwnProperty.call(result, label)) {
+      label = `${label} ${dedupeIndex}`;
+      dedupeIndex += 1;
+    }
+    result[label] = grouped[i];
   }
   return Object.keys(result).length > 0 ? result : null;
 }
@@ -7633,11 +7793,11 @@ async function buildCustomerSegments(customers, openai, options = {}) {
 
   if (openai) {
     const aiSegments = await segmentCustomersByIndustry(cleaned, openai);
-    const normalizedAi = normalizeSegmentMap(aiSegments);
+    const normalizedAi = normalizeMeaningfulSegmentMap(aiSegments, 'customers');
     if (Object.keys(normalizedAi).length > 0) return normalizedAi;
   }
 
-  return buildDeterministicSegments(cleaned, { minCount });
+  return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'customers' });
 }
 
 function buildBrandSegments(brands, options = {}) {
@@ -7645,7 +7805,7 @@ function buildBrandSegments(brands, options = {}) {
   const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(brands || []);
   if (cleaned.length < minCount) return null;
-  return buildDeterministicSegments(cleaned, { minCount });
+  return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'brands' });
 }
 
 function buildPrincipalSegments(principals, options = {}) {
@@ -7653,7 +7813,7 @@ function buildPrincipalSegments(principals, options = {}) {
   const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(principals || []);
   if (cleaned.length < minCount) return null;
-  return buildDeterministicSegments(cleaned, { minCount });
+  return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'principals' });
 }
 
 function buildSupplierSegments(suppliers, options = {}) {
@@ -7661,7 +7821,7 @@ function buildSupplierSegments(suppliers, options = {}) {
   const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(suppliers || []);
   if (cleaned.length < minCount) return null;
-  return buildDeterministicSegments(cleaned, { minCount });
+  return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'suppliers' });
 }
 
 function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = '') {
@@ -7693,8 +7853,15 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
     return value;
   }
 
-  const segmented = buildDeterministicSegments(filteredNames, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
-  const lines = buildSegmentDisplayLines(segmented, { maxLines: 4, maxNamesPerLine: 4, forceNumbered: true });
+  const relationshipType = labelLower.includes('customer') || labelLower.includes('client') ? 'customers'
+    : (labelLower.includes('supplier') || labelLower.includes('vendor') ? 'suppliers'
+      : (labelLower.includes('principal') || labelLower.includes('partner') ? 'principals'
+        : (labelLower.includes('brand') ? 'brands' : 'group')));
+  const segmented = buildDeterministicSegments(filteredNames, {
+    minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+    relationshipType
+  });
+  const lines = buildSegmentDisplayLines(segmented, { maxLines: 4, maxNamesPerLine: 4 });
   if (lines.length === 0) return value;
   return fixAcronymCasing(lines.join('\n'));
 }
@@ -7702,7 +7869,6 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
 function buildSegmentDisplayLines(segmentMap, options = {}) {
   const maxLines = Math.max(1, parseInt(options.maxLines || '6', 10));
   const maxNamesPerLine = Math.max(1, parseInt(options.maxNamesPerLine || '4', 10));
-  const forceNumbered = options.forceNumbered === true;
   const normalized = normalizeSegmentMap(segmentMap);
   const entries = Object.entries(normalized);
   if (entries.length === 0) return [];
@@ -7714,11 +7880,10 @@ function buildSegmentDisplayLines(segmentMap, options = {}) {
   outer:
   for (let idx = 0; idx < entries.length; idx++) {
     const [label, names] = entries[idx];
-    const displayLabel = forceNumbered ? `Segment ${idx + 1}` : label;
     const chunks = chunkArray(names, maxNamesPerLine);
     for (const chunk of chunks) {
       if (lines.length >= maxLines) break outer;
-      lines.push(`${displayLabel}: ${chunk.join(', ')}`);
+      lines.push(`${label}: ${chunk.join(', ')}`);
       shownCount += chunk.length;
     }
   }
@@ -9913,15 +10078,24 @@ async function processSingleWebsite(website, index, total) {
     const customerSegments = await buildCustomerSegments(cleanedCustomersForSegments, openai, {
       minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
     });
-    const supplierSegments = buildSupplierSegments(cleanedSuppliersForSegments, {
-      minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
-    });
-    const principalSegments = buildPrincipalSegments(cleanedPrincipalsForSegments, {
-      minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
-    });
-    const brandSegments = buildBrandSegments(cleanedBrandsForSegments, {
-      minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
-    });
+    const supplierSegments = await segmentRelationshipNamesByAI(
+      cleanedSuppliersForSegments,
+      'suppliers',
+      openai,
+      { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT }
+    );
+    const principalSegments = await segmentRelationshipNamesByAI(
+      cleanedPrincipalsForSegments,
+      'principals',
+      openai,
+      { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT }
+    );
+    const brandSegments = await segmentRelationshipNamesByAI(
+      cleanedBrandsForSegments,
+      'brands',
+      openai,
+      { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT }
+    );
 
     const relationshipCounts = Object.entries(businessRelationships)
       .filter(([, arr]) => arr.length > 0)
@@ -10538,15 +10712,24 @@ app.post('/api/generate-ppt', async (req, res) => {
         const customerSegments = await buildCustomerSegments(cleanedCustomersForSegments, openai, {
           minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
         });
-        const supplierSegments = buildSupplierSegments(cleanedSuppliersForSegments, {
-          minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
-        });
-        const principalSegments = buildPrincipalSegments(cleanedPrincipalsForSegments, {
-          minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
-        });
-        const brandSegments = buildBrandSegments(cleanedBrandsForSegments, {
-          minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
-        });
+        const supplierSegments = await segmentRelationshipNamesByAI(
+          cleanedSuppliersForSegments,
+          'suppliers',
+          openai,
+          { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT }
+        );
+        const principalSegments = await segmentRelationshipNamesByAI(
+          cleanedPrincipalsForSegments,
+          'principals',
+          openai,
+          { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT }
+        );
+        const brandSegments = await segmentRelationshipNamesByAI(
+          cleanedBrandsForSegments,
+          'brands',
+          openai,
+          { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT }
+        );
 
         const relationshipCounts = Object.entries(businessRelationships)
           .filter(([, arr]) => arr.length > 0)
