@@ -7792,7 +7792,12 @@ async function buildCustomerSegments(customers, openai, options = {}) {
   if (cleaned.length < minCount) return null;
 
   if (openai) {
-    const aiSegments = await segmentCustomersByIndustry(cleaned, openai);
+    const aiSegments = await segmentRelationshipNamesByAI(
+      cleaned,
+      'customers',
+      openai,
+      { minCount }
+    );
     const normalizedAi = normalizeMeaningfulSegmentMap(aiSegments, 'customers');
     if (Object.keys(normalizedAi).length > 0) return normalizedAi;
   }
