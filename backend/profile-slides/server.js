@@ -7213,7 +7213,7 @@ Rules:
             }
           ]
         }],
-        max_tokens: 1200,
+        max_completion_tokens: 1200,
         temperature: 0.1
       });
     }, 2, 3000);
@@ -7472,7 +7472,7 @@ Rules:
             }
           ]
         }],
-        max_tokens: 500,
+        max_completion_tokens: 500,
         temperature: 0.1
       });
     }, 2, 3000);
