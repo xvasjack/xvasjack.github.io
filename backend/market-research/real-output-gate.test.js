@@ -36,12 +36,12 @@ function cleanupDir(dir) {
 // ---------------------------------------------------------------------------
 // 1. SKIP path — no deck directory
 // ---------------------------------------------------------------------------
-describe('Real output validation gate — SKIP paths', () => {
+describe('Real output check gate — SKIP paths', () => {
   test('returns INFO/skip when deck directory does not exist', () => {
     const r = checkRealOutputValidation({
       deckDir: '/tmp/nonexistent-real-output-gate-test-dir-xyz-99999',
     });
-    expect(r.name).toBe('Real output validation');
+    expect(r.name).toBe('Real output check');
     expect(r.pass).toBe(true);
     expect(r.severity).toBe(SEVERITY.INFO);
     expect(r.details).toMatch(/no deck directory|skipped/i);
@@ -55,7 +55,7 @@ describe('Real output validation gate — SKIP paths', () => {
       fs.writeFileSync(path.join(dir, 'readme.txt'), 'not a pptx');
 
       const r = checkRealOutputValidation({ deckDir: dir });
-      expect(r.name).toBe('Real output validation');
+      expect(r.name).toBe('Real output check');
       expect(r.pass).toBe(true);
       expect(r.severity).toBe(SEVERITY.INFO);
       expect(r.details).toMatch(/no .pptx files|skipped/i);
@@ -78,7 +78,7 @@ describe('Real output validation gate — SKIP paths', () => {
 // ---------------------------------------------------------------------------
 // 2. FAIL path — invalid PPTX files
 // ---------------------------------------------------------------------------
-describe('Real output validation gate — FAIL paths', () => {
+describe('Real output check gate — FAIL paths', () => {
   test('fails when deck directory contains an invalid .pptx file', () => {
     const dir = makeTempDir('bad-pptx-');
     try {
@@ -86,7 +86,7 @@ describe('Real output validation gate — FAIL paths', () => {
       fs.writeFileSync(path.join(dir, 'broken.pptx'), 'this is not a valid pptx');
 
       const r = checkRealOutputValidation({ deckDir: dir });
-      expect(r.name).toBe('Real output validation');
+      expect(r.name).toBe('Real output check');
       expect(r.pass).toBe(false);
       expect(r.severity).toBe(SEVERITY.BLOCKING);
       expect(r.details).toMatch(/0\/1.*deck/i);
@@ -134,7 +134,7 @@ describe('Real output validation gate — FAIL paths', () => {
 // ---------------------------------------------------------------------------
 // 3. Result shape contract
 // ---------------------------------------------------------------------------
-describe('Real output validation gate — result shape', () => {
+describe('Real output check gate — result shape', () => {
   test('always returns standard check result shape', () => {
     const r = checkRealOutputValidation({ deckDir: '/nonexistent' });
     expect(r).toHaveProperty('name');
@@ -158,39 +158,39 @@ describe('Real output validation gate — result shape', () => {
 // ---------------------------------------------------------------------------
 // 4. Integration with preflight-gates infrastructure
 // ---------------------------------------------------------------------------
-describe('Real output validation — infrastructure integration', () => {
-  test('FULL_GATES includes Real output validation', () => {
-    expect(FULL_GATES).toContain('Real output validation');
+describe('Real output check — infrastructure integration', () => {
+  test('FULL_GATES includes Real output check', () => {
+    expect(FULL_GATES).toContain('Real output check');
   });
 
-  test('ENVIRONMENT_CONTRACTS release mode requires Real output validation', () => {
-    expect(ENVIRONMENT_CONTRACTS.release.required).toContain('Real output validation');
+  test('ENVIRONMENT_CONTRACTS release mode requires Real output check', () => {
+    expect(ENVIRONMENT_CONTRACTS.release.required).toContain('Real output check');
   });
 
-  test('ENVIRONMENT_CONTRACTS dev mode skips Real output validation', () => {
-    expect(ENVIRONMENT_CONTRACTS.dev.skip).toContain('Real output validation');
+  test('ENVIRONMENT_CONTRACTS dev mode skips Real output check', () => {
+    expect(ENVIRONMENT_CONTRACTS.dev.skip).toContain('Real output check');
   });
 
-  test('ENVIRONMENT_CONTRACTS test mode has Real output validation as optional', () => {
-    expect(ENVIRONMENT_CONTRACTS.test.optional).toContain('Real output validation');
+  test('ENVIRONMENT_CONTRACTS test mode has Real output check as optional', () => {
+    expect(ENVIRONMENT_CONTRACTS.test.optional).toContain('Real output check');
   });
 
-  test('REMEDIATION_MAP has entry for Real output validation', () => {
-    expect(REMEDIATION_MAP['Real output validation']).toBeTruthy();
-    expect(typeof REMEDIATION_MAP['Real output validation']).toBe('string');
+  test('REMEDIATION_MAP has entry for Real output check', () => {
+    expect(REMEDIATION_MAP['Real output check']).toBeTruthy();
+    expect(typeof REMEDIATION_MAP['Real output check']).toBe('string');
   });
 
-  test('runFull includes Real output validation gate', () => {
+  test('runFull includes Real output check gate', () => {
     const results = runFull();
     const names = results.map((r) => r.name);
-    expect(names).toContain('Real output validation');
+    expect(names).toContain('Real output check');
   });
 
-  test('runFull Real output validation defaults to skip when no decks dir', () => {
+  test('runFull Real output check defaults to skip when no decks dir', () => {
     const defaultDeckDir = path.join(PROJECT_ROOT, 'preflight-reports', 'decks');
     if (!fs.existsSync(defaultDeckDir)) {
       const results = runFull();
-      const realOutput = results.find((r) => r.name === 'Real output validation');
+      const realOutput = results.find((r) => r.name === 'Real output check');
       expect(realOutput).toBeDefined();
       expect(realOutput.pass).toBe(true);
       // Either INFO or promoted severity depending on mode
@@ -202,7 +202,7 @@ describe('Real output validation — infrastructure integration', () => {
 // ---------------------------------------------------------------------------
 // 5. Report integration
 // ---------------------------------------------------------------------------
-describe('Real output validation — report integration', () => {
+describe('Real output check — report integration', () => {
   test('JSON report includes real-output check when present', () => {
     const checks = [
       {
@@ -214,12 +214,12 @@ describe('Real output validation — report integration', () => {
         remediation: null,
       },
       {
-        name: 'Real output validation',
+        name: 'Real output check',
         pass: false,
         severity: SEVERITY.BLOCKING,
         status: 'FAIL',
         durationMs: 500,
-        details: '0/1 deck(s) passed real-output validation',
+        details: '0/1 deck(s) passed real-output check',
         evidence: ['broken.pptx: FAILED (3 check(s)) — Slide count: expected >= 20, got 0'],
         remediation: 'Fix PPTX output issues.',
       },
@@ -233,7 +233,7 @@ describe('Real output validation — report integration', () => {
     };
     const report = generateJsonReport(checks, meta);
     expect(report.overallPass).toBe(false);
-    const realOutputCheck = report.checks.find((c) => c.name === 'Real output validation');
+    const realOutputCheck = report.checks.find((c) => c.name === 'Real output check');
     expect(realOutputCheck).toBeDefined();
     expect(realOutputCheck.pass).toBe(false);
     expect(realOutputCheck.status).toBe('FAIL');
@@ -246,7 +246,7 @@ describe('Real output validation — report integration', () => {
   test('Markdown report includes real-output failure details', () => {
     const checks = [
       {
-        name: 'Real output validation',
+        name: 'Real output check',
         pass: false,
         severity: SEVERITY.BLOCKING,
         status: 'FAIL',
@@ -263,7 +263,7 @@ describe('Real output validation — report integration', () => {
       mode: 'release',
     };
     const md = generateMarkdownReport(checks, meta);
-    expect(md).toContain('Real output validation');
+    expect(md).toContain('Real output check');
     expect(md).toContain('FAIL');
     expect(md).toContain('0/1 deck(s) passed');
     expect(md).toContain('broken.pptx: FAILED');
@@ -274,7 +274,7 @@ describe('Real output validation — report integration', () => {
   test('JSON report overallPass is true when real-output passes', () => {
     const checks = [
       {
-        name: 'Real output validation',
+        name: 'Real output check',
         pass: true,
         severity: SEVERITY.BLOCKING,
         status: 'PASS',
@@ -321,7 +321,7 @@ describe('parseArgs --deck-dir', () => {
 // ---------------------------------------------------------------------------
 // 7. Edge cases
 // ---------------------------------------------------------------------------
-describe('Real output validation — edge cases', () => {
+describe('Real output check — edge cases', () => {
   test('handles unreadable deck directory gracefully', () => {
     // Use a path that exists but is not a directory (e.g., a file)
     const tmpFile = path.join(os.tmpdir(), 'not-a-dir-real-output-test.txt');
@@ -345,7 +345,7 @@ describe('Real output validation — edge cases', () => {
   test('options object is optional', () => {
     // Should not throw when called with no arguments
     const r = checkRealOutputValidation();
-    expect(r).toHaveProperty('name', 'Real output validation');
+    expect(r).toHaveProperty('name', 'Real output check');
     expect(r).toHaveProperty('pass');
   });
 

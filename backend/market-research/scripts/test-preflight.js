@@ -42,7 +42,7 @@ function main() {
   test('verifyHeadContent: passing case with real patterns', () => {
     const result = verifyHeadContent([
       { file: 'server.js', patterns: ['collectPreRenderStructureIssues'] },
-      { file: 'quality-gates.js', patterns: ['validatePptData'] },
+      { file: 'content-gates.js', patterns: ['validatePptData'] },
     ]);
     assert.strictEqual(result.pass, true, `expected pass=true, got ${result.pass}`);
     assert.strictEqual(

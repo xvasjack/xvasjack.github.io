@@ -1,9 +1,9 @@
 // Post-run auto-summary — generates a structured summary after any pipeline run.
-// Consumes perf-profiler metrics, quality gate scores, budget gate actions, and PPTX integrity.
+// Consumes perf-profiler metrics, quality gate scores, content size check actions, and PPTX fileSafety.
 
 'use strict';
 
-const { metricsStore, budgetGateTelemetry } = require('./perf-profiler');
+const { metricsStore, contentSizeCheckTelemetry } = require('./perf-profiler');
 
 // ============ HEALTH THRESHOLDS ============
 
@@ -11,8 +11,8 @@ const HEALTH_THRESHOLDS = {
   totalDurationMinutes: { good: 30, warn: 45 },
   peakMemoryMB: { good: 300, warn: 400 },
   qualityGateMinScore: 60,
-  integrityMinScore: 90,
-  budgetGateMaxCompactions: 10,
+  fileSafetyMinScore: 90,
+  contentSizeCheckMaxCompactions: 10,
 };
 
 // ============ GENERATE SUMMARY ============
@@ -21,15 +21,15 @@ const HEALTH_THRESHOLDS = {
  * Generates a post-run summary from pipeline run data.
  *
  * @param {object} options
- * @param {object} [options.diagnostics] - lastRunDiagnostics from server.js
- * @param {object} [options.pptStructureValidation] - PPTX validation result
- * @param {Array}  [options.budgetResults] - Array of { country, budgetResult } from budget gate
+ * @param {object} [options.runInfo] - lastRunRunInfo from server.js
+ * @param {object} [options.pptStructureCheck] - PPTX check result
+ * @param {Array}  [options.budgetResults] - Array of { country, budgetResult } from content size check
  * @param {number} [options.startTime] - Pipeline start timestamp (ms)
  * @param {number} [options.endTime] - Pipeline end timestamp (ms)
  * @returns {object} Summary object
  */
 function generateSummary(options = {}) {
-  const { diagnostics, pptStructureValidation, budgetResults, startTime, endTime } = options;
+  const { runInfo, pptStructureCheck, budgetResults, startTime, endTime } = options;
 
   // Duration breakdown from profiler
   const durationBreakdown = buildDurationBreakdown(startTime, endTime);
@@ -38,24 +38,24 @@ function generateSummary(options = {}) {
   const memoryStats = buildMemoryStats();
 
   // Quality gate scores
-  const qualityGateScores = buildQualityGateScores(diagnostics);
+  const qualityGateScores = buildQualityGateScores(runInfo);
 
   // Budget gate actions
-  const budgetGateActions = buildBudgetGateActions(diagnostics, budgetResults);
+  const contentSizeCheckActions = buildBudgetGateActions(runInfo, budgetResults);
 
-  // PPTX integrity score
-  const integrityScore = buildIntegrityScore(diagnostics, pptStructureValidation);
+  // PPTX fileSafety score
+  const fileSafetyScore = buildFileSafetyScore(runInfo, pptStructureCheck);
 
   // Overall health assessment
-  const health = assessHealth(durationBreakdown, memoryStats, qualityGateScores, budgetGateActions, integrityScore);
+  const health = assessHealth(durationBreakdown, memoryStats, qualityGateScores, contentSizeCheckActions, fileSafetyScore);
 
   return {
     timestamp: new Date().toISOString(),
     duration: durationBreakdown,
     memory: memoryStats,
     qualityGates: qualityGateScores,
-    budgetGate: budgetGateActions,
-    integrity: integrityScore,
+    contentSizeCheck: contentSizeCheckActions,
+    fileSafety: fileSafetyScore,
     health,
   };
 }
@@ -158,7 +158,7 @@ function buildMemoryStats() {
 
 // ============ QUALITY GATE SCORES ============
 
-function buildQualityGateScores(diagnostics) {
+function buildQualityGateScores(runInfo) {
   const scores = {
     researchQuality: null,
     synthesisQuality: null,
@@ -166,17 +166,17 @@ function buildQualityGateScores(diagnostics) {
     readinessGate: null,
   };
 
-  if (!diagnostics) return scores;
+  if (!runInfo) return scores;
 
-  // Research quality — from country diagnostics
-  if (Array.isArray(diagnostics.countries)) {
-    const validScores = diagnostics.countries
+  // Research quality — from country runInfo
+  if (Array.isArray(runInfo.countries)) {
+    const validScores = runInfo.countries
       .map((c) => c.synthesisScores?.overall)
       .filter((s) => s != null);
     if (validScores.length > 0) {
       scores.researchQuality = {
         avgScore: Math.round(validScores.reduce((s, v) => s + v, 0) / validScores.length),
-        perCountry: diagnostics.countries.map((c) => ({
+        perCountry: runInfo.countries.map((c) => ({
           country: c.country,
           score: c.synthesisScores?.overall || null,
           valid: c.synthesisValid,
@@ -186,31 +186,31 @@ function buildQualityGateScores(diagnostics) {
   }
 
   // Synthesis quality gate
-  if (diagnostics.synthesisGate) {
+  if (runInfo.synthesisGate) {
     scores.synthesisQuality = {
-      pass: diagnostics.synthesisGate.pass,
-      overall: diagnostics.synthesisGate.overall,
-      failures: diagnostics.synthesisGate.failures || [],
+      pass: runInfo.synthesisGate.pass,
+      overall: runInfo.synthesisGate.overall,
+      failures: runInfo.synthesisGate.failures || [],
     };
   }
 
   // PPT data gate
-  if (diagnostics.pptDataGateFailures) {
+  if (runInfo.pptDataGateFailures) {
     scores.pptDataGate = {
       pass: false,
-      failures: diagnostics.pptDataGateFailures,
+      failures: runInfo.pptDataGateFailures,
     };
   } else {
     scores.pptDataGate = { pass: true, failures: [] };
   }
 
   // Readiness gate
-  if (diagnostics.notReadyCountries) {
+  if (runInfo.notReadyCountries) {
     scores.readinessGate = {
       pass: false,
-      softBypassed: diagnostics.qualityGateSoftBypass || false,
-      draftBypassed: diagnostics.qualityGateBypassedForDraft || false,
-      notReady: diagnostics.notReadyCountries,
+      softBypassed: runInfo.qualityGateSoftBypass || false,
+      draftBypassed: runInfo.qualityGateBypassedForDraft || false,
+      notReady: runInfo.notReadyCountries,
     };
   } else {
     scores.readinessGate = { pass: true, softBypassed: false, draftBypassed: false };
@@ -221,7 +221,7 @@ function buildQualityGateScores(diagnostics) {
 
 // ============ BUDGET GATE ACTIONS ============
 
-function buildBudgetGateActions(diagnostics, budgetResults) {
+function buildBudgetGateActions(runInfo, budgetResults) {
   const actions = {
     totalCompactions: 0,
     worstRisk: 'low',
@@ -230,9 +230,9 @@ function buildBudgetGateActions(diagnostics, budgetResults) {
 
   const riskOrder = { low: 0, medium: 1, high: 2 };
 
-  // From diagnostics
-  if (diagnostics?.budgetGate) {
-    for (const [country, bg] of Object.entries(diagnostics.budgetGate)) {
+  // From runInfo
+  if (runInfo?.contentSizeCheck) {
+    for (const [country, bg] of Object.entries(runInfo.contentSizeCheck)) {
       actions.perCountry.push({
         country,
         risk: bg.risk,
@@ -249,7 +249,7 @@ function buildBudgetGateActions(diagnostics, budgetResults) {
   // From direct budget results (richer telemetry)
   if (Array.isArray(budgetResults)) {
     for (const { country, budgetResult } of budgetResults) {
-      const telemetry = budgetGateTelemetry(budgetResult, country);
+      const telemetry = contentSizeCheckTelemetry(budgetResult, country);
       const existing = actions.perCountry.find((p) => p.country === country);
       if (existing) {
         existing.telemetry = telemetry;
@@ -274,8 +274,8 @@ function buildBudgetGateActions(diagnostics, budgetResults) {
 
 // ============ INTEGRITY SCORE ============
 
-function buildIntegrityScore(diagnostics, pptStructureValidation) {
-  const integrity = {
+function buildFileSafetyScore(runInfo, pptStructureCheck) {
+  const fileSafety = {
     score: 100,
     valid: true,
     checks: {
@@ -287,47 +287,47 @@ function buildIntegrityScore(diagnostics, pptStructureValidation) {
     pptMetrics: null,
   };
 
-  if (pptStructureValidation) {
-    integrity.checks.structureValid = pptStructureValidation.valid;
-    integrity.checks.passedChecks = pptStructureValidation.summary?.passed || 0;
-    integrity.checks.failedChecks = pptStructureValidation.summary?.failed || 0;
-    integrity.checks.warningChecks = pptStructureValidation.summary?.warnings || 0;
-    integrity.valid = pptStructureValidation.valid;
+  if (pptStructureCheck) {
+    fileSafety.checks.structureValid = pptStructureCheck.valid;
+    fileSafety.checks.passedChecks = pptStructureCheck.summary?.passed || 0;
+    fileSafety.checks.failedChecks = pptStructureCheck.summary?.failed || 0;
+    fileSafety.checks.warningChecks = pptStructureCheck.summary?.warnings || 0;
+    fileSafety.valid = pptStructureCheck.valid;
 
     const total =
-      integrity.checks.passedChecks + integrity.checks.failedChecks + integrity.checks.warningChecks;
+      fileSafety.checks.passedChecks + fileSafety.checks.failedChecks + fileSafety.checks.warningChecks;
     if (total > 0) {
-      integrity.score = Math.round((integrity.checks.passedChecks / total) * 100);
+      fileSafety.score = Math.round((fileSafety.checks.passedChecks / total) * 100);
     }
-  } else if (diagnostics?.pptStructure) {
-    const ps = diagnostics.pptStructure;
-    integrity.checks.structureValid = ps.valid;
-    integrity.checks.passedChecks = ps.passed || 0;
-    integrity.checks.failedChecks = ps.failed || 0;
-    integrity.checks.warningChecks = ps.warnings || 0;
-    integrity.valid = ps.valid;
+  } else if (runInfo?.pptStructure) {
+    const ps = runInfo.pptStructure;
+    fileSafety.checks.structureValid = ps.valid;
+    fileSafety.checks.passedChecks = ps.passed || 0;
+    fileSafety.checks.failedChecks = ps.failed || 0;
+    fileSafety.checks.warningChecks = ps.warnings || 0;
+    fileSafety.valid = ps.valid;
 
     const total = (ps.passed || 0) + (ps.failed || 0) + (ps.warnings || 0);
     if (total > 0) {
-      integrity.score = Math.round(((ps.passed || 0) / total) * 100);
+      fileSafety.score = Math.round(((ps.passed || 0) / total) * 100);
     }
   }
 
-  if (diagnostics?.ppt) {
-    integrity.pptMetrics = {
-      templateCoverage: diagnostics.ppt.templateCoverage,
-      slideRenderFailures: diagnostics.ppt.slideRenderFailureCount,
-      geometryIssues: diagnostics.ppt.geometryIssueCount,
-      budgetGateRisk: diagnostics.ppt.budgetGateRisk,
+  if (runInfo?.ppt) {
+    fileSafety.pptMetrics = {
+      templateCoverage: runInfo.ppt.templateCoverage,
+      slideRenderFailures: runInfo.ppt.slideRenderFailureCount,
+      geometryIssues: runInfo.ppt.geometryIssueCount,
+      contentSizeCheckRisk: runInfo.ppt.contentSizeCheckRisk,
     };
   }
 
-  return integrity;
+  return fileSafety;
 }
 
 // ============ HEALTH ASSESSMENT ============
 
-function assessHealth(duration, memory, qualityGates, budgetGate, integrity) {
+function assessHealth(duration, memory, qualityGates, contentSizeCheck, fileSafety) {
   const issues = [];
   let status = 'healthy';
 
@@ -360,21 +360,21 @@ function assessHealth(duration, memory, qualityGates, budgetGate, integrity) {
   }
 
   // Budget gate
-  if (budgetGate.totalCompactions > HEALTH_THRESHOLDS.budgetGateMaxCompactions) {
-    issues.push(`Heavy compaction: ${budgetGate.totalCompactions} fields compacted`);
+  if (contentSizeCheck.totalCompactions > HEALTH_THRESHOLDS.contentSizeCheckMaxCompactions) {
+    issues.push(`Heavy compaction: ${contentSizeCheck.totalCompactions} fields compacted`);
     if (status !== 'unhealthy') status = 'degraded';
   }
-  if (budgetGate.worstRisk === 'high') {
+  if (contentSizeCheck.worstRisk === 'high') {
     issues.push('Budget gate risk: high');
     if (status !== 'unhealthy') status = 'degraded';
   }
 
-  // Integrity
-  if (!integrity.valid) {
-    issues.push('PPTX integrity validation failed');
+  // FileSafety
+  if (!fileSafety.valid) {
+    issues.push('PPTX fileSafety check failed');
     status = 'unhealthy';
-  } else if (integrity.score < HEALTH_THRESHOLDS.integrityMinScore) {
-    issues.push(`Low integrity score: ${integrity.score}/100`);
+  } else if (fileSafety.score < HEALTH_THRESHOLDS.fileSafetyMinScore) {
+    issues.push(`Low fileSafety score: ${fileSafety.score}/100`);
     if (status !== 'unhealthy') status = 'degraded';
   }
 
@@ -436,11 +436,11 @@ function formatSummary(summary) {
   lines.push('');
 
   // Budget gate
-  lines.push(`Budget Gate: risk=${summary.budgetGate.worstRisk}, compactions=${summary.budgetGate.totalCompactions}`);
+  lines.push(`Content Size Check: risk=${summary.contentSizeCheck.worstRisk}, compactions=${summary.contentSizeCheck.totalCompactions}`);
   lines.push('');
 
-  // Integrity
-  lines.push(`Integrity: ${summary.integrity.score}/100 (${summary.integrity.valid ? 'valid' : 'INVALID'})`);
+  // FileSafety
+  lines.push(`FileSafety: ${summary.fileSafety.score}/100 (${summary.fileSafety.valid ? 'valid' : 'INVALID'})`);
   lines.push('');
 
   // Health

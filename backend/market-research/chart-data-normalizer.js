@@ -4,7 +4,7 @@
  * Chart Data Normalizer — normalize, validate, and classify chart payloads.
  *
  * Replaces noisy console.warn chart-skip warnings with structured ChartOutcome
- * objects. Coerces malformed inputs to safe types so charts render or are
+ * objects. Coerces malformed inputs to safe types so charts build or are
  * explicitly rejected with a reason code.
  */
 

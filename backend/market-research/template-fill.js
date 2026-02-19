@@ -120,7 +120,7 @@ async function replaceTemplateTextWithTokens(templateSlideXml, generatedTokens, 
     replacedCount,
     slotCount: candidateSlots,
     droppedTokens,
-    fitMethod: fitResult.method || 'heuristic',
+    fitMethod: fitResult.method || 'rule',
     fitStats: fitResult.stats || {
       inputTokens: generatedTokens.length,
       slotCount: candidateSlots,
@@ -380,7 +380,7 @@ async function applyTemplateClonePostprocess(generatedBuffer, {
     const generatedCharCount = tokenCharCount(generatedTokens);
     const templateSlideXml = await templateSlideEntry.async('string');
     const allowAIForSlide =
-      CONTEXT_FIT_MODE !== 'heuristic' &&
+      CONTEXT_FIT_MODE !== 'rule' &&
       CONTEXT_FIT_MODE !== 'off' &&
       contextFitAISlides < CONTEXT_FIT_MAX_AI_SLIDES;
     const replaced = await replaceTemplateTextWithTokens(templateSlideXml, generatedTokens, {
@@ -391,7 +391,7 @@ async function applyTemplateClonePostprocess(generatedBuffer, {
       forceAI: CONTEXT_FIT_MODE === 'ai',
     });
     if (replaced.fitMethod === 'ai') contextFitAISlides++;
-    else if (replaced.fitMethod === 'heuristic') contextFitHeuristicSlides++;
+    else if (replaced.fitMethod === 'rule') contextFitHeuristicSlides++;
     else contextFitNoneSlides++;
 
     const generatedRelXml = generatedZip.file(relPath)

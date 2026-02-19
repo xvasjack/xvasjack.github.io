@@ -27,7 +27,7 @@ const {
   checkSourceCoverageGate,
   isReportSlideDivider,
 } = require('./preflight-gates');
-const { classifySlideIntent } = require('./pptx-validator');
+const { classifySlideIntent } = require('./deck-file-check');
 
 // ---------------------------------------------------------------------------
 // 1. Gate Modes: dev, test, release
@@ -509,7 +509,7 @@ describe('New Gates', () => {
   });
 
   test('checkModuleFunctionSignatures validates defined paramCounts', () => {
-    // ppt-single-country.js has paramCounts { generateSingleCountryPPT: 2 }
+    // deck-builder-single.js has paramCounts { generateSingleCountryPPT: 3 }
     const r = checkModuleFunctionSignatures();
     // It should have checked at least 1 signature
     if (r.pass) {

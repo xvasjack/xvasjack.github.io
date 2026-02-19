@@ -91,7 +91,7 @@ describe('Runbook decision output consistency', () => {
   });
 
   test('triageError returns consistent results for same message', () => {
-    const msg = 'PPT structural validation failed for slide 5';
+    const msg = 'PPT structural check failed for slide 5';
     const r1 = triageError(msg);
     const r2 = triageError(msg);
     expect(r1).toEqual(r2);
@@ -104,16 +104,16 @@ describe('Runbook decision output consistency', () => {
 // ============================================================
 
 describe('Command recommendation correctness', () => {
-  test('recommendActions with no diagnostics returns info action', () => {
+  test('recommendActions with no runInfo returns info action', () => {
     const result = recommendActions(null);
     expect(result.actions.length).toBe(1);
     expect(result.actions[0].severity).toBe('info');
-    expect(result.summary).toContain('No diagnostics');
+    expect(result.summary).toContain('No runInfo');
   });
 
   test('recommendActions with error stage produces critical action', () => {
     const diag = {
-      error: 'PPT structural validation failed',
+      error: 'PPT structural check failed',
       stage: 'error',
     };
     const result = recommendActions(diag);
@@ -150,9 +150,9 @@ describe('Command recommendation correctness', () => {
     expect(result.actions.length).toBeGreaterThan(0);
   });
 
-  test('recommendActions with budget gate high risk', () => {
+  test('recommendActions with content size check high risk', () => {
     const diag = {
-      budgetGate: {
+      contentSizeCheck: {
         Vietnam: { risk: 'high', issues: ['overflow'], compacted: 5 },
       },
     };
@@ -179,7 +179,7 @@ describe('Command recommendation correctness', () => {
     expect(result.summary).toContain('critical');
   });
 
-  test('recommendActions with healthy diagnostics returns no actions', () => {
+  test('recommendActions with healthy runInfo returns no actions', () => {
     const diag = {
       stage: 'complete',
       ppt: { templateCoverage: 99, slideRenderFailureCount: 0 },
@@ -238,11 +238,11 @@ describe('Local readiness workflow', () => {
     expect(profile.checks).toContain('preflight-gates');
   });
 
-  test('deep-audit includes all release-check checks plus stress-test and integrity-pipeline', () => {
+  test('deep-audit includes all release-check checks plus stress-test and fileSafety-pipeline', () => {
     const profile = getProfile('deep-audit');
     expect(profile).not.toBeNull();
     expect(profile.checks).toContain('stress-test');
-    expect(profile.checks).toContain('integrity-pipeline');
+    expect(profile.checks).toContain('fileSafety-pipeline');
     expect(profile.checks).toContain('regression-tests');
   });
 
@@ -334,7 +334,7 @@ describe('Safe-to-run verdict logic', () => {
     const checks = [
       { name: 'env-vars', pass: true, output: 'All set' },
       { name: 'key-files', pass: true, output: 'All present' },
-      { name: 'module-syntax', pass: false, output: 'SyntaxError in budget-gate.js' },
+      { name: 'module-syntax', pass: false, output: 'SyntaxError in content-size-check.js' },
     ];
     const verdict = getSafeToRunVerdict(checks);
     expect(verdict.safe).toBe(false);
@@ -530,10 +530,10 @@ describe('Memory report generation', () => {
 });
 
 // ============================================================
-// CI-Artifact Output Format Validation (valid JSON)
+// CI-Artifact Output Format Check (valid JSON)
 // ============================================================
 
-describe('CI-artifact output format validation', () => {
+describe('CI-artifact output format check', () => {
   test('generateSummary output is serializable to valid JSON', () => {
     const summary = generateSummary({
       startTime: Date.now() - 30000,
@@ -686,7 +686,7 @@ describe('Existing ops-runbook exports preserved', () => {
   });
 
   test('triageError matches known patterns', () => {
-    const result = triageError('PPT structural validation failed');
+    const result = triageError('PPT structural check failed');
     expect(result.matched).toBe(true);
     expect(result.rootCause).toBeTruthy();
     expect(Array.isArray(result.fix)).toBe(true);

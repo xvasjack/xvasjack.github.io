@@ -25,7 +25,7 @@ const MODEL_CONFIG = {
 
 // Temperature presets for different task types
 const TEMPERATURE_PRESETS = {
-  deterministic: 0.0, // For validation, exact matching
+  deterministic: 0.0, // For check, exact matching
   conservative: 0.1, // For structured output, parsing
   balanced: 0.3, // For analysis, general tasks
   creative: 0.7, // For creative writing, suggestions

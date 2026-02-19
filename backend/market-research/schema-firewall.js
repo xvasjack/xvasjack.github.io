@@ -4,7 +4,7 @@
  * Schema Firewall + Source Lineage for market-research PPT pipeline.
  *
  * Validates, coerces, quarantines, and trust-scores synthesis output
- * before it reaches the PPT renderer. Every field gets an action ledger
+ * before it reaches the PPT builder. Every field gets an action ledger
  * entry (kept / coerced / dropped / quarantined) and a trust score.
  *
  * Handles BOTH multi-country (policy/market/competitors/depth/summary)
@@ -252,7 +252,7 @@ const ROOT_META_KEYS = new Set([
   'reviewIterations',
   'rawData',
   'storyPlan',
-  'contentValidation',
+  'contentCheck',
   '_synthesisError',
   'section',
   'message',
@@ -434,7 +434,7 @@ function validateValue(value, schema, path) {
     return { errors, warnings };
   }
 
-  // Array validation
+  // Array check
   if (schema.type === 'array' && Array.isArray(value)) {
     if (schema.items) {
       for (let i = 0; i < value.length; i++) {
@@ -445,7 +445,7 @@ function validateValue(value, schema, path) {
     }
   }
 
-  // Object validation
+  // Object check
   if (schema.type === 'object' && vt === 'object' && schema.properties) {
     // Check required fields
     if (schema.required) {
@@ -932,7 +932,7 @@ function processFirewall(synthesis) {
   const ledger = createActionLedger();
 
   // 1. Validate raw input
-  const validationResult = validate(synthesis);
+  const checkResult = validate(synthesis);
 
   // 2. Coerce fixable issues
   const coerced = coerce(synthesis, ledger);
@@ -941,7 +941,7 @@ function processFirewall(synthesis) {
   const { result: cleaned, quarantined } = quarantine(coerced, ledger);
 
   // 4. Re-validate after coercion
-  const postValidation = validate(cleaned);
+  const postCheck = validate(cleaned);
 
   // 5. Trust score
   const trustScore = getTrustScore(cleaned);
@@ -951,8 +951,10 @@ function processFirewall(synthesis) {
 
   return {
     result: cleaned,
-    preValidation: validationResult,
-    postValidation,
+    preValidation: checkResult,
+    postValidation: postCheck,
+    preCheck: checkResult,
+    postCheck,
     trustScore,
     lineage,
     quarantined: quarantined.getAll(),

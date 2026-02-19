@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * Header/Footer Drift Diagnostics
+ * Header/Footer Drift RunInfo
  *
- * Precise per-slide diagnostics for header and footer line geometry drift.
+ * Precise per-slide runInfo for header and footer line geometry drift.
  * Scans every slide in a generated PPTX for line shapes whose Y-position
  * corresponds to header-top, header-bottom, or footer lines, then computes
  * delta from the Escort template ground truth.
  *
- * Does NOT modify the PPTX — diagnostics only.
+ * Does NOT modify the PPTX — runInfo only.
  *
  * Output: structured report with per-slide blocking keys, expected vs actual
  * geometry, delta values, and severity classification.
@@ -18,6 +18,24 @@ const fs = require('fs');
 const path = require('path');
 const JSZip = require('jszip');
 const templatePatterns = require('./template-patterns.json');
+
+function resolveTemplateColor(rawColor, fallback = '293F55') {
+  const raw = String(rawColor || '').trim();
+  if (/^[0-9a-f]{6}$/i.test(raw)) return raw.toUpperCase();
+
+  const schemeMatch = raw.match(/^scheme:([a-z0-9_]+)$/i);
+  if (schemeMatch) {
+    const schemeKey = schemeMatch[1];
+    const styleColor = String(templatePatterns.style?.colors?.[schemeKey] || '').trim();
+    if (/^[0-9a-f]{6}$/i.test(styleColor)) return styleColor.toUpperCase();
+
+    const themeEntry = templatePatterns.theme?.colorScheme?.[schemeKey];
+    const themeColor = String(themeEntry?.val || themeEntry?.lastClr || '').trim();
+    if (/^[0-9a-f]{6}$/i.test(themeColor)) return themeColor.toUpperCase();
+  }
+
+  return String(fallback || '293F55').toUpperCase();
+}
 
 // ---------------------------------------------------------------------------
 // Template ground truth (EMU)
@@ -38,9 +56,15 @@ const EXPECTED = Object.freeze({
   footerThicknessEmu: Math.round(
     Number(templatePatterns.pptxPositions?.footerLine?.thickness || 2.25) * 12700
   ),
-  headerTopColor: (templatePatterns.style?.headerLines?.top?.color || '293F55').toUpperCase(),
-  headerBottomColor: (templatePatterns.style?.headerLines?.bottom?.color || '293F55').toUpperCase(),
-  footerColor: (templatePatterns.pptxPositions?.footerLine?.color || '293F55').toUpperCase(),
+  headerTopColor: resolveTemplateColor(templatePatterns.style?.headerLines?.top?.color, '293F55'),
+  headerBottomColor: resolveTemplateColor(
+    templatePatterns.style?.headerLines?.bottom?.color,
+    '293F55'
+  ),
+  footerColor: resolveTemplateColor(
+    templatePatterns.pptxPositions?.footerLine?.color,
+    templatePatterns.style?.headerLines?.bottom?.color || '293F55'
+  ),
   slideWidthEmu: Number(templatePatterns.style?.slideWidthEmu || 12192000),
 });
 
@@ -190,7 +214,9 @@ function analyzeSlide(slideXml, slideName, slideNumber, slideKey) {
 
     const expectedColor = getExpectedColor(classification.role);
     const colorMatch =
-      line.color != null && expectedColor != null ? line.color === expectedColor : null;
+      line.color != null && expectedColor != null
+        ? String(line.color).toUpperCase() === String(expectedColor).toUpperCase()
+        : null;
 
     driftEntries.push({
       role: classification.role,
@@ -260,7 +286,7 @@ function getExpectedColor(role) {
  * @param {Object} [options]
  * @param {Array<{generatedSlideNumber: number, templateSlideNumber: number, blockKey: string|null}>} [options.slideMapping]
  *   Mapping of generated slide numbers to block keys (from templateCloneSlides)
- * @returns {Object} Full drift diagnostics report
+ * @returns {Object} Full drift runInfo report
  */
 async function scanDrift(pptxBuffer, options = {}) {
   const slideMapping = options.slideMapping || [];
@@ -330,7 +356,7 @@ async function scanDrift(pptxBuffer, options = {}) {
   const report = {
     _meta: {
       generatedAt: new Date().toISOString(),
-      description: 'Header/footer line drift diagnostics against Escort template ground truth',
+      description: 'Header/footer line drift runInfo against Escort template ground truth',
       thresholds: {
         infoMaxEmu: DRIFT_THRESHOLD_INFO,
         warningMaxEmu: DRIFT_THRESHOLD_WARNING,
@@ -381,7 +407,7 @@ async function scanDrift(pptxBuffer, options = {}) {
 /**
  * Write the drift report to reports/formatting/header-footer-drift.json.
  *
- * @param {Object} report - The drift diagnostics report from scanDrift()
+ * @param {Object} report - The drift runInfo report from scanDrift()
  * @param {string} [baseDir] - Base directory (defaults to __dirname)
  * @returns {string} Path to the written report file
  */

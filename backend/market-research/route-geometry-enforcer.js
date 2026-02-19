@@ -11,7 +11,7 @@
  * Self-contained: reads template-patterns.json directly to avoid pulling in
  * the full ppt-utils.js dependency chain (which drags in ai-clients/node-fetch).
  *
- * Integration: call enforce() before rendering each block in ppt-single-country.js.
+ * Integration: call enforce() before building each block in deck-builder-single.js.
  */
 
 const templatePatterns = require('./template-patterns.json');
@@ -452,8 +452,8 @@ function describeActualGeometry(layout) {
 /**
  * enforce() — the main entry point.
  *
- * Call before rendering each block. Validates that the resolved route targets
- * a slide whose geometry is compatible with the content being rendered.
+ * Call before building each block. Validates that the resolved route targets
+ * a slide whose geometry is compatible with the content being built.
  *
  * Task 4: Always includes full structured provenance:
  *   - requestedSlide: the originally requested slide
@@ -805,7 +805,7 @@ module.exports = {
   auditAllRoutes,
   RouteGeometryError,
   ERROR_CODES,
-  // Internal maps re-exported for ppt-single-country.js integration
+  // Internal maps re-exported for deck-builder-single.js integration
   BLOCK_TEMPLATE_PATTERN_MAP,
   BLOCK_TEMPLATE_SLIDE_MAP,
   // Exported for testing

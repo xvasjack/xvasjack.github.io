@@ -11,7 +11,7 @@ const {
   getStageMetrics,
   getHighCostStages,
   getParallelismRecommendations,
-  budgetGateTelemetry,
+  contentSizeCheckTelemetry,
   estimatePayloadSize,
 } = require('./perf-profiler');
 
@@ -194,7 +194,7 @@ describe('perf-profiler', () => {
     expect(spRec.isParallelizable).toBe(false);
   });
 
-  test('10. budgetGateTelemetry generates correct telemetry', () => {
+  test('10. contentSizeCheckTelemetry generates correct telemetry', () => {
     const budgetResult = {
       report: {
         risk: 'medium',
@@ -216,7 +216,7 @@ describe('perf-profiler', () => {
       ],
     };
 
-    const telemetry = budgetGateTelemetry(budgetResult, 'Vietnam');
+    const telemetry = contentSizeCheckTelemetry(budgetResult, 'Vietnam');
     expect(telemetry.country).toBe('Vietnam');
     expect(telemetry.risk).toBe('medium');
     expect(telemetry.fieldsCompacted).toBe(1);
@@ -228,8 +228,8 @@ describe('perf-profiler', () => {
     expect(telemetry.compactionDetails[0].reduction).toBe(25); // 25% reduction
   });
 
-  test('11. budgetGateTelemetry handles null input', () => {
-    const telemetry = budgetGateTelemetry(null, 'Test');
+  test('11. contentSizeCheckTelemetry handles null input', () => {
+    const telemetry = contentSizeCheckTelemetry(null, 'Test');
     expect(telemetry.country).toBe('Test');
     expect(telemetry.error).toBeDefined();
   });
@@ -239,7 +239,7 @@ describe('perf-profiler', () => {
 
 describe('ops-runbook', () => {
   test('12. triageError matches known error patterns', () => {
-    const result = triageError('PPT structural validation failed: Min slides');
+    const result = triageError('PPT structural check failed: Min slides');
     expect(result.matched).toBe(true);
     expect(result.rootCause).toContain('malformed');
     expect(result.fix.length).toBeGreaterThan(0);
@@ -309,7 +309,7 @@ describe('ops-runbook', () => {
     expect(result.rootCause).toContain('memory');
   });
 
-  test('21. triageError matches budget gate errors', () => {
+  test('21. triageError matches content size check errors', () => {
     const result = triageError('Budget gate risk is high for Vietnam');
     expect(result.matched).toBe(true);
     expect(result.rootCause).toContain('overflow');
@@ -325,8 +325,8 @@ describe('post-run-summary', () => {
     expect(summary).toHaveProperty('duration');
     expect(summary).toHaveProperty('memory');
     expect(summary).toHaveProperty('qualityGates');
-    expect(summary).toHaveProperty('budgetGate');
-    expect(summary).toHaveProperty('integrity');
+    expect(summary).toHaveProperty('contentSizeCheck');
+    expect(summary).toHaveProperty('fileSafety');
     expect(summary).toHaveProperty('health');
     expect(summary.health.status).toBe('healthy');
   });
@@ -347,13 +347,13 @@ describe('post-run-summary', () => {
     expect(summary.memory.current.heapUsed).toBeGreaterThan(0);
   });
 
-  test('24. generateSummary incorporates diagnostics', () => {
-    const diagnostics = {
+  test('24. generateSummary incorporates runInfo', () => {
+    const runInfo = {
       countries: [
         { country: 'Vietnam', synthesisScores: { overall: 75 }, synthesisValid: true },
         { country: 'Thailand', synthesisScores: { overall: 65 }, synthesisValid: true },
       ],
-      budgetGate: {
+      contentSizeCheck: {
         Vietnam: { risk: 'medium', issues: ['field too long'], compacted: 2 },
         Thailand: { risk: 'low', issues: [], compacted: 0 },
       },
@@ -365,13 +365,13 @@ describe('post-run-summary', () => {
       },
     };
 
-    const summary = generateSummary({ diagnostics });
+    const summary = generateSummary({ runInfo });
 
     expect(summary.qualityGates.researchQuality.avgScore).toBe(70);
-    expect(summary.budgetGate.totalCompactions).toBe(2);
-    expect(summary.budgetGate.worstRisk).toBe('medium');
-    expect(summary.integrity.valid).toBe(true);
-    expect(summary.integrity.score).toBeGreaterThan(80);
+    expect(summary.contentSizeCheck.totalCompactions).toBe(2);
+    expect(summary.contentSizeCheck.worstRisk).toBe('medium');
+    expect(summary.fileSafety.valid).toBe(true);
+    expect(summary.fileSafety.score).toBeGreaterThan(80);
   });
 
   test('25. formatSummary produces readable text', () => {
@@ -383,13 +383,13 @@ describe('post-run-summary', () => {
     expect(text).toContain('Duration:');
     expect(text).toContain('Memory:');
     expect(text).toContain('Quality Gates:');
-    expect(text).toContain('Budget Gate:');
-    expect(text).toContain('Integrity:');
+    expect(text).toContain('Content Size Check:');
+    expect(text).toContain('FileSafety:');
     expect(text).toContain('Health:');
   });
 
-  test('26. health assessment flags unhealthy when integrity fails', () => {
-    const diagnostics = {
+  test('26. health assessment flags unhealthy when fileSafety fails', () => {
+    const runInfo = {
       pptStructure: {
         valid: false,
         passed: 5,
@@ -398,20 +398,20 @@ describe('post-run-summary', () => {
       },
     };
 
-    const summary = generateSummary({ diagnostics });
+    const summary = generateSummary({ runInfo });
     expect(summary.health.status).toBe('unhealthy');
     expect(summary.health.issues.length).toBeGreaterThan(0);
-    expect(summary.health.issues.some((i) => i.includes('integrity'))).toBe(true);
+    expect(summary.health.issues.some((i) => i.includes('fileSafety'))).toBe(true);
   });
 
-  test('27. health assessment flags degraded when budget gate risk is high', () => {
-    const diagnostics = {
-      budgetGate: {
+  test('27. health assessment flags degraded when content size check risk is high', () => {
+    const runInfo = {
+      contentSizeCheck: {
         Vietnam: { risk: 'high', issues: ['a', 'b', 'c'], compacted: 12 },
       },
     };
 
-    const summary = generateSummary({ diagnostics });
+    const summary = generateSummary({ runInfo });
     expect(summary.health.status).toBe('degraded');
     expect(summary.health.issues.some((i) => i.includes('compaction') || i.includes('risk'))).toBe(
       true

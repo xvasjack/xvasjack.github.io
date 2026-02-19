@@ -102,7 +102,7 @@ const style = {
     accent4: tc.accent4?.val || '1524A9',
     accent5: tc.accent5?.val || '001C44',
     accent6: tc.accent6?.val || 'E46C0A',
-    // Semantic mappings
+    // Content mappings
     tableHeaderFill: tc.accent3?.val || '011AB7',
     accentBlue: tc.accent1?.val || '007FFF',
     darkNavy: tc.dk2?.val || '1F497D',
@@ -511,7 +511,7 @@ console.log(`Total elements: ${slideDetails.reduce((s, sl) => s + sl.elementCoun
 // Verify JSON is valid
 try {
   JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-  console.log('JSON validation: PASS');
+  console.log('JSON check: PASS');
 } catch (e) {
-  console.error('JSON validation: FAIL -', e.message);
+  console.error('JSON check: FAIL -', e.message);
 }

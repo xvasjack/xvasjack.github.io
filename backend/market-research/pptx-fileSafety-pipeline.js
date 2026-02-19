@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * PPTX Integrity Pipeline
+ * PPTX FileSafety Pipeline
  *
  * Staged pipeline that normalizes and validates PPTX files:
  *   Stage 1: Relationship Target Normalization
  *   Stage 2: Non-Visual ID Normalization
  *   Stage 3: Content Types Reconciliation
- *   Stage 4: Relationship Reference Integrity Verification
+ *   Stage 4: Relationship Reference FileSafety Verification
  *
  * Each stage takes a Buffer in, returns a Buffer out, emits metrics,
- * and has invariant validators that fail loudly if output is worse.
+ * and has invariant checkers that fail loudly if output is worse.
  *
- * Usage: node pptx-integrity-pipeline.js <file.pptx>
+ * Usage: node pptx-fileSafety-pipeline.js <file.pptx>
  */
 
 const crypto = require('crypto');
@@ -23,12 +23,12 @@ const {
   normalizeAbsoluteRelationshipTargets,
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
-  scanRelationshipReferenceIntegrity,
+  scanRelationshipReferenceIntegrity: scanRelationshipReferenceFileSafety,
   scanRelationshipTargets,
-  scanSlideNonVisualIdIntegrity,
+  scanSlideNonVisualIdIntegrity: scanSlideNonVisualIdFileSafety,
   scanPackageConsistency,
   readPPTX,
-} = require('./pptx-validator');
+} = require('./deck-file-check');
 
 function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
@@ -105,7 +105,7 @@ async function stage2NonVisualIdNormalization(inputBuffer) {
 
   // Pre-scan: count duplicate non-visual IDs before normalization
   const { zip: preZip } = await readPPTX(inputBuffer);
-  const preScan = await scanSlideNonVisualIdIntegrity(preZip);
+  const preScan = await scanSlideNonVisualIdFileSafety(preZip);
   const preDuplicates = preScan.duplicateNonVisualShapeIds.length;
 
   // Run normalization
@@ -115,7 +115,7 @@ async function stage2NonVisualIdNormalization(inputBuffer) {
 
   // Post-scan: count duplicate non-visual IDs after normalization
   const { zip: postZip } = await readPPTX(outputBuffer);
-  const postScan = await scanSlideNonVisualIdIntegrity(postZip);
+  const postScan = await scanSlideNonVisualIdFileSafety(postZip);
   const postDuplicates = postScan.duplicateNonVisualShapeIds.length;
 
   // Invariant: normalization must not create MORE duplicate IDs
@@ -216,15 +216,15 @@ async function stage3ContentTypesReconciliation(inputBuffer) {
 }
 
 // ---------------------------------------------------------------------------
-// Stage 4: Relationship Reference Integrity Verification
+// Stage 4: Relationship Reference FileSafety Verification
 // ---------------------------------------------------------------------------
 
-async function stage4RelationshipReferenceIntegrity(inputBuffer) {
+async function stage4RelationshipReferenceFileSafety(inputBuffer) {
   const start = Date.now();
   const inputHash = sha256(inputBuffer);
 
   const { zip } = await readPPTX(inputBuffer);
-  const result = await scanRelationshipReferenceIntegrity(zip);
+  const result = await scanRelationshipReferenceFileSafety(zip);
 
   // This stage is read-only verification — no buffer modification.
   // Invariant: report any dangling references as failures.
@@ -233,7 +233,7 @@ async function stage4RelationshipReferenceIntegrity(inputBuffer) {
   return {
     buffer: inputBuffer,
     metrics: {
-      stage: 'stage4_relationship_reference_integrity',
+      stage: 'stage4_relationship_reference_fileSafety',
       inputHash,
       outputHash: inputHash,
       changed: false,
@@ -281,17 +281,17 @@ async function getQualityScore(pptxBuffer) {
     (consistency.duplicateSlideIds.length + consistency.duplicateSlideRelIds.length) * 2
   );
   score -= dupSlideDeduction;
-  breakdown.slideIdIntegrity = 10 - dupSlideDeduction;
+  breakdown.slideIdFileSafety = 10 - dupSlideDeduction;
 
   // Dangling relationship references (15 points)
   const danglingRefDeduction = Math.min(15, consistency.missingRelationshipReferences.length * 1);
   score -= danglingRefDeduction;
-  breakdown.relationshipReferenceIntegrity = 15 - danglingRefDeduction;
+  breakdown.relationshipReferenceFileSafety = 15 - danglingRefDeduction;
 
   // Non-visual shape ID duplicates (10 points)
   const nvIdDeduction = Math.min(10, consistency.duplicateNonVisualShapeIds.length * 2);
   score -= nvIdDeduction;
-  breakdown.nonVisualIdIntegrity = 10 - nvIdDeduction;
+  breakdown.nonVisualIdFileSafety = 10 - nvIdDeduction;
 
   // Content types (15 points)
   const ctIssues =
@@ -353,7 +353,7 @@ async function runPipeline(inputBuffer, options = {}) {
     stage1RelationshipTargetNormalization,
     stage2NonVisualIdNormalization,
     stage3ContentTypesReconciliation,
-    stage4RelationshipReferenceIntegrity,
+    stage4RelationshipReferenceFileSafety,
   ];
 
   let currentBuffer = inputBuffer;
@@ -421,7 +421,7 @@ async function runPipeline(inputBuffer, options = {}) {
 async function main() {
   const file = process.argv[2];
   if (!file) {
-    console.error('Usage: node pptx-integrity-pipeline.js <file.pptx>');
+    console.error('Usage: node pptx-fileSafety-pipeline.js <file.pptx>');
     process.exit(1);
   }
 
@@ -464,6 +464,6 @@ module.exports = {
     stage1RelationshipTargetNormalization,
     stage2NonVisualIdNormalization,
     stage3ContentTypesReconciliation,
-    stage4RelationshipReferenceIntegrity,
+    stage4RelationshipReferenceFileSafety,
   },
 };

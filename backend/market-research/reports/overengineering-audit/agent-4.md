@@ -3,13 +3,13 @@
 **Scope:** Every retry loop, fallback chain, re-attempt pattern, and orchestration complexity in the market-research pipeline.
 
 **Files audited (all read in full):**
-- `research-orchestrator.js` (7407 lines)
+- `research-engine.js` (7407 lines)
 - `research-agents.js` (1405 lines)
 - `ai-clients.js` (593 lines)
 - `research-framework.js` (1080 lines)
 - `server.js` (1558 lines)
 - `quality-gates.js` (914 lines)
-- `budget-gate.js` (391 lines)
+- `content-size-check.js` (391 lines)
 - `failure-cluster-analyzer.js` (523 lines)
 - `stress-lab.js` (1711 lines)
 - `ops-runbook.js` (1082 lines)
@@ -37,7 +37,7 @@ The pipeline contains **23 distinct retry/fallback patterns** across 6 files. Th
 | Re-synthesis | 1 | KEEP |
 | Cross-country synthesis fallback | 1 | KEEP |
 | Quality gates (no retries) | 4 | N/A (scoring only) |
-| Budget gate (no retries) | 1 | N/A (compaction only) |
+| content size check (no retries) | 1 | N/A (compaction only) |
 | Test/ops tooling | 2 files | N/A (not production) |
 
 ---
@@ -128,7 +128,7 @@ The pipeline contains **23 distinct retry/fallback patterns** across 6 files. Th
 
 ---
 
-### Finding 5: `parseScope()` retry in research-framework.js
+### Finding 5: `readRequestType()` retry in research-framework.js
 
 **Location:** `research-framework.js` lines ~50-150
 
@@ -172,7 +172,7 @@ The pipeline contains **23 distinct retry/fallback patterns** across 6 files. Th
 
 ### Finding 7: `synthesizeWithFallback()` -- 5-tier synthesis fallback chain
 
-**Location:** `research-orchestrator.js` lines ~2080-2372
+**Location:** `research-engine.js` lines ~2080-2372
 
 **Trigger:** Each synthesis call (policy, market, competitors, summary, re-synthesis, single-country deep dive) routes through this function.
 
@@ -189,7 +189,7 @@ The pipeline contains **23 distinct retry/fallback patterns** across 6 files. Th
 - Tier 3->4: Upgrades model from Flash to Pro (smarter, more expensive)
 - Tier 4->5: Removes jsonMode from Pro
 
-Each tier also runs through the caller's `accept()` function (semantic gate) before accepting the result. If accept rejects, falls through to next tier.
+Each tier also runs through the caller's `accept()` function (content gate) before accepting the result. If accept rejects, falls through to next tier.
 
 **Inter-tier delay:** 10s (`CFG_SYNTHESIS_TIER_DELAY_MS`)
 
@@ -217,7 +217,7 @@ This eliminates 2 Pro calls from the worst case, saving ~6x Flash-equivalent cos
 
 ### Finding 8: `synthesizePolicy()` retry loop
 
-**Location:** `research-orchestrator.js` lines ~2637-2860
+**Location:** `research-engine.js` lines ~2637-2860
 
 **Trigger:** Policy synthesis doesn't pass acceptance criteria (needs >= 2 sections with real data, >= 1 act with name+year).
 
@@ -242,7 +242,7 @@ Each attempt goes through `synthesizeWithFallback()` (5-tier chain).
 
 ### Finding 9: `synthesizeMarket()` retry loop
 
-**Location:** `research-orchestrator.js` lines ~2865-3173
+**Location:** `research-engine.js` lines ~2865-3173
 
 **Trigger:** Market synthesis doesn't pass acceptance criteria (needs >= 2 sections with data, >= 1 with chartData or keyMetrics).
 
@@ -268,7 +268,7 @@ Pro tiers DISABLED in synthesizeWithFallback for market (saves cost).
 
 ### Finding 10: `synthesizeCompetitors()` -- 4 sequential sub-syntheses
 
-**Location:** `research-orchestrator.js` lines ~3178-3571
+**Location:** `research-engine.js` lines ~3178-3571
 
 **Trigger:** Always runs. Synthesizes competitors in 4 parts: japanesePlayers, localMajor, foreignPlayers, caseStudy+maActivity.
 
@@ -291,7 +291,7 @@ Pro tiers DISABLED in synthesizeWithFallback for market (saves cost).
 
 ### Finding 11: Review-Deepen loop
 
-**Location:** `research-orchestrator.js` lines 6043-6188 (inside `researchCountry()`)
+**Location:** `research-engine.js` lines 6043-6188 (inside `researchCountry()`)
 
 **Trigger:** After initial research completes, reviews quality and deepens gaps.
 
@@ -321,7 +321,7 @@ Pro tiers DISABLED in synthesizeWithFallback for market (saves cost).
 
 ### Finding 12: Story architect (`buildStoryPlan()`)
 
-**Location:** `research-orchestrator.js` lines ~2477-2605
+**Location:** `research-engine.js` lines ~2477-2605
 
 **Trigger:** Always runs after review-deepen, before synthesis.
 
@@ -340,7 +340,7 @@ Pro tiers DISABLED in synthesizeWithFallback for market (saves cost).
 
 ### Finding 13: Content-depth rescue (`validateContentDepth` + re-research)
 
-**Location:** `research-orchestrator.js` lines 6274-6382
+**Location:** `research-engine.js` lines 6274-6382
 
 **Trigger:** After initial synthesis, if `validateContentDepth()` score < 30.
 
@@ -361,7 +361,7 @@ Pro tiers DISABLED in synthesizeWithFallback for market (saves cost).
 
 ### Finding 14: Iterative refinement loop
 
-**Location:** `research-orchestrator.js` lines 6392-6586
+**Location:** `research-engine.js` lines 6392-6586
 
 **Trigger:** After initial synthesis, iteratively scores and improves quality.
 
@@ -395,7 +395,7 @@ Pro tiers DISABLED in synthesizeWithFallback for market (saves cost).
 
 ### Finding 15: Final review loop
 
-**Location:** `research-orchestrator.js` lines 6597-6947
+**Location:** `research-engine.js` lines 6597-6947
 
 **Trigger:** After refinement completes, reviews the entire assembled synthesis for coherence, contradictions, and gaps.
 
@@ -456,7 +456,7 @@ This reduces the 350-line final review loop to ~150 lines with the same content 
 
 ### Finding 16: `reSynthesize()` function
 
-**Location:** `research-orchestrator.js` lines 4803-5119
+**Location:** `research-engine.js` lines 4803-5119
 
 **Trigger:** Called by refinement loop when new research data is collected.
 
@@ -479,7 +479,7 @@ This reduces the 350-line final review loop to ~150 lines with the same content 
 
 ### Finding 17: `synthesizeSummary()` depth completeness enforcement
 
-**Location:** `research-orchestrator.js` lines 4278-4506 (synthesizeSummary) + lines 3829-4027 (ensurePartnerAssessment) + lines 4029-4188 (ensureDepthStrategyAndSegments) + lines 4190-4232 (ensureSummaryCompleteness)
+**Location:** `research-engine.js` lines 4278-4506 (synthesizeSummary) + lines 3829-4027 (ensurePartnerAssessment) + lines 4029-4188 (ensureDepthStrategyAndSegments) + lines 4190-4232 (ensureSummaryCompleteness)
 
 **Trigger:** After summary synthesis, enforces minimum structural completeness.
 
@@ -503,7 +503,7 @@ This reduces the 350-line final review loop to ~150 lines with the same content 
 
 ### Finding 18: `synthesizeFindings()` cross-country fallback
 
-**Location:** `research-orchestrator.js` lines 7272-7382
+**Location:** `research-engine.js` lines 7272-7382
 
 **Trigger:** Multi-country synthesis (> 1 country).
 
@@ -564,7 +564,7 @@ This reduces the 350-line final review loop to ~150 lines with the same content 
 
 ### Finding 21: `identifyResearchGaps()` with reviewer calibration
 
-**Location:** `research-orchestrator.js` lines ~583-976
+**Location:** `research-engine.js` lines ~583-976
 
 **Trigger:** Called by refinement loop to score and identify gaps.
 
@@ -585,7 +585,7 @@ This reduces the 350-line final review loop to ~150 lines with the same content 
 
 ### Finding 22: `fillResearchGaps()` with recovery path
 
-**Location:** `research-orchestrator.js` lines ~979-1112
+**Location:** `research-engine.js` lines ~979-1112
 
 **Trigger:** Called by refinement loop when gaps are identified.
 
@@ -631,9 +631,9 @@ Test harness with deterministic seed perturbation. Builds synthetic payloads and
 Operational troubleshooting toolkit. Error pattern matching, playbooks, local validation, readiness checks, command cookbook. **No retry/fallback patterns.** Pure diagnostic/operational tooling.
 
 ### `quality-gates.js` (914 lines)
-Scoring functions: `validateResearchQuality`, `validateSynthesisQuality`, `validatePptData`. **No retries internally** -- these return scores/failures that trigger retries in server.js and research-orchestrator.js.
+Scoring functions: `validateResearchQuality`, `validateSynthesisQuality`, `validatePptData`. **No retries internally** -- these return scores/failures that trigger retries in server.js and research-engine.js.
 
-### `budget-gate.js` (391 lines)
+### `content-size-check.js` (391 lines)
 Payload compaction: `analyzeBudget`, `compactPayload`. **No retries** -- trims oversized fields and truncates tables. Pure data transformation.
 
 ---
@@ -718,7 +718,7 @@ Well within the $30/run budget. Even worst case (~220 calls) would be ~$15-20.
 | 2 | Thin-response retry | Directly improves research quality |
 | 3 | JSON extraction strategies | Zero cost, prevents data loss |
 | 4 | JSON repair retry in agents | Low cost, meaningful quality gain |
-| 5 | `parseScope()` retry + regex fallback | Cheap, robust fallback |
+| 5 | `readRequestType()` retry + regex fallback | Cheap, robust fallback |
 | 6 | Framework generation fallback | Zero cost safety net |
 | 8 | `synthesizePolicy()` retry | Well-designed prompt mutations |
 | 9 | `synthesizeMarket()` retry | Appropriate for section importance |

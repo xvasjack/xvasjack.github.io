@@ -5,7 +5,7 @@
  * Template Contract Compiler
  *
  * Parses template-patterns.json to extract per-slide geometry contracts and
- * validates runtime slide mappings (from ppt-single-country.js) against them.
+ * validates runtime slide mappings (from deck-builder-single.js) against them.
  *
  * Exports: compile(), drift(), doctor()
  * CLI:     node template-contract-compiler.js --doctor
@@ -16,7 +16,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 // ---------------------------------------------------------------------------
-// Constants — mirrored from ppt-utils.js / ppt-single-country.js
+// Constants — mirrored from ppt-utils.js / deck-builder-single.js
 // ---------------------------------------------------------------------------
 
 const BLOCK_TEMPLATE_PATTERN_MAP = Object.freeze({
@@ -222,7 +222,7 @@ function inferMaxTableDimensions(slideLayout) {
   if (!slideLayout) return { maxRows: 16, maxCols: 9, maxCellChars: 3000 };
   const content = slideLayout.content || slideLayout.table;
   if (!content) return { maxRows: 16, maxCols: 9, maxCellChars: 3000 };
-  // Heuristic: row height ~0.3", col width ~1.2"
+  // Rule: row height ~0.3", col width ~1.2"
   const h = content.h || 5.0;
   const w = content.w || 12.6;
   const maxRows = Math.max(4, Math.min(40, Math.floor(h / 0.16)));
@@ -403,7 +403,7 @@ function compile(options = {}) {
 
 /**
  * Compare runtime slide mappings against compiled contracts.
- * Reports mismatches between what ppt-single-country.js uses at runtime
+ * Reports mismatches between what deck-builder-single.js uses at runtime
  * and what the compiled contracts expect.
  *
  * @param {object} compiledContracts - Output of compile()
@@ -531,11 +531,11 @@ function drift(compiledContracts, runtimeMappings = null) {
 }
 
 // ---------------------------------------------------------------------------
-// doctor() — full diagnostic report
+// doctor() — full runInfo report
 // ---------------------------------------------------------------------------
 
 /**
- * Run a full diagnostic on the template contract system.
+ * Run a full runInfo on the template contract system.
  *
  * @param {object} [options]
  * @param {string} [options.templatePath]
@@ -568,19 +568,19 @@ function doctor(options = {}) {
     return report;
   }
 
-  // 2. Contract integrity
+  // 2. Contract fileSafety
   const sig = compiled.signature;
   const recomputed = sha256({ ...compiled, signature: null });
   if (sig === recomputed) {
     report.checks.push({
-      name: 'signature_integrity',
+      name: 'signature_fileSafety',
       status: 'pass',
       message: `SHA-256 signature verified: ${sig.substring(0, 16)}...`,
     });
   } else {
     report.status = 'fail';
     report.checks.push({
-      name: 'signature_integrity',
+      name: 'signature_fileSafety',
       status: 'fail',
       message: `Signature mismatch: expected ${recomputed.substring(0, 16)}... got ${sig.substring(0, 16)}...`,
     });
@@ -635,7 +635,7 @@ function doctor(options = {}) {
     }
   }
   report.checks.push({
-    name: 'geometry_validation',
+    name: 'geometry_check',
     status: geometryIssues.length > 0 ? 'warning' : 'pass',
     message:
       geometryIssues.length > 0
@@ -669,7 +669,7 @@ function doctor(options = {}) {
     message: `${usedSlides.size}/${totalSlides} template slides referenced. Unused: [${unusedSlides.join(', ') || 'none'}]`,
   });
 
-  // 8. Alias chain validation
+  // 8. Alias chain check
   const aliasIssues = [];
   for (const [patternKey, contract] of Object.entries(compiled.patternContracts)) {
     if (contract.aliasOf && !compiled.patternContracts[contract.aliasOf]) {
@@ -677,7 +677,7 @@ function doctor(options = {}) {
     }
   }
   report.checks.push({
-    name: 'alias_validation',
+    name: 'alias_check',
     status: aliasIssues.length > 0 ? 'fail' : 'pass',
     message:
       aliasIssues.length > 0
@@ -710,13 +710,13 @@ function doctor(options = {}) {
 // ---------------------------------------------------------------------------
 
 /**
- * Audit contract coverage for all rendered blocks.
+ * Audit contract coverage for all built blocks.
  * Reports which blocks have contracts, which don't, and coverage %.
  *
  * @param {object} [options]
  * @param {string} [options.templatePath]
  * @param {object} [options.templateData]
- * @param {string[]} [options.renderedBlocks] - list of block keys actually rendered at runtime
+ * @param {string[]} [options.builtBlocks] - list of block keys actually built at runtime
  * @returns {object} Coverage report
  */
 function auditCoverage(options = {}) {
@@ -734,14 +734,14 @@ function auditCoverage(options = {}) {
   }
 
   const contractedBlockKeys = new Set(Object.keys(compiled.blockContracts));
-  const renderedBlocks = Array.isArray(options.renderedBlocks)
-    ? options.renderedBlocks
+  const builtBlocks = Array.isArray(options.builtBlocks)
+    ? options.builtBlocks
     : Object.keys(BLOCK_TEMPLATE_PATTERN_MAP);
 
   const coveredBlocks = [];
   const uncoveredBlocks = [];
 
-  for (const blockKey of renderedBlocks) {
+  for (const blockKey of builtBlocks) {
     if (contractedBlockKeys.has(blockKey)) {
       const contract = compiled.blockContracts[blockKey];
       coveredBlocks.push({
@@ -756,7 +756,7 @@ function auditCoverage(options = {}) {
     }
   }
 
-  const total = renderedBlocks.length;
+  const total = builtBlocks.length;
   const coveragePercent = total > 0 ? Number(((coveredBlocks.length / total) * 100).toFixed(1)) : 0;
 
   return {
@@ -765,7 +765,7 @@ function auditCoverage(options = {}) {
     coveragePercent,
     totalBlocks: total,
     contractedBlockCount: contractedBlockKeys.size,
-    renderedBlockCount: renderedBlocks.length,
+    builtBlockCount: builtBlocks.length,
     auditedAt: new Date().toISOString(),
   };
 }
@@ -1083,7 +1083,7 @@ if (require.main === module) {
     process.exit(driftReport.errorCount > 0 ? 1 : 0);
   } else {
     console.log('Usage:');
-    console.log('  node template-contract-compiler.js --doctor   Full diagnostic report');
+    console.log('  node template-contract-compiler.js --doctor   Full runInfo report');
     console.log(
       '  node template-contract-compiler.js --compile  Output compiled contracts as JSON'
     );

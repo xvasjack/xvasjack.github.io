@@ -289,7 +289,7 @@ function safeArray(arr, max = 5) {
 // Guard addTable calls so malformed AI rows never throw and break slide generation.
 function normalizeTableRows(rows) {
   if (!Array.isArray(rows)) return null;
-  const NORMALIZE_MAX_CELL_CHARS = 1000;
+  const NORMALIZE_MAX_CELL_CHARS = 3000;
   const normalized = rows
     .map((row) => {
       if (Array.isArray(row)) {
@@ -667,7 +667,7 @@ function dedupeCompanies(companies) {
 
 // Flatten nested competitor player profile/financialHighlights into top-level fields
 // AI synthesis returns data nested under profile/financialHighlights keys;
-// PPT renderers expect flat top-level fields like revenue, employees, entryYear, etc.
+// PPT builders expect flat top-level fields like revenue, employees, entryYear, etc.
 function flattenPlayerProfile(p) {
   if (!p || typeof p !== 'object') return {};
   const flat = { ...p };
@@ -1289,7 +1289,7 @@ const CHART_COLORS_EXTENDED = [
   '00838F', // teal
 ];
 
-// Semantic colors for specific meanings (opportunities, risks, etc.)
+// Content colors for specific meanings (opportunities, risks, etc.)
 const SEMANTIC_COLORS = {
   positive: '2E7D32',
   negative: 'B71C1C',
@@ -2263,7 +2263,7 @@ function addChevronFlow(slide, phases, patternDef, opts = {}) {
   const chevronW = (totalW - spacing * (count - 1)) / count;
 
   const requestedShape = String(p.shape || '').trim();
-  // homePlate rendering is inconsistent across clients and has caused visual/recovery issues.
+  // homePlate building is inconsistent across clients and has caused visual/recovery issues.
   // Use chevron as the stable default for roadmap bars.
   const chevronShape =
     requestedShape.toLowerCase() === 'homeplate' || !requestedShape ? 'chevron' : requestedShape;

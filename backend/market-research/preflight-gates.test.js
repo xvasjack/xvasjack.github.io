@@ -269,7 +269,7 @@ describe('preflight-gates', () => {
   // -----------------------------------------------------------------------
   test('checkIntegrityPipeline returns INFO skip when file not found', () => {
     const r = checkIntegrityPipeline();
-    if (!fs.existsSync(path.join(PROJECT_ROOT, 'pptx-integrity-pipeline.js'))) {
+    if (!fs.existsSync(path.join(PROJECT_ROOT, 'pptx-fileSafety-pipeline.js'))) {
       expect(r.pass).toBe(true);
       expect(r.severity).toBe(SEVERITY.INFO);
     }
@@ -280,12 +280,12 @@ describe('preflight-gates', () => {
   // -----------------------------------------------------------------------
   test('MODULE_EXPORT_CONTRACTS covers critical modules', () => {
     const expectedModules = [
-      'ppt-single-country.js',
-      'pptx-validator.js',
-      'quality-gates.js',
-      'research-orchestrator.js',
-      'budget-gate.js',
-      'transient-key-sanitizer.js',
+      'deck-builder-single.js',
+      'deck-file-check.js',
+      'content-gates.js',
+      'research-engine.js',
+      'content-size-check.js',
+      'cleanup-temp-fields.js',
     ];
     for (const mod of expectedModules) {
       expect(mod in MODULE_EXPORT_CONTRACTS).toBe(true);
@@ -298,17 +298,17 @@ describe('preflight-gates', () => {
   // 18. No false passes with wrong export
   // -----------------------------------------------------------------------
   test('checkModuleExportContracts no false passes with wrong export', () => {
-    const original = MODULE_EXPORT_CONTRACTS['quality-gates.js'];
-    MODULE_EXPORT_CONTRACTS['quality-gates.js'] = {
+    const original = MODULE_EXPORT_CONTRACTS['content-gates.js'];
+    MODULE_EXPORT_CONTRACTS['content-gates.js'] = {
       functions: [...original.functions, 'THIS_FUNCTION_DOES_NOT_EXIST_ABC'],
     };
 
     try {
       const r = checkModuleExportContracts();
       expect(r.pass).toBe(false);
-      expect(r.evidence.some((e) => /quality-gates/i.test(e))).toBe(true);
+      expect(r.evidence.some((e) => /content-gates/i.test(e))).toBe(true);
     } finally {
-      MODULE_EXPORT_CONTRACTS['quality-gates.js'] = original;
+      MODULE_EXPORT_CONTRACTS['content-gates.js'] = original;
     }
   });
 

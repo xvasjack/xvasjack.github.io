@@ -730,19 +730,19 @@ describe('generateOrphanReport', () => {
 // ---------------------------------------------------------------------------
 
 describe('checkSourceMismatch', () => {
-  test('detects numbers added in render', () => {
-    const semantic = 'Market growing at 12%';
-    const rendered = 'Market growing at 12% with $500M valuation';
-    const result = checkSourceMismatch(semantic, rendered);
+  test('detects numbers added in build', () => {
+    const content = 'Market growing at 12%';
+    const built = 'Market growing at 12% with $500M valuation';
+    const result = checkSourceMismatch(content, built);
     expect(result.match).toBe(false);
     expect(result.addedInRender.length).toBeGreaterThan(0);
     expect(result.addedInRender.some((n) => n.includes('$500m'))).toBe(true);
   });
 
-  test('detects numbers dropped from render', () => {
-    const semantic = 'Market worth $500M growing at 12% CAGR';
-    const rendered = 'Market is growing steadily';
-    const result = checkSourceMismatch(semantic, rendered);
+  test('detects numbers dropped from build', () => {
+    const content = 'Market worth $500M growing at 12% CAGR';
+    const built = 'Market is growing steadily';
+    const result = checkSourceMismatch(content, built);
     expect(result.match).toBe(false);
     expect(result.droppedFromRender.length).toBeGreaterThan(0);
   });

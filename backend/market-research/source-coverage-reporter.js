@@ -4,7 +4,7 @@
  * Source Coverage Reporter — per-slide coverage scoring and orphan reporting.
  *
  * Generates coverage reports, orphan artifacts, and detects source mismatches
- * between semantic output and rendered text.
+ * between content output and built text.
  */
 
 const {
@@ -156,11 +156,11 @@ function generateOrphanReport(synthesis) {
 // ---------------------------------------------------------------------------
 
 /**
- * checkSourceMismatch(semanticOutput, renderedText) — detect when rendered text
- * contains claims that are not present in the semantic output, or vice versa.
+ * checkSourceMismatch(contentOutput, builtText) — detect when built text
+ * contains claims that are not present in the content output, or vice versa.
  *
- * This catches cases where the PPT renderer introduces numbers/claims not in
- * the synthesis, or drops sourced claims during rendering.
+ * This catches cases where the PPT builder introduces numbers/claims not in
+ * the synthesis, or drops sourced claims during building.
  *
  * Returns:
  * {
@@ -170,8 +170,8 @@ function generateOrphanReport(synthesis) {
  *   match: boolean
  * }
  */
-function checkSourceMismatch(semanticOutput, renderedText) {
-  if (!semanticOutput || typeof semanticOutput !== 'string') {
+function checkSourceMismatch(contentOutput, builtText) {
+  if (!contentOutput || typeof contentOutput !== 'string') {
     return {
       mismatches: [],
       addedInRender: [],
@@ -179,7 +179,7 @@ function checkSourceMismatch(semanticOutput, renderedText) {
       match: true,
     };
   }
-  if (!renderedText || typeof renderedText !== 'string') {
+  if (!builtText || typeof builtText !== 'string') {
     return {
       mismatches: [],
       addedInRender: [],
@@ -191,37 +191,37 @@ function checkSourceMismatch(semanticOutput, renderedText) {
   const NUMBER_RE =
     /(?:\$[\d,.]+\s*(?:B|M|K|billion|million|thousand|trillion)?|[\d,.]+\s*%|[\d,.]+\s*(?:GW|MW|kW|TWh|GWh|MWh))/gi;
 
-  const semanticNumbers = new Set(
-    (semanticOutput.match(NUMBER_RE) || []).map((n) => n.trim().toLowerCase())
+  const contentNumbers = new Set(
+    (contentOutput.match(NUMBER_RE) || []).map((n) => n.trim().toLowerCase())
   );
-  const renderedNumbers = new Set(
-    (renderedText.match(NUMBER_RE) || []).map((n) => n.trim().toLowerCase())
+  const builtNumbers = new Set(
+    (builtText.match(NUMBER_RE) || []).map((n) => n.trim().toLowerCase())
   );
 
   const addedInRender = [];
   const droppedFromRender = [];
   const mismatches = [];
 
-  // Numbers in rendered that are NOT in semantic
-  for (const num of renderedNumbers) {
-    if (!semanticNumbers.has(num)) {
+  // Numbers in built that are NOT in content
+  for (const num of builtNumbers) {
+    if (!contentNumbers.has(num)) {
       addedInRender.push(num);
       mismatches.push({
         type: 'added_in_render',
         text: num,
-        location: 'rendered',
+        location: 'built',
       });
     }
   }
 
-  // Numbers in semantic that are NOT in rendered
-  for (const num of semanticNumbers) {
-    if (!renderedNumbers.has(num)) {
+  // Numbers in content that are NOT in built
+  for (const num of contentNumbers) {
+    if (!builtNumbers.has(num)) {
       droppedFromRender.push(num);
       mismatches.push({
         type: 'dropped_from_render',
         text: num,
-        location: 'semantic',
+        location: 'content',
       });
     }
   }

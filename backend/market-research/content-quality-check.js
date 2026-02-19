@@ -1585,7 +1585,8 @@ function detectShallowContent(text) {
     specificCount += (text.match(pattern) || []).length;
   }
   const density = words > 0 ? specificCount / (words / 100) : 0;
-  if (words >= 50 && density < 1) {
+  // Apply density check from 30+ words so the 30-49 range does not slip through.
+  if (words >= 30 && density < 1) {
     reasons.push(`Low information density (${density.toFixed(1)} specifics per 100 words)`);
   }
 

@@ -274,7 +274,7 @@ describe('RouteGeometryError includes exact block keys', () => {
     }
   });
 
-  test('failure is stored with full diagnostic data', () => {
+  test('failure is stored with full runInfo data', () => {
     try {
       enforceStrict({
         blockKey: 'localMajor',

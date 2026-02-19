@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Release Loop Orchestrator
+ * Release Loop FlowManager
  *
  * One command to run the full local release loop:
  *   preflight -> regression -> stress (configurable) -> 2 extra rounds -> fresh PPT -> final report
@@ -98,7 +98,7 @@ const REMEDIATION = {
   'regression-round-1': [
     'Regression tests failed on initial round.',
     'Run: node regression-tests.js --rounds=1 to see detailed output.',
-    'Check template-clone-postprocess.js, quality-gates.js, and ppt-single-country.js.',
+    'Check template-fill.js, content-gates.js, and deck-builder-single.js.',
   ],
   'stress-test': [
     'Stress test found runtime crashes.',
@@ -122,8 +122,8 @@ const REMEDIATION = {
     'Run: node ops-runbook.js --playbook ppt-repair for troubleshooting.',
     'Try: node scripts/release-loop.js --skip-ppt to skip this step.',
   ],
-  'final-validation': [
-    'Final validation failed after all rounds passed.',
+  'final-check': [
+    'Final check failed after all rounds passed.',
     'Run: node scripts/preflight-release.js --strict for details.',
     'Check module imports and HEAD content.',
   ],
@@ -288,7 +288,7 @@ Examples:
     } else {
       console.log('[6/6] PPT generation test...');
       // Try to run test-ppt-generation.js if it exists, otherwise use
-      // the validate-output module for a dry-run validation
+      // the validate-output module for a dry-run check
       const pptScript = fs.existsSync(path.join(PROJECT_ROOT, 'test-ppt-generation.js'))
         ? 'test-ppt-generation.js'
         : null;

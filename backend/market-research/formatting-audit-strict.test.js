@@ -346,7 +346,7 @@ describe('Report Generation with Formatting Audit', () => {
         details: 'Formatting drift detected. Blocking slide keys: header_footer_line_drift',
         evidence: ['header_footer_line_drift: delta > 2500 EMU'],
         remediation:
-          'Review formatting audit results in preflight-reports/. Fix drift/mismatch issues in ppt-single-country.js or template-patterns.json',
+          'Review formatting audit results in preflight-reports/. Fix drift/mismatch issues in deck-builder-single.js or template-patterns.json',
       },
     ];
     const meta = {

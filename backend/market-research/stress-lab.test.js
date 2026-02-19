@@ -238,7 +238,7 @@ describe('Error Classification', () => {
   test('data gate patterns are correctly classified', () => {
     expect(classifyError('[PPT] Data gate failed for section X')).toBe('data-gate');
     expect(classifyError('[PPT] Cell text exceeds hard cap')).toBe('data-gate');
-    expect(classifyError('Render normalization rejected payload')).toBe('data-gate');
+    expect(classifyError('Build normalization rejected payload')).toBe('data-gate');
     expect(classifyError('Data quality below threshold')).toBe('data-gate');
   });
 
@@ -258,7 +258,7 @@ describe('Failure Clustering', () => {
       status: 'fail',
       error: 'Cannot read properties of null (reading x)',
       errorClass: 'runtime-crash',
-      failedPhase: 'render-ppt',
+      failedPhase: 'build-ppt',
       mutationClasses: ['schema-corruption', 'empty-null'],
       stack: 'Error: ...',
     },
@@ -267,7 +267,7 @@ describe('Failure Clustering', () => {
       status: 'fail',
       error: 'Cannot read properties of null (reading y)',
       errorClass: 'runtime-crash',
-      failedPhase: 'render-ppt',
+      failedPhase: 'build-ppt',
       mutationClasses: ['schema-corruption'],
       stack: 'Error: ...',
     },
@@ -284,7 +284,7 @@ describe('Failure Clustering', () => {
       status: 'fail',
       error: '[PPT] Data gate failed for section X',
       errorClass: 'data-gate',
-      failedPhase: 'render-ppt',
+      failedPhase: 'build-ppt',
       mutationClasses: ['long-text'],
       stack: 'Error: ...',
     },
@@ -293,7 +293,7 @@ describe('Failure Clustering', () => {
       status: 'fail',
       error: 'foo is not a function',
       errorClass: 'runtime-crash',
-      failedPhase: 'budget-gate',
+      failedPhase: 'content-size-check',
       mutationClasses: ['schema-corruption', 'chart-anomalies'],
       stack: 'Error: ...',
     },
@@ -324,9 +324,9 @@ describe('Failure Clustering', () => {
 
   test('byPhase groups failures by phase', () => {
     const result = cluster(mockTelemetry);
-    expect(result.byPhase['render-ppt']).toBeDefined();
-    expect(result.byPhase['render-ppt'].length).toBe(3);
-    expect(result.byPhase['budget-gate'].length).toBe(1);
+    expect(result.byPhase['build-ppt']).toBeDefined();
+    expect(result.byPhase['build-ppt'].length).toBe(3);
+    expect(result.byPhase['content-size-check'].length).toBe(1);
   });
 
   test('byMutationClass groups failures by mutation class', () => {
@@ -344,7 +344,7 @@ describe('Top Blockers', () => {
     status: i % 3 === 0 ? 'fail' : 'pass',
     error: i % 3 === 0 ? `Error type ${i % 2}: something failed` : null,
     errorClass: i % 3 === 0 ? (i % 6 === 0 ? 'runtime-crash' : 'data-gate') : null,
-    failedPhase: i % 3 === 0 ? (i % 6 === 0 ? 'render-ppt' : 'budget-gate') : null,
+    failedPhase: i % 3 === 0 ? (i % 6 === 0 ? 'build-ppt' : 'content-size-check') : null,
     mutationClasses: ['schema-corruption', 'empty-null'],
     stack: i % 3 === 0 ? 'Error stack...' : null,
   }));
@@ -386,13 +386,13 @@ describe('Risk Scoring', () => {
       count: 5,
       errorClasses: ['runtime-crash'],
       mutationClasses: ['schema-corruption'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
     };
     const gateCluster = {
       count: 5,
       errorClasses: ['data-gate'],
       mutationClasses: ['schema-corruption'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
     };
     const crashScore = getRiskScore(crashCluster, 100);
     const gateScore = getRiskScore(gateCluster, 100);
@@ -404,13 +404,13 @@ describe('Risk Scoring', () => {
       count: 50,
       errorClasses: ['runtime-crash'],
       mutationClasses: ['schema-corruption'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
     };
     const lowFreq = {
       count: 2,
       errorClasses: ['runtime-crash'],
       mutationClasses: ['schema-corruption'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
     };
     expect(getRiskScore(highFreq, 100)).toBeGreaterThan(getRiskScore(lowFreq, 100));
   });
@@ -522,7 +522,7 @@ describe('Report Format', () => {
         totalSeeds: 5,
         riskScore: 75,
         errorClasses: ['runtime-crash'],
-        phases: ['render-ppt'],
+        phases: ['build-ppt'],
         mutationClasses: ['schema-corruption'],
         sampleError: 'Cannot read properties of null (reading x)',
         replayCommand: 'node stress-lab.js --seed=1',
@@ -551,25 +551,25 @@ describe('Aggregate Stats', () => {
         status: 'pass',
         durationMs: 100,
         mutationClasses: ['transient-keys'],
-        phases: { 'build-payload': { durationMs: 10 }, 'render-ppt': { durationMs: 80 } },
+        phases: { 'build-payload': { durationMs: 10 }, 'build-ppt': { durationMs: 80 } },
       },
       {
         seed: 2,
         status: 'fail',
         errorClass: 'runtime-crash',
-        failedPhase: 'render-ppt',
+        failedPhase: 'build-ppt',
         durationMs: 200,
         mutationClasses: ['schema-corruption'],
-        phases: { 'build-payload': { durationMs: 15 }, 'render-ppt': { durationMs: 150 } },
+        phases: { 'build-payload': { durationMs: 15 }, 'build-ppt': { durationMs: 150 } },
       },
       {
         seed: 3,
         status: 'fail',
         errorClass: 'data-gate',
-        failedPhase: 'budget-gate',
+        failedPhase: 'content-size-check',
         durationMs: 50,
         mutationClasses: ['long-text'],
-        phases: { 'build-payload': { durationMs: 5 }, 'budget-gate': { durationMs: 40 } },
+        phases: { 'build-payload': { durationMs: 5 }, 'content-size-check': { durationMs: 40 } },
       },
     ];
     const stats = computeAggregateStats(telemetry);
@@ -578,8 +578,8 @@ describe('Aggregate Stats', () => {
     expect(stats.failed).toBe(2);
     expect(stats.runtimeCrashes).toBe(1);
     expect(stats.dataGateRejections).toBe(1);
-    expect(stats.failuresByPhase['render-ppt']).toBe(1);
-    expect(stats.failuresByPhase['budget-gate']).toBe(1);
+    expect(stats.failuresByPhase['build-ppt']).toBe(1);
+    expect(stats.failuresByPhase['content-size-check']).toBe(1);
     expect(stats.failuresByMutationClass['schema-corruption']).toBe(1);
     expect(stats.p50Duration).toBeGreaterThan(0);
     expect(stats.p95Duration).toBeGreaterThanOrEqual(stats.p50Duration);

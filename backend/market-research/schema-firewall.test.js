@@ -165,8 +165,8 @@ function makeValidSingleCountrySynthesis() {
 // ---------------------------------------------------------------------------
 
 describe('Schema Firewall', () => {
-  // ====== 1. Valid multi-country synthesis passes validation ======
-  test('valid multi-country synthesis passes validation', () => {
+  // ====== 1. Valid multi-country synthesis passes check ======
+  test('valid multi-country synthesis passes check', () => {
     const synthesis = makeValidMultiCountrySynthesis();
     const result = validate(synthesis);
     expect(result.valid).toBe(true);
@@ -177,8 +177,8 @@ describe('Schema Firewall', () => {
     expect(result.fieldResults.summary.present).toBe(true);
   });
 
-  // ====== 2. Valid single-country synthesis passes validation ======
-  test('valid single-country synthesis passes validation', () => {
+  // ====== 2. Valid single-country synthesis passes check ======
+  test('valid single-country synthesis passes check', () => {
     const synthesis = makeValidSingleCountrySynthesis();
     const result = validate(synthesis);
     expect(result.valid).toBe(true);
@@ -187,7 +187,7 @@ describe('Schema Firewall', () => {
     expect(result.fieldResults.keyInsights.present).toBe(true);
   });
 
-  // ====== 3. Missing required sections fail validation ======
+  // ====== 3. Missing required sections fail check ======
   test('missing required sections produce errors', () => {
     const synthesis = { country: 'Vietnam' };
     const result = validate(synthesis);
@@ -406,7 +406,7 @@ describe('Schema Firewall', () => {
   });
 
   // ====== 20. Mutation: type corruption (array where object expected) ======
-  test('validation catches type corruption: array instead of object', () => {
+  test('check catches type corruption: array instead of object', () => {
     const synthesis = makeValidMultiCountrySynthesis();
     synthesis.policy = ['not', 'an', 'object'];
     const result = validate(synthesis);
@@ -415,7 +415,7 @@ describe('Schema Firewall', () => {
   });
 
   // ====== 21. Mutation: nested anomaly — acts as string instead of array ======
-  test('validation catches nested type anomaly', () => {
+  test('check catches nested type anomaly', () => {
     const synthesis = makeValidMultiCountrySynthesis();
     synthesis.policy.foundationalActs.acts = 'not an array';
     const result = validate(synthesis);
@@ -424,7 +424,7 @@ describe('Schema Firewall', () => {
   });
 
   // ====== 22. Mutation: missing required field in insight ======
-  test('validation catches missing required fields in insight objects', () => {
+  test('check catches missing required fields in insight objects', () => {
     const synthesis = makeValidSingleCountrySynthesis();
     synthesis.keyInsights[0] = { pattern: 'No title or data' };
     const result = validate(synthesis);

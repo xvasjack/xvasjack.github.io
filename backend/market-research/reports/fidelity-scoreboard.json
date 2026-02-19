@@ -1,0 +1,2458 @@
+{
+  "reportType": "template_fidelity_scoreboard",
+  "generatedAt": "2026-02-15T08:28:34.917Z",
+  "contractVersion": "1.0.0",
+  "templateSource": "251219_Escort_Phase 1 Market Selection_V3.pptx",
+  "tolerances": {
+    "positionInches": 0.15,
+    "sizeInches": 0.3
+  },
+  "overall": {
+    "score": 88,
+    "totalSlides": 67,
+    "passCount": 67,
+    "failCount": 0,
+    "passRate": 100,
+    "filesAnalyzed": 2
+  },
+  "files": [
+    {
+      "fileName": "test-output.pptx",
+      "totalSlides": 35,
+      "score": 88,
+      "passCount": 35,
+      "failCount": 0,
+      "passRate": 100,
+      "topDeltas": [
+        {
+          "slideNum": 15,
+          "patternKey": "chart_with_grid",
+          "check": "chart_position",
+          "maxDeviation": 7.081199999999999,
+          "delta": {
+            "dx": 0.5991,
+            "dy": 0.3117000000000001,
+            "dw": 7.081199999999999,
+            "dh": 0.8634999999999997,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 14,
+          "patternKey": "chart_with_grid",
+          "check": "chart_position",
+          "maxDeviation": 6.855700000000001,
+          "delta": {
+            "dx": 0.46369999999999995,
+            "dy": 0.5484,
+            "dw": 6.855700000000001,
+            "dh": 1.0581,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 13,
+          "patternKey": "chart_with_grid",
+          "check": "chart_position",
+          "maxDeviation": 6.8462,
+          "delta": {
+            "dx": 0.44919999999999993,
+            "dy": 0.43690000000000007,
+            "dw": 6.8462,
+            "dh": 0.9400999999999997,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 4,
+          "patternKey": "company_comparison",
+          "check": "table_position",
+          "maxDeviation": 6.499099999999999,
+          "delta": {
+            "dx": 0.012899999999999967,
+            "dy": 0.41479999999999984,
+            "dw": 6.499099999999999,
+            "dh": 0,
+            "wChecked": true,
+            "hChecked": false
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 7,
+          "patternKey": "chart_insight_panels",
+          "check": "chart_position",
+          "maxDeviation": 6.4376,
+          "delta": {
+            "dx": 6.4376,
+            "dy": 0.4144000000000001,
+            "dw": 2.4201999999999995,
+            "dh": 0.4771000000000001,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 10,
+          "patternKey": "chart_insight_panels",
+          "check": "chart_position",
+          "maxDeviation": 2.0603999999999996,
+          "delta": {
+            "dx": 0.44289999999999996,
+            "dy": 0.8108,
+            "dw": 2.0603999999999996,
+            "dh": 0.6545000000000001,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 12,
+          "patternKey": "chart_insight_panels",
+          "check": "chart_position",
+          "maxDeviation": 1.6954000000000002,
+          "delta": {
+            "dx": 0.010000000000000009,
+            "dy": 0.3540000000000001,
+            "dw": 1.6954000000000002,
+            "dh": 0.6985999999999999,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 11,
+          "patternKey": "chart_callout_dual",
+          "check": "chartLeft_position",
+          "maxDeviation": 1.1381999999999999,
+          "delta": {
+            "dx": 0.0019000000000000128,
+            "dy": 0.09450000000000003,
+            "dw": 0.005600000000000271,
+            "dh": 1.1381999999999999,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 11,
+          "patternKey": "chart_callout_dual",
+          "check": "chartRight_position",
+          "maxDeviation": 0.7527000000000004,
+          "delta": {
+            "dx": 0.00009999999999976694,
+            "dy": 0.04410000000000003,
+            "dw": 0.12170000000000059,
+            "dh": 0.7527000000000004,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 6,
+          "patternKey": "regulatory_table",
+          "check": "table_position",
+          "maxDeviation": 0.40269999999999984,
+          "delta": {
+            "dx": 0.009099999999999997,
+            "dy": 0.40269999999999984,
+            "dw": 0,
+            "dh": 0,
+            "wChecked": true,
+            "hChecked": false
+          },
+          "pass": false
+        }
+      ],
+      "slideResults": [
+        {
+          "slideNum": 1,
+          "patternKey": "cover",
+          "classification": {
+            "patternKey": "cover",
+            "confidence": 0.95
+          },
+          "score": 100,
+          "totalChecks": 2,
+          "passedChecks": 2,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 2,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 3,
+          "patternKey": "executive_summary",
+          "classification": {
+            "patternKey": "executive_summary",
+            "confidence": 0.85
+          },
+          "score": 100,
+          "totalChecks": 4,
+          "passedChecks": 4,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 4,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "table_position",
+              "pass": false,
+              "expected": {
+                "x": 0.3667,
+                "y": 1.467,
+                "w": 12.6
+              },
+              "actual": {
+                "x": 0.3796,
+                "y": 1.8818,
+                "w": 6.1009,
+                "h": 4.7814
+              },
+              "delta": {
+                "dx": 0.012899999999999967,
+                "dy": 0.41479999999999984,
+                "dw": 6.499099999999999,
+                "dh": 0,
+                "wChecked": true,
+                "hChecked": false
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 5,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 6,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.5
+          },
+          "score": 75,
+          "totalChecks": 8,
+          "passedChecks": 6,
+          "failedChecks": 2,
+          "failures": [
+            {
+              "check": "titleBar_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 0.05,
+                "w": 12.59,
+                "h": 0.91
+              },
+              "actual": {
+                "x": 0.3736,
+                "y": 0.2875,
+                "w": 12.5862,
+                "h": 0.691
+              },
+              "delta": {
+                "dx": 0.006400000000000017,
+                "dy": 0.2375,
+                "dw": 0.0038000000000000256,
+                "dh": 0.21900000000000008,
+                "wChecked": true,
+                "hChecked": true
+              }
+            },
+            {
+              "check": "table_position",
+              "pass": false,
+              "expected": {
+                "x": 0.3667,
+                "y": 1.467,
+                "w": 12.6
+              },
+              "actual": {
+                "x": 0.3758,
+                "y": 1.8697,
+                "w": 12.6,
+                "h": 4.7935
+              },
+              "delta": {
+                "dx": 0.009099999999999997,
+                "dy": 0.40269999999999984,
+                "dw": 0,
+                "dh": 0,
+                "wChecked": true,
+                "hChecked": false
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 7,
+          "patternKey": "chart_insight_panels",
+          "classification": {
+            "patternKey": "chart_insight_panels",
+            "confidence": 0.5
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "chart_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 1.5,
+                "w": 7.8,
+                "h": 4.5
+              },
+              "actual": {
+                "x": 6.8176,
+                "y": 1.9144,
+                "w": 5.3798,
+                "h": 4.9771
+              },
+              "delta": {
+                "dx": 6.4376,
+                "dy": 0.4144000000000001,
+                "dw": 2.4201999999999995,
+                "dh": 0.4771000000000001,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 8,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "titleBar_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 0.05,
+                "w": 12.59,
+                "h": 0.91
+              },
+              "actual": {
+                "x": 0.3736,
+                "y": 0.2875,
+                "w": 12.5862,
+                "h": 0.691
+              },
+              "delta": {
+                "dx": 0.006400000000000017,
+                "dy": 0.2375,
+                "dw": 0.0038000000000000256,
+                "dh": 0.21900000000000008,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 9,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 10,
+          "patternKey": "chart_insight_panels",
+          "classification": {
+            "patternKey": "chart_insight_panels",
+            "confidence": 0.5
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "chart_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 1.5,
+                "w": 7.8,
+                "h": 4.5
+              },
+              "actual": {
+                "x": 0.8229,
+                "y": 2.3108,
+                "w": 5.7396,
+                "h": 3.8455
+              },
+              "delta": {
+                "dx": 0.44289999999999996,
+                "dy": 0.8108,
+                "dw": 2.0603999999999996,
+                "dh": 0.6545000000000001,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 11,
+          "patternKey": "chart_callout_dual",
+          "classification": {
+            "patternKey": "chart_callout_dual",
+            "confidence": 0.6
+          },
+          "score": 71,
+          "totalChecks": 7,
+          "passedChecks": 5,
+          "failedChecks": 2,
+          "failures": [
+            {
+              "check": "chartLeft_position",
+              "pass": false,
+              "expected": {
+                "x": 0.83,
+                "y": 2.31,
+                "w": 5.74,
+                "h": 3.85
+              },
+              "actual": {
+                "x": 0.8281,
+                "y": 2.4045,
+                "w": 5.7344,
+                "h": 2.7118
+              },
+              "delta": {
+                "dx": 0.0019000000000000128,
+                "dy": 0.09450000000000003,
+                "dw": 0.005600000000000271,
+                "dh": 1.1381999999999999,
+                "wChecked": true,
+                "hChecked": true
+              }
+            },
+            {
+              "check": "chartRight_position",
+              "pass": false,
+              "expected": {
+                "x": 6.87,
+                "y": 1.91,
+                "w": 6.09,
+                "h": 4.69
+              },
+              "actual": {
+                "x": 6.8701,
+                "y": 1.8659,
+                "w": 6.2117,
+                "h": 3.9373
+              },
+              "delta": {
+                "dx": 0.00009999999999976694,
+                "dy": 0.04410000000000003,
+                "dw": 0.12170000000000059,
+                "dh": 0.7527000000000004,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 12,
+          "patternKey": "chart_insight_panels",
+          "classification": {
+            "patternKey": "chart_insight_panels",
+            "confidence": 0.5
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "chart_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 1.5,
+                "w": 7.8,
+                "h": 4.5
+              },
+              "actual": {
+                "x": 0.37,
+                "y": 1.854,
+                "w": 6.1046,
+                "h": 3.8014
+              },
+              "delta": {
+                "dx": 0.010000000000000009,
+                "dy": 0.3540000000000001,
+                "dw": 1.6954000000000002,
+                "dh": 0.6985999999999999,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 13,
+          "patternKey": "chart_with_grid",
+          "classification": {
+            "patternKey": "chart_with_grid",
+            "confidence": 0.6
+          },
+          "score": 86,
+          "totalChecks": 7,
+          "passedChecks": 6,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "chart_position",
+              "pass": false,
+              "expected": {
+                "x": 0.83,
+                "y": 2.31,
+                "w": 5.74,
+                "h": 3.85
+              },
+              "actual": {
+                "x": 0.3808,
+                "y": 1.8731,
+                "w": 12.5862,
+                "h": 4.7901
+              },
+              "delta": {
+                "dx": 0.44919999999999993,
+                "dy": 0.43690000000000007,
+                "dw": 6.8462,
+                "dh": 0.9400999999999997,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 14,
+          "patternKey": "chart_with_grid",
+          "classification": {
+            "patternKey": "chart_with_grid",
+            "confidence": 0.6
+          },
+          "score": 86,
+          "totalChecks": 7,
+          "passedChecks": 6,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "chart_position",
+              "pass": false,
+              "expected": {
+                "x": 0.83,
+                "y": 2.31,
+                "w": 5.74,
+                "h": 3.85
+              },
+              "actual": {
+                "x": 0.3663,
+                "y": 1.7616,
+                "w": 12.5957,
+                "h": 4.9081
+              },
+              "delta": {
+                "dx": 0.46369999999999995,
+                "dy": 0.5484,
+                "dw": 6.855700000000001,
+                "dh": 1.0581,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 15,
+          "patternKey": "chart_with_grid",
+          "classification": {
+            "patternKey": "chart_with_grid",
+            "confidence": 0.6
+          },
+          "score": 86,
+          "totalChecks": 7,
+          "passedChecks": 6,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "chart_position",
+              "pass": false,
+              "expected": {
+                "x": 0.83,
+                "y": 2.31,
+                "w": 5.74,
+                "h": 3.85
+              },
+              "actual": {
+                "x": 0.2309,
+                "y": 1.9983,
+                "w": 12.8212,
+                "h": 4.7135
+              },
+              "delta": {
+                "dx": 0.5991,
+                "dy": 0.3117000000000001,
+                "dw": 7.081199999999999,
+                "dh": 0.8634999999999997,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 16,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 17,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 18,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 19,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 20,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "sourceBar_position",
+              "pass": false,
+              "expected": {
+                "x": 0.37,
+                "y": 6.69,
+                "w": 12.59,
+                "h": 0.25
+              },
+              "actual": {
+                "x": 0.3721,
+                "y": 6.6661,
+                "w": 12.5949,
+                "h": 0.6059
+              },
+              "delta": {
+                "dx": 0.0020999999999999908,
+                "dy": 0.023900000000000254,
+                "dw": 0.004900000000001015,
+                "dh": 0.3559,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 21,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 22,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 23,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.5
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 24,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 25,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.5
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 26,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.5
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Meiryo UI, Yu mincho"
+            }
+          ]
+        },
+        {
+          "slideNum": 27,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 28,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 29,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 30,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 31,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 32,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 33,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 34,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 35,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 71,
+          "totalChecks": 7,
+          "passedChecks": 5,
+          "failedChecks": 2,
+          "failures": [
+            {
+              "check": "titleBar_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 0.05,
+                "w": 12.59,
+                "h": 0.91
+              },
+              "actual": null,
+              "detail": "title shape not found"
+            },
+            {
+              "check": "title_shape_exists",
+              "pass": false,
+              "expected": true,
+              "actual": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "fileName": "vietnam-output.pptx",
+      "totalSlides": 32,
+      "score": 88,
+      "passCount": 32,
+      "failCount": 0,
+      "passRate": 100,
+      "topDeltas": [
+        {
+          "slideNum": 12,
+          "patternKey": "chart_with_grid",
+          "check": "chart_position",
+          "maxDeviation": 6.855700000000001,
+          "delta": {
+            "dx": 0.46369999999999995,
+            "dy": 0.5484,
+            "dw": 6.855700000000001,
+            "dh": 1.0581,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 4,
+          "patternKey": "company_comparison",
+          "check": "table_position",
+          "maxDeviation": 6.499099999999999,
+          "delta": {
+            "dx": 0.012899999999999967,
+            "dy": 0.41479999999999984,
+            "dw": 6.499099999999999,
+            "dh": 0,
+            "wChecked": true,
+            "hChecked": false
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 7,
+          "patternKey": "chart_insight_panels",
+          "check": "chart_position",
+          "maxDeviation": 6.4376,
+          "delta": {
+            "dx": 6.4376,
+            "dy": 0.4144000000000001,
+            "dw": 2.4201999999999995,
+            "dh": 0.4771000000000001,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 10,
+          "patternKey": "chart_insight_panels",
+          "check": "chart_position",
+          "maxDeviation": 2.0603999999999996,
+          "delta": {
+            "dx": 0.44289999999999996,
+            "dy": 0.8108,
+            "dw": 2.0603999999999996,
+            "dh": 0.6545000000000001,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 11,
+          "patternKey": "chart_callout_dual",
+          "check": "chartLeft_position",
+          "maxDeviation": 1.1381999999999999,
+          "delta": {
+            "dx": 0.0019000000000000128,
+            "dy": 0.09450000000000003,
+            "dw": 0.005600000000000271,
+            "dh": 1.1381999999999999,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 11,
+          "patternKey": "chart_callout_dual",
+          "check": "chartRight_position",
+          "maxDeviation": 0.7527000000000004,
+          "delta": {
+            "dx": 0.00009999999999976694,
+            "dy": 0.04410000000000003,
+            "dw": 0.12170000000000059,
+            "dh": 0.7527000000000004,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 6,
+          "patternKey": "regulatory_table",
+          "check": "table_position",
+          "maxDeviation": 0.40269999999999984,
+          "delta": {
+            "dx": 0.009099999999999997,
+            "dy": 0.40269999999999984,
+            "dw": 0,
+            "dh": 0,
+            "wChecked": true,
+            "hChecked": false
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 17,
+          "patternKey": "company_comparison",
+          "check": "sourceBar_position",
+          "maxDeviation": 0.3559,
+          "delta": {
+            "dx": 0.0020999999999999908,
+            "dy": 0.023900000000000254,
+            "dw": 0.004900000000001015,
+            "dh": 0.3559,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 6,
+          "patternKey": "regulatory_table",
+          "check": "titleBar_position",
+          "maxDeviation": 0.2375,
+          "delta": {
+            "dx": 0.006400000000000017,
+            "dy": 0.2375,
+            "dw": 0.0038000000000000256,
+            "dh": 0.21900000000000008,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        },
+        {
+          "slideNum": 8,
+          "patternKey": "regulatory_table",
+          "check": "titleBar_position",
+          "maxDeviation": 0.2375,
+          "delta": {
+            "dx": 0.006400000000000017,
+            "dy": 0.2375,
+            "dw": 0.0038000000000000256,
+            "dh": 0.21900000000000008,
+            "wChecked": true,
+            "hChecked": true
+          },
+          "pass": false
+        }
+      ],
+      "slideResults": [
+        {
+          "slideNum": 1,
+          "patternKey": "cover",
+          "classification": {
+            "patternKey": "cover",
+            "confidence": 0.95
+          },
+          "score": 100,
+          "totalChecks": 2,
+          "passedChecks": 2,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 2,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 3,
+          "patternKey": "executive_summary",
+          "classification": {
+            "patternKey": "executive_summary",
+            "confidence": 0.85
+          },
+          "score": 100,
+          "totalChecks": 4,
+          "passedChecks": 4,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 4,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "table_position",
+              "pass": false,
+              "expected": {
+                "x": 0.3667,
+                "y": 1.467,
+                "w": 12.6
+              },
+              "actual": {
+                "x": 0.3796,
+                "y": 1.8818,
+                "w": 6.1009,
+                "h": 4.7814
+              },
+              "delta": {
+                "dx": 0.012899999999999967,
+                "dy": 0.41479999999999984,
+                "dw": 6.499099999999999,
+                "dh": 0,
+                "wChecked": true,
+                "hChecked": false
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 5,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 6,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 75,
+          "totalChecks": 8,
+          "passedChecks": 6,
+          "failedChecks": 2,
+          "failures": [
+            {
+              "check": "titleBar_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 0.05,
+                "w": 12.59,
+                "h": 0.91
+              },
+              "actual": {
+                "x": 0.3736,
+                "y": 0.2875,
+                "w": 12.5862,
+                "h": 0.691
+              },
+              "delta": {
+                "dx": 0.006400000000000017,
+                "dy": 0.2375,
+                "dw": 0.0038000000000000256,
+                "dh": 0.21900000000000008,
+                "wChecked": true,
+                "hChecked": true
+              }
+            },
+            {
+              "check": "table_position",
+              "pass": false,
+              "expected": {
+                "x": 0.3667,
+                "y": 1.467,
+                "w": 12.6
+              },
+              "actual": {
+                "x": 0.3758,
+                "y": 1.8697,
+                "w": 12.6,
+                "h": 4.7935
+              },
+              "delta": {
+                "dx": 0.009099999999999997,
+                "dy": 0.40269999999999984,
+                "dw": 0,
+                "dh": 0,
+                "wChecked": true,
+                "hChecked": false
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 7,
+          "patternKey": "chart_insight_panels",
+          "classification": {
+            "patternKey": "chart_insight_panels",
+            "confidence": 0.5
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "chart_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 1.5,
+                "w": 7.8,
+                "h": 4.5
+              },
+              "actual": {
+                "x": 6.8176,
+                "y": 1.9144,
+                "w": 5.3798,
+                "h": 4.9771
+              },
+              "delta": {
+                "dx": 6.4376,
+                "dy": 0.4144000000000001,
+                "dw": 2.4201999999999995,
+                "dh": 0.4771000000000001,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 8,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "titleBar_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 0.05,
+                "w": 12.59,
+                "h": 0.91
+              },
+              "actual": {
+                "x": 0.3736,
+                "y": 0.2875,
+                "w": 12.5862,
+                "h": 0.691
+              },
+              "delta": {
+                "dx": 0.006400000000000017,
+                "dy": 0.2375,
+                "dw": 0.0038000000000000256,
+                "dh": 0.21900000000000008,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 9,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 10,
+          "patternKey": "chart_insight_panels",
+          "classification": {
+            "patternKey": "chart_insight_panels",
+            "confidence": 0.5
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "chart_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 1.5,
+                "w": 7.8,
+                "h": 4.5
+              },
+              "actual": {
+                "x": 0.8229,
+                "y": 2.3108,
+                "w": 5.7396,
+                "h": 3.8455
+              },
+              "delta": {
+                "dx": 0.44289999999999996,
+                "dy": 0.8108,
+                "dw": 2.0603999999999996,
+                "dh": 0.6545000000000001,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 11,
+          "patternKey": "chart_callout_dual",
+          "classification": {
+            "patternKey": "chart_callout_dual",
+            "confidence": 0.6
+          },
+          "score": 71,
+          "totalChecks": 7,
+          "passedChecks": 5,
+          "failedChecks": 2,
+          "failures": [
+            {
+              "check": "chartLeft_position",
+              "pass": false,
+              "expected": {
+                "x": 0.83,
+                "y": 2.31,
+                "w": 5.74,
+                "h": 3.85
+              },
+              "actual": {
+                "x": 0.8281,
+                "y": 2.4045,
+                "w": 5.7344,
+                "h": 2.7118
+              },
+              "delta": {
+                "dx": 0.0019000000000000128,
+                "dy": 0.09450000000000003,
+                "dw": 0.005600000000000271,
+                "dh": 1.1381999999999999,
+                "wChecked": true,
+                "hChecked": true
+              }
+            },
+            {
+              "check": "chartRight_position",
+              "pass": false,
+              "expected": {
+                "x": 6.87,
+                "y": 1.91,
+                "w": 6.09,
+                "h": 4.69
+              },
+              "actual": {
+                "x": 6.8701,
+                "y": 1.8659,
+                "w": 6.2117,
+                "h": 3.9373
+              },
+              "delta": {
+                "dx": 0.00009999999999976694,
+                "dy": 0.04410000000000003,
+                "dw": 0.12170000000000059,
+                "dh": 0.7527000000000004,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 12,
+          "patternKey": "chart_with_grid",
+          "classification": {
+            "patternKey": "chart_with_grid",
+            "confidence": 0.6
+          },
+          "score": 86,
+          "totalChecks": 7,
+          "passedChecks": 6,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "chart_position",
+              "pass": false,
+              "expected": {
+                "x": 0.83,
+                "y": 2.31,
+                "w": 5.74,
+                "h": 3.85
+              },
+              "actual": {
+                "x": 0.3663,
+                "y": 1.7616,
+                "w": 12.5957,
+                "h": 4.9081
+              },
+              "delta": {
+                "dx": 0.46369999999999995,
+                "dy": 0.5484,
+                "dw": 6.855700000000001,
+                "dh": 1.0581,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 13,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 14,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 15,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 16,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 17,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "sourceBar_position",
+              "pass": false,
+              "expected": {
+                "x": 0.37,
+                "y": 6.69,
+                "w": 12.59,
+                "h": 0.25
+              },
+              "actual": {
+                "x": 0.3721,
+                "y": 6.6661,
+                "w": 12.5949,
+                "h": 0.6059
+              },
+              "delta": {
+                "dx": 0.0020999999999999908,
+                "dy": 0.023900000000000254,
+                "dw": 0.004900000000001015,
+                "dh": 0.3559,
+                "wChecked": true,
+                "hChecked": true
+              }
+            }
+          ]
+        },
+        {
+          "slideNum": 18,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.5
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 19,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 20,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.5
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 21,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 22,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.5
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 23,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.5
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Meiryo UI, Yu mincho"
+            }
+          ]
+        },
+        {
+          "slideNum": 24,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.5
+          },
+          "score": 100,
+          "totalChecks": 8,
+          "passedChecks": 8,
+          "failedChecks": 0,
+          "failures": []
+        },
+        {
+          "slideNum": 25,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 26,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.5
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 27,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 28,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 88,
+          "totalChecks": 8,
+          "passedChecks": 7,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 29,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 86,
+          "totalChecks": 7,
+          "passedChecks": 6,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 30,
+          "patternKey": "company_comparison",
+          "classification": {
+            "patternKey": "company_comparison",
+            "confidence": 0.65
+          },
+          "score": 86,
+          "totalChecks": 7,
+          "passedChecks": 6,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "title_font_size",
+              "pass": false,
+              "expected": 20,
+              "actual": "16"
+            }
+          ]
+        },
+        {
+          "slideNum": 31,
+          "patternKey": "toc_divider",
+          "classification": {
+            "patternKey": "toc_divider",
+            "confidence": 0.9
+          },
+          "score": 83,
+          "totalChecks": 6,
+          "passedChecks": 5,
+          "failedChecks": 1,
+          "failures": [
+            {
+              "check": "font_family",
+              "pass": false,
+              "expected": "Segoe UI",
+              "actual": "Yu Gothic"
+            }
+          ]
+        },
+        {
+          "slideNum": 32,
+          "patternKey": "regulatory_table",
+          "classification": {
+            "patternKey": "regulatory_table",
+            "confidence": 0.7
+          },
+          "score": 71,
+          "totalChecks": 7,
+          "passedChecks": 5,
+          "failedChecks": 2,
+          "failures": [
+            {
+              "check": "titleBar_position",
+              "pass": false,
+              "expected": {
+                "x": 0.38,
+                "y": 0.05,
+                "w": 12.59,
+                "h": 0.91
+              },
+              "actual": null,
+              "detail": "title shape not found"
+            },
+            {
+              "check": "title_shape_exists",
+              "pass": false,
+              "expected": true,
+              "actual": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rootCauses": [
+    {
+      "check": "font_family",
+      "category": "style",
+      "frequency": 16,
+      "affectedSlides": [
+        "test-output.pptx:slide2",
+        "test-output.pptx:slide5",
+        "test-output.pptx:slide9",
+        "test-output.pptx:slide16",
+        "test-output.pptx:slide22",
+        "test-output.pptx:slide26",
+        "test-output.pptx:slide28",
+        "test-output.pptx:slide34",
+        "vietnam-output.pptx:slide2",
+        "vietnam-output.pptx:slide5"
+      ],
+      "rootCause": "Slide uses a font family not matching the template spec (Segoe UI). This usually means pptxgenjs defaults or a hardcoded font override in deck-builder-single.js or ppt-utils.js.",
+      "remediation": "Ensure all addText/addTable calls use fontFace from template-patterns.json style.fonts.majorLatin.",
+      "examples": [
+        {
+          "slide": 2,
+          "file": "test-output.pptx",
+          "expected": "Segoe UI",
+          "actual": "Yu Gothic"
+        },
+        {
+          "slide": 5,
+          "file": "test-output.pptx",
+          "expected": "Segoe UI",
+          "actual": "Yu Gothic"
+        },
+        {
+          "slide": 9,
+          "file": "test-output.pptx",
+          "expected": "Segoe UI",
+          "actual": "Yu Gothic"
+        }
+      ]
+    },
+    {
+      "check": "title_font_size",
+      "category": "style",
+      "frequency": 14,
+      "affectedSlides": [
+        "test-output.pptx:slide23",
+        "test-output.pptx:slide25",
+        "test-output.pptx:slide29",
+        "test-output.pptx:slide30",
+        "test-output.pptx:slide31",
+        "test-output.pptx:slide32",
+        "test-output.pptx:slide33",
+        "vietnam-output.pptx:slide20",
+        "vietnam-output.pptx:slide22",
+        "vietnam-output.pptx:slide26"
+      ],
+      "rootCause": "Title text uses a font size different from template (20pt). May be a hardcoded fontSize in the title building code.",
+      "remediation": "Use template-patterns.json style.fonts.title.size instead of hardcoded values.",
+      "examples": [
+        {
+          "slide": 23,
+          "file": "test-output.pptx",
+          "expected": 20,
+          "actual": "16"
+        },
+        {
+          "slide": 25,
+          "file": "test-output.pptx",
+          "expected": 20,
+          "actual": "16"
+        },
+        {
+          "slide": 29,
+          "file": "test-output.pptx",
+          "expected": 20,
+          "actual": "16"
+        }
+      ]
+    },
+    {
+      "check": "chart_position",
+      "category": "geometry",
+      "frequency": 9,
+      "affectedSlides": [
+        "test-output.pptx:slide7",
+        "test-output.pptx:slide10",
+        "test-output.pptx:slide12",
+        "test-output.pptx:slide13",
+        "test-output.pptx:slide14",
+        "test-output.pptx:slide15",
+        "vietnam-output.pptx:slide7",
+        "vietnam-output.pptx:slide10",
+        "vietnam-output.pptx:slide12"
+      ],
+      "rootCause": "Chart position deviates from the pattern contract. Chart x/y/w/h may be hardcoded.",
+      "remediation": "Source chart dimensions from pattern.elements.chart in template-patterns.json.",
+      "examples": [
+        {
+          "slide": 7,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 0.38,
+            "y": 1.5,
+            "w": 7.8,
+            "h": 4.5
+          },
+          "actual": {
+            "x": 6.8176,
+            "y": 1.9144,
+            "w": 5.3798,
+            "h": 4.9771
+          }
+        },
+        {
+          "slide": 10,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 0.38,
+            "y": 1.5,
+            "w": 7.8,
+            "h": 4.5
+          },
+          "actual": {
+            "x": 0.8229,
+            "y": 2.3108,
+            "w": 5.7396,
+            "h": 3.8455
+          }
+        },
+        {
+          "slide": 12,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 0.38,
+            "y": 1.5,
+            "w": 7.8,
+            "h": 4.5
+          },
+          "actual": {
+            "x": 0.37,
+            "y": 1.854,
+            "w": 6.1046,
+            "h": 3.8014
+          }
+        }
+      ]
+    },
+    {
+      "check": "titleBar_position",
+      "category": "geometry",
+      "frequency": 6,
+      "affectedSlides": [
+        "test-output.pptx:slide6",
+        "test-output.pptx:slide8",
+        "test-output.pptx:slide35",
+        "vietnam-output.pptx:slide6",
+        "vietnam-output.pptx:slide8",
+        "vietnam-output.pptx:slide32"
+      ],
+      "rootCause": "Title bar position deviates from template. The title shape x/y/w/h does not match pptxPositions.title from template-patterns.json.",
+      "remediation": "Use TEMPLATE.title coordinates from ppt-utils.js (sourced from template-patterns.json) for all title shapes.",
+      "examples": [
+        {
+          "slide": 6,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 0.38,
+            "y": 0.05,
+            "w": 12.59,
+            "h": 0.91
+          },
+          "actual": {
+            "x": 0.3736,
+            "y": 0.2875,
+            "w": 12.5862,
+            "h": 0.691
+          }
+        },
+        {
+          "slide": 8,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 0.38,
+            "y": 0.05,
+            "w": 12.59,
+            "h": 0.91
+          },
+          "actual": {
+            "x": 0.3736,
+            "y": 0.2875,
+            "w": 12.5862,
+            "h": 0.691
+          }
+        },
+        {
+          "slide": 35,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 0.38,
+            "y": 0.05,
+            "w": 12.59,
+            "h": 0.91
+          },
+          "actual": null
+        }
+      ]
+    },
+    {
+      "check": "table_position",
+      "category": "geometry",
+      "frequency": 4,
+      "affectedSlides": [
+        "test-output.pptx:slide4",
+        "test-output.pptx:slide6",
+        "vietnam-output.pptx:slide4",
+        "vietnam-output.pptx:slide6"
+      ],
+      "rootCause": "Table position deviates from the pattern contract. The table x/y/w may be hardcoded instead of sourced from the pattern elements.",
+      "remediation": "Use pattern.elements.table position from template-patterns.json for table placement.",
+      "examples": [
+        {
+          "slide": 4,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 0.3667,
+            "y": 1.467,
+            "w": 12.6
+          },
+          "actual": {
+            "x": 0.3796,
+            "y": 1.8818,
+            "w": 6.1009,
+            "h": 4.7814
+          }
+        },
+        {
+          "slide": 6,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 0.3667,
+            "y": 1.467,
+            "w": 12.6
+          },
+          "actual": {
+            "x": 0.3758,
+            "y": 1.8697,
+            "w": 12.6,
+            "h": 4.7935
+          }
+        },
+        {
+          "slide": 4,
+          "file": "vietnam-output.pptx",
+          "expected": {
+            "x": 0.3667,
+            "y": 1.467,
+            "w": 12.6
+          },
+          "actual": {
+            "x": 0.3796,
+            "y": 1.8818,
+            "w": 6.1009,
+            "h": 4.7814
+          }
+        }
+      ]
+    },
+    {
+      "check": "chartLeft_position",
+      "category": "geometry",
+      "frequency": 2,
+      "affectedSlides": [
+        "test-output.pptx:slide11",
+        "vietnam-output.pptx:slide11"
+      ],
+      "rootCause": "Check \"chartLeft_position\" failed on 2 slide(s). Review the building code for this element type.",
+      "remediation": "Compare the building code against template-patterns.json for the specific element.",
+      "examples": [
+        {
+          "slide": 11,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 0.83,
+            "y": 2.31,
+            "w": 5.74,
+            "h": 3.85
+          },
+          "actual": {
+            "x": 0.8281,
+            "y": 2.4045,
+            "w": 5.7344,
+            "h": 2.7118
+          }
+        },
+        {
+          "slide": 11,
+          "file": "vietnam-output.pptx",
+          "expected": {
+            "x": 0.83,
+            "y": 2.31,
+            "w": 5.74,
+            "h": 3.85
+          },
+          "actual": {
+            "x": 0.8281,
+            "y": 2.4045,
+            "w": 5.7344,
+            "h": 2.7118
+          }
+        }
+      ]
+    },
+    {
+      "check": "chartRight_position",
+      "category": "geometry",
+      "frequency": 2,
+      "affectedSlides": [
+        "test-output.pptx:slide11",
+        "vietnam-output.pptx:slide11"
+      ],
+      "rootCause": "Check \"chartRight_position\" failed on 2 slide(s). Review the building code for this element type.",
+      "remediation": "Compare the building code against template-patterns.json for the specific element.",
+      "examples": [
+        {
+          "slide": 11,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 6.87,
+            "y": 1.91,
+            "w": 6.09,
+            "h": 4.69
+          },
+          "actual": {
+            "x": 6.8701,
+            "y": 1.8659,
+            "w": 6.2117,
+            "h": 3.9373
+          }
+        },
+        {
+          "slide": 11,
+          "file": "vietnam-output.pptx",
+          "expected": {
+            "x": 6.87,
+            "y": 1.91,
+            "w": 6.09,
+            "h": 4.69
+          },
+          "actual": {
+            "x": 6.8701,
+            "y": 1.8659,
+            "w": 6.2117,
+            "h": 3.9373
+          }
+        }
+      ]
+    },
+    {
+      "check": "sourceBar_position",
+      "category": "geometry",
+      "frequency": 2,
+      "affectedSlides": [
+        "test-output.pptx:slide20",
+        "vietnam-output.pptx:slide17"
+      ],
+      "rootCause": "Source bar position deviates from template. The source attribution text box is not placed at the correct y-position.",
+      "remediation": "Use TEMPLATE.sourceBar coordinates from ppt-utils.js for source bar placement.",
+      "examples": [
+        {
+          "slide": 20,
+          "file": "test-output.pptx",
+          "expected": {
+            "x": 0.37,
+            "y": 6.69,
+            "w": 12.59,
+            "h": 0.25
+          },
+          "actual": {
+            "x": 0.3721,
+            "y": 6.6661,
+            "w": 12.5949,
+            "h": 0.6059
+          }
+        },
+        {
+          "slide": 17,
+          "file": "vietnam-output.pptx",
+          "expected": {
+            "x": 0.37,
+            "y": 6.69,
+            "w": 12.59,
+            "h": 0.25
+          },
+          "actual": {
+            "x": 0.3721,
+            "y": 6.6661,
+            "w": 12.5949,
+            "h": 0.6059
+          }
+        }
+      ]
+    },
+    {
+      "check": "title_shape_exists",
+      "category": "structural",
+      "frequency": 2,
+      "affectedSlides": [
+        "test-output.pptx:slide35",
+        "vietnam-output.pptx:slide32"
+      ],
+      "rootCause": "Content slide is missing a title shape. The title may not be built, or may be built as a plain text box without the expected name attribute.",
+      "remediation": "Ensure every content slide includes a title shape with position matching pptxPositions.title.",
+      "examples": [
+        {
+          "slide": 35,
+          "file": "test-output.pptx",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "slide": 32,
+          "file": "vietnam-output.pptx",
+          "expected": true,
+          "actual": false
+        }
+      ]
+    }
+  ]
+}

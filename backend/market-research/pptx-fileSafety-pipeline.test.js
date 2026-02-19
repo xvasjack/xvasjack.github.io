@@ -1,5 +1,5 @@
 /**
- * Tests for PPTX Integrity Pipeline
+ * Tests for PPTX FileSafety Pipeline
  */
 
 const JSZip = require('jszip');
@@ -9,13 +9,13 @@ const {
   getQualityScore,
   InvariantError,
   __stages,
-} = require('./pptx-integrity-pipeline');
+} = require('./pptx-fileSafety-pipeline');
 
 const {
   stage1RelationshipTargetNormalization,
   stage2NonVisualIdNormalization,
   stage3ContentTypesReconciliation,
-  stage4RelationshipReferenceIntegrity,
+  stage4RelationshipReferenceFileSafety,
 } = __stages;
 
 // ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ async function buildMinimalPptx(overrides = {}) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('PPTX Integrity Pipeline', () => {
+describe('PPTX FileSafety Pipeline', () => {
   // Test 1: Clean PPTX passes all stages
   test('clean PPTX passes all pipeline stages', async () => {
     const buffer = await buildMinimalPptx();
@@ -140,7 +140,7 @@ describe('PPTX Integrity Pipeline', () => {
     expect(result.metrics[0].stage).toBe('stage1_relationship_target_normalization');
     expect(result.metrics[1].stage).toBe('stage2_nonvisual_id_normalization');
     expect(result.metrics[2].stage).toBe('stage3_content_types_reconciliation');
-    expect(result.metrics[3].stage).toBe('stage4_relationship_reference_integrity');
+    expect(result.metrics[3].stage).toBe('stage4_relationship_reference_fileSafety');
   });
 
   // Test 2: Stage 1 — normalizes absolute relationship targets
@@ -253,8 +253,8 @@ describe('PPTX Integrity Pipeline', () => {
 `,
     });
 
-    const result = await stage4RelationshipReferenceIntegrity(buffer);
-    expect(result.metrics.stage).toBe('stage4_relationship_reference_integrity');
+    const result = await stage4RelationshipReferenceFileSafety(buffer);
+    expect(result.metrics.stage).toBe('stage4_relationship_reference_fileSafety');
     expect(result.metrics.stats.danglingReferences).toBeGreaterThanOrEqual(1);
     expect(result.metrics.passed).toBe(false);
   });

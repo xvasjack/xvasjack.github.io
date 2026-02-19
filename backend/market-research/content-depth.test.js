@@ -8,10 +8,10 @@ const {
   validateInsightStructure,
   detectConsultantFiller,
   scoreDecisionUsefulness,
-} = require('./semantic-quality-engine');
+} = require('./content-quality-check');
 
 const {
-  checkCoherence,
+  checkStoryFlow,
   detectCoherenceBreaks,
   getRemediationHints,
   explainScore,
@@ -19,7 +19,7 @@ const {
   extractPercentages,
   extractTimelines,
   extractEntityNames,
-} = require('./semantic-coherence-checker');
+} = require('./story-flow-check');
 
 // ============ SPARSE / NOISY / CONTRADICTORY INPUTS ============
 
@@ -343,7 +343,7 @@ describe('parsePartnerAssessment', () => {
 
 // ============ COHERENCE CHECKER ============
 
-describe('checkCoherence', () => {
+describe('checkStoryFlow', () => {
   test('returns high score for consistent synthesis', () => {
     const synthesis = {
       executiveSummary:
@@ -360,7 +360,7 @@ describe('checkCoherence', () => {
       },
     };
 
-    const result = checkCoherence(synthesis);
+    const result = checkStoryFlow(synthesis);
     expect(result.score).toBeGreaterThanOrEqual(70);
     expect(result.issues.length).toBeLessThanOrEqual(2);
   });
@@ -373,7 +373,7 @@ describe('checkCoherence', () => {
       },
     };
 
-    const result = checkCoherence(synthesis);
+    const result = checkStoryFlow(synthesis);
     // 500M vs 50M = 10x difference
     const hasMarketSizeIssue = result.issues.some((i) => i.toLowerCase().includes('market size'));
     expect(hasMarketSizeIssue || result.linkedPairs.some((p) => p.type === 'market-size')).toBe(
@@ -381,14 +381,33 @@ describe('checkCoherence', () => {
     );
   });
 
+  test('does not flag funding lines in the same section as market-size mismatch', () => {
+    const synthesis = {
+      executiveSummary:
+        'The total addressable market size is $4.2B through 2028. The JETP funding package is $15.5B for grid upgrades.',
+      marketOpportunityAssessment: {
+        totalAddressableMarket: 'Market size remains $4.2B with 12% CAGR.',
+      },
+    };
+
+    const result = checkStoryFlow(synthesis);
+    const falsePositive = result.issues.some(
+      (i) =>
+        i.toLowerCase().includes('market size mismatch') &&
+        i.includes('executiveSummary') &&
+        i.match(/executiveSummary.*executiveSummary/i)
+    );
+    expect(falsePositive).toBe(false);
+  });
+
   test('returns coherence data for null input', () => {
-    const result = checkCoherence(null);
+    const result = checkStoryFlow(null);
     expect(result.score).toBe(0);
     expect(result.issues.length).toBeGreaterThan(0);
   });
 
   test('returns coherence data for empty synthesis', () => {
-    const result = checkCoherence({});
+    const result = checkStoryFlow({});
     expect(result.score).toBe(0);
     expect(result.issues.length).toBeGreaterThan(0);
   });
@@ -397,7 +416,7 @@ describe('checkCoherence', () => {
     const synthesis = {
       executiveSummary: 'Brief summary with no numbers.',
     };
-    const result = checkCoherence(synthesis);
+    const result = checkStoryFlow(synthesis);
     expect(result).toHaveProperty('score');
     expect(result).toHaveProperty('issues');
     expect(result).toHaveProperty('linkedPairs');

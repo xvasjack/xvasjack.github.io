@@ -261,24 +261,15 @@ function verifyHeadContent(checks) {
       content = execFileSync('git', ['show', `HEAD:${gitPath}`], {
         cwd: GIT_ROOT,
         encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
       });
     } catch (err) {
       const errMsg = String(err?.message || err || '');
-      const isEnvError =
-        err?.code === 'EPERM' ||
-        err?.code === 'ENOENT' ||
-        /EPERM/i.test(errMsg) ||
-        /ENOENT/i.test(errMsg);
-      if (isEnvError) {
-        try {
-          content = fs.readFileSync(path.join(PROJECT_ROOT, file), 'utf8');
-          degradedMode = true;
-        } catch (readErr) {
-          failures.push({ file, missing: patterns, error: readErr.message });
-          continue;
-        }
-      } else {
-        failures.push({ file, missing: patterns, error: errMsg });
+      try {
+        content = fs.readFileSync(path.join(PROJECT_ROOT, file), 'utf8');
+        degradedMode = true;
+      } catch (readErr) {
+        failures.push({ file, missing: patterns, error: `${errMsg}; ${readErr.message}` });
         continue;
       }
     }
@@ -299,15 +290,15 @@ function verifyHeadContent(checks) {
 const DEFAULT_HEAD_CHECKS = [
   { file: 'server.js', patterns: ['collectPreRenderStructureIssues'] },
   {
-    file: 'ppt-single-country.js',
+    file: 'deck-builder-single.js',
     patterns: ['shouldAllowCompetitiveOptionalGroupGap', 'resolveTemplateRouteWithGeometryGuard'],
   },
-  { file: 'research-orchestrator.js', patterns: ['runInBatchesUntilDeadline'] },
+  { file: 'research-engine.js', patterns: ['runInBatchesUntilDeadline'] },
   { file: 'ppt-utils.js', patterns: ['sanitizeHyperlinkUrl'] },
-  { file: 'quality-gates.js', patterns: ['validatePptData'] },
-  { file: 'template-clone-postprocess.js', patterns: ['isLockedTemplateText'] },
+  { file: 'content-gates.js', patterns: ['validatePptData'] },
+  { file: 'template-fill.js', patterns: ['isLockedTemplateText'] },
   {
-    file: 'pptx-validator.js',
+    file: 'deck-file-check.js',
     patterns: ['normalizeAbsoluteRelationshipTargets', 'reconcileContentTypesAndPackage'],
   },
 ];
@@ -318,12 +309,12 @@ const DEFAULT_HEAD_CHECKS = [
 function checkModuleImports() {
   const modules = [
     'server.js',
-    'research-orchestrator.js',
-    'ppt-single-country.js',
+    'research-engine.js',
+    'deck-builder-single.js',
     'ppt-utils.js',
-    'quality-gates.js',
-    'template-clone-postprocess.js',
-    'pptx-validator.js',
+    'content-gates.js',
+    'template-fill.js',
+    'deck-file-check.js',
     'ai-clients.js',
     'theme-normalizer.js',
     'validate-output.js',
@@ -334,7 +325,7 @@ function checkModuleImports() {
   const failures = [];
   const loaded = [];
   const moduleContracts = {
-    'pptx-validator.js': [
+    'deck-file-check.js': [
       'normalizeAbsoluteRelationshipTargets',
       'normalizeSlideNonVisualIds',
       'reconcileContentTypesAndPackage',
@@ -951,57 +942,57 @@ Examples:
     }
   }
 
-  // --- 4b. Real output validation ---
+  // --- 4b. Real output check ---
   {
     const { checkRealOutputValidation } = require(path.join(PROJECT_ROOT, 'preflight-gates.js'));
     if (anyFail) {
       checkResults.push({
-        name: 'Real output validation',
+        name: 'Real output check',
         pass: true,
         status: 'SKIP',
         durationMs: 0,
         details: 'Skipped due to earlier failures',
       });
-      console.log('[SKIP] Real output validation (skipped — fix above failures first)');
+      console.log('[SKIP] Real output check (skipped — fix above failures first)');
     } else {
-      console.log('[....] Running real output validation...');
+      console.log('[....] Running real output check...');
       const t4b = Date.now();
       const realOutputResult = checkRealOutputValidation({
-        deckDir: args.deckDir,
+        deckDir: args.deckDir || PROJECT_ROOT,
       });
       const d4b = Date.now() - t4b;
 
       if (realOutputResult.status === 'PASS') {
         checkResults.push({
-          name: 'Real output validation',
+          name: 'Real output check',
           pass: true,
           status: 'PASS',
           durationMs: d4b,
           details: realOutputResult.details,
         });
         console.log(
-          `[PASS] Real output validation (${(d4b / 1000).toFixed(1)}s) — ${realOutputResult.details}`
+          `[PASS] Real output check (${(d4b / 1000).toFixed(1)}s) — ${realOutputResult.details}`
         );
       } else if (realOutputResult.severity === 'INFO') {
         checkResults.push({
-          name: 'Real output validation',
+          name: 'Real output check',
           pass: true,
           status: 'SKIP',
           durationMs: d4b,
           details: realOutputResult.details,
         });
-        console.log(`[SKIP] Real output validation — ${realOutputResult.details}`);
+        console.log(`[SKIP] Real output check — ${realOutputResult.details}`);
       } else {
         anyFail = true;
         checkResults.push({
-          name: 'Real output validation',
+          name: 'Real output check',
           pass: false,
           status: 'FAIL',
           durationMs: d4b,
           details: realOutputResult.details,
           evidence: realOutputResult.evidence,
         });
-        console.log(`[FAIL] Real output validation — ${realOutputResult.details}`);
+        console.log(`[FAIL] Real output check — ${realOutputResult.details}`);
         if (realOutputResult.evidence) {
           for (const e of realOutputResult.evidence.slice(0, 10)) {
             console.log(`  ${e}`);

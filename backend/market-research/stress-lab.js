@@ -11,9 +11,9 @@
  * - Deterministic seed replay via CLI
  */
 
-const { generateSingleCountryPPT } = require('./ppt-single-country');
-const { runBudgetGate } = require('./budget-gate');
-const { isTransientKey } = require('./transient-key-sanitizer');
+const { generateSingleCountryPPT } = require('./deck-builder-single');
+const { runContentSizeCheck } = require('./content-size-check');
+const { isTransientKey } = require('./cleanup-temp-fields');
 const JSZip = require('jszip');
 const fs = require('fs');
 const path = require('path');
@@ -1093,9 +1093,9 @@ const DATA_GATE_PATTERNS = [
   /\[PPT\] Data gate failed/i,
   /\[PPT\] Cell text exceeds hard cap/i,
   /\[PPT TEMPLATE\] Missing table geometry/i,
-  /Render normalization rejected/i,
-  /non-renderable groups/i,
-  /semantically empty/i,
+  /Build normalization rejected/i,
+  /not-buildable groups/i,
+  /thin placeholder/i,
   /exceed \d+ chars/i,
   /Data quality below threshold/i,
 ];
@@ -1128,7 +1128,7 @@ function classifyError(errorMessage) {
 
 // ============ PIPELINE PHASES ============
 
-const PHASES = ['build-payload', 'budget-gate', 'render-ppt', 'validate-pptx'];
+const PHASES = ['build-payload', 'content-size-check', 'build-ppt', 'validate-pptx'];
 
 /**
  * Run a single seed through all pipeline phases, collecting telemetry.
@@ -1183,18 +1183,18 @@ async function runSeed(seed) {
     return telemetry;
   }
 
-  // Phase 2: Budget gate
+  // Phase 2: Content-size check
   const p2Start = Date.now();
   try {
     if (mutatedPayload.countryAnalysis) {
-      const budgetResult = runBudgetGate(mutatedPayload.countryAnalysis, { dryRun: false });
-      if (budgetResult.compactionLog.length > 0) {
-        mutatedPayload.countryAnalysis = budgetResult.payload;
+      const sizeCheckResult = runContentSizeCheck(mutatedPayload.countryAnalysis, { dryRun: false });
+      if (sizeCheckResult.compactionLog.length > 0) {
+        mutatedPayload.countryAnalysis = sizeCheckResult.payload;
       }
     }
-    telemetry.phases['budget-gate'] = { durationMs: Date.now() - p2Start, status: 'pass' };
+    telemetry.phases['content-size-check'] = { durationMs: Date.now() - p2Start, status: 'pass' };
   } catch (err) {
-    telemetry.phases['budget-gate'] = {
+    telemetry.phases['content-size-check'] = {
       durationMs: Date.now() - p2Start,
       status: 'fail',
       error: err.message,
@@ -1202,13 +1202,13 @@ async function runSeed(seed) {
     telemetry.status = 'fail';
     telemetry.error = err.message;
     telemetry.errorClass = classifyError(err.message);
-    telemetry.failedPhase = 'budget-gate';
+    telemetry.failedPhase = 'content-size-check';
     telemetry.stack = err.stack;
     telemetry.durationMs = Date.now() - startTime;
     return telemetry;
   }
 
-  // Phase 3: Render PPT
+  // Phase 3: Build PPT
   let buffer;
   const p3Start = Date.now();
   try {
@@ -1223,9 +1223,9 @@ async function runSeed(seed) {
     if (buffer.length < 1000) {
       throw new Error('Buffer too small: ' + buffer.length + ' bytes');
     }
-    telemetry.phases['render-ppt'] = { durationMs: Date.now() - p3Start, status: 'pass' };
+    telemetry.phases['build-ppt'] = { durationMs: Date.now() - p3Start, status: 'pass' };
   } catch (err) {
-    telemetry.phases['render-ppt'] = {
+    telemetry.phases['build-ppt'] = {
       durationMs: Date.now() - p3Start,
       status: 'fail',
       error: err.message,
@@ -1233,7 +1233,7 @@ async function runSeed(seed) {
     telemetry.status = 'fail';
     telemetry.error = err.message;
     telemetry.errorClass = classifyError(err.message);
-    telemetry.failedPhase = 'render-ppt';
+    telemetry.failedPhase = 'build-ppt';
     telemetry.stack = err.stack;
     telemetry.durationMs = Date.now() - startTime;
     return telemetry;
@@ -1308,7 +1308,12 @@ function computeAggregateStats(telemetryResults) {
       stats.failed++;
       if (t.errorClass === 'runtime-crash') stats.runtimeCrashes++;
       if (t.errorClass === 'data-gate') stats.dataGateRejections++;
-      if (t.failedPhase) stats.failuresByPhase[t.failedPhase]++;
+      if (t.failedPhase) {
+        if (typeof stats.failuresByPhase[t.failedPhase] !== 'number') {
+          stats.failuresByPhase[t.failedPhase] = 0;
+        }
+        stats.failuresByPhase[t.failedPhase]++;
+      }
       for (const cls of t.mutationClasses || []) {
         stats.failuresByMutationClass[cls] = (stats.failuresByMutationClass[cls] || 0) + 1;
       }

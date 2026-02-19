@@ -8,9 +8,9 @@
  * finalReviewGap* leftovers, pure numeric keys, _synthesisError markers).
  *
  * Used by:
- *   - server.js           (pre-render structure gating)
- *   - research-orchestrator.js (synthesis validation)
- *   - ppt-single-country.js    (render-time sanitization)
+ *   - server.js           (pre-build structure gating)
+ *   - research-engine.js (synthesis check)
+ *   - deck-builder-single.js    (build-time sanitization)
  */
 
 // ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ function _sanitize(value, ctx, depth, maxDepth) {
 /**
  * Logs sanitization results. Call after sanitizeTransientKeys if ctx has drops.
  *
- * @param {string} label   — e.g. "pre-render" or "render:market"
+ * @param {string} label   — e.g. "pre-build" or "build:market"
  * @param {object} ctx     — sanitization context
  */
 function logSanitizationResult(label, ctx) {

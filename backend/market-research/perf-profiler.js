@@ -16,7 +16,7 @@ const PIPELINE_STAGES = [
   'pptDataGate',
   'transientKeySanitization',
   'preRenderStructureGate',
-  'budgetGate',
+  'contentSizeCheck',
   'pptGeneration',
   'pptIntegrity',
   'pptStructuralValidation',
@@ -38,12 +38,12 @@ const SEQUENTIAL_STAGES = new Set([
 // Stages that can safely run in parallel (per-country or independent).
 const PARALLELIZABLE_STAGES = new Set([
   'countryResearch',          // Per-country, already batched in pairs
-  'researchQualityGate',      // Per-country validation
+  'researchQualityGate',      // Per-country check
   'readinessGate',            // Per-country check
-  'pptDataGate',              // Per-country validation
+  'pptDataGate',              // Per-country check
   'transientKeySanitization', // Per-country sanitization
   'preRenderStructureGate',   // Per-country structure check
-  'budgetGate',               // Per-country budget analysis
+  'contentSizeCheck',               // Per-country budget analysis
 ]);
 
 const MEMORY_LIMIT_MB = 450;
@@ -353,12 +353,12 @@ function getParallelismRecommendations() {
 // ============ BUDGET GATE OBSERVABILITY ============
 
 /**
- * Generates telemetry from budget gate results.
- * @param {object} budgetResult - Output of runBudgetGate()
+ * Generates telemetry from content size check results.
+ * @param {object} budgetResult - Output of runContentSizeCheck()
  * @param {string} country - Country name
  * @returns {object} Telemetry object
  */
-function budgetGateTelemetry(budgetResult, country) {
+function contentSizeCheckTelemetry(budgetResult, country) {
   if (!budgetResult || !budgetResult.report) {
     return { country, error: 'No budget result provided' };
   }
@@ -541,7 +541,7 @@ module.exports = {
   getStageMetrics,
   getHighCostStages,
   getParallelismRecommendations,
-  budgetGateTelemetry,
+  contentSizeCheckTelemetry,
   estimatePayloadSize,
   getPerformanceSummary,
 };

@@ -239,7 +239,7 @@ describe('writeValidationSummary', () => {
       results,
     };
 
-    const jsonPath = path.join(reportsDir, 'validation-summary.json');
+    const jsonPath = path.join(reportsDir, 'check-summary.json');
     fs.writeFileSync(jsonPath, JSON.stringify(summary, null, 2));
 
     // Verify JSON
@@ -252,7 +252,7 @@ describe('writeValidationSummary', () => {
     expect(written.results[1].error).toBe('Slide 3 missing text');
   });
 
-  test('writes markdown summary with template fidelity violations', () => {
+  test('writes markdown summary with template styleMatch violations', () => {
     const reportsDir = path.join(tmpDir, 'reports', 'latest');
     fs.mkdirSync(reportsDir, { recursive: true });
 
@@ -267,7 +267,7 @@ describe('writeValidationSummary', () => {
     ];
 
     const mdLines = [
-      '# Validation Summary',
+      '# Check Summary',
       '',
       `**Timestamp:** ${new Date().toISOString()}`,
       `**Round:** 1`,
@@ -288,7 +288,7 @@ describe('writeValidationSummary', () => {
     const failures = results.filter((r) => !r.pass);
     if (failures.length > 0) {
       mdLines.push('');
-      mdLines.push('## Template Fidelity Gate VIOLATIONS');
+      mdLines.push('## Template StyleMatch Gate VIOLATIONS');
       mdLines.push('');
       for (const f of failures) {
         mdLines.push(`- **${f.deck}** (${f.country}): ${f.error || f.details}`);
@@ -296,15 +296,15 @@ describe('writeValidationSummary', () => {
     }
 
     mdLines.push('');
-    const mdPath = path.join(reportsDir, 'validation-summary.md');
+    const mdPath = path.join(reportsDir, 'check-summary.md');
     fs.writeFileSync(mdPath, mdLines.join('\n'));
 
     // Verify markdown
     const md = fs.readFileSync(mdPath, 'utf-8');
-    expect(md).toContain('# Validation Summary');
+    expect(md).toContain('# Check Summary');
     expect(md).toContain('| vietnam-output.pptx | Vietnam | PASS |');
     expect(md).toContain('| test-output.pptx | Thailand | FAIL |');
-    expect(md).toContain('## Template Fidelity Gate VIOLATIONS');
+    expect(md).toContain('## Template StyleMatch Gate VIOLATIONS');
     expect(md).toContain('Cover slide missing country');
   });
 
@@ -317,8 +317,8 @@ describe('writeValidationSummary', () => {
 
 // ============ TEMPLATE FIDELITY GATE: FAIL LOUDLY ============
 
-describe('Template fidelity gate loudness', () => {
-  test('validation results track pass/fail per deck with error messages', () => {
+describe('Template styleMatch gate loudness', () => {
+  test('check results track pass/fail per deck with error messages', () => {
     const results = [];
 
     // Simulate a passing deck
@@ -335,11 +335,11 @@ describe('Template fidelity gate loudness', () => {
       country: 'Thailand',
       pass: false,
       error:
-        'Validation failed for test-output.pptx (Thailand): Slide 1 "Thailand": expected Thailand, got Market Overview',
+        'Check failed for test-output.pptx (Thailand): Slide 1 "Thailand": expected Thailand, got Market Overview',
     });
 
     expect(results.filter((r) => !r.pass)).toHaveLength(1);
-    expect(results[1].error).toContain('Validation failed');
+    expect(results[1].error).toContain('Check failed');
     expect(results[1].error).toContain('Thailand');
   });
 

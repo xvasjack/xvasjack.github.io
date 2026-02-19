@@ -1,17 +1,19 @@
 {
   "name": "market-research-backend",
   "version": "1.0.0",
-  "description": "AI-powered market research analysis with multi-country comparison",
+  "description": "AI-powered single-country market research deck generator",
   "main": "server.js",
   "scripts": {
     "start": "node --expose-gc --max-old-space-size=450 server.js",
     "dev": "node server.js",
+    "stage:check": "node scripts/stage-check.js",
     "preflight:release": "node scripts/preflight-release.js",
     "preflight:stress": "node scripts/preflight-release.js --stress-seeds=30",
     "test:preflight": "node scripts/test-preflight.js",
     "release:loop": "node scripts/release-loop.js",
     "release:loop:deep": "node scripts/release-loop.js --stress-seeds=300",
-    "smoke:readiness": "node scripts/smoke-release-readiness.js"
+    "smoke:readiness": "node scripts/smoke-release-readiness.js",
+    "explain:system": "node scripts/explain-system.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -1,0 +1,21 @@
+Rank,Title,Agents,ContentImpact,SimplicityGain,Risk,Effort,PriorityScore,Action,Phase
+1,Remove content-size-check.js content truncation,"2,3",5,5,2,1,7,Delete content-size-check.js entirely. Remove runBudgetGate() call at server.js:1046-1061. Handle overflow via font shrinking in builder.,1
+2,Downgrade content quality engine to warn-only,"1,2,3",5,4,2,2,5,Change contentReadinessCheck in server.js from throw Error to console.warn. Keep scoring for diagnostics.,2
+3,Fix canonical key enforcement ordering,"1,2",4,4,1,2,5,Move key normalization to run BEFORE accept function in synthesizeWithFallback. Use Gemini structured output to enforce key names.,2
+4,Remove context-fit-agent LLM truncation,"2,5",3,4,1,1,5,Delete context-fit-agent.js. Replace with heuristicFitTokens path in template-fill.js.,1
+5,Delete stress test frameworks,"1,6,7",3,5,1,1,6,Delete stress-lab.js + stress-test-harness.js + stress-lab.test.js (3893 LOC total).,1
+6,Remove hardcoded content defaults,"2,4",5,4,2,3,4,Remove all hardcoded defaults from ensureSummaryCompleteness in research-engine.js. Remove energy-specific ensurePartnerDescription.,2
+7,Delete non-production gate files,"1,3,5,7",2,5,1,2,4,Delete preflight-gates.js + schema-firewall.js + route-geometry-enforcer.js + source-lineage-enforcer.js + golden-baseline-manager.js + pptx-file safety-pipeline.js (6099 LOC).,1
+8,Remove transient key sanitization redundancy,2,3,4,1,2,4,Run transient key sanitization once at pre-build stage only. Remove from accept functions and intermediate stages.,2
+9,Consolidate 3 review loops into 1,"1,2,4,7",5,5,3,4,3,Merge review-deepen + iterative refinement + final review into single loop with max 3 iterations. Cut ~800 lines.,3
+10,Simplify synthesis fallback from 5 to 3 tiers,"1,2,4",4,3,2,2,3,Keep Tier 1 (Flash jsonMode) + Tier 2 (repair) + Tier 3 (Flash non-jsonMode). Remove Pro tiers 4-5.,2
+11,Reduce server.js gate stack from 7 to 4,"2,3,7",4,4,3,2,3,Keep 5 hard-fail gates. Downgrade readiness + content readiness + PPT data overflow + build formatting to warn-only.,2
+12,Delete 18 low-value test files,6,0,5,1,1,3,Delete 18 test files (13123 LOC) that test formatting/ops/test-infrastructure. Keep 4 content-quality test files.,1
+13,Delete dead code paths,7,0,4,1,1,2,Remove useDynamicFramework guard + dead else branch + 6 specialized agents + synthesizeSingleCountry (~1700 LOC).,1
+14,Move dev/ops tools to scripts/,"5,7",0,3,1,2,0,Move repair-pptx.js + build-template-patterns.js + extract-template-complete.js + ops-runbook.js + test scripts to scripts/.,1
+15,Fix competitor synthesis context isolation,2,4,3,3,3,1,Pass previous competitor chunks as context to subsequent synthesis calls to enable cross-referencing.,3
+16,Remove prompt validation checklist from synthesis prompts,2,3,3,1,1,4,Remove 7200-char VALIDATION CHECKPOINT sections from synthesis prompts. Use freed space for research context.,1
+17,Change thin response threshold,"2,4",3,2,1,1,3,Lower callGeminiResearch thin-response threshold from 500 to 200 chars. Accept short authoritative answers.,2
+18,Delete content coherence checker,2,2,4,1,2,3,Delete story-flow-check.js (589 LOC). Remove checkStoryFlow from contentReadinessCheck calls.,1
+19,Deduplicate shared utilities,1,2,2,1,1,2,Move ensureString/normalizePptTextGlyphs/runInBatches/parsePositiveIntEnv to shared/utils.js. Remove duplicates.,2
+20,Consolidate repetitive chart functions,1,1,2,2,2,0,Merge addStackedBarChart/addLineChart/addBarChart/addPieChart into single addChart(type) in ppt-utils.js.,3

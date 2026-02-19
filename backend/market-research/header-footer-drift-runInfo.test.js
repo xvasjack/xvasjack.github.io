@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Tests for header-footer-drift-diagnostics.js
+ * Tests for header-footer-drift-runInfo.js
  *
- * Validates that drift diagnostics always include:
+ * Validates that drift runInfo always include:
  * - Exact blocking slide keys
  * - Expected vs actual geometry
  * - Delta values
@@ -24,7 +24,7 @@ const {
   DRIFT_THRESHOLD_INFO,
   DRIFT_THRESHOLD_WARNING,
   __test: { getExpectedThickness, getExpectedColor },
-} = require('./header-footer-drift-diagnostics');
+} = require('./header-footer-drift-runInfo');
 
 // ---------------------------------------------------------------------------
 // Helpers: Build synthetic PPTX with controllable line positions
@@ -347,14 +347,18 @@ describe('analyzeSlide', () => {
     expect(result.missingRoles).not.toContain('header_top');
   });
 
-  test('includes thickness and color diagnostics', () => {
-    const xml = makeSlideXml([{ y: TEMPLATE_HEADER_TOP_Y, thickness: 57150, color: '293F55' }]);
+  test('includes thickness and color runInfo', () => {
+    const expectedColor = EXPECTED.headerTopColor || '293F55';
+    const expectedThickness = EXPECTED.headerTopThicknessEmu || 57150;
+    const xml = makeSlideXml([
+      { y: TEMPLATE_HEADER_TOP_Y, thickness: expectedThickness, color: expectedColor },
+    ]);
     const result = analyzeSlide(xml, 'slide2.xml', 2, 'executiveSummary');
 
     const entry = result.driftEntries.find((e) => e.role === 'header_top');
     expect(entry).toBeDefined();
-    expect(entry.actual.thickness).toBe(57150);
-    expect(entry.actual.color).toBe('293F55');
+    expect(entry.actual.thickness).toBe(expectedThickness);
+    expect(entry.actual.color).toBe(expectedColor);
     expect(entry.expected.thickness).toBe(EXPECTED.headerTopThicknessEmu);
     expect(entry.expected.color).toBe(EXPECTED.headerTopColor);
     expect(entry.colorMatch).toBe(true);
@@ -650,7 +654,7 @@ describe('writeReport', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: EXPECTED constants integrity
+// Tests: EXPECTED constants fileSafety
 // ---------------------------------------------------------------------------
 
 describe('EXPECTED template constants', () => {
@@ -678,7 +682,7 @@ describe('EXPECTED template constants', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: diagnostics always include blocking slide keys (contract test)
+// Tests: runInfo always include blocking slide keys (contract test)
 // ---------------------------------------------------------------------------
 
 describe('blocking slide key contract', () => {

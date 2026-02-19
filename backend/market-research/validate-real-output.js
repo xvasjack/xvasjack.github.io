@@ -13,7 +13,7 @@ const {
   extractAllText,
   countTables,
   classifySlideIntent,
-} = require('./pptx-validator');
+} = require('./deck-file-check');
 
 /**
  * Get real expectations based on country and industry
@@ -56,14 +56,14 @@ function getRealExpectations(country = 'Vietnam', industry = 'Energy Services') 
 // Default expectations (for backward compatibility)
 const REAL_EXPECTATIONS = getRealExpectations();
 
-async function validateRealOutput(filePath, expectations = REAL_EXPECTATIONS) {
+async function validateRealOutput(filePath, expectations = REAL_EXPECTATIONS, options = {}) {
   const all = { passed: [], failed: [], warnings: [] };
   const pass = (c, m) => all.passed.push({ check: c, message: m });
   const fail = (c, e, a) => all.failed.push({ check: c, expected: e, actual: a });
   const warn = (c, m) => all.warnings.push({ check: c, message: m });
 
   try {
-    // Basic validation
+    // Basic check
     const basic = await validatePPTX(filePath, expectations);
     all.passed.push(...basic.passed);
     all.failed.push(...basic.failed);
@@ -166,7 +166,13 @@ async function validateRealOutput(filePath, expectations = REAL_EXPECTATIONS) {
     Object.entries(sections).forEach(([s, c]) => console.log(`  ${s}: ${c} slide(s)`));
 
     // Export issues
-    const issuesFile = path.join(__dirname, 'real-output-issues.json');
+    const outputDir = options.outputDir || path.join(__dirname, 'reports', 'latest');
+    let issuesFile = options.outputFile || null;
+    if (!issuesFile) {
+      const stem = path.basename(filePath, path.extname(filePath)).replace(/[^a-z0-9._-]/gi, '_');
+      issuesFile = path.join(outputDir, `${stem}.real-output-issues.json`);
+    }
+    fs.mkdirSync(path.dirname(issuesFile), { recursive: true });
     fs.writeFileSync(
       issuesFile,
       JSON.stringify(
@@ -195,9 +201,9 @@ async function validateRealOutput(filePath, expectations = REAL_EXPECTATIONS) {
     );
     console.log(`\nIssues exported to: ${issuesFile}`);
 
-    return { valid: all.failed.length === 0, results: all, report, sections };
+    return { valid: all.failed.length === 0, results: all, report, sections, issuesFile };
   } catch (err) {
-    console.error('Validation error:', err.message);
+    console.error('Check error:', err.message);
     return { valid: false, error: err.message };
   }
 }
@@ -208,8 +214,12 @@ async function main() {
   // Parse arguments
   const countryArg = args.find((a) => a.startsWith('--country='));
   const industryArg = args.find((a) => a.startsWith('--industry='));
+  const outputDirArg = args.find((a) => a.startsWith('--output-dir='));
+  const outputFileArg = args.find((a) => a.startsWith('--output-file='));
   const country = countryArg ? countryArg.split('=')[1] : 'Vietnam';
   const industry = industryArg ? industryArg.split('=')[1] : 'Energy Services';
+  const outputDir = outputDirArg ? outputDirArg.split('=')[1] : null;
+  const outputFile = outputFileArg ? outputFileArg.split('=')[1] : null;
 
   // Find file path (first non-flag argument)
   const fileArg = args.find((a) => !a.startsWith('--'));
@@ -228,7 +238,7 @@ async function main() {
   console.log(`Country: ${country} | Industry: ${industry}`);
 
   const customExpectations = getRealExpectations(country, industry);
-  const result = await validateRealOutput(filePath, customExpectations);
+  const result = await validateRealOutput(filePath, customExpectations, { outputDir, outputFile });
   process.exit(result.valid ? 0 : 1);
 }
 

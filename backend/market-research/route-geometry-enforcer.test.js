@@ -25,7 +25,7 @@ const {
 } = require('./route-geometry-enforcer');
 
 // ---------------------------------------------------------------------------
-// Context sets (same as ppt-single-country.js)
+// Context sets (same as deck-builder-single.js)
 // ---------------------------------------------------------------------------
 const TABLE_TEMPLATE_CONTEXTS = new Set([
   'foundationalActs',

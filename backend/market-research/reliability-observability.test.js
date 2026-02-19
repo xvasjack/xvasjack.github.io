@@ -6,11 +6,11 @@
  */
 
 // Mock heavy dependencies so tests run without real PPT generation
-jest.mock('./ppt-single-country', () => ({
+jest.mock('./deck-builder-single', () => ({
   generateSingleCountryPPT: jest.fn().mockResolvedValue(Buffer.alloc(5000, 0)),
 }));
-jest.mock('./budget-gate', () => ({
-  runBudgetGate: jest.fn().mockReturnValue({ payload: {}, compactionLog: [] }),
+jest.mock('./content-size-check', () => ({
+  runContentSizeCheck: jest.fn().mockReturnValue({ payload: {}, compactionLog: [] }),
 }));
 jest.mock('jszip', () => {
   return jest.fn().mockImplementation(() => ({}));
@@ -77,8 +77,8 @@ function buildSyntheticTelemetry(count, { failRate = 0.3, runtimeCrashRate = 0.5
         mutationClasses: selectMutationsForSeed(i),
         phases: {
           'build-payload': { durationMs: 5, status: 'pass' },
-          'budget-gate': { durationMs: 10, status: 'pass' },
-          'render-ppt': {
+          'content-size-check': { durationMs: 10, status: 'pass' },
+          'build-ppt': {
             durationMs: 50,
             status: 'fail',
             error: isRuntimeCrash
@@ -91,7 +91,7 @@ function buildSyntheticTelemetry(count, { failRate = 0.3, runtimeCrashRate = 0.5
           ? 'Cannot read properties of null (reading PROP)'
           : '[PPT] Data gate failed: section missing',
         errorClass: isRuntimeCrash ? 'runtime-crash' : 'data-gate',
-        failedPhase: 'render-ppt',
+        failedPhase: 'build-ppt',
         stack: 'Error: test\n    at Object.<anonymous> (test.js:1:1)',
         durationMs: 65,
       });
@@ -102,8 +102,8 @@ function buildSyntheticTelemetry(count, { failRate = 0.3, runtimeCrashRate = 0.5
         mutationClasses: selectMutationsForSeed(i),
         phases: {
           'build-payload': { durationMs: 5, status: 'pass' },
-          'budget-gate': { durationMs: 10, status: 'pass' },
-          'render-ppt': { durationMs: 50, status: 'pass' },
+          'content-size-check': { durationMs: 10, status: 'pass' },
+          'build-ppt': { durationMs: 50, status: 'pass' },
           'validate-pptx': { durationMs: 20, status: 'pass' },
         },
         status: 'pass',
@@ -235,7 +235,7 @@ describe('Clustering Stability', () => {
         status: 'fail',
         error: 'Cannot read properties of null',
         errorClass: 'runtime-crash',
-        failedPhase: 'render-ppt',
+        failedPhase: 'build-ppt',
         mutationClasses: ['schema-corruption'],
       },
       {
@@ -243,7 +243,7 @@ describe('Clustering Stability', () => {
         status: 'fail',
         error: 'Cannot read properties of null',
         errorClass: 'runtime-crash',
-        failedPhase: 'render-ppt',
+        failedPhase: 'build-ppt',
         mutationClasses: ['empty-null'],
       },
       {
@@ -283,7 +283,7 @@ describe('Risk Score Calculation', () => {
       count: 10,
       errorClasses: ['runtime-crash'],
       mutationClasses: ['schema-corruption'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
       seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     };
 
@@ -291,7 +291,7 @@ describe('Risk Score Calculation', () => {
       count: 10,
       errorClasses: ['data-gate'],
       mutationClasses: ['schema-corruption'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
       seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     };
 
@@ -306,7 +306,7 @@ describe('Risk Score Calculation', () => {
       count: 2,
       errorClasses: ['runtime-crash'],
       mutationClasses: ['schema-corruption'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
       seeds: [1, 2],
     };
 
@@ -314,7 +314,7 @@ describe('Risk Score Calculation', () => {
       count: 50,
       errorClasses: ['runtime-crash'],
       mutationClasses: ['schema-corruption'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
       seeds: Array.from({ length: 50 }, (_, i) => i + 1),
     };
 
@@ -324,16 +324,16 @@ describe('Risk Score Calculation', () => {
     expect(highScore).toBeGreaterThan(lowScore);
   });
 
-  test('paid-run risk multiplier applied for runtime crash in render phase', () => {
-    const renderCrash = {
+  test('paid-run risk multiplier applied for runtime crash in build phase', () => {
+    const buildPptCrash = {
       count: 5,
       errorClasses: ['runtime-crash'],
       mutationClasses: ['schema-corruption'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
       seeds: [1, 2, 3, 4, 5],
     };
 
-    const buildCrash = {
+    const payloadCrash = {
       count: 5,
       errorClasses: ['runtime-crash'],
       mutationClasses: ['schema-corruption'],
@@ -341,13 +341,13 @@ describe('Risk Score Calculation', () => {
       seeds: [1, 2, 3, 4, 5],
     };
 
-    const renderScore = getRiskScore(renderCrash, 100);
-    const buildScore = getRiskScore(buildCrash, 100);
+    const buildPptScore = getRiskScore(buildPptCrash, 100);
+    const payloadScore = getRiskScore(payloadCrash, 100);
 
-    // Render phase crash with paid-run multiplier should be higher
+    // Build phase crash with paid-run multiplier should be higher
     // even though build-payload has higher phase weight
-    expect(renderScore).toBeGreaterThan(0);
-    expect(buildScore).toBeGreaterThan(0);
+    expect(buildPptScore).toBeGreaterThan(0);
+    expect(payloadScore).toBeGreaterThan(0);
   });
 
   test('score is capped at 100', () => {
@@ -355,7 +355,7 @@ describe('Risk Score Calculation', () => {
       count: 100,
       errorClasses: ['runtime-crash'],
       mutationClasses: MUTATION_CLASS_KEYS,
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
       seeds: Array.from({ length: 100 }, (_, i) => i + 1),
     };
 
@@ -374,7 +374,7 @@ describe('Risk Score Calculation', () => {
       count: 10,
       errorClasses: ['data-gate'],
       mutationClasses: ['schema-corruption'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
       seeds: Array.from({ length: 10 }, (_, i) => i + 1),
     };
 
@@ -382,7 +382,7 @@ describe('Risk Score Calculation', () => {
       count: 10,
       errorClasses: ['data-gate'],
       mutationClasses: ['schema-corruption', 'empty-null', 'long-text', 'chart-anomalies'],
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
       seeds: Array.from({ length: 10 }, (_, i) => i + 1),
     };
 
@@ -395,19 +395,19 @@ describe('Risk Score Calculation', () => {
 describe('Phase Confidence', () => {
   test('single phase cluster returns high confidence', () => {
     const clusterEntry = {
-      phases: ['render-ppt'],
+      phases: ['build-ppt'],
       seeds: [1, 2, 3],
       count: 3,
     };
 
     const confidence = getPhaseConfidence(clusterEntry);
-    expect(confidence['render-ppt']).toBeGreaterThanOrEqual(0.9);
+    expect(confidence['build-ppt']).toBeGreaterThanOrEqual(0.9);
     expect(confidence['build-payload']).toBeLessThan(0.1);
   });
 
   test('multi-phase cluster distributes confidence', () => {
     const clusterEntry = {
-      phases: ['budget-gate', 'render-ppt'],
+      phases: ['content-size-check', 'build-ppt'],
       seeds: [1, 2, 3, 4],
       count: 4,
     };
@@ -417,14 +417,14 @@ describe('Phase Confidence', () => {
     // Total should be approximately 1
     expect(total).toBeCloseTo(1, 1);
     // Both participating phases should have non-zero confidence
-    expect(confidence['budget-gate']).toBeGreaterThan(0);
-    expect(confidence['render-ppt']).toBeGreaterThan(0);
+    expect(confidence['content-size-check']).toBeGreaterThan(0);
+    expect(confidence['build-ppt']).toBeGreaterThan(0);
   });
 
   test('empty phases returns zero confidence', () => {
     const confidence = getPhaseConfidence({ phases: [], seeds: [], count: 0 });
     expect(confidence['build-payload']).toBe(0);
-    expect(confidence['render-ppt']).toBe(0);
+    expect(confidence['build-ppt']).toBe(0);
   });
 
   test('null cluster returns zero confidence', () => {

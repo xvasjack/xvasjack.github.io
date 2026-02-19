@@ -1,8 +1,8 @@
 'use strict';
 
-const { generateSingleCountryPPT } = require('./ppt-single-country');
-const { runBudgetGate } = require('./budget-gate');
-const { isTransientKey } = require('./transient-key-sanitizer');
+const { generateSingleCountryPPT } = require('./deck-builder-single');
+const { runContentSizeCheck } = require('./content-size-check');
+const { isTransientKey } = require('./cleanup-temp-fields');
 const JSZip = require('jszip');
 const fs = require('fs');
 const path = require('path');
@@ -1042,7 +1042,7 @@ function applyLongStringMutations(payload, rng) {
   const stringPaths = [];
   collectStringPaths(payload, [], stringPaths);
 
-  // Filter to target fields likely to cause rendering issues
+  // Filter to target fields likely to cause building issues
   const targetPaths = stringPaths.filter((p) => {
     const lastKey = p[p.length - 1];
     return typeof lastKey === 'string' && LONG_STRING_TARGET_FIELDS.some((f) => lastKey === f);
@@ -1060,7 +1060,7 @@ function applyLongStringMutations(payload, rng) {
   }
 }
 
-// Transient keys to inject (must all match isTransientKey from ./transient-key-sanitizer.js)
+// Transient keys to inject (must all match isTransientKey from ./cleanup-temp-fields.js)
 const TRANSIENT_KEYS_POOL = [
   'section_0',
   'section_1',
@@ -1264,16 +1264,16 @@ function mutatePayload(basePayload, seed) {
  * Classify an error as either a deliberate data-gate rejection (expected)
  * or a runtime crash (Stage-4 bug).
  *
- * Data-gate rejections: the renderer intentionally validated and rejected bad data.
+ * Data-gate rejections: the builder intentionally validated and rejected bad data.
  * Runtime crashes: TypeError, ReferenceError, unguarded null access — real bugs.
  */
 const DATA_GATE_PATTERNS = [
   /\[PPT\] Data gate failed/i,
   /\[PPT\] Cell text exceeds hard cap/i,
   /\[PPT TEMPLATE\] Missing table geometry/i,
-  /Render normalization rejected/i,
-  /non-renderable groups/i,
-  /semantically empty/i,
+  /Build normalization rejected/i,
+  /not-buildable groups/i,
+  /thin placeholder/i,
   /exceed \d+ chars/i,
   /Data quality below threshold/i,
 ];
@@ -1406,10 +1406,10 @@ async function runStressTest({ seeds = 30, reportPath = null } = {}) {
       const { synthesis, countryAnalysis, scope } = buildBasePayload();
       const mutated = mutatePayload({ synthesis, countryAnalysis, scope }, seed);
 
-      // Budget gate: compact oversized fields before rendering (mirrors server.js path)
-      const budgetResult = runBudgetGate(mutated.countryAnalysis, { dryRun: false });
-      if (budgetResult.compactionLog.length > 0) {
-        mutated.countryAnalysis = budgetResult.payload;
+      // Content-size check: compact oversized fields before building (mirrors server.js path)
+      const sizeCheckResult = runContentSizeCheck(mutated.countryAnalysis, { dryRun: false });
+      if (sizeCheckResult.compactionLog.length > 0) {
+        mutated.countryAnalysis = sizeCheckResult.payload;
       }
 
       const buffer = await generateSingleCountryPPT(
@@ -1480,7 +1480,7 @@ async function runTablePressureStressTest() {
   const longCell = 'Market analysis data point with extensive detail. '.repeat(20);
   payload.market.marketSizeAndGrowth = {
     slideTitle: 'Market Size Stress Test',
-    keyMessage: 'Testing extreme table rendering resilience',
+    keyMessage: 'Testing extreme table building resilience',
     tableData: Array.from({ length: 25 }, (_, i) => ({
       segment: `Segment ${i + 1}`,
       value2023: `$${(Math.random() * 1000).toFixed(1)}M`,

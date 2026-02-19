@@ -353,7 +353,7 @@ function getSectionSources(synthesis, sectionKey) {
 // ---------------------------------------------------------------------------
 
 /**
- * enforceLineage(synthesis) — enforce source lineage for every rendered claim.
+ * enforceLineage(synthesis) — enforce source lineage for every built claim.
  *
  * Walks all claims (text with specific numbers, percentages, company names),
  * maps claims to nearest source references, and returns coverage metrics.

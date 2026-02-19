@@ -126,8 +126,8 @@ function cluster(telemetryResults) {
 function getPhaseConfidence(clusterEntry) {
   const confidence = {
     'build-payload': 0,
-    'budget-gate': 0,
-    'render-ppt': 0,
+    'content-size-check': 0,
+    'build-ppt': 0,
     'validate-pptx': 0,
   };
 
@@ -143,7 +143,7 @@ function getPhaseConfidence(clusterEntry) {
   if (phases.length === 1) {
     confidence[phases[0]] = 0.95;
     // Small probability it's upstream
-    const phaseOrder = ['build-payload', 'budget-gate', 'render-ppt', 'validate-pptx'];
+    const phaseOrder = ['build-payload', 'content-size-check', 'build-ppt', 'validate-pptx'];
     const idx = phaseOrder.indexOf(phases[0]);
     if (idx > 0) {
       confidence[phaseOrder[idx - 1]] = 0.05;
@@ -156,8 +156,8 @@ function getPhaseConfidence(clusterEntry) {
   // Earlier phases get slightly higher weight as they're more likely to be root cause
   const phaseWeights = {
     'build-payload': 1.5,
-    'budget-gate': 1.3,
-    'render-ppt': 1.1,
+    'content-size-check': 1.3,
+    'build-ppt': 1.1,
     'validate-pptx': 1.0,
   };
 
@@ -187,7 +187,7 @@ function getPhaseConfidence(clusterEntry) {
  * Factors:
  * - Frequency weight: how many seeds trigger it (0-40 pts)
  * - Severity weight: runtime-crash vs data-gate (0-30 pts)
- * - Paid-run phase bonus: runtime crashes in render/validate get +5
+ * - Paid-run phase bonus: runtime crashes in build/validate get +5
  * - Mutation breadth: if many mutation classes trigger it, the root cause is fragile (0-15 pts)
  * - Phase: earlier phases = wider blast radius (0-15 pts)
  */
@@ -213,8 +213,8 @@ function getRiskScore(clusterEntry, totalSeeds) {
   const phases = clusterEntry.phases || [];
   const phaseWeights = {
     'build-payload': 15,
-    'budget-gate': 12,
-    'render-ppt': 8,
+    'content-size-check': 12,
+    'build-ppt': 8,
     'validate-pptx': 5,
   };
   let maxPhaseWeight = 0;
@@ -223,10 +223,10 @@ function getRiskScore(clusterEntry, totalSeeds) {
   }
   score += maxPhaseWeight;
 
-  // Paid-run phase bonus: render/validate failures are expensive, but should
+  // Paid-run phase bonus: build/validate failures are expensive, but should
   // not outweigh the broader blast radius of earlier-phase failures.
   if (hasRuntimeCrash) {
-    const paidPhases = ['render-ppt', 'validate-pptx'];
+    const paidPhases = ['build-ppt', 'validate-pptx'];
     const hitsPaidPhase = phases.some((p) => paidPhases.includes(p));
     if (hitsPaidPhase) {
       score += 5;

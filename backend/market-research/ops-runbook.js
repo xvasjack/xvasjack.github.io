@@ -19,25 +19,25 @@ const SERVICE_DIR = __dirname;
 
 const ERROR_PATTERNS = [
   {
-    pattern: /PPT structural validation failed/i,
+    pattern: /PPT structural check failed/i,
     rootCause: 'Generated PPTX file is malformed or truncated.',
     fix: [
-      'Run the integrity pipeline: node -e "require(\'./pptx-validator\').validatePPTX(require(\'fs\').readFileSync(\'output.pptx\')).then(r => console.log(JSON.stringify(r, null, 2)))"',
-      'Check ppt-single-country.js for recent template changes.',
+      'Run the fileSafety pipeline: node -e "require(\'./deck-file-check\').validatePPTX(require(\'fs\').readFileSync(\'output.pptx\')).then(r => console.log(JSON.stringify(r, null, 2)))"',
+      'Check deck-builder-single.js for recent template changes.',
       'Run regression tests: npm test -- --testPathPattern=market-research',
     ],
   },
   {
-    pattern: /PPT rendering quality failed/i,
-    rootCause: 'Too many slide blocks failed to render.',
+    pattern: /PPT building quality failed/i,
+    rootCause: 'Too many slide blocks failed to build.',
     fix: [
-      'Check pptMetrics in /api/diagnostics for slideRenderFailureCount.',
+      'Check pptMetrics in /api/runInfo for slideRenderFailureCount.',
       'Look for templateCoverage < 95% — indicates template pattern mismatch.',
       'Review template-patterns.json for missing or changed patterns.',
     ],
   },
   {
-    pattern: /PPT formatting fidelity failed/i,
+    pattern: /PPT formatting styleMatch failed/i,
     rootCause: 'Template coverage or geometry alignment regression.',
     fix: [
       'Check pptMetrics for templateCoverage, nonTemplatePatternCount, geometryIssueCount.',
@@ -49,9 +49,9 @@ const ERROR_PATTERNS = [
     pattern: /Country analysis quality gate failed/i,
     rootCause: 'Research output did not meet readiness thresholds.',
     fix: [
-      'Check /api/diagnostics for notReadyCountries details.',
+      'Check /api/runInfo for notReadyCountries details.',
       'Look at effectiveScore, coherenceScore, finalReviewCritical, finalReviewMajor.',
-      'If coherence < 70, synthesis prompts may need tuning in research-orchestrator.js.',
+      'If coherence < 70, synthesis prompts may need tuning in research-engine.js.',
       'If critical issues > 1, check finalReview.issues for specific problems.',
     ],
   },
@@ -59,54 +59,54 @@ const ERROR_PATTERNS = [
     pattern: /Synthesis quality too low/i,
     rootCause: 'Synthesis pass scored below acceptable threshold.',
     fix: [
-      'Check /api/diagnostics for synthesisGate scores.',
+      'Check /api/runInfo for synthesisGate scores.',
       'Increase maxTokens in scope or GEMINI model config.',
       'Check if country rawData has enough content for synthesis.',
     ],
   },
   {
     pattern: /PPT data gate failed/i,
-    rootCause: 'Country analysis sections have empty or invalid data for PPT rendering.',
+    rootCause: 'Country analysis sections have empty or invalid data for PPT building.',
     fix: [
-      'Check /api/diagnostics for pptDataGateFailures.',
+      'Check /api/runInfo for pptDataGateFailures.',
       'Look for nonRenderableGroups, emptyBlocks, chartIssues.',
       'Check synthesis output for empty sections — may need gap fill.',
     ],
   },
   {
-    pattern: /Pre-render structure gate failed/i,
+    pattern: /Pre-build structure gate failed/i,
     rootCause: 'Country analysis has non-canonical or missing required sections.',
     fix: [
-      'Check /api/diagnostics for preRenderStructureIssues.',
+      'Check /api/runInfo for preRenderStructureIssues.',
       'Verify synthesis output matches canonical section keys in server.js.',
-      'Check transient-key-sanitizer.js if legitimate keys are being removed.',
+      'Check cleanup-temp-fields.js if legitimate keys are being removed.',
     ],
   },
   {
     pattern: /Budget gate/i,
     rootCause: 'Fields or tables exceed size budgets — risk of PPT overflow.',
     fix: [
-      'Check /api/diagnostics for budgetGate details per country.',
-      'Review FIELD_CHAR_BUDGETS in budget-gate.js.',
-      'If compaction is too aggressive, increase limits in budget-gate.js.',
+      'Check /api/runInfo for contentSizeCheck details per country.',
+      'Review FIELD_CHAR_BUDGETS in content-size-check.js.',
+      'If compaction is too aggressive, increase limits in content-size-check.js.',
     ],
   },
   {
-    pattern: /Server PPT relationship integrity failed/i,
+    pattern: /Server PPT relationship fileSafety failed/i,
     rootCause: 'PPTX internal references are broken — missing relationship targets.',
     fix: [
-      'Run integrity pipeline manually on the output buffer.',
-      'Check pptx-validator.js scanRelationshipTargets for the specific broken refs.',
-      'This often happens when slides are cloned incorrectly in ppt-single-country.js.',
+      'Run fileSafety pipeline manually on the output buffer.',
+      'Check deck-file-check.js scanRelationshipTargets for the specific broken refs.',
+      'This often happens when slides are cloned incorrectly in deck-builder-single.js.',
     ],
   },
   {
     pattern: /Server PPT package consistency failed/i,
     rootCause: 'PPTX ZIP structure has duplicates, missing parts, or content-type mismatches.',
     fix: [
-      'Run: node -e "require(\'./pptx-validator\').readPPTX(require(\'fs\').readFileSync(\'output.pptx\')).then(({zip}) => require(\'./pptx-validator\').scanPackageConsistency(zip).then(r => console.log(JSON.stringify(r, null, 2))))"',
+      'Run: node -e "require(\'./deck-file-check\').readPPTX(require(\'fs\').readFileSync(\'output.pptx\')).then(({zip}) => require(\'./deck-file-check\').scanPackageConsistency(zip).then(r => console.log(JSON.stringify(r, null, 2))))"',
       'Check for duplicate relationship IDs or slide IDs.',
-      'Review template-clone-postprocess.js if slide cloning is involved.',
+      'Review template-fill.js if slide cloning is involved.',
     ],
   },
   {
@@ -146,29 +146,29 @@ const PLAYBOOKS = {
     title: 'PPT opens with repair prompt',
     steps: [
       'Download the PPT from /api/latest-ppt',
-      'Run validator: node -e "require(\'./pptx-validator\').validatePPTX(require(\'fs\').readFileSync(\'<file>\')).then(r => console.log(JSON.stringify(r, null, 2)))"',
+      'Run checker: node -e "require(\'./deck-file-check\').validatePPTX(require(\'fs\').readFileSync(\'<file>\')).then(r => console.log(JSON.stringify(r, null, 2)))"',
       'Check for: duplicate IDs, broken relationships, missing content types',
       'Run repair: node repair-pptx.js <file>',
-      'If repair fails, check ppt-single-country.js slide generation',
+      'If repair fails, check deck-builder-single.js slide generation',
     ],
   },
   'quality-gate-failing': {
     title: 'Quality gate failing',
     steps: [
-      'Check /api/diagnostics for the failing gate',
+      'Check /api/runInfo for the failing gate',
       'Research gate: look at researchTopicChars — any topic < 200 chars is likely thin',
       'Synthesis gate: check synthesisGate.overall score and failures array',
       'PPT data gate: check pptDataGateFailures for empty blocks',
-      'Readiness gate: check notReadyCountries for effectiveScore and coherenceScore',
-      'If score is borderline (50-70), consider SOFT_READINESS_GATE=true to proceed with warnings',
+      'Readiness check: check notReadyCountries for effectiveScore and coherenceScore',
+      'Content gate: check contentReadiness.overallScore and failed section reasons',
     ],
   },
-  'budget-gate-compacting': {
-    title: 'Budget gate compacting too much',
+  'content-size-check-compacting': {
+    title: 'Content size check compacting too much',
     steps: [
-      'Check /api/diagnostics budgetGate for each country',
+      'Check /api/runInfo contentSizeCheck for the selected country',
       'Look at compacted field count and risk level',
-      'If risk=high with many compactions, increase FIELD_CHAR_BUDGETS in budget-gate.js',
+      'If risk=high with many compactions, increase FIELD_CHAR_BUDGETS in content-size-check.js',
       'Check TABLE_MAX_ROWS (default 16), TABLE_MAX_COLS (default 9)',
       'If tables are being truncated too aggressively, raise TABLE_FLEX_MAX_ROWS env var',
     ],
@@ -186,12 +186,12 @@ const PLAYBOOKS = {
   'slow-pipeline': {
     title: 'Pipeline running slower than expected',
     steps: [
-      'Check /api/diagnostics for total run time',
+      'Check /api/runInfo for total run time',
       'Check perf-profiler.getStageMetrics() for per-stage breakdown',
       'Typical bottlenecks: countryResearch (API calls), synthesis (LLM), pptGeneration (XML)',
       'If countryResearch is slow: check Gemini API latency, consider increasing batch size',
       'If synthesis is slow: check maxTokens setting, consider gemini-3-flash for speed',
-      'If pptGeneration is slow: check payload size — budget gate should have caught oversize',
+      'If pptGeneration is slow: check payload size — content size check should have caught oversize',
     ],
   },
   'email-not-arriving': {
@@ -201,7 +201,7 @@ const PLAYBOOKS = {
       'Verify SENDGRID_API_KEY is valid',
       'Verify SENDER_EMAIL is set and verified in SendGrid',
       'Check spam/junk folder',
-      'Check /api/diagnostics — if stage=error, the pipeline failed before email',
+      'Check /api/runInfo — if stage=error, the pipeline failed before email',
       'If pipeline succeeded, check the error email catch block in server.js',
     ],
   },
@@ -214,29 +214,29 @@ const COMMANDS = {
     { cmd: 'curl -s http://localhost:3010/health | jq .', desc: 'Check service health' },
     { cmd: 'curl -s http://localhost:3010/api/costs | jq .', desc: 'Check API cost tracker' },
     {
-      cmd: 'curl -s http://localhost:3010/api/diagnostics | jq .',
-      desc: 'Get last run diagnostics',
+      cmd: 'curl -s http://localhost:3010/api/runInfo | jq .',
+      desc: 'Get last run runInfo',
     },
   ],
   Debugging: [
     {
-      cmd: 'curl -s http://localhost:3010/api/diagnostics | jq .stage',
+      cmd: 'curl -s http://localhost:3010/api/runInfo | jq .stage',
       desc: 'Check which stage failed',
     },
     {
-      cmd: 'curl -s http://localhost:3010/api/diagnostics | jq .error',
+      cmd: 'curl -s http://localhost:3010/api/runInfo | jq .error',
       desc: 'Get error message',
     },
     {
-      cmd: 'curl -s http://localhost:3010/api/diagnostics | jq .notReadyCountries',
+      cmd: 'curl -s http://localhost:3010/api/runInfo | jq .notReadyCountries',
       desc: 'Check readiness gate details',
     },
     {
-      cmd: 'curl -s http://localhost:3010/api/diagnostics | jq .budgetGate',
-      desc: 'Check budget gate results',
+      cmd: 'curl -s http://localhost:3010/api/runInfo | jq .contentSizeCheck',
+      desc: 'Check content size check results',
     },
     {
-      cmd: 'curl -s http://localhost:3010/api/diagnostics | jq .ppt',
+      cmd: 'curl -s http://localhost:3010/api/runInfo | jq .ppt',
       desc: 'Check PPT metrics',
     },
   ],
@@ -296,7 +296,7 @@ const COMMANDS = {
 // ============ VALIDATE LOCAL ============
 
 /**
- * Runs a local validation sequence:
+ * Runs a local check sequence:
  * 1. Preflight checks (env vars, dependencies)
  * 2. Lint check
  * 3. Test suite
@@ -321,12 +321,12 @@ function validateLocal() {
   const fs = require('fs');
   const keyFiles = [
     'server.js',
-    'budget-gate.js',
-    'quality-gates.js',
-    'pptx-validator.js',
-    'research-orchestrator.js',
+    'content-size-check.js',
+    'content-gates.js',
+    'deck-file-check.js',
+    'research-engine.js',
     'ai-clients.js',
-    'ppt-single-country.js',
+    'deck-builder-single.js',
   ];
   const missingFiles = keyFiles.filter((f) => !fs.existsSync(path.join(SERVICE_DIR, f)));
   steps.push({
@@ -340,7 +340,7 @@ function validateLocal() {
   });
 
   // Step 3: Try to require main modules (syntax check)
-  const modulesToCheck = ['./budget-gate', './quality-gates', './perf-profiler'];
+  const modulesToCheck = ['./content-size-check', './content-gates', './perf-profiler'];
   const moduleErrors = [];
   for (const mod of modulesToCheck) {
     try {
@@ -362,7 +362,7 @@ function validateLocal() {
     execSync('curl -sf http://localhost:3010/health', { timeout: 5000, stdio: 'pipe' });
     serverReachable = true;
   } catch {
-    // Server not running — that's OK for local validation
+    // Server not running — that's OK for local check
   }
   steps.push({
     name: 'Server health check',
@@ -404,9 +404,9 @@ function triageError(errorMessage) {
     pattern: null,
     rootCause: null,
     fix: [
-      'Check /api/diagnostics for full error context.',
+      'Check /api/runInfo for full error context.',
       'Search server logs for the error message.',
-      'Check the stage field in diagnostics to narrow the failure point.',
+      'Check the stage field in runInfo to narrow the failure point.',
     ],
   };
 }
@@ -448,21 +448,21 @@ function getCommands(category) {
 const ERROR_CODE_RUNBOOKS = {
   PPT_STRUCTURAL_VALIDATION: {
     code: 'PPT_STRUCTURAL_VALIDATION',
-    title: 'PPTX structural validation failure',
+    title: 'PPTX structural check failure',
     severity: 'critical',
     steps: [
-      { action: 'Run integrity pipeline on the output buffer', command: 'node -e "require(\'./pptx-integrity-pipeline\').runIntegrityPipeline(require(\'fs\').readFileSync(\'output.pptx\')).then(r => console.log(JSON.stringify(r, null, 2)))"' },
-      { action: 'Check for duplicate slide IDs or broken refs', command: 'node -e "require(\'./pptx-validator\').validatePPTX(require(\'fs\').readFileSync(\'output.pptx\')).then(r => console.log(JSON.stringify(r, null, 2)))"' },
+      { action: 'Run fileSafety pipeline on the output buffer', command: 'node -e "require(\'./pptx-fileSafety-pipeline\').runFileSafetyPipeline(require(\'fs\').readFileSync(\'output.pptx\')).then(r => console.log(JSON.stringify(r, null, 2)))"' },
+      { action: 'Check for duplicate slide IDs or broken refs', command: 'node -e "require(\'./deck-file-check\').validatePPTX(require(\'fs\').readFileSync(\'output.pptx\')).then(r => console.log(JSON.stringify(r, null, 2)))"' },
       { action: 'Run repair', command: 'node repair-pptx.js output.pptx' },
-      { action: 'If repair fails, check template clone postprocess', command: 'grep -n "cloneSlide\\|duplicateSlide" ppt-single-country.js' },
+      { action: 'If repair fails, check template clone postprocess', command: 'grep -n "cloneSlide\\|duplicateSlide" deck-builder-single.js' },
     ],
   },
   PPT_RENDERING_QUALITY: {
     code: 'PPT_RENDERING_QUALITY',
-    title: 'Slide rendering failure rate too high',
+    title: 'Slide building failure rate too high',
     severity: 'high',
     steps: [
-      { action: 'Check PPT metrics for render failures', command: 'curl -s http://localhost:3010/api/diagnostics | jq .ppt' },
+      { action: 'Check PPT metrics for build failures', command: 'curl -s http://localhost:3010/api/runInfo | jq .ppt' },
       { action: 'Review template pattern coverage', command: 'node -e "console.log(JSON.stringify(require(\'./template-contract-compiler\').compile(), null, 2))"' },
       { action: 'Regenerate template patterns', command: 'node build-template-patterns.js' },
     ],
@@ -472,8 +472,8 @@ const ERROR_CODE_RUNBOOKS = {
     title: 'Research quality gate failure',
     severity: 'high',
     steps: [
-      { action: 'Check diagnostics for failing gate', command: 'curl -s http://localhost:3010/api/diagnostics | jq "{synthesisGate, notReadyCountries, pptDataGateFailures}"' },
-      { action: 'Check synthesis scores per country', command: 'curl -s http://localhost:3010/api/diagnostics | jq ".countries[]? | {country, score: .synthesisScores?.overall}"' },
+      { action: 'Check runInfo for failing gate', command: 'curl -s http://localhost:3010/api/runInfo | jq "{synthesisGate, notReadyCountries, pptDataGateFailures}"' },
+      { action: 'Check synthesis scores per country', command: 'curl -s http://localhost:3010/api/runInfo | jq ".countries[]? | {country, score: .synthesisScores?.overall}"' },
       { action: 'If borderline, try soft bypass', command: 'SOFT_READINESS_GATE=true node server.js' },
     ],
   },
@@ -482,9 +482,9 @@ const ERROR_CODE_RUNBOOKS = {
     title: 'Budget gate overflow risk',
     severity: 'medium',
     steps: [
-      { action: 'Check budget gate details', command: 'curl -s http://localhost:3010/api/diagnostics | jq .budgetGate' },
-      { action: 'Review field char budgets', command: 'grep -n "FIELD_CHAR_BUDGETS" budget-gate.js' },
-      { action: 'Increase limits if needed', command: 'Edit FIELD_CHAR_BUDGETS in budget-gate.js' },
+      { action: 'Check content size check details', command: 'curl -s http://localhost:3010/api/runInfo | jq .contentSizeCheck' },
+      { action: 'Review field char budgets', command: 'grep -n "FIELD_CHAR_BUDGETS" content-size-check.js' },
+      { action: 'Increase limits if needed', command: 'Edit FIELD_CHAR_BUDGETS in content-size-check.js' },
     ],
   },
   GEMINI_API_ERROR: {
@@ -546,10 +546,10 @@ const PROFILES = {
   },
   'deep-audit': {
     name: 'deep-audit',
-    description: 'Full audit: release-check + stress test + integrity pipeline',
+    description: 'Full audit: release-check + stress test + fileSafety pipeline',
     checks: [
       'env-vars', 'key-files', 'module-syntax', 'template-contract',
-      'regression-tests', 'preflight-gates', 'stress-test', 'integrity-pipeline',
+      'regression-tests', 'preflight-gates', 'stress-test', 'fileSafety-pipeline',
     ],
     estimatedSeconds: 120,
   },
@@ -596,7 +596,7 @@ function runLocalReadiness(options = {}) {
 
   // --- key-files ---
   if (profile.checks.includes('key-files')) {
-    const keyFiles = ['server.js', 'budget-gate.js', 'quality-gates.js', 'pptx-validator.js', 'research-orchestrator.js', 'ai-clients.js', 'ppt-single-country.js'];
+    const keyFiles = ['server.js', 'content-size-check.js', 'content-gates.js', 'deck-file-check.js', 'research-engine.js', 'ai-clients.js', 'deck-builder-single.js'];
     const missing = keyFiles.filter((f) => !fs.existsSync(path.join(SERVICE_DIR, f)));
     checks.push({
       name: 'key-files',
@@ -607,7 +607,7 @@ function runLocalReadiness(options = {}) {
 
   // --- module-syntax ---
   if (profile.checks.includes('module-syntax')) {
-    const modulesToCheck = ['./budget-gate', './quality-gates', './perf-profiler'];
+    const modulesToCheck = ['./content-size-check', './content-gates', './perf-profiler'];
     const errors = [];
     for (const mod of modulesToCheck) {
       try {
@@ -711,27 +711,27 @@ function runLocalReadiness(options = {}) {
     });
   }
 
-  // --- integrity-pipeline ---
-  if (profile.checks.includes('integrity-pipeline')) {
-    let integrityPass = false;
-    let integrityOutput = '';
+  // --- fileSafety-pipeline ---
+  if (profile.checks.includes('fileSafety-pipeline')) {
+    let fileSafetyPass = false;
+    let fileSafetyOutput = '';
     try {
-      const integ = require('./pptx-integrity-pipeline');
-      integrityPass = typeof integ.runIntegrityPipeline === 'function';
-      integrityOutput = integrityPass ? 'Integrity pipeline module available' : 'Missing runIntegrityPipeline export';
+      const integ = require('./pptx-fileSafety-pipeline');
+      fileSafetyPass = typeof integ.runFileSafetyPipeline === 'function';
+      fileSafetyOutput = fileSafetyPass ? 'FileSafety pipeline module available' : 'Missing runFileSafetyPipeline export';
     } catch (err) {
-      integrityOutput = `Integrity pipeline error: ${err.message}`;
+      fileSafetyOutput = `FileSafety pipeline error: ${err.message}`;
     }
     checks.push({
-      name: 'integrity-pipeline',
-      pass: integrityPass,
-      output: integrityOutput,
+      name: 'fileSafety-pipeline',
+      pass: fileSafetyPass,
+      output: fileSafetyOutput,
     });
   }
 
   const duration = Date.now() - startMs;
   const failures = checks.filter((c) => !c.pass);
-  const pass = strict ? failures.length === 0 : failures.filter((c) => c.name !== 'preflight-gates' && c.name !== 'stress-test' && c.name !== 'integrity-pipeline').length === 0;
+  const pass = strict ? failures.length === 0 : failures.filter((c) => c.name !== 'preflight-gates' && c.name !== 'stress-test' && c.name !== 'fileSafety-pipeline').length === 0;
 
   let verdict;
   if (pass && failures.length === 0) {
@@ -748,21 +748,21 @@ function runLocalReadiness(options = {}) {
 // ============ RECOMMEND ACTIONS ============
 
 /**
- * Post-run action recommender. Given diagnostics from a pipeline run,
+ * Post-run action recommender. Given runInfo from a pipeline run,
  * returns exact remediation commands for each detected issue.
- * @param {object} diagnostics - lastRunDiagnostics from server.js
+ * @param {object} runInfo - lastRunRunInfo from server.js
  * @returns {{ actions: Array<{issue: string, severity: string, command: string}>, summary: string }}
  */
-function recommendActions(diagnostics) {
+function recommendActions(runInfo) {
   const actions = [];
 
-  if (!diagnostics) {
-    return { actions: [{ issue: 'No diagnostics provided', severity: 'info', command: 'curl -s http://localhost:3010/api/diagnostics | jq .' }], summary: 'No diagnostics to analyze' };
+  if (!runInfo) {
+    return { actions: [{ issue: 'No runInfo provided', severity: 'info', command: 'curl -s http://localhost:3010/api/runInfo | jq .' }], summary: 'No runInfo to analyze' };
   }
 
   // Check stage failure
-  if (diagnostics.error || diagnostics.stage === 'error') {
-    const triage = triageError(diagnostics.error || '');
+  if (runInfo.error || runInfo.stage === 'error') {
+    const triage = triageError(runInfo.error || '');
     if (triage.matched) {
       actions.push({
         issue: triage.rootCause,
@@ -771,7 +771,7 @@ function recommendActions(diagnostics) {
       });
     } else {
       actions.push({
-        issue: `Pipeline error: ${diagnostics.error || 'unknown'}`,
+        issue: `Pipeline error: ${runInfo.error || 'unknown'}`,
         severity: 'critical',
         command: 'Check server logs for full stack trace',
       });
@@ -779,59 +779,59 @@ function recommendActions(diagnostics) {
   }
 
   // Quality gate issues
-  if (diagnostics.notReadyCountries && diagnostics.notReadyCountries.length > 0) {
+  if (runInfo.notReadyCountries && runInfo.notReadyCountries.length > 0) {
     actions.push({
-      issue: `${diagnostics.notReadyCountries.length} country(ies) not ready`,
+      issue: `${runInfo.notReadyCountries.length} country(ies) not ready`,
       severity: 'high',
-      command: 'curl -s http://localhost:3010/api/diagnostics | jq .notReadyCountries',
+      command: 'curl -s http://localhost:3010/api/runInfo | jq .notReadyCountries',
     });
   }
 
   // Synthesis gate
-  if (diagnostics.synthesisGate && !diagnostics.synthesisGate.pass) {
+  if (runInfo.synthesisGate && !runInfo.synthesisGate.pass) {
     actions.push({
-      issue: `Synthesis gate failed (score: ${diagnostics.synthesisGate.overall || 'N/A'})`,
+      issue: `Synthesis gate failed (score: ${runInfo.synthesisGate.overall || 'N/A'})`,
       severity: 'high',
-      command: 'Check synthesis prompts in research-orchestrator.js',
+      command: 'Check synthesis prompts in research-engine.js',
     });
   }
 
   // PPT data gate
-  if (diagnostics.pptDataGateFailures && diagnostics.pptDataGateFailures.length > 0) {
+  if (runInfo.pptDataGateFailures && runInfo.pptDataGateFailures.length > 0) {
     actions.push({
-      issue: `PPT data gate failures: ${diagnostics.pptDataGateFailures.length}`,
+      issue: `PPT data gate failures: ${runInfo.pptDataGateFailures.length}`,
       severity: 'high',
-      command: 'curl -s http://localhost:3010/api/diagnostics | jq .pptDataGateFailures',
+      command: 'curl -s http://localhost:3010/api/runInfo | jq .pptDataGateFailures',
     });
   }
 
   // Budget gate
-  if (diagnostics.budgetGate) {
-    for (const [country, bg] of Object.entries(diagnostics.budgetGate)) {
+  if (runInfo.contentSizeCheck) {
+    for (const [country, bg] of Object.entries(runInfo.contentSizeCheck)) {
       if (bg.risk === 'high') {
         actions.push({
           issue: `Budget gate high risk for ${country}`,
           severity: 'medium',
-          command: `curl -s http://localhost:3010/api/diagnostics | jq '.budgetGate["${country}"]'`,
+          command: `curl -s http://localhost:3010/api/runInfo | jq '.contentSizeCheck["${country}"]'`,
         });
       }
     }
   }
 
   // PPT metrics
-  if (diagnostics.ppt) {
-    if (diagnostics.ppt.templateCoverage != null && diagnostics.ppt.templateCoverage < 95) {
+  if (runInfo.ppt) {
+    if (runInfo.ppt.templateCoverage != null && runInfo.ppt.templateCoverage < 95) {
       actions.push({
-        issue: `Low template coverage: ${diagnostics.ppt.templateCoverage}%`,
+        issue: `Low template coverage: ${runInfo.ppt.templateCoverage}%`,
         severity: 'medium',
         command: 'node build-template-patterns.js',
       });
     }
-    if (diagnostics.ppt.slideRenderFailureCount > 0) {
+    if (runInfo.ppt.slideRenderFailureCount > 0) {
       actions.push({
-        issue: `${diagnostics.ppt.slideRenderFailureCount} slide render failures`,
+        issue: `${runInfo.ppt.slideRenderFailureCount} slide build failures`,
         severity: 'high',
-        command: 'Check ppt-single-country.js render logic',
+        command: 'Check deck-builder-single.js build logic',
       });
     }
   }
@@ -1054,7 +1054,7 @@ if (require.main === module) {
   }
 
   console.log('Usage:');
-  console.log('  node ops-runbook.js --validate-local    Run local validation sequence');
+  console.log('  node ops-runbook.js --validate-local    Run local check sequence');
   console.log('  node ops-runbook.js --triage "msg"      Triage an error message');
   console.log('  node ops-runbook.js --playbook <name>   Show a playbook');
   console.log('  node ops-runbook.js --commands [cat]    Show command cookbook');

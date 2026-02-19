@@ -185,7 +185,7 @@ function ensureBaselinesDir() {
 /**
  * Snapshot gate results as a golden baseline.
  * @param {string} name - Baseline name (typically matches fixture name)
- * @param {object} gateResults - Gate validation results to snapshot
+ * @param {object} gateResults - Gate check results to snapshot
  * @returns {object} The stored baseline with metadata
  */
 function createBaseline(name, gateResults) {
@@ -240,7 +240,7 @@ function deleteBaseline(name) {
 /**
  * Compare current results to a golden baseline, return drift report.
  * @param {string} name - Baseline name to compare against
- * @param {object} currentResults - Current gate validation results
+ * @param {object} currentResults - Current gate check results
  * @returns {object} Drift report
  */
 function compareToBaseline(name, currentResults) {
@@ -354,7 +354,7 @@ function detectDrift(baseline, current) {
 
 function compareScores(baseline, current, prefix, report) {
   // Compare direct numeric fields (score, overall, sectionScores)
-  const numericFields = ['score', 'overall', 'semanticallyEmptyRatio'];
+  const numericFields = ['score', 'overall', 'thinContentRatio'];
   for (const field of numericFields) {
     if (typeof baseline[field] === 'number' && typeof current[field] === 'number') {
       if (baseline[field] !== current[field]) {
@@ -1076,7 +1076,7 @@ function flattenObject(obj, prefix = '', result = {}) {
 /**
  * Run both gate-result drift and structural drift checks.
  * @param {string} name - Baseline name
- * @param {object} currentGateResults - Current gate validation results
+ * @param {object} currentGateResults - Current gate check results
  * @param {object} currentCountryAnalysis - Current country analysis data
  * @param {object} [templatePatterns] - Template patterns (auto-loaded if null)
  * @returns {object} Combined drift report
@@ -1108,7 +1108,7 @@ function runFullDriftCheck(name, currentGateResults, currentCountryAnalysis, tem
 
 /**
  * Deterministic fixture replay — runs the fixture through quality gates.
- * No paid API calls. All validation is local.
+ * No paid API calls. All check is local.
  * @param {string} name - Fixture name to replay
  * @returns {object} Gate results for the fixture
  */
@@ -1117,7 +1117,7 @@ function replayFixture(name) {
     validateResearchQuality,
     validateSynthesisQuality,
     validatePptData,
-  } = require('./quality-gates');
+  } = require('./content-gates');
 
   const fixture = loadFixture(name);
   const { synthesis, countryAnalysis, scope } = fixture;
@@ -1146,7 +1146,7 @@ function replayFixture(name) {
   // Gate: PPT data (if countryAnalysis is available)
   try {
     if (countryAnalysis && typeof countryAnalysis === 'object') {
-      // Flatten countryAnalysis sections into blocks for PPT data validation
+      // Flatten countryAnalysis sections into blocks for PPT data check
       const blocks = flattenToBlocks(countryAnalysis);
       results.gates.pptData = validatePptData(blocks);
     } else {
@@ -1218,7 +1218,7 @@ function getCoverageReport() {
     'null-required-field',
     'overflow-risk',
     'chart-data-issues',
-    'semantic-empty',
+    'thin-content',
     'schema-violation',
     'deep-nesting',
     'boundary-values',
@@ -1286,8 +1286,8 @@ function classifyFailures(failures) {
     if (/overflow|exceed|char|too long|10k|600/.test(lower)) classes.add('overflow-risk');
     if (/chart|series|data point|all-zero|negative|stacked/.test(lower))
       classes.add('chart-data-issues');
-    if (/semantic|placeholder|unavailable|insufficient|tbd|n\/a/.test(lower))
-      classes.add('semantic-empty');
+    if (/content|placeholder|unavailable|insufficient|tbd|n\/a/.test(lower))
+      classes.add('thin-content');
     if (/schema|structural|corrupt/.test(lower)) classes.add('schema-violation');
     if (/nest|deep|level|circular/.test(lower)) classes.add('deep-nesting');
     if (/boundary|extreme|max|min|zero|single|empty array/.test(lower))

@@ -1,5 +1,5 @@
 const {
-  semanticReadinessGate,
+  checkContentReadiness,
   detectShallowContent,
   checkContradictions,
   analyze,
@@ -8,12 +8,12 @@ const {
   scoreActionability,
   detectRootCauseAnalysis,
   scoreStorylineCoherence,
-} = require('./semantic-quality-engine');
-const { checkCoherence } = require('./semantic-coherence-checker');
+} = require('./content-quality-check');
+const { checkStoryFlow } = require('./story-flow-check');
 
 // ============ HIGH-QUALITY PAYLOAD (should pass >= 80) ============
 
-describe('semanticReadinessGate', () => {
+describe('checkContentReadiness', () => {
   const highQualitySynthesis = {
     executiveSummary: [
       "Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. ENGIE Corp and Schneider Electric dominate with combined 35% market share. We recommend targeting mid-tier industrial factories because their energy spend averages $500K annually, which means significant savings potential of 15-20%. The regulatory push from DEDE creates urgency for compliance-driven demand. By Q2 2026, ISO 50001 mandates will force 1,200 factories to upgrade, therefore early movers capture first-wave contracts resulting in a $45M serviceable market. However, local competitors like B.Grimm Power Ltd have established relationships that create a barrier to entry.",
@@ -63,7 +63,7 @@ describe('semanticReadinessGate', () => {
   };
 
   test('high-quality payload passes with score >= 80', () => {
-    const result = semanticReadinessGate(highQualitySynthesis, {
+    const result = checkContentReadiness(highQualitySynthesis, {
       threshold: 80,
       industry: 'energy services',
     });
@@ -80,8 +80,8 @@ describe('semanticReadinessGate', () => {
   });
 
   test('per-section scores are deterministic', () => {
-    const result1 = semanticReadinessGate(highQualitySynthesis, { threshold: 80 });
-    const result2 = semanticReadinessGate(highQualitySynthesis, { threshold: 80 });
+    const result1 = checkContentReadiness(highQualitySynthesis, { threshold: 80 });
+    const result2 = checkContentReadiness(highQualitySynthesis, { threshold: 80 });
     expect(result1.overallScore).toBe(result2.overallScore);
     expect(result1.sectionScorecard.length).toBe(result2.sectionScorecard.length);
     for (let i = 0; i < result1.sectionScorecard.length; i++) {
@@ -100,7 +100,7 @@ describe('semanticReadinessGate', () => {
       keyInsights: [],
     };
 
-    const result = semanticReadinessGate(shallowSynthesis, {
+    const result = checkContentReadiness(shallowSynthesis, {
       threshold: 80,
       industry: 'technology',
     });
@@ -157,7 +157,7 @@ describe('semanticReadinessGate', () => {
       ],
     };
 
-    const result = semanticReadinessGate(contradictorySynthesis, {
+    const result = checkContentReadiness(contradictorySynthesis, {
       threshold: 80,
       industry: 'energy services',
     });
@@ -171,20 +171,20 @@ describe('semanticReadinessGate', () => {
   // ============ NULL/EMPTY INPUTS ============
 
   test('returns fail for null synthesis', () => {
-    const result = semanticReadinessGate(null);
+    const result = checkContentReadiness(null);
     expect(result.pass).toBe(false);
     expect(result.overallScore).toBe(0);
     expect(result.improvementActions.length).toBeGreaterThan(0);
   });
 
   test('returns fail for empty object', () => {
-    const result = semanticReadinessGate({});
+    const result = checkContentReadiness({});
     expect(result.pass).toBe(false);
     expect(result.overallScore).toBeLessThan(80);
   });
 
   test('returns fail for undefined', () => {
-    const result = semanticReadinessGate(undefined);
+    const result = checkContentReadiness(undefined);
     expect(result.pass).toBe(false);
     expect(result.overallScore).toBe(0);
   });
@@ -198,8 +198,8 @@ describe('semanticReadinessGate', () => {
       ],
     };
 
-    const high = semanticReadinessGate(synthesis, { threshold: 90 });
-    const low = semanticReadinessGate(synthesis, { threshold: 20 });
+    const high = checkContentReadiness(synthesis, { threshold: 90 });
+    const low = checkContentReadiness(synthesis, { threshold: 20 });
     expect(high.threshold).toBe(90);
     expect(low.threshold).toBe(20);
     // Same synthesis, different thresholds
@@ -220,9 +220,9 @@ describe('semanticReadinessGate', () => {
       },
     };
 
-    const result = semanticReadinessGate(synthesis, {
+    const result = checkContentReadiness(synthesis, {
       threshold: 80,
-      coherenceChecker: checkCoherence,
+      coherenceChecker: checkStoryFlow,
     });
     // Should have run coherence check (market size mismatch: $500M vs $50M)
     expect(result).toHaveProperty('overallScore');
@@ -232,7 +232,7 @@ describe('semanticReadinessGate', () => {
   // ============ SECTION SCORECARD STRUCTURE ============
 
   test('section scorecard has required fields for every section', () => {
-    const result = semanticReadinessGate(highQualitySynthesis, { threshold: 80 });
+    const result = checkContentReadiness(highQualitySynthesis, { threshold: 80 });
     for (const entry of result.sectionScorecard) {
       expect(entry).toHaveProperty('section');
       expect(typeof entry.section).toBe('string');
@@ -251,7 +251,7 @@ describe('semanticReadinessGate', () => {
       marketOpportunityAssessment: { overview: 'Small.' },
     };
 
-    const result = semanticReadinessGate(shallowSynthesis, { threshold: 80 });
+    const result = checkContentReadiness(shallowSynthesis, { threshold: 80 });
     expect(result.improvementActions.length).toBeGreaterThan(0);
     // Actions should reference specific sections
     expect(
@@ -287,6 +287,17 @@ describe('detectShallowContent', () => {
   test('detects low information density', () => {
     const text =
       'The market presents various opportunities across multiple segments and regions. The industry dynamics continue to evolve as stakeholders evaluate strategic options. Several factors contribute to the overall trajectory of the sector. Market participants are exploring new approaches to address emerging challenges and capitalize on growth potential. The competitive landscape remains dynamic with ongoing shifts in market positioning.';
+    const result = detectShallowContent(text);
+    expect(result.isShallow).toBe(true);
+    expect(result.reasons.some((r) => r.includes('density'))).toBe(true);
+  });
+
+  test('detects low information density in 30-49 word range', () => {
+    const text =
+      'The market shows broad opportunity with strong momentum across many segments. Multiple players are exploring expansion and partnerships. Conditions remain favorable for entry and scaling over the coming period with broad regional interest.';
+    const words = text.split(/\s+/).filter(Boolean).length;
+    expect(words).toBeGreaterThanOrEqual(30);
+    expect(words).toBeLessThan(50);
     const result = detectShallowContent(text);
     expect(result.isShallow).toBe(true);
     expect(result.reasons.some((r) => r.includes('density'))).toBe(true);
@@ -336,7 +347,7 @@ describe('deterministic scoring', () => {
 
     const results = [];
     for (let i = 0; i < 5; i++) {
-      results.push(semanticReadinessGate(synthesis, { threshold: 80 }));
+      results.push(checkContentReadiness(synthesis, { threshold: 80 }));
     }
 
     for (let i = 1; i < results.length; i++) {
@@ -428,7 +439,7 @@ describe('rubric dimensions', () => {
   };
 
   test('strong fixture passes overall gate >= 80', () => {
-    const result = semanticReadinessGate(strongFixture, {
+    const result = checkContentReadiness(strongFixture, {
       threshold: 80,
       industry: 'energy services',
     });
@@ -437,7 +448,7 @@ describe('rubric dimensions', () => {
   });
 
   test('strong fixture has rubric with all 4 dimensions', () => {
-    const result = semanticReadinessGate(strongFixture, { threshold: 80 });
+    const result = checkContentReadiness(strongFixture, { threshold: 80 });
     expect(result.rubric).toBeDefined();
     expect(result.rubric).toHaveProperty('insightDepth');
     expect(result.rubric).toHaveProperty('evidenceGrounding');
@@ -450,20 +461,20 @@ describe('rubric dimensions', () => {
   });
 
   test('strong fixture has root-cause analysis', () => {
-    const result = semanticReadinessGate(strongFixture, { threshold: 80 });
+    const result = checkContentReadiness(strongFixture, { threshold: 80 });
     expect(result.rootCauseAnalysis).toBeDefined();
     expect(result.rootCauseAnalysis.hasRootCause).toBe(true);
     expect(result.rootCauseAnalysis.evidence.length).toBeGreaterThanOrEqual(3);
   });
 
   test('strong fixture has no remediation hints (all dimensions passing)', () => {
-    const result = semanticReadinessGate(strongFixture, { threshold: 80 });
+    const result = checkContentReadiness(strongFixture, { threshold: 80 });
     // remediationHints should exist as an array
     expect(Array.isArray(result.remediationHints)).toBe(true);
   });
 
   test('weak fixture fails overall gate', () => {
-    const result = semanticReadinessGate(weakFixture, {
+    const result = checkContentReadiness(weakFixture, {
       threshold: 80,
       industry: 'technology',
     });
@@ -472,14 +483,14 @@ describe('rubric dimensions', () => {
   });
 
   test('weak fixture has low rubric scores', () => {
-    const result = semanticReadinessGate(weakFixture, { threshold: 80 });
+    const result = checkContentReadiness(weakFixture, { threshold: 80 });
     expect(result.rubric.insightDepth).toBeLessThan(50);
     expect(result.rubric.evidenceGrounding).toBeLessThan(30);
     expect(result.rubric.actionability).toBeLessThan(30);
   });
 
   test('weak fixture emits remediation hints', () => {
-    const result = semanticReadinessGate(weakFixture, { threshold: 80 });
+    const result = checkContentReadiness(weakFixture, { threshold: 80 });
     expect(result.remediationHints.length).toBeGreaterThan(0);
     // Each hint should have required structure
     for (const hint of result.remediationHints) {
@@ -493,7 +504,7 @@ describe('rubric dimensions', () => {
   });
 
   test('weak fixture fails root-cause check', () => {
-    const result = semanticReadinessGate(weakFixture, { threshold: 80 });
+    const result = checkContentReadiness(weakFixture, { threshold: 80 });
     expect(result.rootCauseAnalysis.hasRootCause).toBe(false);
     expect(
       result.improvementActions.some(
@@ -503,7 +514,7 @@ describe('rubric dimensions', () => {
   });
 
   test('weak fixture remediation hints reference specific dimensions', () => {
-    const result = semanticReadinessGate(weakFixture, { threshold: 80 });
+    const result = checkContentReadiness(weakFixture, { threshold: 80 });
     const dimensions = result.remediationHints.map((h) => h.dimension);
     // Should flag multiple dimensions
     expect(dimensions.length).toBeGreaterThanOrEqual(2);
@@ -745,7 +756,7 @@ describe('major coherence failure', () => {
       ],
     };
 
-    const result = semanticReadinessGate(synthesis, {
+    const result = checkContentReadiness(synthesis, {
       threshold: 80,
       coherenceChecker: lowCoherenceChecker,
     });
@@ -772,7 +783,7 @@ describe('readiness report structure', () => {
         },
       ],
     };
-    const result = semanticReadinessGate(synthesis, { threshold: 80 });
+    const result = checkContentReadiness(synthesis, { threshold: 80 });
 
     // Core fields
     expect(result).toHaveProperty('pass');
@@ -803,7 +814,7 @@ describe('readiness report structure', () => {
   });
 
   test('null input includes full structure with zeros', () => {
-    const result = semanticReadinessGate(null);
+    const result = checkContentReadiness(null);
     expect(result.rubric).toEqual({
       insightDepth: 0,
       evidenceGrounding: 0,

@@ -2,7 +2,7 @@
   "_meta": {
     "source": "251219_Escort_Phase 1 Market Selection_V3.pptx",
     "extractedAt": "2026-02-09T14:28:51.506Z",
-    "builtAt": "2026-02-09T14:39:42.732Z",
+    "builtAt": "2026-02-16T03:57:40.185Z",
     "description": "Ground truth extracted from Escort template PPTX (251219_Escort_Phase 1 Market Selection_V3.pptx). All values are actual measurements.",
     "slideCount": 34,
     "chartCount": 15,
@@ -72,31 +72,25 @@
       "x": 0.3758,
       "y": 6.6944,
       "w": 12.5862,
-      "h": 0.27
+      "h": 0.25
     },
     "headerLineTop": {
       "x": 0,
       "y": 1.0208,
       "w": 13.3333,
-      "h": 0,
-      "color": "293F55",
-      "thickness": 4.5
+      "h": 0
     },
     "headerLineBottom": {
       "x": 0,
       "y": 1.0972,
       "w": 13.3333,
-      "h": 0,
-      "color": "293F55",
-      "thickness": 2.25
+      "h": 0
     },
     "footerLine": {
       "x": 0,
       "y": 7.2361,
       "w": 13.3333,
-      "h": 0,
-      "color": "293F55",
-      "thickness": 2.25
+      "h": 0
     }
   },
   "style": {
@@ -135,10 +129,7 @@
       },
       "coverTitle": {
         "family": "Segoe UI"
-      },
-      "majorEA": "Yu mincho",
-      "sourceEA": "Meiryo UI",
-      "sourceCS": "Times New Roman"
+      }
     },
     "colors": {
       "dk1": "000000",
@@ -151,62 +142,40 @@
       "accent4": "1524A9",
       "accent5": "001C44",
       "accent6": "E46C0A",
-      "tableHeaderFill": "FFFFFF",
+      "tableHeaderFill": "011AB7",
       "accentBlue": "007FFF",
       "darkNavy": "1F497D",
       "orange": "E46C0A",
-      "gridLine": "D6D7D9",
-      "chartSeries": ["1736B6", "8EC1FF", "D6D7D9"],
-      "calloutFill": "D9D9D9",
-      "calloutBorder": "BFBFBF",
-      "categoryFillDark": "7F8DA1",
-      "categoryFillLight": "BFC6D0",
-      "tocFirstRowFill": "99CBFF",
-      "tocActiveSectionFill": "CCE5FF"
+      "gridLine": "D6D7D9"
     },
-    "expectedLineWidthsEmu": [28575, 57150],
     "headerLines": {
       "top": {
         "y": 1.0208,
-        "color": "293F55",
-        "thickness": 4.5
+        "color": "scheme:dk2",
+        "thickness": 1.75
       },
       "bottom": {
         "y": 1.0972,
-        "color": "293F55",
-        "thickness": 2.25
+        "color": "scheme:dk2",
+        "thickness": 1.75
       }
     },
+    "expectedLineWidthsEmu": [
+      28575,
+      57150
+    ],
     "dividerLine": {
       "x": 0.4983,
       "y": 2.2292,
       "w": 4.4983,
-      "thickness": 1.75,
-      "color": "1F497D"
-    },
-    "toc": {
-      "fontSize": 18,
-      "rowHeight": 0.59,
-      "sectionIndentPt": 35,
-      "firstRowFill": "accent1_tint60",
-      "sideBorders": false,
-      "countryRowFontSize": 18,
-      "countryRowBold": false,
-      "activeSectionFill": "accent1_tint80",
-      "cellMarginLR": 0.101,
-      "cellMarginTB": 0.0505
+      "thickness": 1.75
     },
     "table": {
-      "headerFill": "noFill",
+      "headerFill": "scheme:bg1",
       "headerFontSize": 14,
       "bodyFontSize": 14,
-      "borderWidth": 1,
-      "borderColor": "BFBFBF",
-      "borderStyle": "sysDash",
-      "outerBorderWidth": 3,
-      "outerBorderColor": "FFFFFF",
-      "cellMarginLR": 0.04,
-      "cellMarginTB": 0
+      "borderWidth": 0.5,
+      "borderColor": "D6D7D9"
     },
     "footer": {
       "copyrightPos": {
@@ -238,27 +207,19 @@
       "templateSlides": [
         1
       ],
-      "layout": 3,
+      "layout": 2,
       "elements": {
         "companyName": {
           "x": 0.4555,
           "y": 1.6333,
           "w": 9.3541,
-          "h": 2.8349,
-          "fontSize": 36
+          "h": 2.8349
         },
         "projectTitle": {
           "x": 0.4555,
           "y": 4.862,
           "w": 9.3541,
-          "h": 1.6491,
-          "fontSize": 18
-        },
-        "logo": {
-          "x": 0.4467,
-          "y": 0.3228,
-          "w": 1.1389,
-          "h": 0.4027
+          "h": 1.6491
         }
       }
     },
@@ -272,37 +233,16 @@
         20,
         30
       ],
-      "layout": 1,
+      "layout": 5,
       "elements": {
         "title": {
           "fontSize": 18,
-          "font": "+mj-lt"
+          "font": "+mn-lt"
         },
         "tocTable": {
           "x": 0.3758,
           "y": 1.5,
           "w": 12.5862
-        }
-      }
-    },
-    "section_divider": {
-      "id": 2.5,
-      "layout": 2,
-      "templateSlides": [2, 5, 11, 20, 30],
-      "elements": {
-        "title": {
-          "x": 0.7411,
-          "y": 2.9863,
-          "w": 8.1926,
-          "h": 1.5137,
-          "fontSize": 44,
-          "color": "FFFFFF"
-        },
-        "whiteLogo": {
-          "x": 0.6322,
-          "y": 0.5847,
-          "w": 2.4367,
-          "h": 0.8692
         }
       }
     },
@@ -312,17 +252,7 @@
       "templateSlides": [
         3
       ],
-      "layout": 1,
-      "elements": {
-        "content": {
-          "x": 0.3758,
-          "y": 1.5,
-          "w": 12.5862,
-          "h": 5.0,
-          "fontSize": 14,
-          "autoFit": "spAutoFit"
-        }
-      }
+      "layout": 6
     },
     "country_overview": {
       "id": 4,
@@ -330,7 +260,7 @@
       "templateSlides": [
         4
       ],
-      "layout": 1,
+      "layout": 7,
       "elements": {
         "title": {
           "x": 0.37,
@@ -373,9 +303,9 @@
           "w": 4.4983
         },
         "table": {
-          "x": 0.3667,
-          "y": 1.467,
-          "w": 12.6
+          "x": 0.38,
+          "y": 1.5,
+          "w": 12.59
         }
       }
     },
@@ -406,12 +336,7 @@
           "y": 2.2292,
           "w": 4.4983
         },
-        "chart": {
-          "x": 0.83,
-          "y": 2.31,
-          "w": 5.74,
-          "h": 3.85
-        },
+        "chart": {},
         "gridLines": {
           "color": "D6D7D9",
           "thickness": 0.25
@@ -436,24 +361,22 @@
       "layout": 1,
       "elements": {
         "chartLeft": {
-          "x": 0.83,
-          "y": 2.31,
-          "w": 5.74,
-          "h": 3.85
+          "x": 0.38,
+          "y": 1.5,
+          "w": 6,
+          "h": 4.2
         },
         "chartRight": {
-          "x": 6.87,
-          "y": 1.91,
-          "w": 6.09,
-          "h": 4.69
+          "x": 6.8,
+          "y": 1.5,
+          "w": 6.1,
+          "h": 4.2
         },
         "quoteCallout": {
-          "x": 1.16,
-          "y": 5.67,
-          "w": 11.81,
-          "h": 0.96,
-          "fill": "D9D9D9",
-          "border": "BFBFBF"
+          "x": 0.38,
+          "y": 5.9,
+          "w": 12.59,
+          "h": 0.7
         }
       }
     },
@@ -501,15 +424,14 @@
           }
         ],
         "calloutOverlay": {
-          "x": 1.1,
-          "y": 2.22,
-          "w": 4.51,
-          "h": 1.04,
-          "fill": "D9D9D9",
-          "border": "BFBFBF",
-          "borderWidth": 0.75,
-          "cornerRadius": 0,
-          "shape": "wedgeRectCallout"
+          "x": 1,
+          "y": 5,
+          "w": 5.5,
+          "h": 1,
+          "fill": "F5F5F5",
+          "border": "CCCCCC",
+          "borderWidth": 1,
+          "cornerRadius": 0.05
         }
       }
     },
@@ -529,9 +451,9 @@
           "fontSize": 10
         },
         "table": {
-          "x": 0.3667,
-          "y": 1.467,
-          "w": 12.6
+          "x": 0.38,
+          "y": 1.5,
+          "w": 12.59
         }
       }
     },
@@ -550,9 +472,9 @@
           "fontSize": 20
         },
         "table": {
-          "x": 0.3667,
-          "y": 1.467,
-          "w": 12.6
+          "x": 0.38,
+          "y": 1.5,
+          "w": 12.59
         }
       }
     },
@@ -596,35 +518,32 @@
           }
         ],
         "labelStyle": {
-          "fill": "011AB7",
+          "fill": "1F497D",
           "color": "FFFFFF",
-          "fontSize": 14,
-          "bold": false
+          "fontSize": 10,
+          "bold": true
         },
         "contentStyle": {
-          "fill": "FFFFFF",
-          "color": "000000",
-          "fontSize": 14
+          "fill": "F2F2F2",
+          "color": "333333",
+          "fontSize": 9
         },
         "chevronFlow": {
-          "x": 1.43,
-          "y": 3.2,
-          "w": 11.45,
-          "h": 0.53,
+          "x": 2.5,
+          "y": 5.6,
+          "w": 10.4,
+          "h": 0.8,
           "maxPhases": 5,
           "chevronColors": [
-            "005FBF",
-            "005FBF",
-            "005FBF",
-            "005FBF",
-            "005FBF"
+            "007FFF",
+            "2E7D32",
+            "E46C0A",
+            "4F81BD",
+            "C0504D"
           ],
           "spacing": 0.05,
-          "fontSize": 14,
-          "textColor": "FFFFFF",
-          "lineColor": "FFFFFF",
-          "lineWidth": 3,
-          "shape": "homePlate"
+          "fontSize": 8,
+          "textColor": "FFFFFF"
         }
       }
     },
@@ -635,7 +554,7 @@
         26,
         29
       ],
-      "layout": 1,
+      "layout": 7,
       "elements": {
         "dividerLine": {
           "x": 2.1851,
@@ -644,15 +563,15 @@
         },
         "chartLeft": {
           "x": 0.38,
-          "y": 1.79,
-          "w": 6.1,
-          "h": 4.87
+          "y": 1.5,
+          "w": 6,
+          "h": 4.2
         },
         "chartRight": {
-          "x": 6.86,
-          "y": 1.74,
-          "w": 6.11,
-          "h": 4.94
+          "x": 6.8,
+          "y": 1.5,
+          "w": 6.1,
+          "h": 4.2
         }
       }
     },
@@ -664,19 +583,19 @@
         26,
         29
       ],
-      "layout": 1,
+      "layout": 7,
       "elements": {
         "chartLeft": {
           "x": 0.38,
-          "y": 1.79,
-          "w": 6.1,
-          "h": 4.5
+          "y": 1.5,
+          "w": 6,
+          "h": 4
         },
         "chartRight": {
-          "x": 6.86,
-          "y": 1.74,
-          "w": 6.11,
-          "h": 4.5
+          "x": 6.8,
+          "y": 1.5,
+          "w": 6.1,
+          "h": 4
         },
         "metricsRow": {
           "y": 5.7,
@@ -704,17 +623,13 @@
         33,
         34
       ],
-      "layout": 1,
+      "layout": 6,
       "elements": {
         "table": {
-          "x": 0.3796,
-          "y": 1.467,
-          "w": 12.578
-        },
-        "headerFill": "011AB7",
-        "termColFill": "7F8DA1",
-        "termColWidth": 2.15,
-        "explanationColWidth": 10.43
+          "x": 0.38,
+          "y": 1.5,
+          "w": 12.59
+        }
       }
     },
     "matrix_2x2": {

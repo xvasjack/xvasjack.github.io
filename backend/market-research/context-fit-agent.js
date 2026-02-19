@@ -107,7 +107,7 @@ function fillBodySlotsBalanced(parts, slotCount, startIdx, slots) {
   return slots;
 }
 
-function heuristicFitTokens(tokens, slotCount, { maxCharsPerSlot = 360 } = {}) {
+function ruleFitTokens(tokens, slotCount, { maxCharsPerSlot = 360 } = {}) {
   if (slotCount <= 0) return [];
   const cleaned = dedupeTokens(tokens);
   if (cleaned.length === 0) return [];
@@ -218,7 +218,7 @@ function shouldTryAI({
 }) {
   if (!allowAI) return false;
   if (MODE_FALSE_RE.test(String(mode || 'auto'))) return false;
-  if (mode === 'heuristic') return false;
+  if (mode === 'rule') return false;
   if (mode === 'ai') return true;
   if (forceAI) return true;
   if (slotCount <= 0) return false;
@@ -272,21 +272,21 @@ async function fitTokensToTemplateSlots(
         };
       }
     } catch (err) {
-      // Fall through to heuristic fitting.
-      console.warn(`[Context Fit] AI fit failed, fallback to heuristic: ${err.message}`);
+      // Fall through to rule fitting.
+      console.warn(`[Context Fit] AI fit failed, fallback to rule: ${err.message}`);
     }
   }
 
-  const heuristicTokens = heuristicFitTokens(cleaned, slotCount, { maxCharsPerSlot });
+  const ruleTokens = ruleFitTokens(cleaned, slotCount, { maxCharsPerSlot });
   return {
-    tokens: heuristicTokens.slice(0, slotCount),
-    method: 'heuristic',
-    stats: { inputTokens: cleaned.length, slotCount, outputTokens: heuristicTokens.length },
+    tokens: ruleTokens.slice(0, slotCount),
+    method: 'rule',
+    stats: { inputTokens: cleaned.length, slotCount, outputTokens: ruleTokens.length },
   };
 }
 
 module.exports = {
   fitTokensToTemplateSlots,
-  heuristicFitTokens,
+  ruleFitTokens,
 };
 

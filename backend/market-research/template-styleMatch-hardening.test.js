@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Template Fidelity Hardening — comprehensive Jest test matrix.
+ * Template StyleMatch Hardening — comprehensive Jest test matrix.
  *
  * Covers:
  *   Task 1:  auditCoverage()
@@ -121,7 +121,7 @@ beforeAll(() => {
 afterAll(() => {
   metricsAfter = { ...getMetrics() };
   // Task 12: Print before/after metrics
-  console.log('\n=== Template Fidelity Hardening — Metrics ===');
+  console.log('\n=== Template StyleMatch Hardening — Metrics ===');
   console.log('Before:', JSON.stringify(metricsBefore, null, 2));
   console.log('After:', JSON.stringify(metricsAfter, null, 2));
   console.log('Delta:');
@@ -143,7 +143,7 @@ beforeEach(() => {
 // ====================================================================
 
 describe('Task 1: auditCoverage()', () => {
-  test('returns full coverage when all rendered blocks have contracts', () => {
+  test('returns full coverage when all built blocks have contracts', () => {
     const result = auditCoverage({
       templateData: makeMinimalTemplateData(),
     });
@@ -154,10 +154,10 @@ describe('Task 1: auditCoverage()', () => {
     expect(result.auditedAt).toBeDefined();
   });
 
-  test('reports uncovered blocks when renderedBlocks includes unknown keys', () => {
+  test('reports uncovered blocks when builtBlocks includes unknown keys', () => {
     const result = auditCoverage({
       templateData: makeMinimalTemplateData(),
-      renderedBlocks: [...ALL_BLOCK_KEYS, 'unknownBlock1', 'unknownBlock2'],
+      builtBlocks: [...ALL_BLOCK_KEYS, 'unknownBlock1', 'unknownBlock2'],
     });
     expect(result.uncoveredBlocks).toHaveLength(2);
     expect(result.uncoveredBlocks.map((b) => b.blockKey)).toEqual(
@@ -166,10 +166,10 @@ describe('Task 1: auditCoverage()', () => {
     expect(result.coveragePercent).toBeLessThan(100);
   });
 
-  test('returns 0% coverage for empty renderedBlocks', () => {
+  test('returns 0% coverage for empty builtBlocks', () => {
     const result = auditCoverage({
       templateData: makeMinimalTemplateData(),
-      renderedBlocks: [],
+      builtBlocks: [],
     });
     expect(result.coveragePercent).toBe(0);
     expect(result.totalBlocks).toBe(0);
@@ -187,7 +187,7 @@ describe('Task 1: auditCoverage()', () => {
   test('covered blocks include expected metadata', () => {
     const result = auditCoverage({
       templateData: makeMinimalTemplateData(),
-      renderedBlocks: ['foundationalActs'],
+      builtBlocks: ['foundationalActs'],
     });
     expect(result.coveredBlocks).toHaveLength(1);
     const block = result.coveredBlocks[0];
@@ -795,7 +795,7 @@ describe('Task 10: enforceStrict()', () => {
 });
 
 // ====================================================================
-// Task 11: CLI --audit (validation via module exports)
+// Task 11: CLI --audit (check via module exports)
 // ====================================================================
 
 describe('Task 11: CLI audit (validated via module)', () => {

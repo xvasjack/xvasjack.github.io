@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Tests for release-loop.js orchestrator.
+ * Tests for release-loop.js flowManager.
  *
  * Tests:
  *   1. parseArgs defaults and overrides
@@ -241,7 +241,7 @@ test('has entries for all expected step names', () => {
     'regression-round-2',
     'regression-round-3',
     'ppt-generation',
-    'final-validation',
+    'final-check',
   ];
   for (const step of expectedSteps) {
     assert.ok(

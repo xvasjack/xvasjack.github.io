@@ -246,7 +246,7 @@ REQUIREMENTS:
       // Validate policy-specific structure
       let dataQuality = structuredData?.dataQuality || 'unknown';
       if (structuredData && !validatePolicyData(structuredData)) {
-        console.log(`      [Policy] ${topicKey}: validation failed — missing acts with name/year`);
+        console.log(`      [Policy] ${topicKey}: check failed — missing acts with name/year`);
         dataQuality = 'incomplete';
       }
 
@@ -464,7 +464,7 @@ REQUIREMENTS:
         let dataQuality = structuredData?.dataQuality || 'unknown';
         if (structuredData && !validateMarketData(structuredData)) {
           console.log(
-            `      [Market] ${topicKey}: validation failed — missing chartData.series with numeric values`
+            `      [Market] ${topicKey}: check failed — missing chartData.series with numeric values`
           );
           dataQuality = 'incomplete';
         }
@@ -666,7 +666,7 @@ REQUIREMENTS:
       let dataQuality = structuredData?.dataQuality || 'unknown';
       if (structuredData && !validateCompetitorData(structuredData)) {
         console.log(
-          `      [Competitor] ${topicKey}: validation failed — missing players with name/description(45+words)/website`
+          `      [Competitor] ${topicKey}: check failed — missing players with name/description(45+words)/website`
         );
         dataQuality = 'incomplete';
       }

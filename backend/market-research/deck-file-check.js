@@ -1,6 +1,6 @@
 /**
- * PPTX Validator - Read and validate PPTX files using JSZip
- * Run: node pptx-validator.js <file.pptx> [--validate]
+ * PPTX Checker - Read and validate PPTX files using JSZip
+ * Run: node deck-file-check.js <file.pptx> [--validate]
  */
 const JSZip = require('jszip');
 const fs = require('fs');
@@ -254,12 +254,12 @@ async function scanRelationshipTargets(zip) {
       const rawTarget = decodeXmlAttr(targetMatch[2]).trim();
       if (targetMode === 'external') {
         checkedExternal++;
-        const validation = isValidExternalRelationshipTarget(rawTarget);
-        if (!validation.valid) {
+        const check = isValidExternalRelationshipTarget(rawTarget);
+        if (!check.valid) {
           invalidExternalTargets.push({
             relFile,
             target: rawTarget,
-            reason: validation.reason,
+            reason: check.reason,
           });
         }
         continue;
@@ -903,7 +903,7 @@ function classifySlideIntent(fullText, charCount) {
     }
   }
 
-  // Heuristic: if the slide has very few chars (under threshold) and consists
+  // Rule: if the slide has very few chars (under threshold) and consists
   // of only 1-3 short text fragments that look like titles/labels (no sentences),
   // classify as divider-intent.
   if (charCount < 80) {
@@ -932,12 +932,12 @@ async function validatePPTX(input, exp = {}) {
 
   try {
     const { zip, fileSize } = await readPPTX(input);
-    pass('File integrity', 'PPTX parsed successfully');
+    pass('File fileSafety', 'PPTX parsed successfully');
 
     const xmlIntegrity = await scanXmlIntegrity(zip);
     if (xmlIntegrity.issueCount > 0) {
       fail(
-        'XML character integrity',
+        'XML character fileSafety',
         'No invalid XML chars or unpaired surrogates',
         `${xmlIntegrity.issueCount} issue(s), e.g. ${xmlIntegrity.issues
           .slice(0, 3)
@@ -945,7 +945,7 @@ async function validatePPTX(input, exp = {}) {
           .join(', ')}`
       );
     } else {
-      pass('XML character integrity', 'No invalid characters found');
+      pass('XML character fileSafety', 'No invalid characters found');
     }
 
     const relIntegrity = await scanRelationshipTargets(zip);
@@ -955,13 +955,13 @@ async function validatePPTX(input, exp = {}) {
         .map((x) => `${x.relFile}: ${x.target} -> ${x.resolvedTarget || '(empty)'}`)
         .join('; ');
       fail(
-        'Relationship target integrity',
+        'Relationship target fileSafety',
         'All internal .rels targets resolve to existing package parts',
         `${relIntegrity.missingInternalTargets.length} broken internal target(s), e.g. ${examples}`
       );
     } else {
       pass(
-        'Relationship target integrity',
+        'Relationship target fileSafety',
         `${relIntegrity.checkedInternal} internal targets resolved`
       );
     }
@@ -971,13 +971,13 @@ async function validatePPTX(input, exp = {}) {
         .map((x) => `${x.relFile}: ${x.target || '(empty)'} (${x.reason})`)
         .join('; ');
       fail(
-        'External relationship target integrity',
+        'External relationship target fileSafety',
         'External targets are valid absolute URLs (http/https/mailto) with no whitespace',
         `${relIntegrity.invalidExternalTargets.length} invalid external target(s), e.g. ${examples}`
       );
     } else {
       pass(
-        'External relationship target integrity',
+        'External relationship target fileSafety',
         `${relIntegrity.checkedExternal} external targets validated`
       );
     }
@@ -1023,12 +1023,12 @@ async function validatePPTX(input, exp = {}) {
         );
       }
       fail(
-        'Presentation slide ID integrity',
+        'Presentation slide ID fileSafety',
         'Unique p:sldId id and r:id entries',
         parts.join(' | ')
       );
     } else {
-      pass('Presentation slide ID integrity', 'Slide IDs and relationship IDs are unique');
+      pass('Presentation slide ID fileSafety', 'Slide IDs and relationship IDs are unique');
     }
 
     if (packageConsistency.missingRelationshipReferences.length > 0) {
@@ -1037,13 +1037,13 @@ async function validatePPTX(input, exp = {}) {
         .map((x) => `${x.ownerPart}:${x.relId}`)
         .join(', ');
       fail(
-        'Relationship reference integrity',
+        'Relationship reference fileSafety',
         'Every r:id/r:embed/r:link/r:href resolves within owner .rels file',
         `${packageConsistency.missingRelationshipReferences.length} dangling reference(s), e.g. ${examples}`
       );
     } else {
       pass(
-        'Relationship reference integrity',
+        'Relationship reference fileSafety',
         `${packageConsistency.checkedRelationshipReferences || 0} XML relationship references resolved`
       );
     }
@@ -1053,10 +1053,10 @@ async function validatePPTX(input, exp = {}) {
         .slice(0, 5)
         .map((x) => `${x.slide}:id=${x.id} (x${x.count})`)
         .join(', ');
-      fail('Slide non-visual shape ID integrity', 'Unique p:cNvPr id values per slide', examples);
+      fail('Slide non-visual shape ID fileSafety', 'Unique p:cNvPr id values per slide', examples);
     } else {
       pass(
-        'Slide non-visual shape ID integrity',
+        'Slide non-visual shape ID fileSafety',
         `No duplicate p:cNvPr ids across ${packageConsistency.slidesCheckedForNonVisualShapeIds || 0} slide(s)`
       );
     }
@@ -1241,7 +1241,7 @@ async function validatePPTX(input, exp = {}) {
       }
     }
   } catch (err) {
-    fail('File integrity', 'Valid PPTX', err.message);
+    fail('File fileSafety', 'Valid PPTX', err.message);
   }
 
   return {
@@ -1290,7 +1290,7 @@ if (require.main === module) {
   const flags = args.filter((a) => a.startsWith('--'));
 
   if (!file) {
-    console.log('Usage: node pptx-validator.js <file.pptx> [--validate] [--country=Vietnam]');
+    console.log('Usage: node deck-file-check.js <file.pptx> [--validate] [--country=Vietnam]');
     process.exit(0);
   }
   if (!fs.existsSync(file)) {

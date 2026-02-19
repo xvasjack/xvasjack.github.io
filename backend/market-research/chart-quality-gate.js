@@ -6,7 +6,7 @@
  * Provides:
  * - scoreChartQuality(chartData)      → 0-100 score
  * - runChartGate(chartData, opts)     → { pass, score, issues[], reasonCodes[] }
- * - generateChartDiagnostics(blocks)  → JSON diagnostics artifact
+ * - generateChartDiagnostics(blocks)  → JSON runInfo artifact
  */
 
 const {
@@ -244,7 +244,7 @@ function runChartGate(chartData, opts = {}) {
 // ─── generateChartDiagnostics ───────────────────────────────────────────────
 
 /**
- * Generate per-block chart diagnostics for a list of blocks.
+ * Generate per-block chart runInfo for a list of blocks.
  *
  * Each block is expected to have a `chartData` field (or be the chart data itself).
  *

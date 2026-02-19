@@ -26,7 +26,7 @@ const {
   },
 } = require('./golden-baseline-manager');
 
-const { validateSynthesisQuality, validatePptData } = require('./quality-gates');
+const { validateSynthesisQuality, validatePptData } = require('./content-gates');
 
 // ============ FIXTURE NAMES ============
 
@@ -202,7 +202,7 @@ describe('Clean Gold Fixture - All Validation Gates', () => {
     expect(result.sectionScores.executiveSummary).toBeGreaterThanOrEqual(60);
   });
 
-  test('clean-gold PPT data blocks have renderable content', () => {
+  test('clean-gold PPT data blocks have buildable content', () => {
     const blocks = flattenToBlocks(fixture.countryAnalysis);
     expect(blocks.length).toBeGreaterThanOrEqual(5);
     const result = validatePptData(blocks);
@@ -842,7 +842,7 @@ describe('Internal Helpers', () => {
     expect(classes).toContain('wrong-type');
     expect(classes).toContain('overflow-risk');
     expect(classes).toContain('chart-data-issues');
-    expect(classes).toContain('semantic-empty');
+    expect(classes).toContain('thin-content');
   });
 
   test('extractFailures collects from all failure arrays', () => {

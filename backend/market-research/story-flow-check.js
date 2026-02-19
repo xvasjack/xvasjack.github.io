@@ -396,24 +396,36 @@ function checkStoryFlow(synthesis) {
     'depth.dealEconomics',
   ];
   const marketSizeValues = [];
+  const marketSizePatterns = [
+    /(?:market(?:\s+size|\s+value|\s+opportunity)?|TAM|total addressable(?:\s+market)?|addressable market)[^.!?\n]{0,90}?(?:\$|€|£|¥)\s*[\d,.]+\s*(?:million|billion|M|B|K|trillion|T)?/gi,
+    /(?:\$|€|£|¥)\s*[\d,.]+\s*(?:million|billion|M|B|K|trillion|T)?[^.!?\n]{0,70}?(?:market(?:\s+size|\s+value|\s+opportunity)?|TAM|total addressable(?:\s+market)?|addressable market)/gi,
+  ];
+  const marketSizeNegativeHints =
+    /\b(funding|investment|capex|opex|budget|loan|grant|subsidy|bond|financing|market cap|valuation|revenue|cost|profit|ebitda)\b/i;
   for (const section of marketSizeSections) {
     const text = sectionTexts[section];
     if (!text) continue;
-    // Look for market size context
-    const marketSizePattern =
-      /(?:market(?:\s+size)?|TAM|total addressable|addressable market)[^.]*?(?:\$|€|£|¥)[\d,.]+\s*(?:million|billion|M|B|K|trillion|T)?/gi;
-    const matches = text.match(marketSizePattern) || [];
-    for (const m of matches) {
-      const normalized = normalizeCurrency(
-        m.match(/(?:\$|€|£|¥)[\d,.]+\s*(?:million|billion|M|B|K|trillion|T)?/i)?.[0] || ''
-      );
-      if (normalized) {
-        marketSizeValues.push({
-          section,
-          value: normalized.value,
-          currency: normalized.currency,
-          raw: m,
-        });
+
+    for (const pattern of marketSizePatterns) {
+      pattern.lastIndex = 0;
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const candidate = String(match[0] || '');
+        if (marketSizeNegativeHints.test(candidate)) {
+          continue;
+        }
+        const normalized = normalizeCurrency(
+          candidate.match(/(?:\$|€|£|¥)\s*[\d,.]+\s*(?:million|billion|M|B|K|trillion|T)?/i)?.[0] ||
+            ''
+        );
+        if (normalized) {
+          marketSizeValues.push({
+            section,
+            value: normalized.value,
+            currency: normalized.currency,
+            raw: candidate,
+          });
+        }
       }
     }
   }
@@ -424,6 +436,9 @@ function checkStoryFlow(synthesis) {
       for (let j = i + 1; j < marketSizeValues.length; j++) {
         const a = marketSizeValues[i];
         const b = marketSizeValues[j];
+        // Compare cross-section only. Different figures inside one section can be valid
+        // (for example market size plus a funding line-item).
+        if (a.section === b.section) continue;
         if (a.currency === b.currency) {
           const ratio = Math.max(a.value, b.value) / Math.min(a.value, b.value);
           linkedPairs.push({

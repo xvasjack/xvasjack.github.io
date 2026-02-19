@@ -7,14 +7,14 @@ const readline = require('readline');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
-const { validatePPTX, generateReport, readPPTX } = require('./pptx-validator');
+const { validatePPTX, generateReport, readPPTX } = require('./deck-file-check');
 const { getExpectations, validateSlides } = require('./validate-output');
 
 const CONFIG = {
   maxIterations: 10,
   waitForFix: true,
   outputFile: path.join(__dirname, 'test-output.pptx'),
-  issuesFile: path.join(__dirname, 'validation-issues.json'),
+  issuesFile: path.join(__dirname, 'check-issues.json'),
   genScript: path.join(__dirname, 'test-ppt-generation.js'),
 };
 
@@ -55,7 +55,7 @@ async function validate(expectations) {
   } catch (err) {
     results.valid = false;
     results.error = err.message;
-    results.failed.push({ check: 'Validation', expected: 'No errors', actual: err.message });
+    results.failed.push({ check: 'Check', expected: 'No errors', actual: err.message });
   }
   return results;
 }
@@ -72,7 +72,7 @@ function printReport(iter, gen, val) {
   console.log(`Generated: ${(stats.size / 1024).toFixed(1)}KB in ${gen.duration}ms`);
   const total = val.passed.length + val.failed.length;
   console.log(
-    `Validation: ${val.failed.length === 0 ? 'PASSED' : 'FAILED'} (${val.passed.length}/${total})`
+    `Check: ${val.failed.length === 0 ? 'PASSED' : 'FAILED'} (${val.passed.length}/${total})`
   );
   if (val.details)
     console.log(

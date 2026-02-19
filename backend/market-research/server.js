@@ -168,6 +168,81 @@ function parseJsonObjectFromModelText(text) {
   }
 }
 
+function normalizeReviewFixLines(lines, maxCount = 12) {
+  if (!Array.isArray(lines)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const raw of lines) {
+    const text = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length >= maxCount) break;
+  }
+  return out;
+}
+
+async function buildSeniorReviewFixListWithGeminiPro({
+  mode = 'general',
+  scope,
+  attempt,
+  maxRetries,
+  baseIssues,
+  payload,
+}) {
+  const fallbackFixes = normalizeReviewFixLines(baseIssues, 12);
+  const country = Array.isArray(scope?.targetMarkets) ? scope.targetMarkets[0] : 'target country';
+  const industry = scope?.industry || 'unknown';
+  const modeLabelMap = {
+    country: 'country analysis',
+    synthesis: 'strategy draft',
+    content: 'content quality',
+  };
+  const modeLabel = modeLabelMap[mode] || 'analysis';
+  const payloadPreview = JSON.stringify(payload || {}, null, 2).slice(0, 24000);
+
+  const systemPrompt = `You are a senior strategy reviewer.
+Your job is to review the analysis and return clear fix instructions for a junior fixer.
+Return ONLY valid JSON: {"priorityFixes":["..."]}.`;
+
+  const prompt = `Mode: ${modeLabel}
+Attempt: ${attempt}/${maxRetries}
+Country: ${country}
+Industry: ${industry}
+
+Known issues:
+${fallbackFixes.length > 0 ? fallbackFixes.map((x) => `- ${x}`).join('\n') : '- improve quality and completeness'}
+
+Data preview:
+${payloadPreview}
+
+Rules:
+1) Return 5-12 clear and concrete fixes.
+2) Keep each fix to one short sentence.
+3) Focus on depth, insight quality, and story flow.
+4) Preserve facts; never suggest placeholders.
+5) Output only JSON object with key "priorityFixes".`;
+
+  try {
+    const responseText = await callGeminiPro(prompt, {
+      systemPrompt,
+      temperature: 0,
+      jsonMode: true,
+      maxTokens: 4096,
+      timeout: 120000,
+      maxRetries: 2,
+    });
+    const parsed = parseJsonObjectFromModelText(responseText);
+    const reviewedFixes = normalizeReviewFixLines(parsed?.priorityFixes, 12);
+    return reviewedFixes.length > 0 ? reviewedFixes : fallbackFixes;
+  } catch (reviewErr) {
+    console.warn(`[Senior Review] Gemini Pro review fallback: ${reviewErr.message}`);
+    return fallbackFixes;
+  }
+}
+
 async function improveSynthesisWithGeminiPro({
   synthesis,
   scope,
@@ -182,11 +257,25 @@ async function improveSynthesisWithGeminiPro({
         .map((s) => `${s.section}(${s.score})`)
         .slice(0, 8)
     : [];
-  const improvementActions = Array.isArray(contentReadiness?.improvementActions)
+  const baseImprovementActions = Array.isArray(contentReadiness?.improvementActions)
     ? contentReadiness.improvementActions.slice(0, 10)
     : [];
+  const reviewerFixes = await buildSeniorReviewFixListWithGeminiPro({
+    mode: 'content',
+    scope,
+    attempt,
+    maxRetries,
+    baseIssues: [...baseImprovementActions, ...failedSections],
+    payload: {
+      overallScore: contentReadiness?.overallScore || 0,
+      threshold: contentReadiness?.threshold || 80,
+      failedSections,
+      synthesis,
+    },
+  });
 
-  const systemPrompt = `You are a senior strategy reviewer improving one-country market research synthesis.
+  const systemPrompt = `You are a junior strategy writer.
+A senior reviewer already gave fix instructions. Apply them carefully.
 Return ONLY valid JSON object.
 Keep the same top-level structure and field names as the input.
 Do not return markdown.`;
@@ -197,8 +286,8 @@ Attempt: ${attempt}/${maxRetries}
 
 Current score: ${contentReadiness?.overallScore || 0}/${contentReadiness?.threshold || 80}
 Failed sections: ${failedSections.join(', ') || 'unknown'}
-Must fix:
-${improvementActions.join('\n') || '- Improve depth, evidence, actionability, and story flow'}
+Senior reviewer fixes:
+${reviewerFixes.length > 0 ? reviewerFixes.join('\n') : '- Improve depth, evidence, actionability, and story flow'}
 
 Rules:
 1) Keep all existing factual content unless it is clearly contradictory.
@@ -209,9 +298,10 @@ Rules:
 Current synthesis JSON:
 ${JSON.stringify(synthesis, null, 2)}`;
 
-  const responseText = await callGeminiPro(prompt, {
+  const responseText = await callGemini(prompt, {
     systemPrompt,
     temperature: 0.1,
+    jsonMode: true,
     maxTokens: 12000,
     timeout: 120000,
     maxRetries: 2,
@@ -262,15 +352,24 @@ async function reviewCountryAnalysisWithGeminiPro({
   attempt,
   maxRetries,
 }) {
-  const systemPrompt = `You are a senior reviewer improving one-country market analysis JSON.
+  const reviewerFixes = await buildSeniorReviewFixListWithGeminiPro({
+    mode: 'country',
+    scope,
+    attempt,
+    maxRetries,
+    baseIssues: Array.isArray(issues) ? issues : [],
+    payload: countryAnalysis,
+  });
+
+  const systemPrompt = `You are a junior analyst applying senior review comments to one-country market analysis JSON.
 Return ONLY valid JSON object.
 Keep structure stable with sections: policy, market, competitors, depth, summary, insights.`;
 
   const prompt = `Attempt: ${attempt}/${maxRetries}
 Country: ${countryAnalysis?.country || (scope?.targetMarkets || [])[0] || 'unknown'}
 Industry: ${scope?.industry || 'unknown'}
-Problems to fix:
-${Array.isArray(issues) && issues.length > 0 ? issues.join('\n') : '- improve depth and structure'}
+Senior reviewer fixes:
+${reviewerFixes.length > 0 ? reviewerFixes.join('\n') : '- improve depth and structure'}
 
 Rules:
 1) Keep existing valid facts.
@@ -284,9 +383,10 @@ Rules:
 Current country analysis JSON:
 ${JSON.stringify(countryAnalysis, null, 2)}`;
 
-  const responseText = await callGeminiPro(prompt, {
+  const responseText = await callGemini(prompt, {
     systemPrompt,
     temperature: 0.1,
+    jsonMode: true,
     maxTokens: 12000,
     timeout: 120000,
     maxRetries: 2,
@@ -301,19 +401,32 @@ async function improveSynthesisQualityWithGeminiPro({
   attempt,
   maxRetries,
 }) {
-  const systemPrompt = `You are a senior reviewer improving one-country synthesis quality.
-Return ONLY valid JSON object.
-Keep the same top-level structure as input.`;
-
   const failures = Array.isArray(synthesisGate?.failures)
     ? synthesisGate.failures.slice(0, 12)
     : [];
+  const reviewerFixes = await buildSeniorReviewFixListWithGeminiPro({
+    mode: 'synthesis',
+    scope,
+    attempt,
+    maxRetries,
+    baseIssues: failures,
+    payload: {
+      overall: Number(synthesisGate?.overall || 0),
+      failures,
+      synthesis,
+    },
+  });
+
+  const systemPrompt = `You are a junior strategy writer applying senior reviewer feedback.
+Return ONLY valid JSON object.
+Keep the same top-level structure as input.`;
+
   const prompt = `Attempt: ${attempt}/${maxRetries}
 Industry: ${scope?.industry || 'unknown'}
 Country: ${(scope?.targetMarkets || [])[0] || 'unknown'}
 Current synthesis quality score: ${Number(synthesisGate?.overall || 0)}/100
-Problems to fix:
-${failures.length > 0 ? failures.join('\n') : '- improve evidence and structure quality'}
+Senior reviewer fixes:
+${reviewerFixes.length > 0 ? reviewerFixes.join('\n') : '- improve evidence and structure quality'}
 
 Rules:
 1) Keep existing valid facts unless contradictory.
@@ -324,9 +437,10 @@ Rules:
 Current synthesis JSON:
 ${JSON.stringify(synthesis, null, 2)}`;
 
-  const responseText = await callGeminiPro(prompt, {
+  const responseText = await callGemini(prompt, {
     systemPrompt,
     temperature: 0.1,
+    jsonMode: true,
     maxTokens: 12000,
     timeout: 120000,
     maxRetries: 2,
@@ -3510,5 +3624,8 @@ module.exports = {
     normalizeGateChartData,
     buildGateContent,
     collectPreRenderStructureIssues,
+    mergeCountryAnalysis,
+    countryNeedsReview,
+    reviewCountryAnalysisWithGeminiPro,
   },
 };

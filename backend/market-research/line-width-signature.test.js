@@ -13,7 +13,32 @@
  */
 
 const JSZip = require('jszip');
-const { auditGeneratedPptFormatting } = require('./ppt-single-country');
+const { auditGeneratedPptFormatting } = require('./deck-builder-single');
+const templatePatterns = require('./template-patterns.json');
+
+function deriveExpectedLineWidthsEmu() {
+  const explicit = Array.isArray(templatePatterns.style?.expectedLineWidthsEmu)
+    ? templatePatterns.style.expectedLineWidthsEmu
+        .map((x) => Number(x))
+        .filter((x) => Number.isFinite(x) && x > 0)
+    : [];
+  if (explicit.length > 0) return [...new Set(explicit)].sort((a, b) => a - b);
+
+  const emuPerPt = 12700;
+  const thicknessesPt = [
+    templatePatterns.style?.headerLines?.top?.thickness,
+    templatePatterns.style?.headerLines?.bottom?.thickness,
+    templatePatterns.pptxPositions?.footerLine?.thickness,
+  ]
+    .map((x) => Number(x))
+    .filter((x) => Number.isFinite(x) && x > 0);
+  const derived = thicknessesPt.map((pt) => Math.round(pt * emuPerPt));
+  return [...new Set(derived)].sort((a, b) => a - b);
+}
+
+const EXPECTED_LINE_WIDTHS = deriveExpectedLineWidthsEmu();
+const PRIMARY_EXPECTED_WIDTH = EXPECTED_LINE_WIDTHS[0] || 28575;
+const SECONDARY_EXPECTED_WIDTH = EXPECTED_LINE_WIDTHS[1] || null;
 
 // ---------------------------------------------------------------------------
 // Helper: Build a synthetic PPTX with configurable layout/master contents
@@ -96,7 +121,7 @@ async function buildTestPptx({
 }
 
 // Template-like XML with connector lines at the correct Escort widths
-function makeLayoutWithLines(widths = [57150, 28575]) {
+function makeLayoutWithLines(widths = EXPECTED_LINE_WIDTHS) {
   const lineElements = widths
     .map(
       (w, i) =>
@@ -116,7 +141,7 @@ function makeLayoutWithLines(widths = [57150, 28575]) {
 </p:sldLayout>`;
 }
 
-function makeMasterWithLines(widths = [57150, 28575]) {
+function makeMasterWithLines(widths = EXPECTED_LINE_WIDTHS) {
   const lineElements = widths
     .map(
       (w, i) =>
@@ -152,7 +177,7 @@ describe('line_width_signature_mismatch', () => {
     // Reproduces the exact Escort template scenario: lines in layout1, empty layout3.
     const buffer = await buildTestPptx({
       slideLayouts: {
-        'slideLayout1.xml': makeLayoutWithLines([57150, 28575]),
+        'slideLayout1.xml': makeLayoutWithLines(EXPECTED_LINE_WIDTHS),
         'slideLayout3.xml': makeEmptyLayout(),
       },
     });
@@ -160,7 +185,9 @@ describe('line_width_signature_mismatch', () => {
     const result = await auditGeneratedPptFormatting(buffer);
     const mismatch = result.issues.find((i) => i.code === 'line_width_signature_mismatch');
     expect(mismatch).toBeUndefined();
-    expect(result.checks.headerFooterLineWidths).toEqual(expect.arrayContaining([28575, 57150]));
+    expect(result.checks.headerFooterLineWidths).toEqual(
+      expect.arrayContaining(EXPECTED_LINE_WIDTHS)
+    );
   });
 
   test('no warning when correct widths are in slideMaster only', async () => {
@@ -170,7 +197,7 @@ describe('line_width_signature_mismatch', () => {
         'slideLayout3.xml': makeEmptyLayout(),
       },
       slideMasters: {
-        'slideMaster1.xml': makeMasterWithLines([57150, 28575]),
+        'slideMaster1.xml': makeMasterWithLines(EXPECTED_LINE_WIDTHS),
       },
     });
 
@@ -180,14 +207,17 @@ describe('line_width_signature_mismatch', () => {
   });
 
   test('no warning when widths split across layout and master', async () => {
-    // 57150 in layout1, 28575 in slideMaster1
+    // Split expected widths across layout/master when there are at least two expected widths.
+    // If only one expected width exists, keep it in layout and still expect pass.
+    const layoutWidths = [PRIMARY_EXPECTED_WIDTH];
+    const masterWidths = SECONDARY_EXPECTED_WIDTH ? [SECONDARY_EXPECTED_WIDTH] : [];
     const buffer = await buildTestPptx({
       slideLayouts: {
-        'slideLayout1.xml': makeLayoutWithLines([57150]),
+        'slideLayout1.xml': makeLayoutWithLines(layoutWidths),
         'slideLayout3.xml': makeEmptyLayout(),
       },
       slideMasters: {
-        'slideMaster1.xml': makeMasterWithLines([28575]),
+        'slideMaster1.xml': makeMasterWithLines(masterWidths),
       },
     });
 
@@ -198,9 +228,11 @@ describe('line_width_signature_mismatch', () => {
 
   test('warning when widths are genuinely missing from all layouts/masters', async () => {
     // Wrong widths present — should trigger warning
+    const wrongWidth =
+      PRIMARY_EXPECTED_WIDTH !== 12700 ? 12700 : Math.max(25400, PRIMARY_EXPECTED_WIDTH + 12700);
     const buffer = await buildTestPptx({
       slideLayouts: {
-        'slideLayout1.xml': makeLayoutWithLines([12700]), // 1pt, wrong
+        'slideLayout1.xml': makeLayoutWithLines([wrongWidth]),
         'slideLayout3.xml': makeEmptyLayout(),
       },
     });
@@ -210,8 +242,9 @@ describe('line_width_signature_mismatch', () => {
     expect(mismatch).toBeDefined();
     expect(mismatch.severity).toBe('warning');
     expect(mismatch.message).toContain('Missing:');
-    expect(mismatch.message).toContain('57150');
-    expect(mismatch.message).toContain('28575');
+    for (const emu of EXPECTED_LINE_WIDTHS) {
+      expect(mismatch.message).toContain(String(emu));
+    }
   });
 
   test('warning when no line geometry exists at all', async () => {
@@ -281,7 +314,7 @@ describe('strict mode: line_width_signature_mismatch blocks with slide keys', ()
   test('strict mode: no error when widths match contract', async () => {
     const buffer = await buildTestPptx({
       slideLayouts: {
-        'slideLayout1.xml': makeLayoutWithLines([57150, 28575]),
+        'slideLayout1.xml': makeLayoutWithLines(EXPECTED_LINE_WIDTHS),
       },
     });
 
@@ -310,32 +343,38 @@ describe('strict mode: line_width_signature_mismatch blocks with slide keys', ()
 
 describe('contract-derived expected line widths', () => {
   test('expected EMU values are derived from template-patterns.json thicknesses', async () => {
-    // 4.5pt = 57150 EMU, 2.25pt = 28575 EMU — both should be expected.
-    // If either is present in any layout/master, the check should pass for that width.
+    // Expected widths are derived from template-patterns contract.
     const buffer = await buildTestPptx({
       slideLayouts: {
-        'slideLayout1.xml': makeLayoutWithLines([57150, 28575]),
+        'slideLayout1.xml': makeLayoutWithLines(EXPECTED_LINE_WIDTHS),
       },
     });
 
     const result = await auditGeneratedPptFormatting(buffer);
-    expect(result.checks.headerFooterLineWidths).toEqual(expect.arrayContaining([28575, 57150]));
+    expect(result.checks.headerFooterLineWidths).toEqual(
+      expect.arrayContaining(EXPECTED_LINE_WIDTHS)
+    );
     const mismatch = result.issues.find((i) => i.code === 'line_width_signature_mismatch');
     expect(mismatch).toBeUndefined();
   });
 
   test('partial match triggers warning for missing width', async () => {
-    // Only 57150 present, 28575 missing
+    // Keep only one expected width (or a wrong width when only one expected width exists).
+    const partialWidths = SECONDARY_EXPECTED_WIDTH ? [PRIMARY_EXPECTED_WIDTH] : [12700];
     const buffer = await buildTestPptx({
       slideLayouts: {
-        'slideLayout1.xml': makeLayoutWithLines([57150]),
+        'slideLayout1.xml': makeLayoutWithLines(partialWidths),
       },
     });
 
     const result = await auditGeneratedPptFormatting(buffer);
     const mismatch = result.issues.find((i) => i.code === 'line_width_signature_mismatch');
     expect(mismatch).toBeDefined();
-    expect(mismatch.message).toContain('28575');
-    expect(mismatch.message).not.toContain('Missing: 57150');
+    if (SECONDARY_EXPECTED_WIDTH) {
+      expect(mismatch.message).toContain(String(SECONDARY_EXPECTED_WIDTH));
+      expect(mismatch.message).not.toContain(`Missing: ${PRIMARY_EXPECTED_WIDTH}`);
+    } else {
+      expect(mismatch.message).toContain(String(PRIMARY_EXPECTED_WIDTH));
+    }
   });
 });

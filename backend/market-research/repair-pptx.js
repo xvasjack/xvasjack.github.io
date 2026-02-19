@@ -16,7 +16,7 @@ const {
   scanPackageConsistency,
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
-} = require('./pptx-validator');
+} = require('./deck-file-check');
 
 function buildIssues(packageConsistency) {
   const issues = [];
@@ -79,7 +79,7 @@ async function repair(inputPath, outputPath) {
   const packageConsistency = await scanPackageConsistency(zip);
   const packageIssues = buildIssues(packageConsistency);
 
-  const validation = await validatePPTX(buffer, {
+  const check = await validatePPTX(buffer, {
     minFileSize: 50 * 1024,
     minSlides: 5,
     minCharts: 0,
@@ -98,20 +98,20 @@ async function repair(inputPath, outputPath) {
     `[Repair] Content types reconcile: changed=${ctReconcile.changed}, removedDangling=${(ctReconcile.stats?.removedDangling || []).length}, addedOverrides=${(ctReconcile.stats?.addedOverrides || []).length}, correctedOverrides=${(ctReconcile.stats?.correctedOverrides || []).length}`
   );
   console.log(
-    `[Repair] Relationship integrity: brokenTargets=${relIntegrity.missingInternalTargets.length}, invalidExternal=${(relIntegrity.invalidExternalTargets || []).length}`
+    `[Repair] Relationship fileSafety: brokenTargets=${relIntegrity.missingInternalTargets.length}, invalidExternal=${(relIntegrity.invalidExternalTargets || []).length}`
   );
   console.log(
     `[Repair] Package consistency: ${packageIssues.length === 0 ? 'PASS' : packageIssues.join(' | ')}`
   );
   console.log(
-    `[Repair] Validator: ${validation.valid ? 'PASS' : `FAIL (${validation.summary.failed} failed checks)`}`
+    `[Repair] Checker: ${check.valid ? 'PASS' : `FAIL (${check.summary.failed} failed checks)`}`
   );
 
   if (
     relIntegrity.missingInternalTargets.length > 0 ||
     (relIntegrity.invalidExternalTargets || []).length > 0 ||
     packageIssues.length > 0 ||
-    !validation.valid
+    !check.valid
   ) {
     process.exitCode = 1;
   }

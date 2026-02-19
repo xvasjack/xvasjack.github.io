@@ -1180,7 +1180,7 @@ describe('Seeded fuzz tests — chart payload corruption', () => {
 // Integration: full pipeline flow
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('Integration: normalize -> gate -> diagnostics', () => {
+describe('Integration: normalize -> gate -> runInfo', () => {
   test('valid chart passes full pipeline', () => {
     const data = makeValidChart();
 
@@ -1192,7 +1192,7 @@ describe('Integration: normalize -> gate -> diagnostics', () => {
     const gate = runChartGate(data);
     expect(gate.pass).toBe(true);
 
-    // Step 3: diagnostics
+    // Step 3: runInfo
     const diag = generateChartDiagnostics([{ chartData: data }]);
     expect(diag.chartsValid).toBe(1);
     expect(diag.chartsRejected).toBe(0);

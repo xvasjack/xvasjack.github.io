@@ -2,20 +2,20 @@
 'use strict';
 
 /**
- * Template Fidelity Scoreboard
+ * Template StyleMatch Scoreboard
  *
  * Compares generated PPTX output against template contracts (template-patterns.json)
- * to measure geometry and style fidelity per slide.
+ * to measure geometry and style styleMatch per slide.
  *
  * Reads PPTX files via JSZip, extracts shape/table/chart positions from the XML,
  * then checks each slide against the compiled contract for that slide's pattern.
  *
  * Output:
- *   reports/fidelity-scoreboard.json   — machine-readable results
- *   reports/fidelity-scoreboard.md     — human-readable report with root-cause analysis
+ *   reports/styleMatch-scoreboard.json   — machine-readable results
+ *   reports/styleMatch-scoreboard.md     — human-readable report with root-cause analysis
  *
  * Usage:
- *   node scripts/template-fidelity-scoreboard.js [file1.pptx] [file2.pptx ...]
+ *   node scripts/template-styleMatch-scoreboard.js [file1.pptx] [file2.pptx ...]
  *   (defaults to test-output.pptx and vietnam-output.pptx if no args)
  *
  * No paid API calls. Purely offline analysis.
@@ -397,7 +397,7 @@ async function extractSlideGeometry(zip, slideNum) {
 }
 
 // ---------------------------------------------------------------------------
-// Fidelity comparison logic
+// StyleMatch comparison logic
 // ---------------------------------------------------------------------------
 
 const POSITION_TOLERANCE_INCHES = 0.15; // Allow 0.15" deviation
@@ -464,7 +464,7 @@ function findClosestTable(tables, expectedPos) {
  *  - geometryChecks: array of { check, pass, expected, actual, delta }
  *  - styleChecks: array of { check, pass, expected, actual }
  *  - structuralChecks: array of { check, pass, expected, actual }
- *  - score: 0-100 overall fidelity score
+ *  - score: 0-100 overall styleMatch score
  */
 function scoreSlide(slideGeometry, patternKey, patternContract) {
   const checks = {
@@ -794,7 +794,7 @@ function scoreSlide(slideGeometry, patternKey, patternContract) {
 
 /**
  * Classify what pattern a slide likely represents based on its content and geometry.
- * Uses heuristics: text content, element counts, position in deck.
+ * Uses rules: text content, element counts, position in deck.
  */
 function classifySlide(slideGeometry, slideNum, totalSlides) {
   if (!slideGeometry) return { patternKey: 'unknown', confidence: 0 };
@@ -1022,12 +1022,12 @@ function analyzeRootCauses(results) {
 
     if (item.check === 'font_family') {
       rootCause =
-        'Slide uses a font family not matching the template spec (Segoe UI). This usually means pptxgenjs defaults or a hardcoded font override in ppt-single-country.js or ppt-utils.js.';
+        'Slide uses a font family not matching the template spec (Segoe UI). This usually means pptxgenjs defaults or a hardcoded font override in deck-builder-single.js or ppt-utils.js.';
       remediation =
         'Ensure all addText/addTable calls use fontFace from template-patterns.json style.fonts.majorLatin.';
     } else if (item.check === 'title_font_size') {
       rootCause =
-        'Title text uses a font size different from template (20pt). May be a hardcoded fontSize in the title rendering code.';
+        'Title text uses a font size different from template (20pt). May be a hardcoded fontSize in the title building code.';
       remediation =
         'Use template-patterns.json style.fonts.title.size instead of hardcoded values.';
     } else if (item.check === 'table_body_font_size') {
@@ -1052,28 +1052,28 @@ function analyzeRootCauses(results) {
         'Source chart dimensions from pattern.elements.chart in template-patterns.json.';
     } else if (item.check === 'has_content') {
       rootCause =
-        'Slide has very little or no text content. This may be a rendering failure, content truncation, or a slide that was added as a placeholder but never populated.';
+        'Slide has very little or no text content. This may be a building failure, content truncation, or a slide that was added as a placeholder but never populated.';
       remediation =
-        'Check the block rendering pipeline for this slide type. Ensure research data is being passed through and not silently dropped.';
+        'Check the block building pipeline for this slide type. Ensure research data is being passed through and not silently dropped.';
     } else if (item.check === 'table_exists') {
       rootCause =
-        'A slide that should contain a table has no table element. The table rendering code may have skipped this slide due to missing data.';
+        'A slide that should contain a table has no table element. The table building code may have skipped this slide due to missing data.';
       remediation =
-        'Ensure the data pipeline provides table data for all table-type blocks. Check for null/undefined guards that silently skip rendering.';
+        'Ensure the data pipeline provides table data for all table-type blocks. Check for null/undefined guards that silently skip building.';
     } else if (item.check === 'chart_exists') {
       rootCause =
-        'A slide that should contain a chart has no chart element. Chart rendering may have failed or been skipped due to data format issues.';
+        'A slide that should contain a chart has no chart element. Chart building may have failed or been skipped due to data format issues.';
       remediation =
-        'Check chart data normalization. Ensure chart-data-normalizer.js produces valid data for the chart renderer.';
+        'Check chart data normalization. Ensure chart-data-normalizer.js produces valid data for the chart builder.';
     } else if (item.check === 'header_line_color') {
       rootCause =
         'Header line color does not match template (293F55). May be using a different color constant.';
       remediation =
-        'Use template-patterns.json style.headerLines.top.color for header line rendering.';
+        'Use template-patterns.json style.headerLines.top.color for header line building.';
     } else if (item.check === 'table_border_width') {
       rootCause = 'Table border width deviates from template spec.';
       remediation =
-        'Use template-patterns.json style.table.borderWidth for table border rendering.';
+        'Use template-patterns.json style.table.borderWidth for table border building.';
     } else if (item.check === 'sourceBar_position') {
       rootCause =
         'Source bar position deviates from template. The source attribution text box is not placed at the correct y-position.';
@@ -1081,13 +1081,13 @@ function analyzeRootCauses(results) {
         'Use TEMPLATE.sourceBar coordinates from ppt-utils.js for source bar placement.';
     } else if (item.check === 'title_shape_exists') {
       rootCause =
-        'Content slide is missing a title shape. The title may not be rendered, or may be rendered as a plain text box without the expected name attribute.';
+        'Content slide is missing a title shape. The title may not be built, or may be built as a plain text box without the expected name attribute.';
       remediation =
         'Ensure every content slide includes a title shape with position matching pptxPositions.title.';
     } else {
-      rootCause = `Check "${item.check}" failed on ${item.count} slide(s). Review the rendering code for this element type.`;
+      rootCause = `Check "${item.check}" failed on ${item.count} slide(s). Review the building code for this element type.`;
       remediation =
-        'Compare the rendering code against template-patterns.json for the specific element.';
+        'Compare the building code against template-patterns.json for the specific element.';
     }
 
     causes.push({
@@ -1119,7 +1119,7 @@ function generateJsonReport(results, rootCauses) {
   const totalFail = results.reduce((sum, r) => sum + r.failCount, 0);
 
   return {
-    reportType: 'template_fidelity_scoreboard',
+    reportType: 'template_styleMatch_scoreboard',
     generatedAt: new Date().toISOString(),
     contractVersion: '1.0.0',
     templateSource: templatePatterns._meta?.source || 'unknown',
@@ -1174,7 +1174,7 @@ function generateMarkdownReport(results, rootCauses) {
 
   let md = '';
 
-  md += '# Template Fidelity Scoreboard\n\n';
+  md += '# Template StyleMatch Scoreboard\n\n';
   md += `Generated: ${new Date().toISOString()}\n`;
   md += `Template: ${templatePatterns._meta?.source || 'unknown'}\n`;
   md += `Contract Version: 1.0.0\n`;
@@ -1249,7 +1249,7 @@ function generateMarkdownReport(results, rootCauses) {
   // Root cause analysis
   md += '## Root Cause Analysis\n\n';
   if (rootCauses.length === 0) {
-    md += 'No failures detected. All slides pass fidelity checks.\n\n';
+    md += 'No failures detected. All slides pass styleMatch checks.\n\n';
   } else {
     for (const cause of rootCauses) {
       md += `### ${cause.category}: ${cause.check} (${cause.frequency} occurrences)\n\n`;
@@ -1300,7 +1300,7 @@ async function main() {
     }
   }
 
-  console.log(`Template Fidelity Scoreboard`);
+  console.log(`Template StyleMatch Scoreboard`);
   console.log(`Analyzing ${files.length} file(s)...\n`);
 
   const results = [];
@@ -1330,8 +1330,8 @@ async function main() {
     fs.mkdirSync(REPORTS_DIR, { recursive: true });
   }
 
-  const jsonPath = path.join(REPORTS_DIR, 'fidelity-scoreboard.json');
-  const mdPath = path.join(REPORTS_DIR, 'fidelity-scoreboard.md');
+  const jsonPath = path.join(REPORTS_DIR, 'styleMatch-scoreboard.json');
+  const mdPath = path.join(REPORTS_DIR, 'styleMatch-scoreboard.md');
 
   fs.writeFileSync(jsonPath, JSON.stringify(jsonReport, null, 2));
   fs.writeFileSync(mdPath, mdReport);

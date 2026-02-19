@@ -2,7 +2,7 @@
 /**
  * Vietnam Market Research test harness.
  *
- * This script now routes through the production single-country renderer
+ * This script now routes through the production single-country builder
  * (`generateSingleCountryPPT`) so formatting, truncation handling,
  * structure repair, and quality gates are identical to real runs.
  *
@@ -12,19 +12,19 @@
 
 const fs = require('fs');
 const path = require('path');
-const { generateSingleCountryPPT } = require('./ppt-single-country');
-const { runBudgetGate } = require('./budget-gate');
+const { generateSingleCountryPPT } = require('./deck-builder-single');
+const { runContentSizeCheck } = require('./content-size-check');
 const {
   normalizeSlideNonVisualIds,
   reconcileContentTypesAndPackage,
   readPPTX,
   scanRelationshipTargets,
   scanPackageConsistency,
-} = require('./pptx-validator');
-// Lazy-load visual fidelity runner (optional module, may not exist yet)
+} = require('./deck-file-check');
+// Lazy-load visual styleMatch runner (optional module, may not exist yet)
 let runVisualFidelityCheck;
 try {
-  ({ runVisualFidelityCheck } = require('./visual-fidelity-runner'));
+  ({ runVisualFidelityCheck } = require('./visual-styleMatch-runner'));
 } catch {
   runVisualFidelityCheck = async () => ({
     valid: true,
@@ -688,18 +688,18 @@ function collectPackageConsistencyIssues(scan) {
 }
 
 async function main() {
-  console.log('Generating Vietnam PPT using production single-country renderer...');
+  console.log('Generating Vietnam PPT using production single-country builder...');
 
   let countryAnalysis = buildCountryAnalysis(mockData);
   const synthesis = buildSynthesis(mockData);
   const scope = buildScope(mockData);
 
-  // Budget gate: compact oversized fields before rendering (mirrors server.js path)
-  const budgetResult = runBudgetGate(countryAnalysis, { dryRun: false });
-  if (budgetResult.compactionLog.length > 0) {
-    countryAnalysis = budgetResult.payload;
+  // Content-size check: compact oversized fields before building (mirrors server.js path)
+  const sizeCheckResult = runContentSizeCheck(countryAnalysis, { dryRun: false });
+  if (sizeCheckResult.compactionLog.length > 0) {
+    countryAnalysis = sizeCheckResult.payload;
     console.log(
-      `[Budget Gate] Compacted ${budgetResult.compactionLog.length} field(s), risk=${budgetResult.report.risk}`
+      `[Content Size Check] Compacted ${sizeCheckResult.compactionLog.length} field(s), risk=${sizeCheckResult.report.risk}`
     );
   }
 
@@ -732,7 +732,7 @@ async function main() {
       .map((m) => `${m.relFile} -> ${m.target} (${m.reason})`)
       .join(' | ');
     throw new Error(
-      `Relationship integrity failed: ${relScan.missingInternalTargets.length} broken target(s); ${preview}`
+      `Relationship fileSafety failed: ${relScan.missingInternalTargets.length} broken target(s); ${preview}`
     );
   }
   if (Array.isArray(relScan.invalidExternalTargets) && relScan.invalidExternalTargets.length > 0) {
@@ -741,7 +741,7 @@ async function main() {
       .map((m) => `${m.relFile} -> ${m.target || '(empty)'} (${m.reason})`)
       .join(' | ');
     throw new Error(
-      `External relationship integrity failed: ${relScan.invalidExternalTargets.length} invalid target(s); ${preview}`
+      `External relationship fileSafety failed: ${relScan.invalidExternalTargets.length} invalid target(s); ${preview}`
     );
   }
 
@@ -764,7 +764,7 @@ async function main() {
     failed.forEach((c) => {
       console.warn(`  [Visual FAIL] ${c.name}: expected ${c.expected}, actual ${c.actual}`);
     });
-    throw new Error(`Visual fidelity gate failed (score=${visual.score || 0})`);
+    throw new Error(`Visual styleMatch gate failed (score=${visual.score || 0})`);
   }
 
   const stats = fs.statSync(outputPath);
