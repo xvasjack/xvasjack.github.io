@@ -47,6 +47,11 @@ const {
   createSanitizationContext,
   logSanitizationResult,
 } = require('./cleanup-temp-fields');
+const {
+  emitHook,
+  shouldStopAfterStage,
+  buildPartialResult,
+} = require('./phase-tracker/core/stage-payload-sanitizer');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers({
@@ -1329,8 +1334,17 @@ async function runMarketResearch(userPrompt, email, options = {}) {
   const tracker = createTracker('market-research', email, { prompt: userPrompt.substring(0, 200) });
 
   return trackingContext.run(tracker, async () => {
+    // Checkpoint hook options — declared outside try so catch can access them
+    const runOptions = options && typeof options === 'object' ? options : {};
+    const stopAfterStage = runOptions.stopAfterStage || null;
+    const disableEmail = runOptions.disableEmail === true;
+    const stageHooks =
+      runOptions.stageHooks && typeof runOptions.stageHooks === 'object'
+        ? runOptions.stageHooks
+        : null;
+    let currentPublicStage = null;
+
     try {
-      const runOptions = options && typeof options === 'object' ? options : {};
       const abortSignal = runOptions.abortSignal || null;
       const throwIfAborted = (stage) => {
         if (!abortSignal || !abortSignal.aborted) return;
@@ -1343,6 +1357,8 @@ async function runMarketResearch(userPrompt, email, options = {}) {
               : 'Pipeline aborted';
         throw new Error(`Pipeline aborted${stage ? ` during ${stage}` : ''}: ${reasonText}`);
       };
+
+      const completedStages = [];
 
       const issueLog = [];
       const fixAttempts = [];
@@ -1447,6 +1463,11 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       }
 
       // Stage 2: Research single country
+      currentPublicStage = '2';
+      await emitHook(stageHooks, 'onStageStart', '2', {
+        country: selectedCountry,
+        industry: scope.industry,
+      });
       console.log('\n=== STAGE 2: COUNTRY RESEARCH ===');
       console.log(`Researching country: ${selectedCountry}`);
 
@@ -1572,7 +1593,24 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         }
       }
 
+      completedStages.push('2');
+      await emitHook(stageHooks, 'onStageComplete', '2', {
+        country: selectedCountry,
+        countriesResearched: countryAnalyses.length,
+      });
+      if (shouldStopAfterStage('2', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '2',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
       // Stage 2a: Gemini 3 Pro review loop for country analysis (max 3 retries).
+      currentPublicStage = '2a';
+      await emitHook(stageHooks, 'onStageStart', '2a', { country: selectedCountry });
       const stage2ReviewLoop = [];
       const MAX_STAGE2_REVIEW_RETRIES = 3;
       for (let i = 0; i < countryAnalyses.length; i++) {
@@ -1736,10 +1774,30 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         }
       }
 
+      completedStages.push('2a');
+      await emitHook(stageHooks, 'onStageComplete', '2a', {
+        country: selectedCountry,
+        reviewAttempts: stage2ReviewLoop.length,
+      });
+      if (shouldStopAfterStage('2a', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '2a',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
       // NOTE: rawData is preserved here — PPT generation needs it for citations and fallback content.
       // It will be cleaned up AFTER PPT generation to free memory.
 
       // Stage 3: Synthesize findings
+      currentPublicStage = '3';
+      await emitHook(stageHooks, 'onStageStart', '3', {
+        industry: scope.industry,
+        countryCount: countryAnalyses.length,
+      });
       throwIfAborted('synthesis');
       const MAX_STAGE3_RETRIES = 3;
       let synthesis = null;
@@ -1765,8 +1823,24 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         );
       }
 
+      completedStages.push('3');
+      await emitHook(stageHooks, 'onStageComplete', '3', {
+        synthesisKeys: Object.keys(synthesis || {}).length,
+      });
+      if (shouldStopAfterStage('3', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '3',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
       // Stage 3a (merged): synthesis score + Gemini review loop.
       // This score is informative here; hard blocking is in stage 5.
+      currentPublicStage = '3a';
+      await emitHook(stageHooks, 'onStageStart', '3a', { industry: scope.industry });
       let finalSynthesis = synthesis;
       let synthesisGate = validateSynthesisQuality(finalSynthesis, scope.industry);
       console.log(
@@ -1909,7 +1983,25 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         };
       }
 
-      // Main content gate: hard fail if below threshold.
+      completedStages.push('3a');
+      await emitHook(stageHooks, 'onStageComplete', '3a', {
+        score: synthesisGate.overall,
+        pass: synthesisGate.pass,
+        attempts: synthesisReviewLoop.length,
+      });
+      if (shouldStopAfterStage('3a', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '3a',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
+      // Main content gate (public stage 4): hard fail if below threshold.
+      currentPublicStage = '4';
+      await emitHook(stageHooks, 'onStageStart', '4', { industry: scope.industry });
       let contentReadiness = checkContentReadiness(finalSynthesis, {
         threshold: 80,
         industry: scope.industry,
@@ -1928,6 +2020,28 @@ async function runMarketResearch(userPrompt, email, options = {}) {
             .map((s) => `${s.section}(${s.score})`),
         })
       );
+      completedStages.push('4');
+      await emitHook(stageHooks, 'onStageComplete', '4', {
+        score: contentReadiness.overallScore,
+        pass: contentReadiness.pass,
+        threshold: contentReadiness.threshold,
+      });
+      if (shouldStopAfterStage('4', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '4',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
+      // Public stage 4a: content review loop
+      currentPublicStage = '4a';
+      await emitHook(stageHooks, 'onStageStart', '4a', {
+        currentScore: contentReadiness.overallScore,
+        threshold: contentReadiness.threshold,
+      });
       const MAX_CONTENT_REVIEW_RETRIES = 3;
       const contentReviewLoop = [];
       if (!contentReadiness.pass) {
@@ -2120,8 +2234,26 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         };
       }
 
-      // Stage 6: Pre-build check (merged stage):
+      completedStages.push('4a');
+      await emitHook(stageHooks, 'onStageComplete', '4a', {
+        score: contentReadiness.overallScore,
+        pass: contentReadiness.pass,
+        attempts: contentReviewLoop.length,
+      });
+      if (shouldStopAfterStage('4a', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '4a',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
+      // Stage 6 (public stage 5): Pre-build check (merged stage):
       // cleanup temp keys + build-readiness checks + basic shape checks.
+      currentPublicStage = '5';
+      await emitHook(stageHooks, 'onStageStart', '5', { countriesChecked: countryAnalyses.length });
       const MAX_PRE_RENDER_RETRIES = 3;
       const preRenderAttempts = [];
       let finalPptGateFailures = [];
@@ -2331,8 +2463,25 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         };
       }
 
-      // Content size check:
+      completedStages.push('5');
+      await emitHook(stageHooks, 'onStageComplete', '5', {
+        pptGatePass: finalPptGateFailures.length === 0,
+        structureIssues: finalPreRenderStructureIssues.length,
+      });
+      if (shouldStopAfterStage('5', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '5',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
+      // Content size check (public stage 6):
       // In content-first mode, this is analysis-only (no truncation, no row-cutting).
+      currentPublicStage = '6';
+      await emitHook(stageHooks, 'onStageStart', '6', { countriesChecked: countryAnalyses.length });
       const runCompaction = !CONTENT_FIRST_MODE;
       const sizeReportByCountry = {};
       for (let i = 0; i < countryAnalyses.length; i++) {
@@ -2385,9 +2534,23 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         }
       }
 
-      // Stage 7a: readability rewrite loop (no hard cutting).
+      completedStages.push('6');
+      await emitHook(stageHooks, 'onStageComplete', '6', { compactionEnabled: runCompaction });
+      if (shouldStopAfterStage('6', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '6',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
+      // Stage 7a (public stage 6a): readability rewrite loop (no hard cutting).
       // If text density is still high in content-first mode, ask Gemini to rewrite for slide readability
       // while preserving key facts and recommendations.
+      currentPublicStage = '6a';
+      await emitHook(stageHooks, 'onStageStart', '6a', {});
       const MAX_SIZE_REVIEW_RETRIES = 3;
       const sizeReviewAttempts = [];
       if (!runCompaction) {
@@ -2524,6 +2687,18 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         };
       }
 
+      completedStages.push('6a');
+      await emitHook(stageHooks, 'onStageComplete', '6a', { attempts: sizeReviewAttempts.length });
+      if (shouldStopAfterStage('6a', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '6a',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
       const applyOwnerFix = async ({
         ownerStage,
         sourceStage,
@@ -2654,7 +2829,9 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         return fixResult;
       };
 
-      // Stage 8: Generate PPT
+      // Stage 8 (public stage 7): Generate PPT
+      currentPublicStage = '7';
+      await emitHook(stageHooks, 'onStageStart', '7', { industry: scope.industry });
       throwIfAborted('ppt generation');
       const MAX_PPT_BUILD_RETRIES = 3;
       let pptBuffer = null;
@@ -2698,6 +2875,23 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         );
       }
       let pptMetrics = (pptBuffer && (pptBuffer.__pptMetrics || pptBuffer.pptMetrics)) || null;
+      completedStages.push('7');
+      await emitHook(stageHooks, 'onStageComplete', '7', {
+        bufferSize: pptBuffer ? pptBuffer.length : 0,
+      });
+      if (shouldStopAfterStage('7', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '7',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
+      // Stage 9 (public stage 8): PPT structure hardening
+      currentPublicStage = '8';
+      await emitHook(stageHooks, 'onStageStart', '8', {});
       const pptCheckExpectations = buildPptCheckExpectations(scope);
       let latestPptStructureCheck = null;
 
@@ -2960,7 +3154,21 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         );
       }
 
-      // Stage 9a: McKinsey-style final deck review loop (max 3 rounds).
+      completedStages.push('8');
+      await emitHook(stageHooks, 'onStageComplete', '8', { structureValid: stage9Completed });
+      if (shouldStopAfterStage('8', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '8',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
+      // Stage 9a (public stage 8a): McKinsey-style final deck review loop (max 3 rounds).
+      currentPublicStage = '8a';
+      await emitHook(stageHooks, 'onStageStart', '8a', { maxRounds: 3 });
       // Reviewer gives comments, synthesis is revised, deck is rebuilt, then reviewed again.
       // Stabilized: convergence tracking, flip-flop detection, screenshot-missing fallback.
       const MAX_FINAL_DECK_REVIEW_RETRIES = 3;
@@ -3364,6 +3572,21 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         finalDeckReady = true;
       }
 
+      completedStages.push('8a');
+      await emitHook(stageHooks, 'onStageComplete', '8a', {
+        rounds: finalDeckReviewRounds.length,
+        accepted: finalDeckReady,
+      });
+      if (shouldStopAfterStage('8a', stopAfterStage)) {
+        return buildPartialResult({
+          scope,
+          completedStages,
+          stoppedAfterStage: '8a',
+          startTime,
+          totalCost: costTracker.totalCost,
+        });
+      }
+
       // Clean up rawData AFTER PPT generation to free memory (citations already used by PPT builder)
       for (const ca of countryAnalyses) {
         if (ca.rawData) {
@@ -3371,7 +3594,9 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         }
       }
 
-      // Stage 10: Send email
+      // Stage 10 (public stage 9): Send email
+      currentPublicStage = '9';
+      await emitHook(stageHooks, 'onStageStart', '9', { disableEmail });
       throwIfAborted('delivery');
       const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
       const finalFilename = draftPptMode ? filename.replace(/\.pptx$/i, '_DRAFT.pptx') : filename;
@@ -3383,21 +3608,31 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         buffer: Buffer.from(pptBuffer),
       };
 
-      const emailHtml = `
-      <p>Your market research report is attached.</p>
-      ${draftPptMode ? '<p><strong>Mode:</strong> Draft PPT (quality gates bypassed for formatting QA)</p>' : ''}
-      <p style="color: #666; font-size: 12px;">${escapeHtml(scope.industry)} - ${escapeHtml(scope.targetMarkets.join(', '))}</p>
-    `;
+      if (disableEmail) {
+        console.log('[Stage 9] Email delivery disabled by options.disableEmail — skipping');
+      } else {
+        const emailHtml = `
+        <p>Your market research report is attached.</p>
+        ${draftPptMode ? '<p><strong>Mode:</strong> Draft PPT (quality gates bypassed for formatting QA)</p>' : ''}
+        <p style="color: #666; font-size: 12px;">${escapeHtml(scope.industry)} - ${escapeHtml(scope.targetMarkets.join(', '))}</p>
+      `;
 
-      await sendEmail({
-        to: email,
-        subject: `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`,
-        html: emailHtml,
-        attachments: {
-          filename: finalFilename,
-          content: pptBuffer.toString('base64'),
-        },
-        fromName: 'Market Research AI',
+        await sendEmail({
+          to: email,
+          subject: `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`,
+          html: emailHtml,
+          attachments: {
+            filename: finalFilename,
+            content: pptBuffer.toString('base64'),
+          },
+          fromName: 'Market Research AI',
+        });
+      }
+
+      completedStages.push('9');
+      await emitHook(stageHooks, 'onStageComplete', '9', {
+        emailSkipped: disableEmail,
+        filename: finalFilename,
       });
 
       const totalTime = (Date.now() - startTime) / 1000;
@@ -3436,9 +3671,13 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         countriesAnalyzed: countryAnalyses.length,
         totalCost: costTracker.totalCost,
         totalTimeSeconds: totalTime,
+        ...(disableEmail ? { emailSkipped: true } : {}),
       };
     } catch (error) {
       console.error('Market research failed:', error);
+      await emitHook(stageHooks, 'onStageFail', currentPublicStage || 'unknown', {
+        error: error.message,
+      });
       lastRunRunInfo = {
         ...(lastRunRunInfo || {}),
         timestamp: new Date().toISOString(),
@@ -3451,29 +3690,31 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       };
       await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
 
-      // Try to send error email
-      try {
-        await sendEmail({
-          to: email,
-          subject: 'Market Research Failed',
-          html: `
+      // Try to send error email (skip if disableEmail)
+      if (!disableEmail) {
+        try {
+          await sendEmail({
+            to: email,
+            subject: 'Market Research Failed',
+            html: `
         <h2>Market Research Error</h2>
         <p>Your market research request encountered an error:</p>
         <pre>${escapeHtml(error.message)}</pre>
         <p>Please try again or contact support.</p>
       `,
-          attachments: {
-            filename: 'error.txt',
-            content: Buffer.from(error.message).toString('base64'),
-          },
-          fromName: 'Market Research AI',
-        });
-      } catch (emailError) {
-        console.error('Failed to send error email:', emailError);
-      }
+            attachments: {
+              filename: 'error.txt',
+              content: Buffer.from(error.message).toString('base64'),
+            },
+            fromName: 'Market Research AI',
+          });
+        } catch (emailError) {
+          console.error('Failed to send error email:', emailError);
+        }
+      } // end if (!disableEmail)
 
       // Mark that error email was already sent to prevent double-send from outer catch
-      error._errorEmailSent = true;
+      error._errorEmailSent = !disableEmail;
       throw error;
     }
   }); // end trackingContext.run
@@ -3621,6 +3862,7 @@ if (require.main === module) {
 module.exports = {
   app,
   startServer,
+  runMarketResearch,
   __test: {
     buildPptGateBlocks,
     normalizeGateChartData,
@@ -3629,6 +3871,10 @@ module.exports = {
     mergeCountryAnalysis,
     countryNeedsReview,
     reviewCountryAnalysisWithGeminiPro,
+    improveSynthesisWithGeminiPro,
     improveSynthesisQualityWithGeminiPro,
+    buildStageIssuesFromMessages,
+    makeStageIssue,
+    pickOwnerStage,
   },
 };
