@@ -33,6 +33,13 @@ Run this:
 npm run stage:check -- --stage=2 --prompt="Energy Services market entry in Vietnam"
 ```
 
+Stage 3 and 3a live outputs:
+
+```bash
+npm run stage:check -- --stage=3 --prompt="Energy Services market entry in Vietnam"
+npm run stage:check -- --stage=3a --prompt="Energy Services market entry in Vietnam"
+```
+
 You get full Stage 2 output files in `reports/latest/`:
 - `2-output-...md` (easy to read)
 - `2-output-...json` (full raw output)

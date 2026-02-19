@@ -173,7 +173,9 @@ function normalizeReviewFixLines(lines, maxCount = 12) {
   const out = [];
   const seen = new Set();
   for (const raw of lines) {
-    const text = String(raw || '').replace(/\s+/g, ' ').trim();
+    const text = String(raw || '')
+      .replace(/\s+/g, ' ')
+      .trim();
     if (!text) continue;
     const key = text.toLowerCase();
     if (seen.has(key)) continue;
@@ -3627,5 +3629,6 @@ module.exports = {
     mergeCountryAnalysis,
     countryNeedsReview,
     reviewCountryAnalysisWithGeminiPro,
+    improveSynthesisQualityWithGeminiPro,
   },
 };

@@ -20,11 +20,13 @@ const fs = require('fs');
 const path = require('path');
 
 const { readRequestType } = require('../research-framework');
-const { researchCountry } = require('../research-engine');
-const { validateResearchQuality } = require('../content-gates');
+const { researchCountry, synthesizeFindings } = require('../research-engine');
+const { validateResearchQuality, validateSynthesisQuality } = require('../content-gates');
 
 const REPORT_DIR = path.join(__dirname, '..', 'reports', 'latest');
 const MAX_STAGE2A_RETRIES = 3;
+const MAX_STAGE3_RETRIES = 3;
+const MAX_STAGE3A_RETRIES = 3;
 const CORE_SECTIONS = ['policy', 'market', 'competitors', 'depth', 'summary'];
 
 let cachedServerTest = null;
@@ -290,6 +292,165 @@ async function runStage2a(context, stage2Result) {
   };
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+async function runStage3(context, countryAnalysis) {
+  const started = Date.now();
+  if (!isPlainObject(countryAnalysis)) {
+    return {
+      stage: '3',
+      pass: false,
+      score: 0,
+      grade: 'F',
+      durationMs: Date.now() - started,
+      details: { error: 'Stage 2/2a output missing or invalid' },
+      synthesis: null,
+    };
+  }
+
+  const stage3Errors = [];
+  let synthesis = null;
+  for (let attempt = 1; attempt <= MAX_STAGE3_RETRIES; attempt++) {
+    try {
+      const candidate = await synthesizeFindings([countryAnalysis], context.scope);
+      if (!isPlainObject(candidate)) {
+        throw new Error('synthesis result is not a JSON object');
+      }
+      synthesis = candidate;
+      break;
+    } catch (err) {
+      stage3Errors.push(String(err.message || err));
+    }
+  }
+
+  if (!isPlainObject(synthesis)) {
+    return {
+      stage: '3',
+      pass: false,
+      score: 0,
+      grade: 'F',
+      durationMs: Date.now() - started,
+      details: {
+        retries: MAX_STAGE3_RETRIES,
+        errors: stage3Errors,
+      },
+      synthesis: null,
+    };
+  }
+
+  const synthesisGate = validateSynthesisQuality(synthesis, context.industry);
+  const score = Math.max(0, Math.min(100, Number(synthesisGate?.overall || 0)));
+  return {
+    stage: '3',
+    pass: true,
+    score,
+    grade: gradeFromScore(score),
+    durationMs: Date.now() - started,
+    details: {
+      retries: MAX_STAGE3_RETRIES,
+      failures: Array.isArray(synthesisGate?.failures) ? synthesisGate.failures.slice(0, 10) : [],
+      gatePass: Boolean(synthesisGate?.pass),
+      gateOverall: score,
+      executiveSummaryCount: Array.isArray(synthesis?.executiveSummary)
+        ? synthesis.executiveSummary.length
+        : 0,
+      keyInsightsCount: Array.isArray(synthesis?.keyInsights) ? synthesis.keyInsights.length : 0,
+    },
+    synthesis,
+    synthesisGate,
+  };
+}
+
+async function runStage3a(context, stage3Result) {
+  const started = Date.now();
+  const serverTest = getServerTestHelpers();
+  if (!isPlainObject(stage3Result?.synthesis)) {
+    return {
+      stage: '3a',
+      pass: false,
+      score: 0,
+      grade: 'F',
+      durationMs: Date.now() - started,
+      details: { error: 'Stage 3 synthesis missing or invalid' },
+      synthesis: null,
+      synthesisGate: null,
+    };
+  }
+  if (typeof serverTest.improveSynthesisQualityWithGeminiPro !== 'function') {
+    return {
+      stage: '3a',
+      pass: false,
+      score: 0,
+      grade: 'F',
+      durationMs: Date.now() - started,
+      details: { error: 'Server test helper improveSynthesisQualityWithGeminiPro is unavailable' },
+      synthesis: stage3Result.synthesis,
+      synthesisGate: stage3Result.synthesisGate || null,
+    };
+  }
+
+  let finalSynthesis = stage3Result.synthesis;
+  let synthesisGate = validateSynthesisQuality(finalSynthesis, context.industry);
+  const attempts = [];
+  const beforeScore = Number(synthesisGate?.overall || 0);
+
+  if (!synthesisGate.pass) {
+    for (let attempt = 1; attempt <= MAX_STAGE3A_RETRIES; attempt++) {
+      let improved = null;
+      let error = null;
+      try {
+        improved = await serverTest.improveSynthesisQualityWithGeminiPro({
+          synthesis: finalSynthesis,
+          scope: context.scope,
+          synthesisGate,
+          attempt,
+          maxRetries: MAX_STAGE3A_RETRIES,
+        });
+      } catch (err) {
+        error = String(err.message || err);
+      }
+
+      if (isPlainObject(improved)) {
+        finalSynthesis = improved;
+        synthesisGate = validateSynthesisQuality(finalSynthesis, context.industry);
+      }
+
+      attempts.push({
+        attempt,
+        applied: isPlainObject(improved),
+        score: Number(synthesisGate?.overall || 0),
+        pass: Boolean(synthesisGate?.pass),
+        error,
+      });
+
+      if (synthesisGate.pass) break;
+    }
+  }
+
+  const finalScore = Math.max(0, Math.min(100, Number(synthesisGate?.overall || 0)));
+  const improvedBy = finalScore - beforeScore;
+  const pass = Boolean(synthesisGate?.pass);
+  return {
+    stage: '3a',
+    pass,
+    score: finalScore,
+    grade: gradeFromScore(finalScore),
+    durationMs: Date.now() - started,
+    details: {
+      beforeScore,
+      afterScore: finalScore,
+      improvedBy,
+      attempts,
+      retries: MAX_STAGE3A_RETRIES,
+      failures: Array.isArray(synthesisGate?.failures) ? synthesisGate.failures.slice(0, 10) : [],
+    },
+    synthesis: finalSynthesis,
+    synthesisGate,
+  };
+}
+
 function printSummaryRow(result) {
   const id = String(result.stage || '').padEnd(4, ' ');
   const works = (result.pass ? 'YES' : 'NO').padEnd(6, ' ');
@@ -360,6 +521,7 @@ function pickTopicSources(topicValue) {
 
 function buildStageOutputMarkdown(stageResult, context) {
   const analysis = stageResult?.countryAnalysis || {};
+  const synthesis = stageResult?.synthesis || {};
   const lines = [];
   lines.push(`# Stage ${stageResult.stage} output`);
   lines.push('');
@@ -370,39 +532,52 @@ function buildStageOutputMarkdown(stageResult, context) {
   lines.push(`- time_ms: ${stageResult.durationMs}`);
   lines.push('');
 
-  const sectionNames = ['policy', 'market', 'competitors', 'depth', 'summary'];
-  for (const sectionName of sectionNames) {
-    if (!analysis || typeof analysis !== 'object') continue;
-    if (!Object.prototype.hasOwnProperty.call(analysis, sectionName)) continue;
-    lines.push(`## ${sectionName}`);
+  if (String(stageResult.stage) === '3' || String(stageResult.stage) === '3a') {
+    const gate = stageResult?.synthesisGate || {};
+    lines.push(`- synthesis_gate_pass: ${Boolean(gate?.pass)}`);
+    lines.push(`- synthesis_gate_score: ${Number(gate?.overall || 0)}/100`);
+    lines.push('');
+    lines.push('## synthesis');
     lines.push('```json');
-    lines.push(JSON.stringify(analysis[sectionName], null, 2));
+    lines.push(JSON.stringify(synthesis, null, 2));
     lines.push('```');
     lines.push('');
-  }
-
-  const rawData = analysis?.rawData && typeof analysis.rawData === 'object' ? analysis.rawData : {};
-  const topicKeys = Object.keys(rawData);
-  lines.push(`## raw topics (${topicKeys.length})`);
-  lines.push('');
-  if (topicKeys.length === 0) {
-    lines.push('(none)');
-    lines.push('');
   } else {
-    for (const topicKey of topicKeys) {
-      const topicValue = rawData[topicKey];
-      const topicText = pickTopicText(topicValue);
-      const sources = pickTopicSources(topicValue);
-      lines.push(`### ${topicKey}`);
+    const sectionNames = ['policy', 'market', 'competitors', 'depth', 'summary'];
+    for (const sectionName of sectionNames) {
+      if (!analysis || typeof analysis !== 'object') continue;
+      if (!Object.prototype.hasOwnProperty.call(analysis, sectionName)) continue;
+      lines.push(`## ${sectionName}`);
+      lines.push('```json');
+      lines.push(JSON.stringify(analysis[sectionName], null, 2));
+      lines.push('```');
       lines.push('');
-      lines.push(topicText || '(no text)');
+    }
+
+    const rawData =
+      analysis?.rawData && typeof analysis.rawData === 'object' ? analysis.rawData : {};
+    const topicKeys = Object.keys(rawData);
+    lines.push(`## raw topics (${topicKeys.length})`);
+    lines.push('');
+    if (topicKeys.length === 0) {
+      lines.push('(none)');
       lines.push('');
-      if (sources.length > 0) {
-        lines.push('sources:');
-        for (const source of sources) {
-          lines.push(`- ${source}`);
-        }
+    } else {
+      for (const topicKey of topicKeys) {
+        const topicValue = rawData[topicKey];
+        const topicText = pickTopicText(topicValue);
+        const sources = pickTopicSources(topicValue);
+        lines.push(`### ${topicKey}`);
         lines.push('');
+        lines.push(topicText || '(no text)');
+        lines.push('');
+        if (sources.length > 0) {
+          lines.push('sources:');
+          for (const source of sources) {
+            lines.push(`- ${source}`);
+          }
+          lines.push('');
+        }
       }
     }
   }
@@ -433,7 +608,8 @@ function saveStageOutputFiles(stageResult, context, runId) {
         grade: stageResult.grade,
         durationMs: stageResult.durationMs,
         details: stageResult.details || {},
-        output: stageResult.countryAnalysis || null,
+        output: stageResult.synthesis || stageResult.countryAnalysis || null,
+        synthesisGate: stageResult.synthesisGate || null,
       },
       null,
       2
@@ -450,12 +626,16 @@ async function main() {
     console.log('Usage:');
     console.log('  npm run stage:check -- --stage=2 --prompt="Energy Services in Vietnam"');
     console.log('  npm run stage:check -- --stage=2a --prompt="Energy Services in Vietnam"');
-    console.log('  npm run stage:check -- --through=2a --prompt="Energy Services in Vietnam"');
-    console.log('  npm run stage:check -- --stage=2 --country=Vietnam --industry="Energy Services"');
+    console.log('  npm run stage:check -- --stage=3 --prompt="Energy Services in Vietnam"');
+    console.log('  npm run stage:check -- --stage=3a --prompt="Energy Services in Vietnam"');
+    console.log('  npm run stage:check -- --through=3a --prompt="Energy Services in Vietnam"');
+    console.log(
+      '  npm run stage:check -- --stage=2 --country=Vietnam --industry="Energy Services"'
+    );
     console.log('');
     console.log('Flags:');
-    console.log('  --stage=2|2a');
-    console.log('  --through=2a');
+    console.log('  --stage=2|2a|3|3a');
+    console.log('  --through=2|2a|3|3a');
     console.log('  --prompt="..."');
     console.log('  --country=...');
     console.log('  --industry=...');
@@ -465,8 +645,12 @@ async function main() {
     console.log('  --print-output=true|false (default: false)');
     process.exit(0);
   }
-  const stage = String(args.stage || '').trim().toLowerCase();
-  const through = String(args.through || '').trim().toLowerCase();
+  const stage = String(args.stage || '')
+    .trim()
+    .toLowerCase();
+  const through = String(args.through || '')
+    .trim()
+    .toLowerCase();
   const target = through || stage || '2';
   const saveOutput = parseBoolArg(args['save-output'], true);
   const printOutput = parseBoolArg(args['print-output'], false);
@@ -481,8 +665,10 @@ async function main() {
       'GEMINI_API_KEY is not visible to this process. Set env var or pass --api-key=...'
     );
   }
-  if (!['2', '2a'].includes(target)) {
-    throw new Error(`Unsupported stage target: ${target}. Use --stage=2, --stage=2a, or --through=2a`);
+  if (!['2', '2a', '3', '3a'].includes(target)) {
+    throw new Error(
+      `Unsupported stage target: ${target}. Use --stage=2|2a|3|3a or --through=2|2a|3|3a`
+    );
   }
 
   const context = await resolveScope(args);
@@ -491,9 +677,24 @@ async function main() {
   const stage2 = await runStage2(context);
   stageResults.push(stage2);
 
-  if (target === '2a') {
-    const stage2a = await runStage2a(context, stage2);
+  const shouldRun2a = ['2a', '3', '3a'].includes(target);
+  let stage2a = null;
+  if (shouldRun2a) {
+    stage2a = await runStage2a(context, stage2);
     stageResults.push(stage2a);
+  }
+
+  const shouldRun3 = ['3', '3a'].includes(target);
+  let stage3 = null;
+  if (shouldRun3) {
+    const inputCountryAnalysis = stage2a?.countryAnalysis || stage2?.countryAnalysis || null;
+    stage3 = await runStage3(context, inputCountryAnalysis);
+    stageResults.push(stage3);
+  }
+
+  if (target === '3a') {
+    const stage3a = await runStage3a(context, stage3);
+    stageResults.push(stage3a);
   }
 
   console.log('');
@@ -521,7 +722,7 @@ async function main() {
   if (saveOutput) {
     const runId = Date.now();
     for (const result of stageResults) {
-      if (!result || !['2', '2a'].includes(String(result.stage || ''))) continue;
+      if (!result || !['2', '2a', '3', '3a'].includes(String(result.stage || ''))) continue;
       const files = saveStageOutputFiles(result, context, runId);
       outputFiles.push({
         stage: result.stage,
