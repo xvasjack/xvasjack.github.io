@@ -258,6 +258,10 @@ function applyModePolicy(result, mode, strict) {
 // ---------------------------------------------------------------------------
 function checkDirtyTree() {
   const elapsed = timer();
+  const isGeneratedNoise = (filePath) => {
+    const normalized = String(filePath || '').replace(/\\/g, '/');
+    return normalized.includes('reports/smoke-readiness.json');
+  };
   try {
     const output = execFileSync('git', ['status', '--porcelain', '--', '.'], {
       cwd: PROJECT_ROOT,
@@ -269,6 +273,7 @@ function checkDirtyTree() {
       .filter((l) => l.length > 0)
       .filter((l) => {
         const file = l.slice(3).replace(/^"(.*)"$/, '$1');
+        if (isGeneratedNoise(file)) return false;
         return file.endsWith('.js') || file.endsWith('.json');
       });
 

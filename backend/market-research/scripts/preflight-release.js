@@ -13,6 +13,10 @@ const RELATIVE_PREFIX = 'backend/market-research/';
 // 1. Dirty-tree guard
 // ---------------------------------------------------------------------------
 function checkDirtyTree() {
+  const isGeneratedNoise = (filePath) => {
+    const normalized = String(filePath || '').replace(/\\/g, '/');
+    return normalized.includes('reports/smoke-readiness.json');
+  };
   let output;
   try {
     output = execFileSync('git', ['status', '--porcelain', '--', '.'], {
@@ -53,6 +57,7 @@ function checkDirtyTree() {
     .filter((l) => l.length > 0)
     .filter((l) => {
       const file = l.slice(3).replace(/^"(.*)"$/, '$1');
+      if (isGeneratedNoise(file)) return false;
       return file.endsWith('.js') || file.endsWith('.json');
     });
 
