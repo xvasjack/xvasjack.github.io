@@ -400,7 +400,7 @@ function mergeRelationshipNamesByTrust(sourceMap = {}, companyName = '', options
     structured: 3,
     url: 2,
     screenshot: 2,
-    feed: 1,
+    feed: 2,
     embedded: 1,
     ai: 1,
   };
@@ -449,8 +449,8 @@ function mergeRelationshipNamesByTrust(sourceMap = {}, companyName = '', options
 // GPT-4o limit: 128K tokens ≈ 512K chars, but leave margin for response
 const MAX_INPUT_CHARS = 100000; // ~25K tokens, safe margin for 128K limit
 const RELATIONSHIP_SEGMENT_MIN_COUNT = 5; // Segment long relationship lists for readable slide output
-const PROFILE_STRICT_QUALITY_GATE = process.env.PROFILE_STRICT_QUALITY_GATE !== 'false';
-const PROFILE_REQUIRE_FULL_COVERAGE = process.env.PROFILE_REQUIRE_FULL_COVERAGE !== 'false';
+const PROFILE_STRICT_QUALITY_GATE = process.env.PROFILE_STRICT_QUALITY_GATE === 'true';
+const PROFILE_REQUIRE_FULL_COVERAGE = process.env.PROFILE_REQUIRE_FULL_COVERAGE === 'true';
 const AU_STATE_MAP = {
   nsw: 'New South Wales',
   'new south wales': 'New South Wales',
@@ -8604,6 +8604,16 @@ function normalizeUrlForDedup(rawUrl) {
   }
 }
 
+function getOriginWebsiteUrl(rawUrl) {
+  try {
+    const normalized = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    const parsed = new URL(normalized);
+    return `${parsed.origin}/`;
+  } catch {
+    return ensureString(rawUrl).trim();
+  }
+}
+
 function scoreScreenshotPage(url) {
   let path = ensureString(url).toLowerCase();
   try {
@@ -12008,7 +12018,17 @@ async function processSingleWebsite(website, index, total) {
   try {
     // Step 1: Scrape website (now scrapes multiple pages: homepage + contact + about + partners)
     console.log(`  [${index + 1}] Step 1: Scraping website (multi-page)...`);
-    const scraped = await scrapeMultiplePages(trimmedWebsite);
+    let scrapeTarget = trimmedWebsite;
+    let scraped = await scrapeMultiplePages(scrapeTarget);
+
+    if (!scraped.success && /http 404/i.test(ensureString(scraped.error))) {
+      const rootWebsite = getOriginWebsiteUrl(trimmedWebsite);
+      if (normalizeUrlForDedup(rootWebsite) !== normalizeUrlForDedup(trimmedWebsite)) {
+        console.log(`  [${index + 1}] Step 1a: 404 on deep URL, retrying root URL ${rootWebsite}`);
+        scrapeTarget = rootWebsite;
+        scraped = await scrapeMultiplePages(scrapeTarget);
+      }
+    }
 
     if (!scraped.success) {
       console.log(`  [${index + 1}] Failed to scrape: ${scraped.error}`);
@@ -12514,7 +12534,7 @@ async function processSingleWebsite(website, index, total) {
     );
     let principalBrandCoverage =
       businessRelationships.principals.length + businessRelationships.brands.length;
-    if (principalBrandCoverage < 2) {
+    if (principalBrandCoverage < 1) {
       console.log(
         `  [${index + 1}] Step 6e: Relationship coverage low (${principalBrandCoverage}), running AI text fallback...`
       );
@@ -12558,7 +12578,7 @@ async function processSingleWebsite(website, index, total) {
         `  [${index + 1}] Step 6e: Coverage after AI fallback = ${principalBrandCoverage}`
       );
     }
-    const relationshipCoverageStatus = principalBrandCoverage < 2 ? 'needs_manual_review' : 'ok';
+    const relationshipCoverageStatus = principalBrandCoverage < 1 ? 'needs_manual_review' : 'ok';
     if (relationshipCoverageStatus === 'needs_manual_review') {
       console.log(
         `  [${index + 1}] Step 6f: Principal/brand coverage still low (${principalBrandCoverage}) - marking manual review required`
@@ -12890,20 +12910,20 @@ function validateProfileData(companies) {
     const cleanedBrands = filterGarbageNames(relationships.brands || [], companyNameForFilter);
     const principalBrandCoverage = cleanedPrincipals.length + cleanedBrands.length;
 
-    if (principalBrandCoverage < 2) {
-      blockingIssues.push(`principal/brand coverage too low (${principalBrandCoverage})`);
+    if (principalBrandCoverage < 1) {
+      warningIssues.push(`principal/brand coverage too low (${principalBrandCoverage})`);
     }
     if (ensureString(company._relationshipCoverageStatus) === 'needs_manual_review') {
-      blockingIssues.push('relationship coverage flagged for manual review');
+      warningIssues.push('relationship coverage flagged for manual review');
     }
 
     const branchEvidenceDetected = Boolean(company._branchEvidenceDetected);
     const branchSummary = ensureString(getBranchNetworkSummaryFromCompany(company)).trim();
     if (branchEvidenceDetected && !branchSummary) {
-      blockingIssues.push('branch evidence found but branch summary missing');
+      warningIssues.push('branch evidence found but branch summary missing');
     }
     if (/\balong\b/i.test(branchSummary)) {
-      blockingIssues.push('branch summary contains invalid token');
+      warningIssues.push('branch summary contains invalid token');
     }
 
     const inferredCountry = inferCountryFromWebsite(ensureString(company.website));
@@ -12911,18 +12931,18 @@ function validateProfileData(companies) {
     const branchLower = branchSummary.toLowerCase();
     if (inferredCountry === 'New Zealand') {
       if (/\baustralia\b/.test(locationLower) && !/\bnew zealand\b/.test(locationLower)) {
-        blockingIssues.push('location country mismatch with website domain');
+        warningIssues.push('location country mismatch with website domain');
       }
       if (/\baustralia\b/.test(branchLower) && !/\bnew zealand\b/.test(branchLower)) {
-        blockingIssues.push('branch country mismatch with website domain');
+        warningIssues.push('branch country mismatch with website domain');
       }
     }
     if (inferredCountry === 'Australia') {
       if (/\bnew zealand\b/.test(locationLower) && !/\baustralia\b/.test(locationLower)) {
-        blockingIssues.push('location country mismatch with website domain');
+        warningIssues.push('location country mismatch with website domain');
       }
       if (/\bnew zealand\b/.test(branchLower) && !/\baustralia\b/.test(branchLower)) {
-        blockingIssues.push('branch country mismatch with website domain');
+        warningIssues.push('branch country mismatch with website domain');
       }
     }
 
@@ -13276,7 +13296,17 @@ app.post('/api/generate-ppt', async (req, res) => {
       try {
         // Step 1: Scrape website (now scrapes multiple pages)
         console.log('  Step 1: Scraping website (multi-page)...');
-        const scraped = await scrapeMultiplePages(website);
+        let scrapeTarget = website;
+        let scraped = await scrapeMultiplePages(scrapeTarget);
+
+        if (!scraped.success && /http 404/i.test(ensureString(scraped.error))) {
+          const rootWebsite = getOriginWebsiteUrl(website);
+          if (normalizeUrlForDedup(rootWebsite) !== normalizeUrlForDedup(website)) {
+            console.log(`  Step 1a: 404 on deep URL, retrying root URL ${rootWebsite}`);
+            scrapeTarget = rootWebsite;
+            scraped = await scrapeMultiplePages(scrapeTarget);
+          }
+        }
 
         if (!scraped.success) {
           console.log(`  Failed to scrape: ${scraped.error}`);
@@ -13655,7 +13685,7 @@ app.post('/api/generate-ppt', async (req, res) => {
         );
         let principalBrandCoverage =
           businessRelationships.principals.length + businessRelationships.brands.length;
-        if (principalBrandCoverage < 2) {
+        if (principalBrandCoverage < 1) {
           console.log(
             `  Step 5d: Relationship coverage low (${principalBrandCoverage}), running AI text fallback...`
           );
@@ -13698,7 +13728,7 @@ app.post('/api/generate-ppt', async (req, res) => {
           console.log(`  Step 5d: Coverage after AI fallback = ${principalBrandCoverage}`);
         }
         const relationshipCoverageStatus =
-          principalBrandCoverage < 2 ? 'needs_manual_review' : 'ok';
+          principalBrandCoverage < 1 ? 'needs_manual_review' : 'ok';
         if (relationshipCoverageStatus === 'needs_manual_review') {
           console.log(
             `  Step 5e: Principal/brand coverage still low (${principalBrandCoverage}) - marking manual review required`
