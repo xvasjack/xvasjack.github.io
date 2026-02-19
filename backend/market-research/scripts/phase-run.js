@@ -1,20 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 
-/**
- * phase-run — Run the market-research pipeline through a target stage and stop.
- *
- * Usage:
- *   node scripts/phase-run.js --country=Vietnam --industry="Energy Services" --through=3
- *   node scripts/phase-run.js --country=Germany --industry=Fintech --through=9 --run-id=run-custom-123
- *
- * See --help for full options.
- */
+require('dotenv').config();
 
 const { parsePhaseRunArgs, phaseRunHelp } = require('../phase-tracker/core/args');
-const { stagesThrough, formatStage } = require('../phase-tracker/core/stage-order');
+const { runThrough } = require('../phase-tracker/core/runner');
+const { formatStage } = require('../phase-tracker/core/stage-order');
 
-function main() {
+async function main() {
   const result = parsePhaseRunArgs(process.argv.slice(2));
 
   if (result.help) {
@@ -33,32 +26,49 @@ function main() {
   }
 
   const { args } = result;
-  const stages = stagesThrough(args.through);
 
   console.log(`Run ID:            ${args.runId}`);
-  console.log(`Country:           ${args.country}`);
-  console.log(`Industry:          ${args.industry}`);
-  console.log(`Through:           ${args.through}`);
+  console.log(`Through:           ${formatStage(args.through)}`);
   console.log(`Strict template:   ${args.strictTemplate}`);
-  console.log(`Attempts/stage:    ${args.attemptsPerStage}`);
-  if (args.clientContext) {
-    console.log(`Client context:    ${args.clientContext}`);
-  }
-  console.log('');
-  console.log(`Stages to execute (${stages.length}):`);
-  for (const stageId of stages) {
-    console.log(`  ${formatStage(stageId)}`);
-  }
+  if (args.country) console.log(`Country:           ${args.country}`);
+  if (args.industry) console.log(`Industry:          ${args.industry}`);
+  if (args.clientContext) console.log(`Client context:    ${args.clientContext}`);
   console.log('');
 
-  // --- Placeholder: stage execution will be wired in a later session ---
-  for (const stageId of stages) {
-    console.log(`[PLACEHOLDER] Stage ${stageId}: not yet wired — service call goes here`);
-  }
+  try {
+    const runResult = await runThrough({
+      runId: args.runId,
+      through: args.through,
+      country: args.country,
+      industry: args.industry,
+      clientContext: args.clientContext,
+      strictTemplate: args.strictTemplate,
+      dbPath: args.dbPath,
+    });
 
-  console.log('');
-  console.log('Done (skeleton only — no stages executed).');
-  process.exit(0);
+    console.log('\n' + '='.repeat(60));
+    console.log(`Run ${runResult.runId}: ${runResult.status}`);
+    console.log('='.repeat(60));
+
+    for (const s of runResult.stages) {
+      const icon = s.status === 'completed' ? '+' : 'X';
+      const duration = s.durationMs ? `${(s.durationMs / 1000).toFixed(1)}s` : '';
+      const gate =
+        s.gateResults && typeof s.gateResults.pass === 'boolean'
+          ? s.gateResults.pass
+            ? 'PASS'
+            : 'FAIL'
+          : '';
+      console.log(
+        `  [${icon}] Stage ${s.stage}: ${s.status} ${duration} ${gate}${s.error ? ` -- ${s.error}` : ''}`
+      );
+    }
+
+    process.exit(runResult.status === 'failed' ? 1 : 0);
+  } catch (err) {
+    console.error(`\nFatal: ${err.message}`);
+    process.exit(1);
+  }
 }
 
 main();

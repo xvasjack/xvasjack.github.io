@@ -1,24 +1,23 @@
 #!/usr/bin/env node
 'use strict';
 
-/**
- * phase-list — List all known pipeline runs.
- *
- * Usage:
- *   node scripts/phase-list.js
- *   node scripts/phase-list.js --status=completed
- *   node scripts/phase-list.js --limit=10 --json
- */
-
 const { parseRawArgs } = require('../phase-tracker/core/args');
+const { migrate } = require('../phase-tracker/storage/migrate');
+const { listRuns } = require('../phase-tracker/storage/runs-repo');
 
-const HELP = `Usage: node scripts/phase-list.js [--status=<status>] [--limit=<n>] [--json]
+const HELP = `Usage: npm run phase:list [--status <STATUS>] [--limit <N>] [--json] [--db-path <PATH>]
 
 Optional:
   --status    Filter by run status (pending, running, completed, failed, cancelled)
   --limit     Max number of runs to show (default: 20)
   --json      Output raw JSON instead of formatted text
+  --db-path   Custom SQLite database path
   --help      Show this help message`;
+
+function padRight(str, len) {
+  const s = String(str || '');
+  return s.length >= len ? s.substring(0, len) : s + ' '.repeat(len - s.length);
+}
 
 function main() {
   const raw = parseRawArgs(process.argv.slice(2));
@@ -31,6 +30,7 @@ function main() {
   const status = raw.status || null;
   const limit = raw.limit ? parseInt(raw.limit, 10) : 20;
   const jsonMode = raw.json !== undefined;
+  const dbPath = raw['db-path'] || undefined;
 
   if (status && !['pending', 'running', 'completed', 'failed', 'cancelled'].includes(status)) {
     console.error(
@@ -39,25 +39,42 @@ function main() {
     process.exit(1);
   }
 
-  if (isNaN(limit) || limit < 1) {
-    console.error('Error: --limit must be a positive integer');
-    process.exit(1);
-  }
+  migrate(dbPath);
 
-  // --- Placeholder: DB lookup will be wired in a later session ---
-  const placeholder = {
-    runs: [],
-    filter: { status, limit },
-    message: 'Database not yet wired — run listing goes here',
-  };
+  const runs = listRuns({ status, limit, dbPath });
 
   if (jsonMode) {
-    console.log(JSON.stringify(placeholder, null, 2));
-  } else {
-    console.log('Runs: (none — database not yet wired)');
-    if (status) console.log(`  Filter: status=${status}`);
-    console.log(`  Limit:  ${limit}`);
+    console.log(JSON.stringify(runs, null, 2));
+    process.exit(0);
   }
+
+  if (runs.length === 0) {
+    console.log('No runs found.');
+    process.exit(0);
+  }
+
+  console.log(
+    '\n' +
+      padRight('ID', 20) +
+      padRight('Country', 16) +
+      padRight('Industry', 24) +
+      padRight('Status', 12) +
+      padRight('Through', 10) +
+      'Created'
+  );
+  console.log('-'.repeat(100));
+
+  for (const r of runs) {
+    console.log(
+      padRight(r.id, 20) +
+        padRight(r.country, 16) +
+        padRight(r.industry, 24) +
+        padRight(r.status, 12) +
+        padRight(r.target_stage || '-', 10) +
+        (r.created_at || '-')
+    );
+  }
+  console.log(`\nTotal: ${runs.length} run(s)\n`);
 
   process.exit(0);
 }

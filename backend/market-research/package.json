@@ -18,7 +18,7 @@
     "phase:status": "node scripts/phase-status.js",
     "phase:list": "node scripts/phase-list.js",
     "phase:paths": "node scripts/phase-paths.js",
-    "phase:test": "node --test phase-tracker/phase-tracker.test.js"
+    "phase:test": "node --test phase-tracker/phase-tracker.test.js tests/phase-tracker/runner.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

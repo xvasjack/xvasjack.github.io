@@ -13,17 +13,20 @@ const DEFAULTS = Object.freeze({
 
 /**
  * Parse raw argv (process.argv.slice(2)) into a key-value map.
- * Supports: --key=value, --flag (boolean true)
+ * Supports: --key=value, --key value, --flag (boolean true)
  */
 function parseRawArgs(argv) {
   const out = {};
-  for (const arg of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
     if (!arg.startsWith('--')) continue;
     const eq = arg.indexOf('=');
-    if (eq < 0) {
-      out[arg.slice(2)] = 'true';
-    } else {
+    if (eq >= 0) {
       out[arg.slice(2, eq)] = arg.slice(eq + 1);
+    } else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
+      out[arg.slice(2)] = argv[++i];
+    } else {
+      out[arg.slice(2)] = 'true';
     }
   }
   return out;
@@ -41,36 +44,34 @@ function generateRunId() {
 /**
  * Parse and validate phase-run CLI arguments.
  *
- * Required: --country, --industry, --through
- * Optional: --run-id, --client-context, --strict-template, --attempts-per-stage
+ * Required: --run-id, --through
+ * Required for NEW runs: --country, --industry
+ * Optional: --client-context, --strict-template, --attempts-per-stage
  *
- * Returns { valid: true, args: PhaseRunArgs } or { valid: false, errors: string[] }.
+ * Returns { valid: true, args } or { valid: false, errors }.
  */
 function parsePhaseRunArgs(argv) {
   const raw = parseRawArgs(argv);
   const errors = [];
 
-  // Check for --help
   if (raw.help !== undefined) {
     return { valid: false, help: true, errors: [] };
   }
 
   // Required fields
-  const country = raw.country;
-  const industry = raw.industry;
+  const runId = raw['run-id'];
   const through = raw.through;
 
-  if (!country) errors.push('Missing required: --country');
-  if (!industry) errors.push('Missing required: --industry');
+  if (!runId) errors.push('Missing required: --run-id');
   if (!through) errors.push('Missing required: --through');
 
-  // Validate --through stage ID
   if (through && !isValidStage(through)) {
     errors.push(`Invalid --through stage: "${through}". Valid stages: ${STAGE_ORDER.join(', ')}`);
   }
 
-  // Optional fields with defaults
-  const runId = raw['run-id'] || generateRunId();
+  // Country/industry are optional at parse time (runner validates at runtime)
+  const country = raw.country || null;
+  const industry = raw.industry || null;
 
   const strictTemplateRaw = raw['strict-template'];
   let strictTemplate = DEFAULTS.strictTemplate;
@@ -90,6 +91,7 @@ function parsePhaseRunArgs(argv) {
   }
 
   const clientContext = raw['client-context'] || null;
+  const dbPath = raw['db-path'] || null;
 
   if (errors.length > 0) {
     return { valid: false, help: false, errors };
@@ -107,6 +109,7 @@ function parsePhaseRunArgs(argv) {
       clientContext,
       strictTemplate,
       attemptsPerStage,
+      dbPath,
     },
   };
 }
@@ -115,19 +118,27 @@ function parsePhaseRunArgs(argv) {
  * Build help text for phase-run CLI.
  */
 function phaseRunHelp() {
-  return `Usage: node scripts/phase-run.js --country=<country> --industry=<industry> --through=<stage>
+  return `Usage: npm run phase:run -- --run-id <ID> --through <STAGE> [options]
 
 Required:
-  --country             Target country (e.g. "Vietnam")
-  --industry            Target industry (e.g. "Energy Services")
+  --run-id              Unique run identifier (e.g. vn-es-001)
   --through             Run through this stage (inclusive). Valid: ${STAGE_ORDER.join(', ')}
 
+Required for NEW runs:
+  --country             Target country (e.g. "Vietnam")
+  --industry            Target industry (e.g. "Energy Services")
+
 Optional:
-  --run-id              Custom run ID (auto-generated if omitted)
   --client-context      Freeform client context string
   --strict-template     Strict template mode (default: true)
   --attempts-per-stage  Max attempts per stage, fail-fast=1 (default: 1)
-  --help                Show this help message`;
+  --db-path             Custom SQLite database path
+  --help                Show this help message
+
+Examples:
+  npm run phase:run -- --run-id vn-es-001 --country Vietnam --industry "Energy Services" --through 2
+  npm run phase:run -- --run-id vn-es-001 --through 2a
+  npm run phase:run -- --run-id vn-es-001 --through 9`;
 }
 
 module.exports = {

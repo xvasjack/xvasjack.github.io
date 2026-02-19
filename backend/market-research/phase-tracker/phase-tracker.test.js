@@ -250,15 +250,19 @@ describe('parsePhaseRunArgs', () => {
     assert.equal(result.args.attemptsPerStage, 2);
   });
 
-  it('auto-generates runId when not provided', () => {
+  it('errors when --run-id is not provided', () => {
     const result = parsePhaseRunArgs(['--country=Germany', '--industry=Fintech', '--through=2']);
-    assert.ok(result.valid);
-    assert.ok(result.args.runId.startsWith('run-'));
-    assert.ok(result.args.runId.length > 10);
+    assert.ok(!result.valid);
+    assert.ok(result.errors.some((e) => e.includes('--run-id')));
   });
 
   it('applies defaults for optional fields', () => {
-    const result = parsePhaseRunArgs(['--country=Japan', '--industry=Healthcare', '--through=5']);
+    const result = parsePhaseRunArgs([
+      '--run-id=run-defaults-test',
+      '--country=Japan',
+      '--industry=Healthcare',
+      '--through=5',
+    ]);
     assert.ok(result.valid);
     assert.equal(result.args.strictTemplate, DEFAULTS.strictTemplate);
     assert.equal(result.args.attemptsPerStage, DEFAULTS.attemptsPerStage);
@@ -271,46 +275,40 @@ describe('parsePhaseRunArgs', () => {
     assert.ok(result.help);
   });
 
-  it('errors on missing --country', () => {
-    const result = parsePhaseRunArgs(['--industry=X', '--through=2']);
-    assert.ok(!result.valid);
-    assert.ok(result.errors.some((e) => e.includes('--country')));
-  });
-
-  it('errors on missing --industry', () => {
-    const result = parsePhaseRunArgs(['--country=X', '--through=2']);
-    assert.ok(!result.valid);
-    assert.ok(result.errors.some((e) => e.includes('--industry')));
+  it('country and industry are optional at parse time', () => {
+    const result = parsePhaseRunArgs(['--run-id=run-no-ci', '--through=2']);
+    assert.ok(result.valid);
+    assert.equal(result.args.country, null);
+    assert.equal(result.args.industry, null);
   });
 
   it('errors on missing --through', () => {
-    const result = parsePhaseRunArgs(['--country=X', '--industry=Y']);
+    const result = parsePhaseRunArgs(['--run-id=run-no-through']);
     assert.ok(!result.valid);
     assert.ok(result.errors.some((e) => e.includes('--through')));
   });
 
-  it('errors on all three missing', () => {
+  it('errors on missing --run-id and --through', () => {
     const result = parsePhaseRunArgs([]);
     assert.ok(!result.valid);
-    assert.ok(result.errors.length >= 3);
+    assert.ok(result.errors.length >= 2);
   });
 
   it('errors on invalid --through stage', () => {
-    const result = parsePhaseRunArgs(['--country=X', '--industry=Y', '--through=1']);
+    const result = parsePhaseRunArgs(['--run-id=run-bad-1', '--through=1']);
     assert.ok(!result.valid);
     assert.ok(result.errors.some((e) => e.includes('Invalid --through')));
   });
 
   it('errors on invalid --through stage "10"', () => {
-    const result = parsePhaseRunArgs(['--country=X', '--industry=Y', '--through=10']);
+    const result = parsePhaseRunArgs(['--run-id=run-bad-2', '--through=10']);
     assert.ok(!result.valid);
     assert.ok(result.errors.some((e) => e.includes('Invalid --through')));
   });
 
   it('errors on non-numeric --attempts-per-stage', () => {
     const result = parsePhaseRunArgs([
-      '--country=X',
-      '--industry=Y',
+      '--run-id=run-bad-3',
       '--through=2',
       '--attempts-per-stage=abc',
     ]);
@@ -320,8 +318,7 @@ describe('parsePhaseRunArgs', () => {
 
   it('errors on zero --attempts-per-stage', () => {
     const result = parsePhaseRunArgs([
-      '--country=X',
-      '--industry=Y',
+      '--run-id=run-bad-4',
       '--through=2',
       '--attempts-per-stage=0',
     ]);
@@ -331,8 +328,7 @@ describe('parsePhaseRunArgs', () => {
 
   it('--strict-template=false sets false', () => {
     const result = parsePhaseRunArgs([
-      '--country=X',
-      '--industry=Y',
+      '--run-id=run-st-false',
       '--through=2',
       '--strict-template=false',
     ]);
@@ -342,8 +338,7 @@ describe('parsePhaseRunArgs', () => {
 
   it('--strict-template=0 sets false', () => {
     const result = parsePhaseRunArgs([
-      '--country=X',
-      '--industry=Y',
+      '--run-id=run-st-zero',
       '--through=2',
       '--strict-template=0',
     ]);
