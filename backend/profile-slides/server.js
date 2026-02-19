@@ -23,7 +23,9 @@ function logMemoryUsage(label = '') {
   const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
   const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
   const rssMB = Math.round(mem.rss / 1024 / 1024);
-  console.log(`  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`);
+  console.log(
+    `  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`
+  );
 }
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -50,9 +52,9 @@ function ensureString(value, defaultValue = '') {
   if (value === null || value === undefined) return defaultValue;
   // Handle arrays - join with newlines if items look like bullet points, else comma
   if (Array.isArray(value)) {
-    const items = value.map(v => ensureString(v));
+    const items = value.map((v) => ensureString(v));
     // If any item starts with "- ", it's point form - join with newlines
-    const isBulletForm = items.some(item => item.trim().startsWith('- '));
+    const isBulletForm = items.some((item) => item.trim().startsWith('- '));
     return items.join(isBulletForm ? '\n' : ', ');
   }
   // Handle objects - try to extract meaningful string
@@ -63,7 +65,11 @@ function ensureString(value, defaultValue = '') {
     if (value.value) return ensureString(value.value);
     if (value.name) return ensureString(value.name);
     // Fallback: stringify
-    try { return JSON.stringify(value); } catch { return defaultValue; }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return defaultValue;
+    }
   }
   // Convert other types to string
   return String(value);
@@ -75,7 +81,7 @@ function normalizeLabel(label) {
   if (!label || typeof label !== 'string') return label;
   return label
     .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
 }
 
@@ -85,7 +91,7 @@ function toTitleCase(name) {
   return name
     .toLowerCase()
     .split(/\s+/)
-    .map(word => {
+    .map((word) => {
       // Keep acronyms uppercase (2-4 letter all-caps words)
       if (/^[A-Z]{2,4}$/i.test(word) && word === word.toUpperCase()) {
         return word.toUpperCase();
@@ -101,8 +107,11 @@ function toTitleCase(name) {
 function stripCompanySuffix(name) {
   if (!name || typeof name !== 'string') return name;
   return name
-    .replace(/\s*(Sdn\.?\s*Bhd\.?|Bhd\.?|Berhad|Pte\.?\s*Ltd\.?|Ltd\.?|Limited|Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?,?\s*Ltd\.?|LLC|LLP|GmbH|S\.?A\.?|Tbk\.?|JSC|PLC|Public\s*Limited|Private\s*Limited|Joint\s*Stock|Company|\(.*?\))$/gi, '')
-    .replace(/^(PT\.?|CV\.?)\s+/gi, '')  // Remove PT/CV prefix
+    .replace(
+      /\s*(Sdn\.?\s*Bhd\.?|Bhd\.?|Berhad|Pte\.?\s*Ltd\.?|Ltd\.?|Limited|Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?,?\s*Ltd\.?|LLC|LLP|GmbH|S\.?A\.?|Tbk\.?|JSC|PLC|Public\s*Limited|Private\s*Limited|Joint\s*Stock|Company|\(.*?\))$/gi,
+      ''
+    )
+    .replace(/^(PT\.?|CV\.?)\s+/gi, '') // Remove PT/CV prefix
     .trim();
 }
 
@@ -117,7 +126,7 @@ function cleanCompanyPrefixesInText(text) {
     .replace(/\bPT\s+(?=[A-Z])/g, '')
     .replace(/\bCV\.\s*/gi, '')
     .replace(/\bCV\s+(?=[A-Z])/g, '')
-    .replace(/\s{2,}/g, ' ')  // Clean up double spaces
+    .replace(/\s{2,}/g, ' ') // Clean up double spaces
     .trim();
 
   // Fix acronym casing - these should always be ALL CAPS
@@ -131,15 +140,64 @@ function fixAcronymCasing(text) {
 
   // Known acronyms that should be ALL CAPS
   const allCapsAcronyms = [
-    'BNI', 'BRI', 'BCA', 'BTN', 'BSI', 'CIMB', 'OCBC', 'UOB', 'DBS', 'HSBC',  // Banks
-    'PLN', 'PGN', 'PDAM', 'BUMN',  // Indonesian state companies
-    'SPBU', 'BPJS', 'KPK', 'DPR', 'MPR', 'TNI', 'POLRI',  // Indonesian institutions
-    'VVF', 'KFC', 'MNC', 'SCG', 'PTT', 'AIS', 'TRUE', 'DTAC',  // Companies
-    'IBM', 'HP', 'AMD', 'ASUS', 'MSI', 'LG', 'GE', 'ABB', 'SKF',  // Tech/Industrial
-    'BMW', 'VW', 'GM', 'JLR', 'MAN',  // Automotive
-    'AMP', 'UPS', 'DHL', 'FDX', 'TNT',  // Logistics
-    'HID', 'NEC', 'NTT', 'NXP', 'TDK',  // Electronics
-    'ENI', 'BP', 'EDF', 'RWE', 'EON',  // Energy
+    'BNI',
+    'BRI',
+    'BCA',
+    'BTN',
+    'BSI',
+    'CIMB',
+    'OCBC',
+    'UOB',
+    'DBS',
+    'HSBC', // Banks
+    'PLN',
+    'PGN',
+    'PDAM',
+    'BUMN', // Indonesian state companies
+    'SPBU',
+    'BPJS',
+    'KPK',
+    'DPR',
+    'MPR',
+    'TNI',
+    'POLRI', // Indonesian institutions
+    'VVF',
+    'KFC',
+    'MNC',
+    'SCG',
+    'PTT',
+    'AIS',
+    'TRUE',
+    'DTAC', // Companies
+    'IBM',
+    'HP',
+    'AMD',
+    'ASUS',
+    'MSI',
+    'LG',
+    'GE',
+    'ABB',
+    'SKF', // Tech/Industrial
+    'BMW',
+    'VW',
+    'GM',
+    'JLR',
+    'MAN', // Automotive
+    'AMP',
+    'UPS',
+    'DHL',
+    'FDX',
+    'TNT', // Logistics
+    'HID',
+    'NEC',
+    'NTT',
+    'NXP',
+    'TDK', // Electronics
+    'ENI',
+    'BP',
+    'EDF',
+    'RWE',
+    'EON', // Energy
   ];
 
   let result = text;
@@ -153,7 +211,19 @@ function fixAcronymCasing(text) {
   // If a word is 2-4 chars and has mixed case like "Bni" or "vvf", make it ALL CAPS
   result = result.replace(/\b([A-Za-z]{2,4})\b/g, (match) => {
     // If it's a known lowercase word, don't change it
-    const lowerWords = ['and', 'the', 'for', 'with', 'from', 'into', 'bank', 'city', 'east', 'west', 'asia'];
+    const lowerWords = [
+      'and',
+      'the',
+      'for',
+      'with',
+      'from',
+      'into',
+      'bank',
+      'city',
+      'east',
+      'west',
+      'asia',
+    ];
     if (lowerWords.includes(match.toLowerCase())) return match;
     // If all consonants or has numbers, likely an acronym - make ALL CAPS
     if (!/[aeiou]/i.test(match) || match.toUpperCase() === match) {
@@ -173,81 +243,136 @@ function filterGarbageNames(names, companyName = '') {
 
   const companyLower = (companyName || '').toLowerCase().replace(/\s+/g, '');
 
-  return names.filter(name => {
-    if (!name || typeof name !== 'string') return false;
-    const lower = name.toLowerCase();
-    const normalized = lower.replace(/\s+/g, '');
+  return names
+    .filter((name) => {
+      if (!name || typeof name !== 'string') return false;
+      const lower = name.toLowerCase();
+      const normalized = lower.replace(/\s+/g, '');
 
-    // Too short (1-2 chars) or too long (>60 chars)
-    if (name.length < 3 || name.length > 60) return false;
+      // Too short (1-2 chars) or too long (>60 chars)
+      if (name.length < 3 || name.length > 60) return false;
 
-    // Filter out company's own name
-    if (companyLower && normalized.includes(companyLower)) return false;
-    if (companyLower && companyLower.includes(normalized) && normalized.length > 5) return false;
+      // Filter out company's own name
+      if (companyLower && normalized.includes(companyLower)) return false;
+      if (companyLower && companyLower.includes(normalized) && normalized.length > 5) return false;
 
-    // HTML artifacts
-    if (/<[^>]+>/.test(name)) return false; // HTML tags
-    if (/style\s*=|href\s*=|src\s*=|class\s*=/i.test(name)) return false; // HTML attributes
-    if (/&[a-z]+;|&#\d+;/i.test(name)) return false; // HTML entities
-    if (/alt\s+text/i.test(name)) return false;
+      // HTML artifacts
+      if (/<[^>]+>/.test(name)) return false; // HTML tags
+      if (/style\s*=|href\s*=|src\s*=|class\s*=/i.test(name)) return false; // HTML attributes
+      if (/&[a-z]+;|&#\d+;/i.test(name)) return false; // HTML entities
+      if (/alt\s+text/i.test(name)) return false;
 
-    // Page elements and navigation
-    const pageElements = [
-      'home', 'footer', 'header', 'copyright', 'loading', 'contact', 'menu',
-      'product & system', 'cctv & vms', 'about us', 'our services', 'our products',
-      'read more', 'learn more', 'click here', 'download', 'subscribe',
-      'navigation', 'sidebar', 'breadcrumb', 'pagination', 'next', 'previous'
-    ];
-    if (pageElements.includes(lower.trim())) return false;
-    if (/^(page|section|slide)\s*\d*$/i.test(name)) return false;
+      // Page elements and navigation
+      const pageElements = [
+        'home',
+        'footer',
+        'header',
+        'copyright',
+        'loading',
+        'contact',
+        'menu',
+        'product & system',
+        'cctv & vms',
+        'about us',
+        'our services',
+        'our products',
+        'read more',
+        'learn more',
+        'click here',
+        'download',
+        'subscribe',
+        'navigation',
+        'sidebar',
+        'breadcrumb',
+        'pagination',
+        'next',
+        'previous',
+      ];
+      if (pageElements.includes(lower.trim())) return false;
+      if (/^(page|section|slide)\s*\d*$/i.test(name)) return false;
 
-    // Generic single-word garbage
-    const genericTerms = [
-      'logo', 'email', 'phone', 'address', 'fax', 'website', 'english', 'indonesia',
-      'image', 'photo', 'picture', 'icon', 'button', 'link', 'banner', 'background',
-      'thumbnail', 'gallery', 'slider', 'carousel', 'video', 'animation'
-    ];
-    if (genericTerms.includes(lower.trim())) return false;
-    if (/(download|login|sign in|sign up|register|application form|order online|reviews?|privacy policy|terms)/i.test(lower)) return false;
+      // Generic single-word garbage
+      const genericTerms = [
+        'logo',
+        'email',
+        'phone',
+        'address',
+        'fax',
+        'website',
+        'english',
+        'indonesia',
+        'image',
+        'photo',
+        'picture',
+        'icon',
+        'button',
+        'link',
+        'banner',
+        'background',
+        'thumbnail',
+        'gallery',
+        'slider',
+        'carousel',
+        'video',
+        'animation',
+      ];
+      if (genericTerms.includes(lower.trim())) return false;
+      if (
+        /(download|login|sign in|sign up|register|application form|order online|reviews?|privacy policy|terms)/i.test(
+          lower
+        )
+      )
+        return false;
 
-    // Product names that aren't customers (security industry specific)
-    const productTerms = [
-      'ai camera', 'smart home', 'turnstile', 'access control', 'barrier gate',
-      'cctv system', 'fingerprint', 'visitor management', 'fire alarm',
-      'smart security', 'building solution', 'integration system', 'security system'
-    ];
-    if (productTerms.some(p => lower === p || lower === p + 's')) return false;
+      // Product names that aren't customers (security industry specific)
+      const productTerms = [
+        'ai camera',
+        'smart home',
+        'turnstile',
+        'access control',
+        'barrier gate',
+        'cctv system',
+        'fingerprint',
+        'visitor management',
+        'fire alarm',
+        'smart security',
+        'building solution',
+        'integration system',
+        'security system',
+      ];
+      if (productTerms.some((p) => lower === p || lower === p + 's')) return false;
 
-    // Image artifacts (more specific patterns)
-    if (/[-_]removebg|removebg[-_]/i.test(name)) return false;
-    if (/[-_]preview|preview[-_]|\spreview$/i.test(name)) return false;
-    if (/[-_]scaled|scaled[-_]|\d+x\s*scaled/i.test(name)) return false;
-    if (/[-_]cover[-_]|home[-_]page[-_]cover/i.test(name)) return false;
-    if (/\d+x\d*$/.test(name)) return false; // Dimensions like "140x"
-    if (/[-_]\d{5,}[-_\.]/.test(name)) return false; // Long number sequences in filenames
+      // Image artifacts (more specific patterns)
+      if (/[-_]removebg|removebg[-_]/i.test(name)) return false;
+      if (/[-_]preview|preview[-_]|\spreview$/i.test(name)) return false;
+      if (/[-_]scaled|scaled[-_]|\d+x\s*scaled/i.test(name)) return false;
+      if (/[-_]cover[-_]|home[-_]page[-_]cover/i.test(name)) return false;
+      if (/\d+x\d*$/.test(name)) return false; // Dimensions like "140x"
+      if (/[-_]\d{5,}[-_.]/.test(name)) return false; // Long number sequences in filenames
 
-    // URLs and paths
-    if (name.includes('~') || name.includes('://')) return false;
-    if (/\/\d+\/|\/blog\/|\/images?\//i.test(name)) return false;
-    if (/\d{4}\/\d+\/\d+/.test(name)) return false; // Date paths
-    if (/\.(jpg|jpeg|png|gif|webp|svg|pdf)$/i.test(name)) return false; // File extensions
+      // URLs and paths
+      if (name.includes('~') || name.includes('://')) return false;
+      if (/\/\d+\/|\/blog\/|\/images?\//i.test(name)) return false;
+      if (/\d{4}\/\d+\/\d+/.test(name)) return false; // Date paths
+      if (/\.(jpg|jpeg|png|gif|webp|svg|pdf)$/i.test(name)) return false; // File extensions
 
-    // Descriptions (sentences)
-    if (name.split(/\s+/).length > 8) return false;
-    if (/^a\s+\w+\s+with\s+/i.test(name)) return false;
-    if (/^the\s+\w+\s+(is|are|was|has)/i.test(name)) return false;
-    if (/\s+displaying\s+|\s+showing\s+|\s+featuring\s+/i.test(name)) return false;
-    if (/multiple\s+(security|camera|monitor)/i.test(name)) return false;
-    if (/camera\s+feeds|control\s+room\s+with|group\s+of\s+people/i.test(name)) return false;
+      // Descriptions (sentences)
+      if (name.split(/\s+/).length > 8) return false;
+      if (/^a\s+\w+\s+with\s+/i.test(name)) return false;
+      if (/^the\s+\w+\s+(is|are|was|has)/i.test(name)) return false;
+      if (/\s+displaying\s+|\s+showing\s+|\s+featuring\s+/i.test(name)) return false;
+      if (/multiple\s+(security|camera|monitor)/i.test(name)) return false;
+      if (/camera\s+feeds|control\s+room\s+with|group\s+of\s+people/i.test(name)) return false;
 
-    // Combined brand/product listings
-    if (/hanwha.*hikvision|hikvision.*hanwha/i.test(name)) return false;
-    if (/dahua.*hikvision|hikvision.*dahua/i.test(name)) return false;
-    // Common false positives from testimonial/person-name blocks
-    if (/^[A-Z][a-z]+-[A-Z][a-z]+$/.test(name)) return false;
+      // Combined brand/product listings
+      if (/hanwha.*hikvision|hikvision.*hanwha/i.test(name)) return false;
+      if (/dahua.*hikvision|hikvision.*dahua/i.test(name)) return false;
+      // Common false positives from testimonial/person-name blocks
+      if (/^[A-Z][a-z]+-[A-Z][a-z]+$/.test(name)) return false;
 
-    return true;
-  }).map(name => toTitleCase(stripCompanySuffix(name))); // Strip suffixes and title case
+      return true;
+    })
+    .map((name) => toTitleCase(stripCompanySuffix(name))); // Strip suffixes and title case
 }
 
 // ===== TOKEN ESTIMATION =====
@@ -256,59 +381,59 @@ function filterGarbageNames(names, companyName = '') {
 const MAX_INPUT_CHARS = 100000; // ~25K tokens, safe margin for 128K limit
 const RELATIONSHIP_SEGMENT_MIN_COUNT = 5; // Segment long relationship lists for readable slide output
 const AU_STATE_MAP = {
-  'nsw': 'New South Wales',
+  nsw: 'New South Wales',
   'new south wales': 'New South Wales',
-  'vic': 'Victoria',
-  'victoria': 'Victoria',
-  'qld': 'Queensland',
-  'queensland': 'Queensland',
-  'wa': 'Western Australia',
+  vic: 'Victoria',
+  victoria: 'Victoria',
+  qld: 'Queensland',
+  queensland: 'Queensland',
+  wa: 'Western Australia',
   'western australia': 'Western Australia',
-  'sa': 'South Australia',
+  sa: 'South Australia',
   'south australia': 'South Australia',
-  'tas': 'Tasmania',
-  'tasmania': 'Tasmania',
-  'act': 'Australian Capital Territory',
+  tas: 'Tasmania',
+  tasmania: 'Tasmania',
+  act: 'Australian Capital Territory',
   'australian capital territory': 'Australian Capital Territory',
-  'nt': 'Northern Territory',
-  'northern territory': 'Northern Territory'
+  nt: 'Northern Territory',
+  'northern territory': 'Northern Territory',
 };
 const NZ_REGION_MAP = {
-  'auckland': 'Auckland',
-  'wellington': 'Wellington',
-  'canterbury': 'Canterbury',
-  'christchurch': 'Canterbury',
-  'otago': 'Otago',
-  'dunedin': 'Otago',
-  'waikato': 'Waikato',
-  'hamilton': 'Waikato',
+  auckland: 'Auckland',
+  wellington: 'Wellington',
+  canterbury: 'Canterbury',
+  christchurch: 'Canterbury',
+  otago: 'Otago',
+  dunedin: 'Otago',
+  waikato: 'Waikato',
+  hamilton: 'Waikato',
   'bay of plenty': 'Bay of Plenty',
-  'tauranga': 'Bay of Plenty',
+  tauranga: 'Bay of Plenty',
   'hawke bay': "Hawke's Bay",
   'hawkes bay': "Hawke's Bay",
-  'napier': "Hawke's Bay",
-  'hastings': "Hawke's Bay",
-  'northland': 'Northland',
-  'manawatu': 'Manawatu-Whanganui',
+  napier: "Hawke's Bay",
+  hastings: "Hawke's Bay",
+  northland: 'Northland',
+  manawatu: 'Manawatu-Whanganui',
   'palmerston north': 'Manawatu-Whanganui',
-  'taranaki': 'Taranaki',
-  'southland': 'Southland',
-  'nelson': 'Nelson',
-  'marlborough': 'Marlborough',
-  'tasman': 'Tasman',
-  'gisborne': 'Gisborne',
-  'west coast': 'West Coast'
+  taranaki: 'Taranaki',
+  southland: 'Southland',
+  nelson: 'Nelson',
+  marlborough: 'Marlborough',
+  tasman: 'Tasman',
+  gisborne: 'Gisborne',
+  'west coast': 'West Coast',
 };
 const AU_CITY_REGION_MAP = {
   'regency park': 'South Australia',
-  'adelaide': 'South Australia',
-  'melbourne': 'Victoria',
-  'sydney': 'New South Wales',
-  'brisbane': 'Queensland',
-  'perth': 'Western Australia',
-  'hobart': 'Tasmania',
-  'darwin': 'Northern Territory',
-  'canberra': 'Australian Capital Territory'
+  adelaide: 'South Australia',
+  melbourne: 'Victoria',
+  sydney: 'New South Wales',
+  brisbane: 'Queensland',
+  perth: 'Western Australia',
+  hobart: 'Tasmania',
+  darwin: 'Northern Territory',
+  canberra: 'Australian Capital Territory',
 };
 
 function estimateTokens(text) {
@@ -331,12 +456,12 @@ function normalizeTextForComparison(text) {
   if (!text) return '';
   return text
     .toLowerCase()
-    .replace(/\s+/g, ' ')           // Normalize whitespace
-    .replace(/[,\.]/g, '')           // Remove commas and periods from numbers
-    .replace(/&amp;/g, '&')          // Decode HTML entities
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/[,.]/g, '') // Remove commas and periods from numbers
+    .replace(/&amp;/g, '&') // Decode HTML entities
     .replace(/&nbsp;/g, ' ')
     .replace(/&#\d+;/g, '')
-    .replace(/['']/g, "'")           // Normalize quotes
+    .replace(/['']/g, "'") // Normalize quotes
     .replace(/[""]/g, '"')
     .trim();
 }
@@ -344,8 +469,8 @@ function normalizeTextForComparison(text) {
 // Extract key numbers from text for verification (more lenient matching)
 function extractNumbersFromText(text) {
   if (!text) return [];
-  const numbers = text.match(/\d+(?:[,\.]\d+)*/g) || [];
-  return numbers.map(n => n.replace(/[,\.]/g, ''));
+  const numbers = text.match(/\d+(?:[,.]\d+)*/g) || [];
+  return numbers.map((n) => n.replace(/[,.]/g, ''));
 }
 
 // Translate non-English units to English in metric values
@@ -355,92 +480,260 @@ function translateUnitsToEnglish(text) {
 
   const translations = {
     // === THAI ===
-    'ตัน/เดือน': 'tons/month', 'ตัน/ปี': 'tons/year', 'ต่อเดือน': '/month', 'ต่อปี': '/year',
-    'ตัน': 'tons', 'ไร่': 'rai', 'งาน': 'ngan', 'ตารางวา': 'sq wah',
-    'ตร.ม.': 'sqm', 'ตารางเมตร': 'sqm', 'เครื่องจักร': 'machines', 'เครื่อง': 'machines',
-    'พนักงาน': 'employees', 'บุคลากร': 'staff', 'คน': 'people',
-    'พันธมิตร': 'partners', 'ตัวแทนจำหน่าย': 'distributors', 'ผู้จัดจำหน่าย': 'distributors', 'ราย': 'units',
-    'ลูกค้า': 'customers', 'ประเทศ': 'countries', 'สาขา': 'branches', 'ร้าน': 'stores',
-    'โรงงาน': 'factories', 'คลังสินค้า': 'warehouses', 'ผลิตภัณฑ์': 'products', 'รายการ': 'items',
+    'ตัน/เดือน': 'tons/month',
+    'ตัน/ปี': 'tons/year',
+    ต่อเดือน: '/month',
+    ต่อปี: '/year',
+    ตัน: 'tons',
+    ไร่: 'rai',
+    งาน: 'ngan',
+    ตารางวา: 'sq wah',
+    'ตร.ม.': 'sqm',
+    ตารางเมตร: 'sqm',
+    เครื่องจักร: 'machines',
+    เครื่อง: 'machines',
+    พนักงาน: 'employees',
+    บุคลากร: 'staff',
+    คน: 'people',
+    พันธมิตร: 'partners',
+    ตัวแทนจำหน่าย: 'distributors',
+    ผู้จัดจำหน่าย: 'distributors',
+    ราย: 'units',
+    ลูกค้า: 'customers',
+    ประเทศ: 'countries',
+    สาขา: 'branches',
+    ร้าน: 'stores',
+    โรงงาน: 'factories',
+    คลังสินค้า: 'warehouses',
+    ผลิตภัณฑ์: 'products',
+    รายการ: 'items',
 
     // === VIETNAMESE ===
-    'tấn/tháng': 'tons/month', 'tấn/năm': 'tons/year', 'mỗi tháng': '/month', 'mỗi năm': '/year',
-    'tấn': 'tons', 'nhân viên': 'employees', 'người lao động': 'workers', 'người': 'people',
-    'văn phòng': 'offices', 'chi nhánh': 'branches', 'cửa hàng': 'stores',
-    'máy móc': 'machines', 'máy': 'machines', 'thiết bị': 'equipment',
-    'đối tác': 'partners', 'nhà phân phối': 'distributors', 'đại lý': 'agents',
-    'khách hàng': 'customers', 'sản phẩm': 'products', 'mặt hàng': 'items',
+    'tấn/tháng': 'tons/month',
+    'tấn/năm': 'tons/year',
+    'mỗi tháng': '/month',
+    'mỗi năm': '/year',
+    tấn: 'tons',
+    'nhân viên': 'employees',
+    'người lao động': 'workers',
+    người: 'people',
+    'văn phòng': 'offices',
+    'chi nhánh': 'branches',
+    'cửa hàng': 'stores',
+    'máy móc': 'machines',
+    máy: 'machines',
+    'thiết bị': 'equipment',
+    'đối tác': 'partners',
+    'nhà phân phối': 'distributors',
+    'đại lý': 'agents',
+    'khách hàng': 'customers',
+    'sản phẩm': 'products',
+    'mặt hàng': 'items',
 
     // === INDONESIAN/MALAY ===
-    'ton/bulan': 'tons/month', 'ton/tahun': 'tons/year', 'per bulan': '/month', 'per tahun': '/year',
-    'karyawan': 'employees', 'pekerja': 'workers', 'staf': 'staff',
-    'mesin': 'machines', 'peralatan': 'equipment', 'unit mesin': 'machine units',
-    'kantor': 'offices', 'cabang': 'branches', 'lokasi': 'locations', 'toko': 'stores',
-    'mitra': 'partners', 'distributor': 'distributors', 'agen': 'agents',
-    'pelanggan': 'customers', 'produk': 'products', 'jenis': 'types',
-    'meter persegi': 'sqm', 'hektar': 'hectares',
+    'ton/bulan': 'tons/month',
+    'ton/tahun': 'tons/year',
+    'per bulan': '/month',
+    'per tahun': '/year',
+    karyawan: 'employees',
+    pekerja: 'workers',
+    staf: 'staff',
+    mesin: 'machines',
+    peralatan: 'equipment',
+    'unit mesin': 'machine units',
+    kantor: 'offices',
+    cabang: 'branches',
+    lokasi: 'locations',
+    toko: 'stores',
+    mitra: 'partners',
+    distributor: 'distributors',
+    agen: 'agents',
+    pelanggan: 'customers',
+    produk: 'products',
+    jenis: 'types',
+    'meter persegi': 'sqm',
+    hektar: 'hectares',
 
     // === CHINESE (Simplified & Traditional) ===
-    '吨/月': 'tons/month', '吨/年': 'tons/year', '噸/月': 'tons/month', '噸/年': 'tons/year',
-    '每月': '/month', '每年': '/year', '吨': 'tons', '噸': 'tons',
-    '名员工': 'employees', '名員工': 'employees', '员工': 'employees', '員工': 'employees',
-    '職員': 'staff', '雇员': 'workers', '人': 'people',
-    '台设备': 'machines', '台設備': 'machines', '设备': 'equipment', '設備': 'equipment',
-    '機器': 'machines', '机器': 'machines', '機械': 'machinery', '机械': 'machinery',
-    '个办事处': 'offices', '個辦事處': 'offices', '办公室': 'offices', '辦公室': 'offices',
-    '分公司': 'branches', '门店': 'stores', '門店': 'stores',
-    '家经销商': 'distributors', '家經銷商': 'distributors', '经销商': 'distributors', '經銷商': 'distributors',
-    '合作伙伴': 'partners', '合作夥伴': 'partners', '代理商': 'agents',
-    '家客户': 'customers', '家客戶': 'customers', '客户': 'customers', '客戶': 'customers',
-    '种产品': 'products', '種產品': 'products', '产品': 'products', '產品': 'products',
-    '平方米': 'sqm', '平米': 'sqm', '亩': 'mu', '畝': 'mu', '坪': 'ping',
-    '产能': 'capacity', '產能': 'capacity', '产量': 'output', '產量': 'output',
+    '吨/月': 'tons/month',
+    '吨/年': 'tons/year',
+    '噸/月': 'tons/month',
+    '噸/年': 'tons/year',
+    每月: '/month',
+    每年: '/year',
+    吨: 'tons',
+    噸: 'tons',
+    名员工: 'employees',
+    名員工: 'employees',
+    员工: 'employees',
+    員工: 'employees',
+    職員: 'staff',
+    雇员: 'workers',
+    人: 'people',
+    台设备: 'machines',
+    台設備: 'machines',
+    设备: 'equipment',
+    設備: 'equipment',
+    機器: 'machines',
+    机器: 'machines',
+    機械: 'machinery',
+    机械: 'machinery',
+    个办事处: 'offices',
+    個辦事處: 'offices',
+    办公室: 'offices',
+    辦公室: 'offices',
+    分公司: 'branches',
+    门店: 'stores',
+    門店: 'stores',
+    家经销商: 'distributors',
+    家經銷商: 'distributors',
+    经销商: 'distributors',
+    經銷商: 'distributors',
+    合作伙伴: 'partners',
+    合作夥伴: 'partners',
+    代理商: 'agents',
+    家客户: 'customers',
+    家客戶: 'customers',
+    客户: 'customers',
+    客戶: 'customers',
+    种产品: 'products',
+    種產品: 'products',
+    产品: 'products',
+    產品: 'products',
+    平方米: 'sqm',
+    平米: 'sqm',
+    亩: 'mu',
+    畝: 'mu',
+    坪: 'ping',
+    产能: 'capacity',
+    產能: 'capacity',
+    产量: 'output',
+    產量: 'output',
 
     // === JAPANESE ===
-    'トン/月': 'tons/month', 'トン/年': 'tons/year', 'トン': 'tons',
-    '名の従業員': 'employees', '名従業員': 'employees', '従業員': 'employees', '社員': 'employees',
-    'スタッフ': 'staff', '名': 'people',
-    '台の設備': 'machines', '台設備': 'machines', '設備': 'equipment', '機械': 'machinery',
-    'の事務所': 'offices', '事務所': 'offices', '支店': 'branches', '店舗': 'stores', '拠点': 'locations',
-    'パートナー': 'partners', '代理店': 'agents', '販売店': 'dealers',
-    '顧客': 'customers', '製品': 'products', '種類': 'types',
-    '平方メートル': 'sqm',
+    'トン/月': 'tons/month',
+    'トン/年': 'tons/year',
+    トン: 'tons',
+    名の従業員: 'employees',
+    名従業員: 'employees',
+    従業員: 'employees',
+    社員: 'employees',
+    スタッフ: 'staff',
+    名: 'people',
+    台の設備: 'machines',
+    の事務所: 'offices',
+    事務所: 'offices',
+    支店: 'branches',
+    店舗: 'stores',
+    拠点: 'locations',
+    パートナー: 'partners',
+    代理店: 'agents',
+    販売店: 'dealers',
+    顧客: 'customers',
+    製品: 'products',
+    種類: 'types',
+    平方メートル: 'sqm',
 
     // === KOREAN ===
-    '톤/월': 'tons/month', '톤/년': 'tons/year', '월간': '/month', '연간': '/year', '톤': 'tons',
-    '명의 직원': 'employees', '명 직원': 'employees', '직원': 'employees', '임직원': 'employees',
-    '근로자': 'workers', '명': 'people',
-    '대 기계': 'machines', '대 설비': 'machines', '기계': 'machines', '설비': 'equipment', '장비': 'equipment',
-    '개 사무소': 'offices', '사무소': 'offices', '지점': 'branches', '매장': 'stores', '센터': 'centers',
-    '개 파트너': 'partners', '파트너': 'partners', '대리점': 'agents', '유통업체': 'distributors', '협력사': 'partners',
-    '개 고객': 'customers', '고객': 'customers', '거래처': 'clients',
-    '개 제품': 'products', '제품': 'products', '상품': 'products', '품목': 'items',
-    '제곱미터': 'sqm', '평': 'pyeong', '㎡': 'sqm',
+    '톤/월': 'tons/month',
+    '톤/년': 'tons/year',
+    월간: '/month',
+    연간: '/year',
+    톤: 'tons',
+    '명의 직원': 'employees',
+    '명 직원': 'employees',
+    직원: 'employees',
+    임직원: 'employees',
+    근로자: 'workers',
+    명: 'people',
+    '대 기계': 'machines',
+    '대 설비': 'machines',
+    기계: 'machines',
+    설비: 'equipment',
+    장비: 'equipment',
+    '개 사무소': 'offices',
+    사무소: 'offices',
+    지점: 'branches',
+    매장: 'stores',
+    센터: 'centers',
+    '개 파트너': 'partners',
+    파트너: 'partners',
+    대리점: 'agents',
+    유통업체: 'distributors',
+    협력사: 'partners',
+    '개 고객': 'customers',
+    고객: 'customers',
+    거래처: 'clients',
+    '개 제품': 'products',
+    제품: 'products',
+    상품: 'products',
+    품목: 'items',
+    제곱미터: 'sqm',
+    평: 'pyeong',
+    '㎡': 'sqm',
 
     // === HINDI ===
-    'टन/माह': 'tons/month', 'टन/वर्ष': 'tons/year', 'प्रति माह': '/month', 'प्रति वर्ष': '/year', 'टन': 'tons',
-    'कर्मचारी': 'employees', 'कार्यालय': 'offices', 'शाखा': 'branches',
-    'मशीन': 'machines', 'मशीनें': 'machines', 'उपकरण': 'equipment',
-    'भागीदार': 'partners', 'वितरक': 'distributors', 'डीलर': 'dealers', 'एजेंट': 'agents',
-    'ग्राहक': 'customers', 'उत्पाद': 'products',
-    'उत्पादन क्षमता': 'production capacity', 'क्षमता': 'capacity',
+    'टन/माह': 'tons/month',
+    'टन/वर्ष': 'tons/year',
+    'प्रति माह': '/month',
+    'प्रति वर्ष': '/year',
+    टन: 'tons',
+    कर्मचारी: 'employees',
+    कार्यालय: 'offices',
+    शाखा: 'branches',
+    मशीन: 'machines',
+    मशीनें: 'machines',
+    उपकरण: 'equipment',
+    भागीदार: 'partners',
+    वितरक: 'distributors',
+    डीलर: 'dealers',
+    एजेंट: 'agents',
+    ग्राहक: 'customers',
+    उत्पाद: 'products',
+    'उत्पादन क्षमता': 'production capacity',
+    क्षमता: 'capacity',
 
     // === BENGALI ===
-    'টন/মাস': 'tons/month', 'টন/বছর': 'tons/year', 'টন': 'tons',
-    'কর্মচারী': 'employees', 'কর্মী': 'workers',
-    'মেশিন': 'machines', 'যন্ত্র': 'machines', 'যন্ত্রপাতি': 'machinery',
-    'অংশীদার': 'partners', 'পরিবেশক': 'distributors', 'ডিলার': 'dealers', 'এজেন্ট': 'agents',
-    'গ্রাহক': 'customers', 'পণ্য': 'products',
-    'উৎপাদন ক্ষমতা': 'production capacity', 'ক্ষমতা': 'capacity',
+    'টন/মাস': 'tons/month',
+    'টন/বছর': 'tons/year',
+    টন: 'tons',
+    কর্মচারী: 'employees',
+    কর্মী: 'workers',
+    মেশিন: 'machines',
+    যন্ত্র: 'machines',
+    যন্ত্রপাতি: 'machinery',
+    অংশীদার: 'partners',
+    পরিবেশক: 'distributors',
+    ডিলার: 'dealers',
+    এজেন্ট: 'agents',
+    গ্রাহক: 'customers',
+    পণ্য: 'products',
+    'উৎপাদন ক্ষমতা': 'production capacity',
+    ক্ষমতা: 'capacity',
 
     // === ARABIC ===
-    'طن/شهر': 'tons/month', 'طن/سنة': 'tons/year', 'طن': 'tons',
-    'موظف': 'employees', 'موظفين': 'employees', 'عامل': 'workers',
-    'آلة': 'machines', 'آلات': 'machines', 'معدات': 'equipment',
-    'مكتب': 'offices', 'مكاتب': 'offices', 'فرع': 'branches', 'فروع': 'branches',
-    'شريك': 'partners', 'شركاء': 'partners', 'موزع': 'distributors',
-    'عميل': 'customers', 'عملاء': 'customers', 'منتج': 'products', 'منتجات': 'products',
-    'متر مربع': 'sqm', 'هكتار': 'hectares',
+    'طن/شهر': 'tons/month',
+    'طن/سنة': 'tons/year',
+    طن: 'tons',
+    موظف: 'employees',
+    موظفين: 'employees',
+    عامل: 'workers',
+    آلة: 'machines',
+    آلات: 'machines',
+    معدات: 'equipment',
+    مكتب: 'offices',
+    مكاتب: 'offices',
+    فرع: 'branches',
+    فروع: 'branches',
+    شريك: 'partners',
+    شركاء: 'partners',
+    موزع: 'distributors',
+    عميل: 'customers',
+    عملاء: 'customers',
+    منتج: 'products',
+    منتجات: 'products',
+    'متر مربع': 'sqm',
+    هكتار: 'hectares',
   };
 
   let result = text;
@@ -471,12 +764,13 @@ function verifyQuoteInContent(quote, scrapedContent) {
   const quoteNumbers = extractNumbersFromText(quote);
   if (quoteNumbers.length > 0) {
     const contentNumbers = extractNumbersFromText(scrapedContent);
-    const allNumbersFound = quoteNumbers.every(num =>
-      contentNumbers.some(contentNum => contentNum === num || contentNum.includes(num))
+    const allNumbersFound = quoteNumbers.every((num) =>
+      contentNumbers.some((contentNum) => contentNum === num || contentNum.includes(num))
     );
     if (allNumbersFound) {
       // For non-ASCII text (Thai, Chinese, etc.), just verify numbers exist
       // Thai/CJK doesn't have word boundaries, so word matching doesn't work
+      // eslint-disable-next-line no-control-regex
       const hasNonAscii = /[^\x00-\x7F]/.test(quote);
       if (hasNonAscii) {
         // For Thai/CJK: if numbers match, that's good enough
@@ -484,8 +778,8 @@ function verifyQuoteInContent(quote, scrapedContent) {
       }
 
       // For ASCII text: also check for key non-numeric words (at least 2 must match)
-      const quoteWords = normalizedQuote.split(' ').filter(w => w.length > 3 && !/^\d+$/.test(w));
-      const matchedWords = quoteWords.filter(word => normalizedContent.includes(word));
+      const quoteWords = normalizedQuote.split(' ').filter((w) => w.length > 3 && !/^\d+$/.test(w));
+      const matchedWords = quoteWords.filter((word) => normalizedContent.includes(word));
       if (matchedWords.length >= Math.min(2, quoteWords.length)) {
         return true;
       }
@@ -494,13 +788,17 @@ function verifyQuoteInContent(quote, scrapedContent) {
 
   // Method 3: For non-ASCII quotes (ANY language), check if significant portions exist
   // Covers: Thai, Chinese, Japanese, Korean, Vietnamese, Hindi, Arabic, Russian, etc.
+  // eslint-disable-next-line no-control-regex
   const hasNonAscii = /[^\x00-\x7F]/.test(quote);
   if (hasNonAscii) {
     // Method 3a: Extract ALL non-ASCII word sequences and check if ANY exist in content
     // This works for Thai, Chinese, Japanese, Korean, Vietnamese, Hindi, Arabic, Cyrillic, etc.
+    // eslint-disable-next-line no-control-regex
     const nonAsciiKeywords = quote.match(/[^\x00-\x7F\s\d]+/g) || [];
     if (nonAsciiKeywords.length > 0) {
-      const matchedKeywords = nonAsciiKeywords.filter(kw => kw.length >= 2 && scrapedContent.includes(kw));
+      const matchedKeywords = nonAsciiKeywords.filter(
+        (kw) => kw.length >= 2 && scrapedContent.includes(kw)
+      );
       if (matchedKeywords.length >= 1) {
         // At least one non-ASCII keyword matches - good enough
         return true;
@@ -510,25 +808,27 @@ function verifyQuoteInContent(quote, scrapedContent) {
     // Method 3b: Check for ANY 3+ character substring match
     for (let i = 0; i < quote.length - 2; i++) {
       const substring = quote.substring(i, i + 3);
+      // eslint-disable-next-line no-control-regex
       if (/[^\x00-\x7F]/.test(substring) && scrapedContent.includes(substring)) {
         return true; // Found a 3-char non-ASCII substring in content
       }
     }
 
     // Method 3c: Split by spaces and numbers, check if any chunk exists
-    const chunks = quote.split(/[\s\d]+/).filter(c => c.length > 1);
-    const matchedChunks = chunks.filter(chunk => scrapedContent.includes(chunk));
+    const chunks = quote.split(/[\s\d]+/).filter((c) => c.length > 1);
+    const matchedChunks = chunks.filter((chunk) => scrapedContent.includes(chunk));
     if (matchedChunks.length >= 1) {
       return true; // At least one chunk found
     }
   }
 
   // Method 4: Check for word overlap (for text-heavy quotes) - ASCII only
-  const quoteWords = normalizedQuote.split(' ').filter(w => w.length > 2);
+  const quoteWords = normalizedQuote.split(' ').filter((w) => w.length > 2);
   if (quoteWords.length >= 3) {
-    const matchedWords = quoteWords.filter(word => normalizedContent.includes(word));
+    const matchedWords = quoteWords.filter((word) => normalizedContent.includes(word));
     const matchRatio = matchedWords.length / quoteWords.length;
-    if (matchRatio >= 0.7) { // 70% word match
+    if (matchRatio >= 0.7) {
+      // 70% word match
       return true;
     }
   }
@@ -546,13 +846,13 @@ function verifyMetricQuotes(metric, scrapedContent) {
     return { verified: false, reason: 'empty_source_quotes' };
   }
 
-  const verificationResults = metric.source_quotes.map(quote => ({
+  const verificationResults = metric.source_quotes.map((quote) => ({
     quote,
-    found: verifyQuoteInContent(quote, scrapedContent)
+    found: verifyQuoteInContent(quote, scrapedContent),
   }));
 
-  const allFound = verificationResults.every(r => r.found);
-  const someFound = verificationResults.some(r => r.found);
+  const allFound = verificationResults.every((r) => r.found);
+  const someFound = verificationResults.some((r) => r.found);
 
   if (allFound) {
     return { verified: true, results: verificationResults };
@@ -561,13 +861,13 @@ function verifyMetricQuotes(metric, scrapedContent) {
     return {
       verified: 'partial',
       results: verificationResults,
-      reason: 'some_quotes_not_found'
+      reason: 'some_quotes_not_found',
     };
   } else {
     return {
       verified: false,
       results: verificationResults,
-      reason: 'no_quotes_found'
+      reason: 'no_quotes_found',
     };
   }
 }
@@ -588,14 +888,17 @@ function filterMetricsByVerification(metrics, scrapedContent, companyIndex) {
       if (metric.value && typeof metric.value === 'string') {
         const valueLower = metric.value.toLowerCase();
         // Reject obvious placeholders and vague values
-        if (valueLower.includes('not specified') ||
-            valueLower.includes('not available') ||
-            valueLower.includes('various') ||
-            /customer\s*[a-z1-9]/i.test(valueLower) ||
-            /client\s*[a-z1-9]/i.test(valueLower) ||
-            /supplier\s*[a-z1-9]/i.test(valueLower) ||
-            /partner\s*[a-z1-9]/i.test(valueLower) ||
-            /^0\s+\w/i.test(metric.value)) { // "0 Something" pattern
+        if (
+          valueLower.includes('not specified') ||
+          valueLower.includes('not available') ||
+          valueLower.includes('various') ||
+          /customer\s*[a-z1-9]/i.test(valueLower) ||
+          /client\s*[a-z1-9]/i.test(valueLower) ||
+          /supplier\s*[a-z1-9]/i.test(valueLower) ||
+          /partner\s*[a-z1-9]/i.test(valueLower) ||
+          /^0\s+\w/i.test(metric.value)
+        ) {
+          // "0 Something" pattern
           rejectedCount++;
           continue;
         }
@@ -603,7 +906,7 @@ function filterMetricsByVerification(metrics, scrapedContent, companyIndex) {
       // Translate any non-English units in the metric value
       verifiedMetrics.push({
         label: metric.label,
-        value: translateUnitsToEnglish(metric.value)
+        value: translateUnitsToEnglish(metric.value),
       });
       continue;
     }
@@ -614,24 +917,30 @@ function filterMetricsByVerification(metrics, scrapedContent, companyIndex) {
       // Fully verified - keep the metric (translate any non-English units)
       verifiedMetrics.push({
         label: metric.label,
-        value: translateUnitsToEnglish(metric.value)
+        value: translateUnitsToEnglish(metric.value),
       });
     } else if (verification.verified === 'partial') {
       // Partially verified - keep but log warning (translate any non-English units)
-      console.log(`  [${companyIndex}] Partial verification for "${metric.label}" - some quotes not found`);
+      console.log(
+        `  [${companyIndex}] Partial verification for "${metric.label}" - some quotes not found`
+      );
       verifiedMetrics.push({
         label: metric.label,
-        value: translateUnitsToEnglish(metric.value)
+        value: translateUnitsToEnglish(metric.value),
       });
     } else {
       // Not verified - reject as potential hallucination
-      console.log(`  [${companyIndex}] REJECTED "${metric.label}" - source quotes not found in content (potential hallucination)`);
+      console.log(
+        `  [${companyIndex}] REJECTED "${metric.label}" - source quotes not found in content (potential hallucination)`
+      );
       rejectedCount++;
     }
   }
 
   if (rejectedCount > 0) {
-    console.log(`  [${companyIndex}] Quote verification: kept ${verifiedMetrics.length}, rejected ${rejectedCount} unverified metrics`);
+    console.log(
+      `  [${companyIndex}] Quote verification: kept ${verifiedMetrics.length}, rejected ${rejectedCount} unverified metrics`
+    );
   }
 
   return verifiedMetrics;
@@ -643,10 +952,14 @@ function extractCompanyNameFromUrl(url) {
     const urlObj = new URL(url);
     let domain = urlObj.hostname.replace(/^www\./, '');
     // Remove common TLDs and country codes
-    domain = domain.replace(/\.(com|co|org|net|io|ai|jp|cn|kr|sg|my|th|vn|id|ph|tw|hk|in|de|uk|fr|it|es|au|nz|ca|us|br|mx|ru|nl|be|ch|at|se|no|dk|fi|pl|cz|hu|ro|bg|gr|tr|ae|sa|il|za|ng|eg|ke)(\.[a-z]{2,3})?$/i, '');
+    domain = domain.replace(
+      /\.(com|co|org|net|io|ai|jp|cn|kr|sg|my|th|vn|id|ph|tw|hk|in|de|uk|fr|it|es|au|nz|ca|us|br|mx|ru|nl|be|ch|at|se|no|dk|fi|pl|cz|hu|ro|bg|gr|tr|ae|sa|il|za|ng|eg|ke)(\.[a-z]{2,3})?$/i,
+      ''
+    );
     // Convert to title case
-    const name = domain.split(/[-_.]/)
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    const name = domain
+      .split(/[-_.]/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
       .join(' ');
     return name || domain;
   } catch (e) {
@@ -664,22 +977,96 @@ function cleanCompanyName(name, fallbackUrl = '') {
 
   // Convert common non-ASCII characters to ASCII equivalents
   const charMap = {
-    'บริษัท': '', 'จำกัด': '', '(มหาชน)': '', // Thai: Company, Limited, Public
-    '株式会社': '', '有限会社': '', '合同会社': '', // Japanese
-    '公司': '', '有限': '', '集团': '', // Chinese
-    'Công ty': '', 'TNHH': '', // Vietnamese
+    บริษัท: '',
+    จำกัด: '',
+    '(มหาชน)': '', // Thai: Company, Limited, Public
+    株式会社: '',
+    有限会社: '',
+    合同会社: '', // Japanese
+    公司: '',
+    有限: '',
+    集团: '', // Chinese
+    'Công ty': '',
+    TNHH: '', // Vietnamese
     // Diacritics
-    'á': 'a', 'à': 'a', 'ả': 'a', 'ã': 'a', 'ạ': 'a', 'ă': 'a', 'ắ': 'a', 'ằ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a',
-    'â': 'a', 'ấ': 'a', 'ầ': 'a', 'ẩ': 'a', 'ẫ': 'a', 'ậ': 'a',
-    'é': 'e', 'è': 'e', 'ẻ': 'e', 'ẽ': 'e', 'ẹ': 'e', 'ê': 'e', 'ế': 'e', 'ề': 'e', 'ể': 'e', 'ễ': 'e', 'ệ': 'e',
-    'í': 'i', 'ì': 'i', 'ỉ': 'i', 'ĩ': 'i', 'ị': 'i',
-    'ó': 'o', 'ò': 'o', 'ỏ': 'o', 'õ': 'o', 'ọ': 'o', 'ô': 'o', 'ố': 'o', 'ồ': 'o', 'ổ': 'o', 'ỗ': 'o', 'ộ': 'o',
-    'ơ': 'o', 'ớ': 'o', 'ờ': 'o', 'ở': 'o', 'ỡ': 'o', 'ợ': 'o',
-    'ú': 'u', 'ù': 'u', 'ủ': 'u', 'ũ': 'u', 'ụ': 'u', 'ư': 'u', 'ứ': 'u', 'ừ': 'u', 'ử': 'u', 'ữ': 'u', 'ự': 'u',
-    'ý': 'y', 'ỳ': 'y', 'ỷ': 'y', 'ỹ': 'y', 'ỵ': 'y',
-    'đ': 'd', 'Đ': 'D',
-    'ñ': 'n', 'ü': 'u', 'ö': 'o', 'ä': 'a', 'ß': 'ss',
-    'ç': 'c', 'ø': 'o', 'å': 'a', 'æ': 'ae', 'œ': 'oe'
+    á: 'a',
+    à: 'a',
+    ả: 'a',
+    ã: 'a',
+    ạ: 'a',
+    ă: 'a',
+    ắ: 'a',
+    ằ: 'a',
+    ẳ: 'a',
+    ẵ: 'a',
+    ặ: 'a',
+    â: 'a',
+    ấ: 'a',
+    ầ: 'a',
+    ẩ: 'a',
+    ẫ: 'a',
+    ậ: 'a',
+    é: 'e',
+    è: 'e',
+    ẻ: 'e',
+    ẽ: 'e',
+    ẹ: 'e',
+    ê: 'e',
+    ế: 'e',
+    ề: 'e',
+    ể: 'e',
+    ễ: 'e',
+    ệ: 'e',
+    í: 'i',
+    ì: 'i',
+    ỉ: 'i',
+    ĩ: 'i',
+    ị: 'i',
+    ó: 'o',
+    ò: 'o',
+    ỏ: 'o',
+    õ: 'o',
+    ọ: 'o',
+    ô: 'o',
+    ố: 'o',
+    ồ: 'o',
+    ổ: 'o',
+    ỗ: 'o',
+    ộ: 'o',
+    ơ: 'o',
+    ớ: 'o',
+    ờ: 'o',
+    ở: 'o',
+    ỡ: 'o',
+    ợ: 'o',
+    ú: 'u',
+    ù: 'u',
+    ủ: 'u',
+    ũ: 'u',
+    ụ: 'u',
+    ư: 'u',
+    ứ: 'u',
+    ừ: 'u',
+    ử: 'u',
+    ữ: 'u',
+    ự: 'u',
+    ý: 'y',
+    ỳ: 'y',
+    ỷ: 'y',
+    ỹ: 'y',
+    ỵ: 'y',
+    đ: 'd',
+    Đ: 'D',
+    ñ: 'n',
+    ü: 'u',
+    ö: 'o',
+    ä: 'a',
+    ß: 'ss',
+    ç: 'c',
+    ø: 'o',
+    å: 'a',
+    æ: 'ae',
+    œ: 'oe',
   };
 
   for (const [from, to] of Object.entries(charMap)) {
@@ -688,18 +1075,38 @@ function cleanCompanyName(name, fallbackUrl = '') {
 
   // Remove company suffixes (expanded list)
   cleaned = cleaned
-    .replace(/\s*(Sdn\.?\s*Bhd\.?|Bhd\.?|Berhad|Pte\.?\s*Ltd\.?|Ltd\.?|Limited|Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?,?\s*Ltd\.?|LLC|LLP|GmbH|S\.?A\.?|PT\.?|CV\.?|Tbk\.?|JSC|PLC|Public\s*Limited|Private\s*Limited|Joint\s*Stock|Company|\(.*?\))$/gi, '')
-    .replace(/^(PT\.?|CV\.?)\s+/gi, '')  // Remove PT/CV prefix
+    .replace(
+      /\s*(Sdn\.?\s*Bhd\.?|Bhd\.?|Berhad|Pte\.?\s*Ltd\.?|Ltd\.?|Limited|Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?,?\s*Ltd\.?|LLC|LLP|GmbH|S\.?A\.?|PT\.?|CV\.?|Tbk\.?|JSC|PLC|Public\s*Limited|Private\s*Limited|Joint\s*Stock|Company|\(.*?\))$/gi,
+      ''
+    )
+    .replace(/^(PT\.?|CV\.?)\s+/gi, '') // Remove PT/CV prefix
     .trim();
 
   // Check if name looks like a description (too many generic/marketing words)
   const descriptionWords = [
-    'leading', 'provider', 'solutions', 'services', 'industrial', 'manufacturing',
-    'global', 'world', 'class', 'premier', 'best', 'top', 'quality', 'excellence',
-    'innovative', 'advanced', 'professional', 'trusted', 'reliable', 'expert'
+    'leading',
+    'provider',
+    'solutions',
+    'services',
+    'industrial',
+    'manufacturing',
+    'global',
+    'world',
+    'class',
+    'premier',
+    'best',
+    'top',
+    'quality',
+    'excellence',
+    'innovative',
+    'advanced',
+    'professional',
+    'trusted',
+    'reliable',
+    'expert',
   ];
   const words = cleaned.toLowerCase().split(/\s+/);
-  const descWordCount = words.filter(w => descriptionWords.includes(w)).length;
+  const descWordCount = words.filter((w) => descriptionWords.includes(w)).length;
 
   // If more than 40% of words are generic description words, reject it
   if (words.length >= 3 && descWordCount / words.length > 0.4) {
@@ -729,13 +1136,24 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Add 50MB limit to prevent OOM on Railway containers
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }  // 50MB max
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
 });
 
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'ANTHROPIC_API_KEY']; // Optional but recommended
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+const requiredEnvVars = [
+  'OPENAI_API_KEY',
+  'PERPLEXITY_API_KEY',
+  'GEMINI_API_KEY',
+  'SENDGRID_API_KEY',
+  'SENDER_EMAIL',
+];
+const optionalEnvVars = [
+  'SERPAPI_API_KEY',
+  'DEEPSEEK_API_KEY',
+  'DEEPGRAM_API_KEY',
+  'ANTHROPIC_API_KEY',
+]; // Optional but recommended
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
@@ -752,7 +1170,7 @@ if (!process.env.DEEPGRAM_API_KEY) {
 
 // Initialize OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'missing'
+  apiKey: process.env.OPENAI_API_KEY || 'missing',
 });
 
 // ============ RATE LIMIT RETRY WRAPPER ============
@@ -764,13 +1182,18 @@ async function withRetry(apiCall, maxRetries = 3, baseDelay = 2000) {
       return await apiCall();
     } catch (error) {
       lastError = error;
-      const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('rate limit');
+      const isRateLimit =
+        error?.status === 429 ||
+        error?.message?.includes('429') ||
+        error?.message?.includes('rate limit');
       const isServerError = error?.status >= 500;
 
       if ((isRateLimit || isServerError) && attempt < maxRetries) {
         const delay = baseDelay * Math.pow(2, attempt); // 2s, 4s, 8s
-        console.log(`    ⚠ Rate limit/server error, retrying in ${delay/1000}s (attempt ${attempt + 1}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        console.log(
+          `    ⚠ Rate limit/server error, retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
       throw error;
@@ -792,7 +1215,7 @@ async function fetchWithTimeoutAndRetry(url, options, timeoutMs = 30000, maxRetr
 
       const response = await fetch(url, {
         ...options,
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
@@ -801,8 +1224,8 @@ async function fetchWithTimeoutAndRetry(url, options, timeoutMs = 30000, maxRetr
         const isRetryable = response.status === 429 || response.status >= 500;
         if (isRetryable && attempt < maxRetries) {
           const delay = 2000 * Math.pow(2, attempt); // 2s, 4s
-          console.log(`    ⚠ Gemini API error ${response.status}, retrying in ${delay/1000}s...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          console.log(`    ⚠ Gemini API error ${response.status}, retrying in ${delay / 1000}s...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
         throw new Error(`Gemini API error: ${response.status}`);
@@ -817,8 +1240,10 @@ async function fetchWithTimeoutAndRetry(url, options, timeoutMs = 30000, maxRetr
 
       if ((isTimeout || isNetworkError) && attempt < maxRetries) {
         const delay = 2000 * Math.pow(2, attempt);
-        console.log(`    ⚠ Gemini ${isTimeout ? 'timeout' : 'network error'}, retrying in ${delay/1000}s...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        console.log(
+          `    ⚠ Gemini ${isTimeout ? 'timeout' : 'network error'}, retrying in ${delay / 1000}s...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
       throw error;
@@ -898,18 +1323,22 @@ ${contentToScan}`;
           generationConfig: {
             temperature: 0.1,
             maxOutputTokens: 8000,
-            responseMimeType: 'application/json'
-          }
-        })
+            responseMimeType: 'application/json',
+          },
+        }),
       },
-      30000,  // 30 second timeout
-      2       // 2 retries
+      30000, // 30 second timeout
+      2 // 2 retries
     );
 
     const data = await response.json();
     const usage = data.usageMetadata;
     if (usage) {
-      recordTokens('gemini-2.0-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+      recordTokens(
+        'gemini-2.0-flash',
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0
+      );
     }
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
@@ -925,7 +1354,9 @@ ${contentToScan}`;
       console.log(`    ⚠ WARNING: Marker found no statistics - validator will need to catch these`);
     }
     if (!markers.location_hints?.length) {
-      console.log(`    ⚠ WARNING: Marker found no location hints - relying on extractBasicInfo with raw content`);
+      console.log(
+        `    ⚠ WARNING: Marker found no location hints - relying on extractBasicInfo with raw content`
+      );
     }
     if (!markers.identity_snippets?.length) {
       console.log(`    ⚠ WARNING: Marker found no company identity info`);
@@ -946,19 +1377,20 @@ ${contentToScan}`;
       ...(markers.products_snippets || []),
       '',
       '=== LOCATION HINTS ===',
-      ...(markers.location_hints || [])
+      ...(markers.location_hints || []),
     ].join('\n');
 
     console.log(`    Marker AI: condensed ${fullContent.length} → ${markedContent.length} chars`);
-    console.log(`    Found: ${markers.statistics_snippets?.length || 0} stats, ${markers.location_hints?.length || 0} locations`);
+    console.log(
+      `    Found: ${markers.statistics_snippets?.length || 0} stats, ${markers.location_hints?.length || 0} locations`
+    );
 
     return {
       markedContent,
       markers,
       originalLength: fullContent.length,
-      markedLength: markedContent.length
+      markedLength: markedContent.length,
     };
-
   } catch (error) {
     console.error(`    Marker AI error: ${error.message}`);
     return null;
@@ -974,23 +1406,25 @@ const anthropic = process.env.ANTHROPIC_API_KEY
 const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
 
 // Initialize Cloudflare R2 (S3-compatible)
-const r2Client = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)
-  ? new S3Client({
-      region: 'auto',
-      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-      }
-    })
-  : null;
+const r2Client =
+  process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY
+    ? new S3Client({
+        region: 'auto',
+        endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+        credentials: {
+          accessKeyId: process.env.R2_ACCESS_KEY_ID,
+          secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        },
+      })
+    : null;
 
 const R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
 
 if (!r2Client) {
-  console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
+  console.warn(
+    'R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME'
+  );
 }
-
 
 // Extract text from .docx files (Word documents)
 async function extractDocxText(base64Content) {
@@ -1005,14 +1439,14 @@ async function extractDocxText(base64Content) {
 
     // Extract text from XML, removing tags
     const text = documentXml
-      .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
-      .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
-      .replace(/<[^>]+>/g, '')  // Remove remaining tags
+      .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1') // Extract text content
+      .replace(/<w:p[^>]*>/g, '\n') // Paragraph breaks
+      .replace(/<[^>]+>/g, '') // Remove remaining tags
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
-      .replace(/\n\s*\n/g, '\n\n')  // Clean up multiple newlines
+      .replace(/\n\s*\n/g, '\n\n') // Clean up multiple newlines
       .trim();
 
     console.log(`[DD] Extracted ${text.length} chars from DOCX`);
@@ -1039,9 +1473,9 @@ async function extractPptxText(base64Content) {
         if (slideXml) {
           // Extract text from slide
           const slideText = slideXml
-            .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
-            .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
-            .replace(/<[^>]+>/g, '')  // Remove tags
+            .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ') // Extract text
+            .replace(/<a:p[^>]*>/g, '\n') // Paragraph breaks
+            .replace(/<[^>]+>/g, '') // Remove tags
             .replace(/&amp;/g, '&')
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
@@ -1089,7 +1523,6 @@ async function extractXlsxText(base64Content) {
   }
 }
 
-
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
   const senderEmail = process.env.SENDER_EMAIL;
@@ -1097,16 +1530,16 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
     personalizations: [{ to: [{ email: to }] }],
     from: { email: senderEmail, name: 'Find Target' },
     subject: subject,
-    content: [{ type: 'text/html', value: html }]
+    content: [{ type: 'text/html', value: html }],
   };
 
   if (attachments) {
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachments = attachmentList.map(a => ({
-      filename: a.filename || a.name,  // Support both 'filename' and 'name' properties
+    emailData.attachments = attachmentList.map((a) => ({
+      filename: a.filename || a.name, // Support both 'filename' and 'name' properties
       content: a.content,
       type: 'application/octet-stream',
-      disposition: 'attachment'
+      disposition: 'attachment',
     }));
   }
 
@@ -1117,10 +1550,10 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
       const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(emailData)
+        body: JSON.stringify(emailData),
       });
 
       if (response.ok) {
@@ -1147,7 +1580,7 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
     if (attempt < maxRetries) {
       const delay = Math.pow(2, attempt) * 1000;
       console.log(`  Retrying email in ${delay / 1000}s...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
@@ -1159,16 +1592,22 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
 // Gemini 2.5 Flash-Lite - cost-effective for general tasks ($0.10/$0.40 per 1M tokens)
 async function callGemini(prompt) {
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      timeout: 90000
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        timeout: 90000,
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Gemini 2.5 Flash-Lite HTTP error ${response.status}:`, errorText.substring(0, 200));
+      console.error(
+        `Gemini 2.5 Flash-Lite HTTP error ${response.status}:`,
+        errorText.substring(0, 200)
+      );
       return '';
     }
 
@@ -1176,7 +1615,11 @@ async function callGemini(prompt) {
 
     const usage = data.usageMetadata;
     if (usage) {
-      recordTokens('gemini-2.5-flash-lite', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+      recordTokens(
+        'gemini-2.5-flash-lite',
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0
+      );
     }
 
     if (data.error) {
@@ -1202,8 +1645,8 @@ async function callGemini3Flash(prompt, jsonMode = false) {
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.1  // Low temperature for consistent validation
-      }
+        temperature: 0.1, // Low temperature for consistent validation
+      },
     };
 
     // Add JSON mode if requested
@@ -1212,12 +1655,15 @@ async function callGemini3Flash(prompt, jsonMode = false) {
     }
 
     // Using stable gemini-2.5-flash (gemini-3-flash-preview was unreliable)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 30000  // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        timeout: 30000, // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -1230,7 +1676,11 @@ async function callGemini3Flash(prompt, jsonMode = false) {
 
     const usage = data.usageMetadata;
     if (usage) {
-      recordTokens('gemini-2.5-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+      recordTokens(
+        'gemini-2.5-flash',
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0
+      );
     }
 
     if (data.error) {
@@ -1260,7 +1710,7 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     const requestOptions = {
       model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1
+      temperature: 0.1,
     };
 
     // Add JSON mode if requested
@@ -1270,7 +1720,11 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
 
     const response = await openai.chat.completions.create(requestOptions);
     if (response.usage) {
-      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices?.[0]?.message?.content || '';
 
@@ -1291,8 +1745,8 @@ async function callGemini2Pro(prompt, jsonMode = false) {
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.0  // Zero temperature for deterministic validation
-      }
+        temperature: 0.0, // Zero temperature for deterministic validation
+      },
     };
 
     if (jsonMode) {
@@ -1300,12 +1754,15 @@ async function callGemini2Pro(prompt, jsonMode = false) {
     }
 
     // Using stable gemini-2.5-pro (upgraded from deprecated gemini-2.5-pro-preview-06-05)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 180000  // Longer timeout for Pro model
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        timeout: 180000, // Longer timeout for Pro model
+      }
+    );
     const data = await response.json();
 
     const usage = data.usageMetadata;
@@ -1336,7 +1793,7 @@ async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
     const requestParams = {
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8192,
-      messages
+      messages,
     };
 
     if (systemPrompt) {
@@ -1345,7 +1802,11 @@ async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
 
     const response = await anthropic.messages.create(requestParams);
     if (response.usage) {
-      recordTokens('claude-sonnet-4', response.usage.input_tokens || 0, response.usage.output_tokens || 0);
+      recordTokens(
+        'claude-sonnet-4',
+        response.usage.input_tokens || 0,
+        response.usage.output_tokens || 0
+      );
     }
     const text = response.content?.[0]?.text || '';
 
@@ -1356,20 +1817,19 @@ async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
   }
 }
 
-
 async function callPerplexity(prompt) {
   try {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'sonar-pro',  // Upgraded from 'sonar' for better search results
-        messages: [{ role: 'user', content: prompt }]
+        model: 'sonar-pro', // Upgraded from 'sonar' for better search results
+        messages: [{ role: 'user', content: prompt }],
       }),
-      timeout: 90000
+      timeout: 90000,
     });
 
     if (!response.ok) {
@@ -1405,10 +1865,14 @@ async function callChatGPT(prompt) {
     const response = await openai.chat.completions.create({
       model: 'gpt-5.1',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2
+      temperature: 0.2,
     });
     if (response.usage) {
-      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -1427,10 +1891,14 @@ async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-5-search-api',
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
-      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5-search-api',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -1445,7 +1913,6 @@ async function callOpenAISearch(prompt) {
   }
 }
 
-
 // SerpAPI - Google Search integration
 async function callSerpAPI(query) {
   if (!process.env.SERPAPI_API_KEY) {
@@ -1456,10 +1923,10 @@ async function callSerpAPI(query) {
       q: query,
       api_key: process.env.SERPAPI_API_KEY,
       engine: 'google',
-      num: 100 // Get more results
+      num: 100, // Get more results
     });
     const response = await fetch(`https://serpapi.com/search?${params}`, {
-      timeout: 30000
+      timeout: 30000,
     });
     const data = await response.json();
 
@@ -1470,7 +1937,7 @@ async function callSerpAPI(query) {
         results.push({
           title: result.title || '',
           link: result.link || '',
-          snippet: result.snippet || ''
+          snippet: result.snippet || '',
         });
       }
     }
@@ -1491,20 +1958,24 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: maxTokens,
-        temperature: 0.3
+        temperature: 0.3,
       }),
-      timeout: 120000
+      timeout: 120000,
     });
     const data = await response.json();
     if (data.usage) {
-      recordTokens('deepseek-chat', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+      recordTokens(
+        'deepseek-chat',
+        data.usage.prompt_tokens || 0,
+        data.usage.completion_tokens || 0
+      );
     }
     if (data.error) {
       console.error('DeepSeek API error:', data.error);
@@ -1517,43 +1988,108 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
   }
 }
 
-
 // ============ SEARCH CONFIGURATION ============
 
 const CITY_MAP = {
-  'malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya', 'Selangor', 'Ipoh', 'Klang', 'Subang', 'Melaka', 'Kuching', 'Kota Kinabalu'],
-  'singapore': ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-  'thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya', 'Chiang Mai', 'Pathum Thani', 'Nonthaburi', 'Samut Sakhon'],
-  'indonesia': ['Jakarta', 'Surabaya', 'Bandung', 'Medan', 'Bekasi', 'Tangerang', 'Semarang', 'Sidoarjo', 'Cikarang', 'Karawang', 'Bogor'],
-  'vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hai Phong', 'Binh Duong', 'Dong Nai', 'Long An', 'Ba Ria', 'Can Tho'],
-  'philippines': ['Manila', 'Cebu', 'Davao', 'Quezon City', 'Makati', 'Laguna', 'Cavite', 'Batangas', 'Bulacan'],
-  'southeast asia': ['Kuala Lumpur', 'Singapore', 'Bangkok', 'Jakarta', 'Ho Chi Minh City', 'Manila', 'Penang', 'Johor Bahru', 'Surabaya', 'Hanoi']
+  malaysia: [
+    'Kuala Lumpur',
+    'Penang',
+    'Johor Bahru',
+    'Shah Alam',
+    'Petaling Jaya',
+    'Selangor',
+    'Ipoh',
+    'Klang',
+    'Subang',
+    'Melaka',
+    'Kuching',
+    'Kota Kinabalu',
+  ],
+  singapore: ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
+  thailand: [
+    'Bangkok',
+    'Chonburi',
+    'Rayong',
+    'Samut Prakan',
+    'Ayutthaya',
+    'Chiang Mai',
+    'Pathum Thani',
+    'Nonthaburi',
+    'Samut Sakhon',
+  ],
+  indonesia: [
+    'Jakarta',
+    'Surabaya',
+    'Bandung',
+    'Medan',
+    'Bekasi',
+    'Tangerang',
+    'Semarang',
+    'Sidoarjo',
+    'Cikarang',
+    'Karawang',
+    'Bogor',
+  ],
+  vietnam: [
+    'Ho Chi Minh City',
+    'Hanoi',
+    'Da Nang',
+    'Hai Phong',
+    'Binh Duong',
+    'Dong Nai',
+    'Long An',
+    'Ba Ria',
+    'Can Tho',
+  ],
+  philippines: [
+    'Manila',
+    'Cebu',
+    'Davao',
+    'Quezon City',
+    'Makati',
+    'Laguna',
+    'Cavite',
+    'Batangas',
+    'Bulacan',
+  ],
+  'southeast asia': [
+    'Kuala Lumpur',
+    'Singapore',
+    'Bangkok',
+    'Jakarta',
+    'Ho Chi Minh City',
+    'Manila',
+    'Penang',
+    'Johor Bahru',
+    'Surabaya',
+    'Hanoi',
+  ],
 };
 
 const LOCAL_SUFFIXES = {
-  'malaysia': ['Sdn Bhd', 'Berhad'],
-  'singapore': ['Pte Ltd', 'Private Limited'],
-  'thailand': ['Co Ltd', 'Co., Ltd.'],
-  'indonesia': ['PT', 'CV'],
-  'vietnam': ['Co Ltd', 'JSC', 'Công ty'],
-  'philippines': ['Inc', 'Corporation']
+  malaysia: ['Sdn Bhd', 'Berhad'],
+  singapore: ['Pte Ltd', 'Private Limited'],
+  thailand: ['Co Ltd', 'Co., Ltd.'],
+  indonesia: ['PT', 'CV'],
+  vietnam: ['Co Ltd', 'JSC', 'Công ty'],
+  philippines: ['Inc', 'Corporation'],
 };
 
 const DOMAIN_MAP = {
-  'malaysia': '.my',
-  'singapore': '.sg',
-  'thailand': '.th',
-  'indonesia': '.co.id',
-  'vietnam': '.vn',
-  'philippines': '.ph'
+  malaysia: '.my',
+  singapore: '.sg',
+  thailand: '.th',
+  indonesia: '.co.id',
+  vietnam: '.vn',
+  philippines: '.ph',
 };
 
 const LOCAL_LANGUAGE_MAP = {
-  'thailand': { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-  'vietnam': { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-  'indonesia': { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
-  'philippines': { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
-  'malaysia': { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] }
+  thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
+  vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
+  indonesia: { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
+  philippines: { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
+  malaysia: { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] },
 };
 
 // ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
@@ -1565,11 +2101,14 @@ Be thorough - include all companies you find. We will verify them later.`;
 
 // Strategy 1: Broad Google Search (SerpAPI)
 function strategy1_BroadSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   // Generate synonyms and variations
-  const terms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
+  const terms = business
+    .split(/\s+or\s+|\s+and\s+|,/)
+    .map((t) => t.trim())
+    .filter((t) => t);
 
   for (const c of countries) {
     queries.push(
@@ -1590,7 +2129,7 @@ function strategy1_BroadSerpAPI(business, country, exclusion) {
 // Strategy 2: Broad Perplexity Search (EXPANDED)
 function strategy2_BroadPerplexity(business, country, exclusion) {
   const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   // General queries
@@ -1617,7 +2156,7 @@ function strategy2_BroadPerplexity(business, country, exclusion) {
 
 // Strategy 3: Lists, Rankings, Top Companies (SerpAPI)
 function strategy3_ListsSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1637,7 +2176,7 @@ function strategy3_ListsSerpAPI(business, country, exclusion) {
 
 // Strategy 4: City-Specific Search (Perplexity) - EXPANDED to ALL cities
 function strategy4_CitiesPerplexity(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -1657,7 +2196,7 @@ function strategy4_CitiesPerplexity(business, country, exclusion) {
 
 // Strategy 5: Industrial Zones + Local Naming (SerpAPI)
 function strategy5_IndustrialSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1688,7 +2227,7 @@ function strategy6_DirectoriesPerplexity(business, country, exclusion) {
     `Chamber of commerce ${business} members in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${country} ${business} industry association member list. No ${exclusion}. ${outputFormat}`,
     `${business} companies on Yellow Pages ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`,
   ];
 }
 
@@ -1699,7 +2238,7 @@ function strategy7_ExhibitionsPerplexity(business, country, exclusion) {
     `${business} exhibitors at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} companies at industry exhibitions in ${country} region. Not ${exclusion}. ${outputFormat}`,
     `${business} participants at expos and conferences in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`
+    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`,
   ];
 }
 
@@ -1712,13 +2251,13 @@ function strategy8_TradePerplexity(business, country, exclusion) {
     `${country} ${business} companies on Global Sources. Exclude ${exclusion}. ${outputFormat}`,
     `${business} OEM suppliers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} contract manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`,
   ];
 }
 
 // Strategy 9: Local Domains + News (Perplexity)
 function strategy9_DomainsPerplexity(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -1741,7 +2280,7 @@ function strategy9_DomainsPerplexity(business, country, exclusion) {
 
 // Strategy 10: Government Registries (SerpAPI)
 function strategy10_RegistriesSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1757,7 +2296,7 @@ function strategy10_RegistriesSerpAPI(business, country, exclusion) {
 
 // Strategy 11: City + Industrial Areas (SerpAPI) - EXPANDED
 function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1779,7 +2318,7 @@ function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
 // Strategy 12: Deep Web Search (OpenAI Search) - EXPANDED with real-time search
 function strategy12_DeepOpenAISearch(business, country, exclusion) {
   const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   // General deep searches
@@ -1810,13 +2349,13 @@ function strategy13_PublicationsPerplexity(business, country, exclusion) {
     `${business} companies mentioned in industry magazines and trade publications for ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} market report ${country} - list all companies mentioned. Not ${exclusion}. ${outputFormat}`,
     `${business} industry analysis ${country} - companies covered. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`
+    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`,
   ];
 }
 
 // Strategy 14: Final Sweep - Local Language + Comprehensive (OpenAI Search)
 function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -1868,14 +2407,18 @@ RULES:
 - If website not in text, you may look it up if you know it's a real company
 - hq must be "City, Country" format ONLY
 - Include companies even if some info is incomplete - we'll verify later
-- Be thorough - extract every company that might match`
+- Be thorough - extract every company that might match`,
         },
-        { role: 'user', content: text.substring(0, 15000) }
+        { role: 'user', content: text.substring(0, 15000) },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
     if (extraction.usage) {
-      recordTokens('gpt-4o-mini', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        extraction.usage.prompt_tokens || 0,
+        extraction.usage.completion_tokens || 0
+      );
     }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
@@ -1889,25 +2432,37 @@ RULES:
 
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    // Remove ALL common legal suffixes globally (expanded list)
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
-    // Also remove these if they appear anywhere (for cases like "PT Company Name")
-    .replace(/^(pt\.?|cv\.?)\s+/gi, '')
-    .replace(/[^\w\s]/g, '')  // Remove special characters
-    .replace(/\s+/g, ' ')      // Normalize spaces
-    .trim();
+  return (
+    name
+      .toLowerCase()
+      // Remove ALL common legal suffixes globally (expanded list)
+      .replace(
+        /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+        ''
+      )
+      // Also remove these if they appear anywhere (for cases like "PT Company Name")
+      .replace(/^(pt\.?|cv\.?)\s+/gi, '')
+      .replace(/[^\w\s]/g, '') // Remove special characters
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim()
+  );
 }
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
-    .replace(/^https?:\/\//, '')           // Remove protocol
-    .replace(/^www\./, '')                  // Remove www
-    .replace(/\/+$/, '')                    // Remove trailing slashes
-    // Remove common path suffixes that don't differentiate companies
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
-    .replace(/\.(html?|php|aspx?|jsp)$/i, ''); // Remove file extensions
+  return (
+    url
+      .toLowerCase()
+      .replace(/^https?:\/\//, '') // Remove protocol
+      .replace(/^www\./, '') // Remove www
+      .replace(/\/+$/, '') // Remove trailing slashes
+      // Remove common path suffixes that don't differentiate companies
+      .replace(
+        /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+        ''
+      )
+      .replace(/\.(html?|php|aspx?|jsp)$/i, '')
+  ); // Remove file extensions
 }
 
 // Extract domain root for additional deduplication
@@ -1957,7 +2512,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -1966,7 +2521,6 @@ function isSpamOrDirectoryURL(url) {
 
   return false;
 }
-
 
 // ============ EXHAUSTIVE PARALLEL SEARCH WITH 14 STRATEGIES ============
 
@@ -1989,7 +2543,6 @@ ${outputFormat}`;
   return extractCompanies(response, country);
 }
 
-
 // ============ WEBSITE VERIFICATION ============
 
 async function verifyWebsite(url) {
@@ -1999,7 +2552,7 @@ async function verifyWebsite(url) {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
       signal: controller.signal,
-      redirect: 'follow'
+      redirect: 'follow',
     });
     clearTimeout(timeout);
 
@@ -2025,10 +2578,10 @@ async function verifyWebsite(url) {
       'hugedomains',
       'afternic',
       'domain expired',
-      'this site can\'t be reached',
+      "this site can't be reached",
       'page not found',
       '404 not found',
-      'website not found'
+      'website not found',
     ];
 
     for (const sign of parkedSigns) {
@@ -2055,7 +2608,6 @@ async function verifyWebsite(url) {
   }
 }
 
-
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
@@ -2076,7 +2628,7 @@ async function fetchWebsite(url) {
     'verify you are human',
     'bot detection',
     'please enable javascript',
-    'enable cookies'
+    'enable cookies',
   ];
 
   const tryFetch = async (targetUrl) => {
@@ -2085,21 +2637,25 @@ async function fetchWebsite(url) {
       const timeout = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds
       const response = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.5',
           'Accept-Encoding': 'gzip, deflate',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
+          Connection: 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
         },
         signal: controller.signal,
-        redirect: 'follow'
+        redirect: 'follow',
       });
       clearTimeout(timeout);
 
       // Check for HTTP-level blocks
       if (response.status === 403 || response.status === 406) {
-        return { status: 'security_blocked', reason: `HTTP ${response.status} - WAF/Security block` };
+        return {
+          status: 'security_blocked',
+          reason: `HTTP ${response.status} - WAF/Security block`,
+        };
       }
       if (!response.ok) return { status: 'error', reason: `HTTP ${response.status}` };
 
@@ -2110,7 +2666,10 @@ async function fetchWebsite(url) {
       for (const pattern of securityBlockPatterns) {
         if (lowerHtml.includes(pattern) && html.length < 5000) {
           // Only flag as security block if page is small (likely a challenge page)
-          return { status: 'security_blocked', reason: `Security protection detected: "${pattern}"` };
+          return {
+            status: 'security_blocked',
+            reason: `Security protection detected: "${pattern}"`,
+          };
         }
       }
 
@@ -2182,9 +2741,14 @@ function buildExclusionRules(exclusion, business) {
   let rules = '';
 
   // Detect if user wants to exclude LARGE companies - use PAGE SIGNALS like n8n
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -2228,13 +2792,16 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
-  const contentToValidate = (typeof pageText === 'string' && pageText) ? pageText : `Company name: ${company.company_name}. Validate based on name only.`;
+  const contentToValidate =
+    typeof pageText === 'string' && pageText
+      ? pageText
+      : `Company name: ${company.company_name}. Validate based on name only.`;
 
   const exclusionRules = buildExclusionRules(exclusion, business);
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-5.1',  // Use smarter model for better validation
+      model: 'gpt-5.1', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -2266,7 +2833,7 @@ ${exclusionRules}
 4. SPAM CHECK:
 - Only reject obvious directories, marketplaces, domain-for-sale sites
 
-OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`
+OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`,
         },
         {
           role: 'user',
@@ -2275,14 +2842,18 @@ WEBSITE: ${company.website}
 HQ: ${company.hq}
 
 PAGE CONTENT:
-${contentToValidate.substring(0, 10000)}`
-        }
+${contentToValidate.substring(0, 10000)}`,
+        },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
 
     if (validation.usage) {
-      recordTokens('gpt-5.1', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        validation.usage.prompt_tokens || 0,
+        validation.usage.completion_tokens || 0
+      );
     }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -2311,9 +2882,11 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       // Use cached _pageContent from verification step, or fetch if not available
       // Add .catch() to prevent any single failure from crashing the batch
       const pageTexts = await Promise.all(
-        batch.map(c => {
+        batch.map((c) => {
           try {
-            return c?._pageContent ? Promise.resolve(c._pageContent) : fetchWebsite(c?.website).catch(() => null);
+            return c?._pageContent
+              ? Promise.resolve(c._pageContent)
+              : fetchWebsite(c?.website).catch(() => null);
           } catch (e) {
             return Promise.resolve(null);
           }
@@ -2324,11 +2897,16 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       const validations = await Promise.all(
         batch.map((company, idx) => {
           try {
-            return validateCompanyStrict(company, business, country, exclusion, pageTexts[idx])
-              .catch(e => {
-                console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-                return { valid: true, corrected_hq: company?.hq }; // Accept on error
-              });
+            return validateCompanyStrict(
+              company,
+              business,
+              country,
+              exclusion,
+              pageTexts[idx]
+            ).catch((e) => {
+              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
+              return { valid: true, corrected_hq: company?.hq }; // Accept on error
+            });
           } catch (e) {
             return Promise.resolve({ valid: true, corrected_hq: company?.hq });
           }
@@ -2342,7 +2920,7 @@ async function parallelValidationStrict(companies, business, country, exclusion)
             const { _pageContent, ...cleanCompany } = company;
             validated.push({
               ...cleanCompany,
-              hq: validations[idx].corrected_hq || company.hq
+              hq: validations[idx].corrected_hq || company.hq,
             });
           }
         } catch (e) {
@@ -2350,14 +2928,18 @@ async function parallelValidationStrict(companies, business, country, exclusion)
         }
       });
 
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+      console.log(
+        `  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`
+      );
     } catch (batchError) {
       console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
       // Continue to next batch instead of crashing
     }
   }
 
-  console.log(`STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  console.log(
+    `STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`
+  );
   return validated;
 }
 
@@ -2396,7 +2978,7 @@ ${exclusionRules}
 4. SPAM CHECK:
 - Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
 
-OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`
+OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`,
         },
         {
           role: 'user',
@@ -2405,14 +2987,18 @@ WEBSITE: ${company.website}
 HQ: ${company.hq}
 
 PAGE CONTENT:
-${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
-        }
+${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`,
+        },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
 
     if (validation.usage) {
-      recordTokens('gpt-4o-mini', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        validation.usage.prompt_tokens || 0,
+        validation.usage.completion_tokens || 0
+      );
     }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -2439,15 +3025,14 @@ async function parallelValidation(companies, business, country, exclusion) {
       if (!batch || batch.length === 0) continue;
 
       const pageTexts = await Promise.all(
-        batch.map(c => fetchWebsite(c?.website).catch(() => null))
+        batch.map((c) => fetchWebsite(c?.website).catch(() => null))
       );
       const validations = await Promise.all(
         batch.map((company, idx) =>
-          validateCompany(company, business, country, exclusion, pageTexts[idx])
-            .catch(e => {
-              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-              return { valid: true, corrected_hq: company?.hq };
-            })
+          validateCompany(company, business, country, exclusion, pageTexts[idx]).catch((e) => {
+            console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
+            return { valid: true, corrected_hq: company?.hq };
+          })
         )
       );
 
@@ -2456,7 +3041,7 @@ async function parallelValidation(companies, business, country, exclusion) {
           if (validations[idx]?.valid && company) {
             validated.push({
               ...company,
-              hq: validations[idx].corrected_hq || company.hq
+              hq: validations[idx].corrected_hq || company.hq,
             });
           }
         } catch (e) {
@@ -2464,13 +3049,17 @@ async function parallelValidation(companies, business, country, exclusion) {
         }
       });
 
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+      console.log(
+        `  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`
+      );
     } catch (batchError) {
       console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
     }
   }
 
-  console.log(`Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  console.log(
+    `Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`
+  );
   return validated;
 }
 
@@ -2503,40 +3092,129 @@ function buildEmailHTML(companies, business, country, exclusion) {
 
 // Country to flag code mapping
 const COUNTRY_FLAG_MAP = {
-  'philippines': 'PH', 'ph': 'PH', 'manila': 'PH',
-  'thailand': 'TH', 'th': 'TH', 'bangkok': 'TH',
-  'malaysia': 'MY', 'my': 'MY', 'kuala lumpur': 'MY',
-  'indonesia': 'ID', 'id': 'ID', 'jakarta': 'ID',
-  'singapore': 'SG', 'sg': 'SG',
-  'vietnam': 'VN', 'vn': 'VN', 'ho chi minh': 'VN', 'hanoi': 'VN',
-  'japan': 'JP', 'jp': 'JP', 'tokyo': 'JP',
-  'china': 'CN', 'cn': 'CN', 'beijing': 'CN', 'shanghai': 'CN',
-  'korea': 'KR', 'kr': 'KR', 'seoul': 'KR',
-  'taiwan': 'TW', 'tw': 'TW', 'taipei': 'TW',
-  'usa': 'US', 'us': 'US', 'united states': 'US', 'america': 'US',
-  'uk': 'GB', 'united kingdom': 'GB', 'england': 'GB', 'london': 'GB',
-  'australia': 'AU', 'au': 'AU', 'sydney': 'AU',
-  'india': 'IN', 'in': 'IN', 'mumbai': 'IN', 'delhi': 'IN',
-  'hong kong': 'HK', 'hk': 'HK'
+  philippines: 'PH',
+  ph: 'PH',
+  manila: 'PH',
+  thailand: 'TH',
+  th: 'TH',
+  bangkok: 'TH',
+  malaysia: 'MY',
+  my: 'MY',
+  'kuala lumpur': 'MY',
+  indonesia: 'ID',
+  id: 'ID',
+  jakarta: 'ID',
+  singapore: 'SG',
+  sg: 'SG',
+  vietnam: 'VN',
+  vn: 'VN',
+  'ho chi minh': 'VN',
+  hanoi: 'VN',
+  japan: 'JP',
+  jp: 'JP',
+  tokyo: 'JP',
+  china: 'CN',
+  cn: 'CN',
+  beijing: 'CN',
+  shanghai: 'CN',
+  korea: 'KR',
+  kr: 'KR',
+  seoul: 'KR',
+  taiwan: 'TW',
+  tw: 'TW',
+  taipei: 'TW',
+  usa: 'US',
+  us: 'US',
+  'united states': 'US',
+  america: 'US',
+  uk: 'GB',
+  'united kingdom': 'GB',
+  england: 'GB',
+  london: 'GB',
+  australia: 'AU',
+  au: 'AU',
+  sydney: 'AU',
+  india: 'IN',
+  in: 'IN',
+  mumbai: 'IN',
+  delhi: 'IN',
+  'hong kong': 'HK',
+  hk: 'HK',
 };
 
 // Valid Singapore areas/districts (hardcoded since Singapore is small)
 // "Central" is NOT a valid area - it's a made-up placeholder
 const VALID_SINGAPORE_AREAS = [
   // West
-  'jurong', 'jurong east', 'jurong west', 'tuas', 'pioneer', 'boon lay', 'clementi', 'bukit batok', 'bukit panjang', 'choa chu kang',
+  'jurong',
+  'jurong east',
+  'jurong west',
+  'tuas',
+  'pioneer',
+  'boon lay',
+  'clementi',
+  'bukit batok',
+  'bukit panjang',
+  'choa chu kang',
   // North
-  'woodlands', 'sembawang', 'yishun', 'admiralty', 'marsiling',
+  'woodlands',
+  'sembawang',
+  'yishun',
+  'admiralty',
+  'marsiling',
   // Northeast
-  'sengkang', 'punggol', 'hougang', 'serangoon', 'ang mo kio', 'bishan',
+  'sengkang',
+  'punggol',
+  'hougang',
+  'serangoon',
+  'ang mo kio',
+  'bishan',
   // East
-  'changi', 'tampines', 'pasir ris', 'bedok', 'simei', 'tanah merah', 'loyang',
+  'changi',
+  'tampines',
+  'pasir ris',
+  'bedok',
+  'simei',
+  'tanah merah',
+  'loyang',
   // Central
-  'orchard', 'somerset', 'bugis', 'city hall', 'raffles place', 'marina bay', 'tanjong pagar', 'chinatown', 'little india', 'lavender', 'kallang', 'geylang', 'aljunied', 'paya lebar', 'eunos', 'kembangan', 'macpherson',
+  'orchard',
+  'somerset',
+  'bugis',
+  'city hall',
+  'raffles place',
+  'marina bay',
+  'tanjong pagar',
+  'chinatown',
+  'little india',
+  'lavender',
+  'kallang',
+  'geylang',
+  'aljunied',
+  'paya lebar',
+  'eunos',
+  'kembangan',
+  'macpherson',
   // South
-  'sentosa', 'harbourfront', 'telok blangah', 'bukit merah', 'alexandra', 'queenstown', 'commonwealth', 'tiong bahru',
+  'sentosa',
+  'harbourfront',
+  'telok blangah',
+  'bukit merah',
+  'alexandra',
+  'queenstown',
+  'commonwealth',
+  'tiong bahru',
   // Industrial areas
-  'toh tuck', 'ubi', 'tai seng', 'benoi', 'kaki bukit', 'defu', 'senoko', 'kranji', 'sungei kadut', 'joo koon'
+  'toh tuck',
+  'ubi',
+  'tai seng',
+  'benoi',
+  'kaki bukit',
+  'defu',
+  'senoko',
+  'kranji',
+  'sungei kadut',
+  'joo koon',
 ];
 
 // Check if a Singapore area is valid
@@ -2546,103 +3224,103 @@ function isValidSingaporeArea(area) {
   // "Central" alone is NOT valid
   if (lower === 'central') return false;
   // Check if any valid area matches
-  return VALID_SINGAPORE_AREAS.some(valid => lower.includes(valid) || valid.includes(lower));
+  return VALID_SINGAPORE_AREAS.some((valid) => lower.includes(valid) || valid.includes(lower));
 }
 
 // Common shortform definitions
 const SHORTFORM_DEFINITIONS = {
-  'HQ': 'Headquarters',
-  'SEA': 'Southeast Asia',
-  'THB': 'Thai Baht',
-  'PHP': 'Philippine Peso',
-  'MYR': 'Malaysian Ringgit',
-  'IDR': 'Indonesian Rupiah',
-  'SGD': 'Singapore Dollar',
-  'VND': 'Vietnamese Dong',
-  'USD': 'US Dollar',
-  'JPY': 'Japanese Yen',
-  'CNY': 'Chinese Yuan',
-  'KRW': 'Korean Won',
-  'TWD': 'Taiwan Dollar',
-  'INR': 'Indian Rupee',
-  'HKD': 'Hong Kong Dollar',
-  'AUD': 'Australian Dollar',
-  'GBP': 'British Pound',
-  'EUR': 'Euro',
-  'ISO': 'International Organization for Standardization',
-  'B2B': 'Business to Business',
-  'B2C': 'Business to Consumer',
+  HQ: 'Headquarters',
+  SEA: 'Southeast Asia',
+  THB: 'Thai Baht',
+  PHP: 'Philippine Peso',
+  MYR: 'Malaysian Ringgit',
+  IDR: 'Indonesian Rupiah',
+  SGD: 'Singapore Dollar',
+  VND: 'Vietnamese Dong',
+  USD: 'US Dollar',
+  JPY: 'Japanese Yen',
+  CNY: 'Chinese Yuan',
+  KRW: 'Korean Won',
+  TWD: 'Taiwan Dollar',
+  INR: 'Indian Rupee',
+  HKD: 'Hong Kong Dollar',
+  AUD: 'Australian Dollar',
+  GBP: 'British Pound',
+  EUR: 'Euro',
+  ISO: 'International Organization for Standardization',
+  B2B: 'Business to Business',
+  B2C: 'Business to Consumer',
   'R&D': 'Research and Development',
-  'OEM': 'Original Equipment Manufacturer',
-  'ODM': 'Original Design Manufacturer',
-  'SME': 'Small and Medium Enterprise',
-  'CAGR': 'Compound Annual Growth Rate',
-  'YoY': 'Year over Year',
-  'QoQ': 'Quarter over Quarter',
-  'FY': 'Fiscal Year',
-  'M': 'Million',
-  'B': 'Billion',
-  'K': 'Thousand',
-  'DBD': 'Department of Business Development',
-  'EBITDA': 'Earnings Before Interest, Taxes, Depreciation and Amortization',
-  'ROE': 'Return on Equity',
-  'ROI': 'Return on Investment',
-  'GM': 'Gross Margin',
-  'NM': 'Net Margin',
-  'JV': 'Joint Venture',
+  OEM: 'Original Equipment Manufacturer',
+  ODM: 'Original Design Manufacturer',
+  SME: 'Small and Medium Enterprise',
+  CAGR: 'Compound Annual Growth Rate',
+  YoY: 'Year over Year',
+  QoQ: 'Quarter over Quarter',
+  FY: 'Fiscal Year',
+  M: 'Million',
+  B: 'Billion',
+  K: 'Thousand',
+  DBD: 'Department of Business Development',
+  EBITDA: 'Earnings Before Interest, Taxes, Depreciation and Amortization',
+  ROE: 'Return on Equity',
+  ROI: 'Return on Investment',
+  GM: 'Gross Margin',
+  NM: 'Net Margin',
+  JV: 'Joint Venture',
   'M&A': 'Mergers and Acquisitions',
-  'IPO': 'Initial Public Offering',
-  'CEO': 'Chief Executive Officer',
-  'CFO': 'Chief Financial Officer',
-  'COO': 'Chief Operating Officer',
-  'HoHo': 'Ho Chi Minh City',
-  'KL': 'Kuala Lumpur',
-  'BKK': 'Bangkok',
-  'JKT': 'Jakarta',
-  'MNL': 'Manila',
-  'SG': 'Singapore',
-  'ISP': 'Internet Service Provider',
-  'IBC': 'International Broadcasting',
-  'IT': 'Information Technology',
-  'AI': 'Artificial Intelligence',
-  'IoT': 'Internet of Things',
-  'ERP': 'Enterprise Resource Planning',
-  'CRM': 'Customer Relationship Management',
-  'SaaS': 'Software as a Service',
-  'API': 'Application Programming Interface',
+  IPO: 'Initial Public Offering',
+  CEO: 'Chief Executive Officer',
+  CFO: 'Chief Financial Officer',
+  COO: 'Chief Operating Officer',
+  HoHo: 'Ho Chi Minh City',
+  KL: 'Kuala Lumpur',
+  BKK: 'Bangkok',
+  JKT: 'Jakarta',
+  MNL: 'Manila',
+  SG: 'Singapore',
+  ISP: 'Internet Service Provider',
+  IBC: 'International Broadcasting',
+  IT: 'Information Technology',
+  AI: 'Artificial Intelligence',
+  IoT: 'Internet of Things',
+  ERP: 'Enterprise Resource Planning',
+  CRM: 'Customer Relationship Management',
+  SaaS: 'Software as a Service',
+  API: 'Application Programming Interface',
   'IP-KVM': 'Internet Protocol Keyboard Video Mouse',
-  'KVM': 'Keyboard Video Mouse',
-  'CCTV': 'Closed-Circuit Television',
-  'UPS': 'Uninterruptible Power Supply',
-  'NEC': 'Nippon Electric Company',
-  'HACCP': 'Hazard Analysis Critical Control Point',
-  'GMP': 'Good Manufacturing Practice',
-  'CE': 'Conformité Européenne',
-  'FDA': 'Food and Drug Administration',
-  'SKU': 'Stock Keeping Unit',
-  'POE': 'Power over Ethernet',
-  'LAN': 'Local Area Network',
-  'WAN': 'Wide Area Network',
-  'VPN': 'Virtual Private Network'
+  KVM: 'Keyboard Video Mouse',
+  CCTV: 'Closed-Circuit Television',
+  UPS: 'Uninterruptible Power Supply',
+  NEC: 'Nippon Electric Company',
+  HACCP: 'Hazard Analysis Critical Control Point',
+  GMP: 'Good Manufacturing Practice',
+  CE: 'Conformité Européenne',
+  FDA: 'Food and Drug Administration',
+  SKU: 'Stock Keeping Unit',
+  POE: 'Power over Ethernet',
+  LAN: 'Local Area Network',
+  WAN: 'Wide Area Network',
+  VPN: 'Virtual Private Network',
 };
 
 // Exchange rate mapping by country (for footnote)
 const EXCHANGE_RATE_MAP = {
-  'PH': '為替レート: PHP 100M = 3億円',
-  'TH': '為替レート: THB 100M = 5億円',
-  'MY': '為替レート: MYR 10M = 3億円',
-  'ID': '為替レート: IDR 100B = 10億円',
-  'SG': '為替レート: SGD 1M = 1億円',
-  'VN': '為替レート: VND 100B = 6億円',
-  'JP': '',
-  'CN': '為替レート: CNY 10M = 2億円',
-  'KR': '為替レート: KRW 1B = 1億円',
-  'TW': '為替レート: TWD 10M = 0.5億円',
-  'US': '為替レート: USD 1M = 1.5億円',
-  'GB': '為替レート: GBP 1M = 2億円',
-  'AU': '為替レート: AUD 1M = 1億円',
-  'IN': '為替レート: INR 100M = 2億円',
-  'HK': '為替レート: HKD 10M = 2億円'
+  PH: '為替レート: PHP 100M = 3億円',
+  TH: '為替レート: THB 100M = 5億円',
+  MY: '為替レート: MYR 10M = 3億円',
+  ID: '為替レート: IDR 100B = 10億円',
+  SG: '為替レート: SGD 1M = 1億円',
+  VN: '為替レート: VND 100B = 6億円',
+  JP: '',
+  CN: '為替レート: CNY 10M = 2億円',
+  KR: '為替レート: KRW 1B = 1億円',
+  TW: '為替レート: TWD 10M = 0.5億円',
+  US: '為替レート: USD 1M = 1.5億円',
+  GB: '為替レート: GBP 1M = 2億円',
+  AU: '為替レート: AUD 1M = 1億円',
+  IN: '為替レート: INR 100M = 2億円',
+  HK: '為替レート: HKD 10M = 2億円',
 };
 
 // Get country code from location string - MUST match HQ country only
@@ -2656,7 +3334,7 @@ function getCountryCode(location) {
   if (hqMatch) {
     const hqLocation = hqMatch[1].trim();
     // Get country from the end of HQ line (last comma-separated part)
-    const parts = hqLocation.split(',').map(p => p.trim());
+    const parts = hqLocation.split(',').map((p) => p.trim());
     const country = parts[parts.length - 1];
     for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
       if (country.includes(key)) return code;
@@ -2665,7 +3343,7 @@ function getCountryCode(location) {
 
   // If no HQ prefix, check if it's a simple location (City, Country format)
   // Use the LAST part which should be the country
-  const parts = loc.split(',').map(p => p.trim());
+  const parts = loc.split(',').map((p) => p.trim());
   if (parts.length >= 1) {
     const lastPart = parts[parts.length - 1];
     for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
@@ -2702,53 +3380,53 @@ function filterEmptyMetrics(keyMetrics) {
     /none stated/i,
     /no information/i,
     /no data/i,
-    /^\s*-?\s*$/,  // Empty or just dashes
+    /^\s*-?\s*$/, // Empty or just dashes
     // ZERO VALUE PATTERNS - metrics with "0" values are garbage
-    /^0\s+\w/i,               // "0 Something" - starts with "0 "
-    /^-?\s*0\s+\w/i,          // "- 0 Something" - bullet point with 0
-    /\b0\s+(customers?|clients?|projects?|partners?|employees?|staff|machines?|years?)/i,  // "0 customers", "0 projects", etc.
+    /^0\s+\w/i, // "0 Something" - starts with "0 "
+    /^-?\s*0\s+\w/i, // "- 0 Something" - bullet point with 0
+    /\b0\s+(customers?|clients?|projects?|partners?|employees?|staff|machines?|years?)/i, // "0 customers", "0 projects", etc.
     // Placeholder text patterns
-    /client\s*\d+/i,          // "Client 1", "Client 2", etc.
-    /client\s*[a-e]/i,        // "Client A", "Client B", etc.
-    /customer\s*\d+/i,        // "Customer 1", "Customer 2", etc.
-    /customer\s*[a-e]/i,      // "Customer A", "Customer B", etc.
-    /supplier\s*\d+/i,        // "Supplier 1", "Supplier 2", etc.
-    /partner\s*\d+/i,         // "Partner 1", "Partner 2", etc.
-    /company\s*\d+/i,         // "Company 1", "Company 2", etc.
-    /brand\s*\d+/i,           // "brand1", "brand2", etc.
-    /brands?\s*\d+\s*,\s*brands?\s*\d+/i,  // "brand1, brand2, brand3"
-    /product\s*\d+/i,         // "product1", "product2", etc.
-    /item\s*\d+/i,            // "item1", "item2", etc.
-    /distributor\s*[a-e]/i,   // "Distributor A", "Distributor B", etc.
-    /distributor\s*\d+/i,     // "Distributor 1", "Distributor 2", etc.
+    /client\s*\d+/i, // "Client 1", "Client 2", etc.
+    /client\s*[a-e]/i, // "Client A", "Client B", etc.
+    /customer\s*\d+/i, // "Customer 1", "Customer 2", etc.
+    /customer\s*[a-e]/i, // "Customer A", "Customer B", etc.
+    /supplier\s*\d+/i, // "Supplier 1", "Supplier 2", etc.
+    /partner\s*\d+/i, // "Partner 1", "Partner 2", etc.
+    /company\s*\d+/i, // "Company 1", "Company 2", etc.
+    /brand\s*\d+/i, // "brand1", "brand2", etc.
+    /brands?\s*\d+\s*,\s*brands?\s*\d+/i, // "brand1, brand2, brand3"
+    /product\s*\d+/i, // "product1", "product2", etc.
+    /item\s*\d+/i, // "item1", "item2", etc.
+    /distributor\s*[a-e]/i, // "Distributor A", "Distributor B", etc.
+    /distributor\s*\d+/i, // "Distributor 1", "Distributor 2", etc.
     // Generic industry descriptions without specifics
     /various\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
     /multiple\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
-    /local\s+printers\s+and\s+multinational/i,  // Too vague
+    /local\s+printers\s+and\s+multinational/i, // Too vague
     // Values without actual data (just descriptions)
-    /^-?\s*production capacity of(?!\s*\d)/i,  // "Production capacity of" without numbers
-    /^-?\s*factory area of(?!\s*\d)/i,         // "Factory area of" without numbers
-    /^-?\s*number of(?!\s*\d)/i,               // "Number of" without numbers
-    /intensive r&d/i,         // Generic R&D statements
+    /^-?\s*production capacity of(?!\s*\d)/i, // "Production capacity of" without numbers
+    /^-?\s*factory area of(?!\s*\d)/i, // "Factory area of" without numbers
+    /^-?\s*number of(?!\s*\d)/i, // "Number of" without numbers
+    /intensive r&d/i, // Generic R&D statements
     /product improvement and innovation/i,
-    /focus(ing|ed)?\s+on\s+(quality|innovation|customer)/i,  // Generic focus statements
-    /commitment to/i,         // Generic commitment statements
-    /world of color/i,        // Corporate slogans
+    /focus(ing|ed)?\s+on\s+(quality|innovation|customer)/i, // Generic focus statements
+    /commitment to/i, // Generic commitment statements
+    /world of color/i, // Corporate slogans
     // Redundant/useless metrics that belong elsewhere
-    /^-?\s*established\s+in\s+\d{4}/i,  // "Established in 2015" - goes in Est. Year field
-    /^-?\s*founded\s+in\s+\d{4}/i,      // "Founded in 2015" - goes in Est. Year field
-    /team\s+with\s+over\s+\d+\s+years?\s+of\s+experience/i,  // Too vague
-    /over\s+\d+\s+years?\s+of\s+experience/i,  // Belongs in company history, not metrics
-    /\d+\s+years?\s+of\s+experience/i,  // "10 years of experience" - not actionable
-    /years?\s+in\s+(?:the\s+)?(?:industry|business|market)/i,  // "Years in industry" - redundant
-    /customer\s+service\s+representatives?/i,  // "12 customer service representatives" - not M&A relevant
-    /value creation/i,        // Generic value statements
-    /environmental impact/i,  // Generic sustainability
-    /high standards in/i,     // "High standards in customer service"
-    /constant.*innovation/i,  // "Constant technical innovation"
+    /^-?\s*established\s+in\s+\d{4}/i, // "Established in 2015" - goes in Est. Year field
+    /^-?\s*founded\s+in\s+\d{4}/i, // "Founded in 2015" - goes in Est. Year field
+    /team\s+with\s+over\s+\d+\s+years?\s+of\s+experience/i, // Too vague
+    /over\s+\d+\s+years?\s+of\s+experience/i, // Belongs in company history, not metrics
+    /\d+\s+years?\s+of\s+experience/i, // "10 years of experience" - not actionable
+    /years?\s+in\s+(?:the\s+)?(?:industry|business|market)/i, // "Years in industry" - redundant
+    /customer\s+service\s+representatives?/i, // "12 customer service representatives" - not M&A relevant
+    /value creation/i, // Generic value statements
+    /environmental impact/i, // Generic sustainability
+    /high standards in/i, // "High standards in customer service"
+    /constant.*innovation/i, // "Constant technical innovation"
     /continuous improvement/i,
-    /excellence in/i,         // "Excellence in service"
-    /dedicated to/i,          // "Dedicated to quality"
+    /excellence in/i, // "Excellence in service"
+    /dedicated to/i, // "Dedicated to quality"
     // Factory locations masquerading as factory size
     /facilities?\s+located\s+in/i,
     /located\s+in\s+.*city/i,
@@ -2785,7 +3463,7 @@ function filterEmptyMetrics(keyMetrics) {
     /dedication/i,
   ];
 
-  return keyMetrics.filter(metric => {
+  return keyMetrics.filter((metric) => {
     if (!metric || !metric.value) return false;
     const value = String(metric.value).trim();
     const label = String(metric.label || '').trim();
@@ -2825,18 +3503,44 @@ function filterEmptyMetrics(keyMetrics) {
 
 // Common shortforms that don't need explanation
 const COMMON_SHORTFORMS = [
-  'M', 'B', 'K',           // Million, Billion, Thousand
-  'HQ',                    // Headquarters
-  'CEO', 'CFO', 'COO',     // C-suite titles
+  'M',
+  'B',
+  'K', // Million, Billion, Thousand
+  'HQ', // Headquarters
+  'CEO',
+  'CFO',
+  'COO', // C-suite titles
   // All currency codes - well known
-  'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'KRW', 'TWD',
-  'IDR', 'SGD', 'MYR', 'THB', 'PHP', 'VND', 'INR', 'HKD', 'AUD',
-  'ISO',                   // Well-known standard
-  'FY',                    // Fiscal Year
-  'YoY', 'QoQ',            // Year over Year, Quarter over Quarter
-  'B2B', 'B2C',            // Business models
-  'AI', 'IT', 'IoT',       // Tech terms - widely known
-  'CE', 'UL', 'FDA', 'GMP', 'HACCP'  // Well-known certifications
+  'USD',
+  'EUR',
+  'GBP',
+  'JPY',
+  'CNY',
+  'KRW',
+  'TWD',
+  'IDR',
+  'SGD',
+  'MYR',
+  'THB',
+  'PHP',
+  'VND',
+  'INR',
+  'HKD',
+  'AUD',
+  'ISO', // Well-known standard
+  'FY', // Fiscal Year
+  'YoY',
+  'QoQ', // Year over Year, Quarter over Quarter
+  'B2B',
+  'B2C', // Business models
+  'AI',
+  'IT',
+  'IoT', // Tech terms - widely known
+  'CE',
+  'UL',
+  'FDA',
+  'GMP',
+  'HACCP', // Well-known certifications
 ];
 
 // Detect shortforms in text and return formatted note (only uncommon ones)
@@ -2847,12 +3551,12 @@ function detectShortforms(companyData) {
     companyData.location,
     companyData.business,
     companyData.metrics,
-    companyData.footnote
+    companyData.footnote,
   ];
 
   // Also include key_metrics array values
   if (companyData.key_metrics && Array.isArray(companyData.key_metrics)) {
-    companyData.key_metrics.forEach(metric => {
+    companyData.key_metrics.forEach((metric) => {
       if (metric?.label) textParts.push(ensureString(metric.label));
       if (metric?.value) textParts.push(ensureString(metric.value));
     });
@@ -2860,7 +3564,7 @@ function detectShortforms(companyData) {
 
   // Also include breakdown_items
   if (companyData.breakdown_items && Array.isArray(companyData.breakdown_items)) {
-    companyData.breakdown_items.forEach(item => {
+    companyData.breakdown_items.forEach((item) => {
       if (item?.label) textParts.push(ensureString(item.label));
       if (item?.value) textParts.push(ensureString(item.value));
     });
@@ -2920,13 +3624,13 @@ function stripInlineLongforms(text) {
 // Apply stripping to all breakdown items and key metrics
 function cleanupInlineLongforms(companyData) {
   if (companyData.breakdown_items && Array.isArray(companyData.breakdown_items)) {
-    companyData.breakdown_items = companyData.breakdown_items.map(item => ({
+    companyData.breakdown_items = companyData.breakdown_items.map((item) => ({
       ...item,
-      value: stripInlineLongforms(item.value)
+      value: stripInlineLongforms(item.value),
     }));
   }
   if (companyData.key_metrics && Array.isArray(companyData.key_metrics)) {
-    companyData.key_metrics = companyData.key_metrics.map(metric => {
+    companyData.key_metrics = companyData.key_metrics.map((metric) => {
       let cleanedValue = stripInlineLongforms(metric.value);
       // Clean PT/CV prefixes from customer/supplier names in Key Customers, Key Suppliers, Customers labels
       const label = (metric.label || '').toLowerCase();
@@ -2954,11 +3658,18 @@ async function fetchImageAsBase64(url) {
 
 // Generate PPTX using PptxGenJS - matching YCP template
 // inaccessibleWebsites: websites that couldn't be scraped (appear on summary slide only, no individual profiles)
-async function generatePPTX(companies, targetDescription = '', inaccessibleWebsites = [], rightLayout = 'table-6') {
+async function generatePPTX(
+  companies,
+  targetDescription = '',
+  inaccessibleWebsites = [],
+  rightLayout = 'table-6'
+) {
   try {
     console.log('Generating PPTX with PptxGenJS...');
     if (inaccessibleWebsites.length > 0) {
-      console.log(`  Including ${inaccessibleWebsites.length} inaccessible website(s) on summary slide only`);
+      console.log(
+        `  Including ${inaccessibleWebsites.length} inaccessible website(s) on summary slide only`
+      );
     }
 
     const pptx = new pptxgen();
@@ -2972,13 +3683,13 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
     // YCP Theme Colors (from template)
     const COLORS = {
-      headerLine: '293F55',    // Dark navy for header/footer lines
-      accent3: '011AB7',       // Dark blue - label column background
+      headerLine: '293F55', // Dark navy for header/footer lines
+      accent3: '011AB7', // Dark blue - label column background
       white: 'FFFFFF',
       black: '000000',
-      gray: 'BFBFBF',          // Dashed border color
-      dk2: '1F497D',           // Section underline color
-      footerText: '808080'     // Gray footer text
+      gray: 'BFBFBF', // Dashed border color
+      dk2: '1F497D', // Section underline color
+      footerText: '808080', // Gray footer text
     };
 
     // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
@@ -2988,12 +3699,18 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       background: { color: 'FFFFFF' },
       objects: [
         // Thick header line (y: 1.02")
-        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
+        {
+          line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } },
+        },
         // Thin header line (y: 1.10")
-        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+        {
+          line: { x: 0, y: 1.1, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } },
+        },
         // Footer line (y: 7.24")
-        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
-      ]
+        {
+          line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } },
+        },
+      ],
     });
 
     // ===== TARGET LIST SLIDE (FIRST SLIDE) =====
@@ -3001,384 +3718,411 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
     const allCompaniesForSummary = [...companies, ...inaccessibleWebsites];
     if (targetDescription && allCompaniesForSummary.length > 0) {
       try {
-      console.log('Generating Target List slide...');
-      const meceData = await generateMECESegments(targetDescription, allCompaniesForSummary);
+        console.log('Generating Target List slide...');
+        const meceData = await generateMECESegments(targetDescription, allCompaniesForSummary);
 
-      // Use master slide - lines are fixed in background
-      const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+        // Use master slide - lines are fixed in background
+        const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-      // Title Case helper function
-      const toTitleCase = (str) => {
-        return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
-      };
-
-      // Simplify country lists to regions
-      const simplifyRegion = (desc) => {
-        const seaCountries = ['malaysia', 'indonesia', 'singapore', 'thailand', 'vietnam', 'philippines', 'myanmar', 'cambodia', 'laos', 'brunei'];
-        const lowerDesc = desc.toLowerCase();
-
-        // Count how many SE Asian countries are mentioned
-        const mentionedSEA = seaCountries.filter(c => lowerDesc.includes(c));
-
-        // If 3+ SE Asian countries are listed, replace with "Southeast Asia"
-        if (mentionedSEA.length >= 3) {
-          // Build regex to match the country list (including "and", commas)
-          const countryListPattern = new RegExp(
-            `\\b(in|from)?\\s*(${seaCountries.join('|')})(\\s*,\\s*(${seaCountries.join('|')}))*\\s*(,?\\s*(and)?\\s*(${seaCountries.join('|')}))?`,
-            'gi'
+        // Title Case helper function
+        const toTitleCase = (str) => {
+          return str.replace(
+            /\w\S*/g,
+            (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
           );
-          return desc.replace(countryListPattern, (match) => {
-            // Check if it started with "in" or "from"
-            const startsWithIn = /^\s*in\s/i.test(match);
-            const startsWithFrom = /^\s*from\s/i.test(match);
-            if (startsWithIn) return 'in Southeast Asia';
-            if (startsWithFrom) return 'from Southeast Asia';
-            return 'Southeast Asia';
+        };
+
+        // Simplify country lists to regions
+        const simplifyRegion = (desc) => {
+          const seaCountries = [
+            'malaysia',
+            'indonesia',
+            'singapore',
+            'thailand',
+            'vietnam',
+            'philippines',
+            'myanmar',
+            'cambodia',
+            'laos',
+            'brunei',
+          ];
+          const lowerDesc = desc.toLowerCase();
+
+          // Count how many SE Asian countries are mentioned
+          const mentionedSEA = seaCountries.filter((c) => lowerDesc.includes(c));
+
+          // If 3+ SE Asian countries are listed, replace with "Southeast Asia"
+          if (mentionedSEA.length >= 3) {
+            // Build regex to match the country list (including "and", commas)
+            const countryListPattern = new RegExp(
+              `\\b(in|from)?\\s*(${seaCountries.join('|')})(\\s*,\\s*(${seaCountries.join('|')}))*\\s*(,?\\s*(and)?\\s*(${seaCountries.join('|')}))?`,
+              'gi'
+            );
+            return desc.replace(countryListPattern, (match) => {
+              // Check if it started with "in" or "from"
+              const startsWithIn = /^\s*in\s/i.test(match);
+              const startsWithFrom = /^\s*from\s/i.test(match);
+              if (startsWithIn) return 'in Southeast Asia';
+              if (startsWithFrom) return 'from Southeast Asia';
+              return 'Southeast Asia';
+            });
+          }
+          return desc;
+        };
+
+        // Title: "Target List – {Target Description}" in Title Case
+        // Simplify multi-country lists to region names
+        const simplifiedDesc = simplifyRegion(targetDescription);
+        const formattedTitle = `Target List – ${toTitleCase(simplifiedDesc)}`;
+        targetSlide.addText(formattedTitle, {
+          x: 0.38,
+          y: 0.07,
+          w: 12.5,
+          h: 0.9,
+          fontSize: 24,
+          fontFace: 'Segoe UI',
+          color: '000000',
+          valign: 'bottom',
+        });
+
+        // Helper function to parse location (handles JSON format like {"HQ":"Singapore"})
+        // Also cleans up "HQ:", "- HQ:" prefixes from location values
+        const parseLocation = (location) => {
+          if (!location) return { country: 'Other', hqCity: '' };
+          let loc = ensureString(location);
+
+          // Clean up "- HQ:" or "HQ:" prefix from the start
+          loc = loc.replace(/^-?\s*HQ:\s*/i, '').trim();
+
+          // Check if location is JSON format (e.g., {"HQ":"Chatuchak, Bangkok, Thailand"})
+          if (loc.includes('{') && loc.includes('}')) {
+            try {
+              // Try to extract the value from JSON-like string
+              const match =
+                loc.match(/"HQ"\s*:\s*"([^"]+)"/i) || loc.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
+              if (match) {
+                let hqValue = match[1] || match[2] || '';
+                // Clean up any remaining "HQ:" prefix
+                hqValue = hqValue.replace(/^-?\s*HQ:\s*/i, '').trim();
+                const parts = hqValue.split(',').map((p) => p.trim());
+                // Country is always last part
+                const country = parts[parts.length - 1] || 'Other';
+                // HQ city is first part only (just the district/area, not including state)
+                const hqCity = parts[0] || '';
+                return { country, hqCity };
+              }
+            } catch (e) {
+              // Fall through to normal parsing
+            }
+          }
+
+          // Normal parsing - extract country from location (last part after comma)
+          const parts = loc.split(',').map((p) => p.trim());
+          const country = parts[parts.length - 1] || 'Other';
+          // HQ city is first part only (just the district/area)
+          // If only 1 part (country only), hqCity should be empty, not the country name
+          let hqCity = parts.length > 1 ? parts[0] || '' : '';
+
+          // SINGAPORE VALIDATION: If country is Singapore, validate the area
+          if (country.toLowerCase() === 'singapore') {
+            if (!hqCity || !isValidSingaporeArea(hqCity)) {
+              // Invalid or missing area - leave empty rather than making one up
+              // "Central" is NOT a valid Singapore area
+              hqCity = '';
+            }
+          }
+          return { country, hqCity };
+        };
+
+        // Group companies by country
+        const companyByCountry = {};
+        companies.forEach((c) => {
+          const { country, hqCity } = parseLocation(c.location);
+          if (!companyByCountry[country]) companyByCountry[country] = [];
+          companyByCountry[country].push({ ...c, hqCity });
+        });
+
+        // Assign sequential numbers AFTER grouping (so numbers are in order by country)
+        let sequentialIndex = 1;
+        Object.keys(companyByCountry).forEach((country) => {
+          companyByCountry[country].forEach((comp) => {
+            comp.index = sequentialIndex++;
+          });
+        });
+
+        // Determine if single country or multi-country
+        const countries = Object.keys(companyByCountry);
+        const isMultiCountry = countries.length > 1;
+
+        // Build table data
+        const segments = meceData.segments || [];
+        const companySegments = meceData.companySegments || {};
+
+        // Template colors (from analysis of YCP Target List Slide Template)
+        const TL_COLORS = {
+          headerBg: '1524A9', // Dark blue for header row
+          countryBg: '011AB7', // Dark blue for country column (accent3)
+          companyBg: '007FFF', // Bright blue for company column (accent1)
+          white: 'FFFFFF',
+          black: '000000',
+          gray: 'BFBFBF', // Gray for dotted borders between rows
+          checkMark: '00B050', // Green for check marks
+        };
+
+        // Build table rows
+        const tableRows = [];
+
+        // Row 1: Merged header for products (spans all segment columns)
+        const productHeaderRow = [];
+
+        if (isMultiCountry) {
+          // Empty cell for country column header (white background)
+          productHeaderRow.push({
+            text: '',
+            options: {
+              fill: TL_COLORS.white,
+              valign: 'middle',
+              align: 'center',
+              border: { pt: 3, color: TL_COLORS.white },
+            },
           });
         }
-        return desc;
-      };
 
-      // Title: "Target List – {Target Description}" in Title Case
-      // Simplify multi-country lists to region names
-      const simplifiedDesc = simplifyRegion(targetDescription);
-      const formattedTitle = `Target List – ${toTitleCase(simplifiedDesc)}`;
-      targetSlide.addText(formattedTitle, {
-        x: 0.38, y: 0.07, w: 12.5, h: 0.9,
-        fontSize: 24, fontFace: 'Segoe UI',
-        color: '000000', valign: 'bottom'
-      });
-
-      // Helper function to parse location (handles JSON format like {"HQ":"Singapore"})
-      // Also cleans up "HQ:", "- HQ:" prefixes from location values
-      const parseLocation = (location) => {
-        if (!location) return { country: 'Other', hqCity: '' };
-        let loc = ensureString(location);
-
-        // Clean up "- HQ:" or "HQ:" prefix from the start
-        loc = loc.replace(/^-?\s*HQ:\s*/i, '').trim();
-
-        // Check if location is JSON format (e.g., {"HQ":"Chatuchak, Bangkok, Thailand"})
-        if (loc.includes('{') && loc.includes('}')) {
-          try {
-            // Try to extract the value from JSON-like string
-            const match = loc.match(/"HQ"\s*:\s*"([^"]+)"/i) || loc.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
-            if (match) {
-              let hqValue = match[1] || match[2] || '';
-              // Clean up any remaining "HQ:" prefix
-              hqValue = hqValue.replace(/^-?\s*HQ:\s*/i, '').trim();
-              const parts = hqValue.split(',').map(p => p.trim());
-              // Country is always last part
-              const country = parts[parts.length - 1] || 'Other';
-              // HQ city is first part only (just the district/area, not including state)
-              const hqCity = parts[0] || '';
-              return { country, hqCity };
-            }
-          } catch (e) {
-            // Fall through to normal parsing
-          }
-        }
-
-        // Normal parsing - extract country from location (last part after comma)
-        const parts = loc.split(',').map(p => p.trim());
-        const country = parts[parts.length - 1] || 'Other';
-        // HQ city is first part only (just the district/area)
-        // If only 1 part (country only), hqCity should be empty, not the country name
-        let hqCity = parts.length > 1 ? (parts[0] || '') : '';
-
-        // SINGAPORE VALIDATION: If country is Singapore, validate the area
-        if (country.toLowerCase() === 'singapore') {
-          if (!hqCity || !isValidSingaporeArea(hqCity)) {
-            // Invalid or missing area - leave empty rather than making one up
-            // "Central" is NOT a valid Singapore area
-            hqCity = '';
-          }
-        }
-        return { country, hqCity };
-      };
-
-      // Group companies by country
-      const companyByCountry = {};
-      companies.forEach((c) => {
-        const { country, hqCity } = parseLocation(c.location);
-        if (!companyByCountry[country]) companyByCountry[country] = [];
-        companyByCountry[country].push({ ...c, hqCity });
-      });
-
-      // Assign sequential numbers AFTER grouping (so numbers are in order by country)
-      let sequentialIndex = 1;
-      Object.keys(companyByCountry).forEach(country => {
-        companyByCountry[country].forEach(comp => {
-          comp.index = sequentialIndex++;
-        });
-      });
-
-      // Determine if single country or multi-country
-      const countries = Object.keys(companyByCountry);
-      const isMultiCountry = countries.length > 1;
-
-      // Build table data
-      const segments = meceData.segments || [];
-      const companySegments = meceData.companySegments || {};
-
-      // Template colors (from analysis of YCP Target List Slide Template)
-      const TL_COLORS = {
-        headerBg: '1524A9',      // Dark blue for header row
-        countryBg: '011AB7',     // Dark blue for country column (accent3)
-        companyBg: '007FFF',     // Bright blue for company column (accent1)
-        white: 'FFFFFF',
-        black: '000000',
-        gray: 'BFBFBF',          // Gray for dotted borders between rows
-        checkMark: '00B050'      // Green for check marks
-      };
-
-      // Build table rows
-      const tableRows = [];
-
-      // Row 1: Merged header for products (spans all segment columns)
-      const productHeaderRow = [];
-
-      if (isMultiCountry) {
-        // Empty cell for country column header (white background)
+        // Empty cell for company column header
         productHeaderRow.push({
           text: '',
           options: {
             fill: TL_COLORS.white,
             valign: 'middle',
             align: 'center',
-            border: { pt: 3, color: TL_COLORS.white }
-          }
+            border: { pt: 3, color: TL_COLORS.white },
+          },
         });
-      }
 
-      // Empty cell for company column header
-      productHeaderRow.push({
-        text: '',
-        options: {
-          fill: TL_COLORS.white,
-          valign: 'middle',
-          align: 'center',
-          border: { pt: 3, color: TL_COLORS.white }
-        }
-      });
-
-      // HQ column header with rowspan: 2 (spans both header rows)
-      productHeaderRow.push({
-        text: 'HQ',
-        options: {
-          rowspan: 2,
-          fill: TL_COLORS.headerBg,
-          color: TL_COLORS.white,
-          bold: false,
-          valign: 'middle',
-          align: 'center',
-          border: { pt: 3, color: TL_COLORS.white }
-        }
-      });
-
-      // Merged header for all product columns (spans all segment columns)
-      if (segments.length > 0) {
+        // HQ column header with rowspan: 2 (spans both header rows)
         productHeaderRow.push({
-          text: 'Products / Services',
+          text: 'HQ',
           options: {
-            colspan: segments.length,
+            rowspan: 2,
             fill: TL_COLORS.headerBg,
             color: TL_COLORS.white,
             bold: false,
-            align: 'center',
             valign: 'middle',
-            border: { pt: 3, color: TL_COLORS.white }
-          }
+            align: 'center',
+            border: { pt: 3, color: TL_COLORS.white },
+          },
         });
-      }
 
-      tableRows.push(productHeaderRow);
+        // Merged header for all product columns (spans all segment columns)
+        if (segments.length > 0) {
+          productHeaderRow.push({
+            text: 'Products / Services',
+            options: {
+              colspan: segments.length,
+              fill: TL_COLORS.headerBg,
+              color: TL_COLORS.white,
+              bold: false,
+              align: 'center',
+              valign: 'middle',
+              border: { pt: 3, color: TL_COLORS.white },
+            },
+          });
+        }
 
-      // Row 2: Segment names (sub-headers for products)
-      const headerRow = [];
+        tableRows.push(productHeaderRow);
 
-      if (isMultiCountry) {
-        // Empty cell for country column header (white background)
+        // Row 2: Segment names (sub-headers for products)
+        const headerRow = [];
+
+        if (isMultiCountry) {
+          // Empty cell for country column header (white background)
+          headerRow.push({
+            text: '',
+            options: {
+              fill: TL_COLORS.white,
+              valign: 'middle',
+              align: 'center',
+              border: { pt: 3, color: TL_COLORS.white },
+            },
+          });
+        }
+
+        // Empty cell for company column header
         headerRow.push({
           text: '',
           options: {
             fill: TL_COLORS.white,
             valign: 'middle',
             align: 'center',
-            border: { pt: 3, color: TL_COLORS.white }
-          }
+            border: { pt: 3, color: TL_COLORS.white },
+          },
         });
-      }
 
-      // Empty cell for company column header
-      headerRow.push({
-        text: '',
-        options: {
-          fill: TL_COLORS.white,
-          valign: 'middle',
-          align: 'center',
-          border: { pt: 3, color: TL_COLORS.white }
-        }
-      });
+        // HQ column is merged from row above (rowspan: 2), so no cell here
 
-      // HQ column is merged from row above (rowspan: 2), so no cell here
-
-      // Segment headers (bright blue background like company names, white text)
-      segments.forEach(seg => {
-        headerRow.push({
-          text: seg,
-          options: {
-            fill: TL_COLORS.companyBg,
-            color: TL_COLORS.white,
-            bold: false,
-            align: 'center',
-            valign: 'middle',
-            border: { pt: 3, color: TL_COLORS.white }
-          }
-        });
-      });
-
-      tableRows.push(headerRow);
-
-      // Data rows grouped by country
-      const countryKeys = Object.keys(companyByCountry);
-      countryKeys.forEach((country) => {
-        const countryCompanies = companyByCountry[country];
-        countryCompanies.forEach((comp, idx) => {
-          const row = [];
-          const isFirstInCountry = idx === 0;
-          const isLastInCountry = idx === countryCompanies.length - 1;
-
-          // Determine if this is the last company in the last country (for bottom border)
-          const isLastCountry = countryKeys.indexOf(country) === countryKeys.length - 1;
-          const isVeryLastRow = isLastCountry && isLastInCountry;
-
-          // Border style: dotted gray between ALL rows including last row
-          const rowBottomBorder = { pt: 1, color: TL_COLORS.gray, type: 'dash' };
-
-          if (isMultiCountry) {
-            // Country column (only show text for first company in group, use rowspan)
-            if (isFirstInCountry) {
-              row.push({
-                text: country,
-                options: {
-                  rowspan: countryCompanies.length,
-                  fill: TL_COLORS.countryBg,
-                  color: TL_COLORS.white,
-                  bold: false,
-                  align: 'center',
-                  valign: 'middle',
-                  border: { pt: 3, color: TL_COLORS.white }
-                }
-              });
-            }
-          }
-
-          // Company name with numbering (bright blue background, WHITE text, left-aligned)
-          // Keep 3pt white borders on ALL sides for company name cells
-          // Apply cleanCompanyName to ensure no suffixes (PT, Ltd) and English only
-          const rawName = comp.title || comp.company_name || '';
-          const companyName = cleanCompanyName(rawName, comp.website) || 'Unknown';
-          row.push({
-            text: `${comp.index}. ${companyName}`,
+        // Segment headers (bright blue background like company names, white text)
+        segments.forEach((seg) => {
+          headerRow.push({
+            text: seg,
             options: {
               fill: TL_COLORS.companyBg,
               color: TL_COLORS.white,
               bold: false,
-              align: 'left',
+              align: 'center',
               valign: 'middle',
               border: { pt: 3, color: TL_COLORS.white },
-              hyperlink: { url: comp.website || '' }
-            }
+            },
           });
+        });
 
-          // HQ column (white background, black text)
-          const hqCity = comp.hqCity || '';
-          row.push({
-            text: hqCity,
-            options: {
-              fill: TL_COLORS.white,
-              color: TL_COLORS.black,
-              bold: false,
-              align: 'left',
-              valign: 'middle',
-              border: [
-                { pt: 3, color: TL_COLORS.white },    // top
-                { pt: 3, color: TL_COLORS.white },    // right
-                rowBottomBorder,                       // bottom (dotted between rows)
-                { pt: 3, color: TL_COLORS.white }     // left
-              ]
+        tableRows.push(headerRow);
+
+        // Data rows grouped by country
+        const countryKeys = Object.keys(companyByCountry);
+        countryKeys.forEach((country) => {
+          const countryCompanies = companyByCountry[country];
+          countryCompanies.forEach((comp, idx) => {
+            const row = [];
+            const isFirstInCountry = idx === 0;
+            const isLastInCountry = idx === countryCompanies.length - 1;
+
+            // Determine if this is the last company in the last country (for bottom border)
+            const isLastCountry = countryKeys.indexOf(country) === countryKeys.length - 1;
+            const isVeryLastRow = isLastCountry && isLastInCountry;
+
+            // Border style: dotted gray between ALL rows including last row
+            const rowBottomBorder = { pt: 1, color: TL_COLORS.gray, type: 'dash' };
+
+            if (isMultiCountry) {
+              // Country column (only show text for first company in group, use rowspan)
+              if (isFirstInCountry) {
+                row.push({
+                  text: country,
+                  options: {
+                    rowspan: countryCompanies.length,
+                    fill: TL_COLORS.countryBg,
+                    color: TL_COLORS.white,
+                    bold: false,
+                    align: 'center',
+                    valign: 'middle',
+                    border: { pt: 3, color: TL_COLORS.white },
+                  },
+                });
+              }
             }
-          });
 
-          // Segment tick marks (white background, green check marks)
-          const compSegments = companySegments[String(comp.index)] || [];
-          segments.forEach((seg, segIdx) => {
-            const hasTick = compSegments[segIdx] === true;
+            // Company name with numbering (bright blue background, WHITE text, left-aligned)
+            // Keep 3pt white borders on ALL sides for company name cells
+            // Apply cleanCompanyName to ensure no suffixes (PT, Ltd) and English only
+            const rawName = comp.title || comp.company_name || '';
+            const companyName = cleanCompanyName(rawName, comp.website) || 'Unknown';
             row.push({
-              text: hasTick ? '✓' : '',
+              text: `${comp.index}. ${companyName}`,
+              options: {
+                fill: TL_COLORS.companyBg,
+                color: TL_COLORS.white,
+                bold: false,
+                align: 'left',
+                valign: 'middle',
+                border: { pt: 3, color: TL_COLORS.white },
+                hyperlink: { url: comp.website || '' },
+              },
+            });
+
+            // HQ column (white background, black text)
+            const hqCity = comp.hqCity || '';
+            row.push({
+              text: hqCity,
               options: {
                 fill: TL_COLORS.white,
-                color: TL_COLORS.checkMark,
-                align: 'center',
+                color: TL_COLORS.black,
+                bold: false,
+                align: 'left',
                 valign: 'middle',
                 border: [
-                  { pt: 3, color: TL_COLORS.white },    // top
-                  { pt: 3, color: TL_COLORS.white },    // right
-                  rowBottomBorder,                       // bottom (dotted between rows)
-                  { pt: 3, color: TL_COLORS.white }     // left
-                ]
-              }
+                  { pt: 3, color: TL_COLORS.white }, // top
+                  { pt: 3, color: TL_COLORS.white }, // right
+                  rowBottomBorder, // bottom (dotted between rows)
+                  { pt: 3, color: TL_COLORS.white }, // left
+                ],
+              },
             });
+
+            // Segment tick marks (white background, green check marks)
+            const compSegments = companySegments[String(comp.index)] || [];
+            segments.forEach((seg, segIdx) => {
+              const hasTick = compSegments[segIdx] === true;
+              row.push({
+                text: hasTick ? '✓' : '',
+                options: {
+                  fill: TL_COLORS.white,
+                  color: TL_COLORS.checkMark,
+                  align: 'center',
+                  valign: 'middle',
+                  border: [
+                    { pt: 3, color: TL_COLORS.white }, // top
+                    { pt: 3, color: TL_COLORS.white }, // right
+                    rowBottomBorder, // bottom (dotted between rows)
+                    { pt: 3, color: TL_COLORS.white }, // left
+                  ],
+                },
+              });
+            });
+
+            tableRows.push(row);
           });
-
-          tableRows.push(row);
         });
-      });
 
-      // Calculate column widths (from template: Country=1.12", Company=2.14", HQ=1.5", Segments=~1.17" each)
-      const tableWidth = 12.6;
-      let colWidths = [];
+        // Calculate column widths (from template: Country=1.12", Company=2.14", HQ=1.5", Segments=~1.17" each)
+        const tableWidth = 12.6;
+        let colWidths = [];
 
-      if (isMultiCountry) {
-        const countryColWidth = 1.12;
-        const companyColWidth = 2.14;
-        const hqColWidth = 1.5;
-        const remainingWidth = tableWidth - countryColWidth - companyColWidth - hqColWidth;
-        const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
-        colWidths = [countryColWidth, companyColWidth, hqColWidth];
-        segments.forEach(() => colWidths.push(segmentColWidth));
-      } else {
-        // Single country - no country column, company column takes more space
-        const companyColWidth = 2.5;
-        const hqColWidth = 1.5;
-        const remainingWidth = tableWidth - companyColWidth - hqColWidth;
-        const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
-        colWidths = [companyColWidth, hqColWidth];
-        segments.forEach(() => colWidths.push(segmentColWidth));
-      }
+        if (isMultiCountry) {
+          const countryColWidth = 1.12;
+          const companyColWidth = 2.14;
+          const hqColWidth = 1.5;
+          const remainingWidth = tableWidth - countryColWidth - companyColWidth - hqColWidth;
+          const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
+          colWidths = [countryColWidth, companyColWidth, hqColWidth];
+          segments.forEach(() => colWidths.push(segmentColWidth));
+        } else {
+          // Single country - no country column, company column takes more space
+          const companyColWidth = 2.5;
+          const hqColWidth = 1.5;
+          const remainingWidth = tableWidth - companyColWidth - hqColWidth;
+          const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
+          colWidths = [companyColWidth, hqColWidth];
+          segments.forEach(() => colWidths.push(segmentColWidth));
+        }
 
-      // Add target list table (position from template: x=0.3663", y=1.467")
-      // Cell margins: 0.04 inch (0.1cm) left/right, 0 inch top/bottom
-      // Font size 14 per design requirements
-      targetSlide.addTable(tableRows, {
-        x: 0.37, y: 1.47, w: tableWidth,
-        colW: colWidths,
-        fontFace: 'Segoe UI',
-        fontSize: 14,
-        valign: 'middle',
-        rowH: 0.30,
-        margin: [0, 0.04, 0, 0.04]  // [top, right, bottom, left] in inches
-      });
+        // Add target list table (position from template: x=0.3663", y=1.467")
+        // Cell margins: 0.04 inch (0.1cm) left/right, 0 inch top/bottom
+        // Font size 14 per design requirements
+        targetSlide.addTable(tableRows, {
+          x: 0.37,
+          y: 1.47,
+          w: tableWidth,
+          colW: colWidths,
+          fontFace: 'Segoe UI',
+          fontSize: 14,
+          valign: 'middle',
+          rowH: 0.3,
+          margin: [0, 0.04, 0, 0.04], // [top, right, bottom, left] in inches
+        });
 
-      // Footnote (from template: x=0.3754", y=6.6723", font 10pt)
-      targetSlide.addText('Source: Company disclosures, industry databases', {
-        x: 0.38, y: 6.67, w: 12.54, h: 0.42,
-        fontSize: 10, fontFace: 'Segoe UI',
-        color: COLORS.black, valign: 'top'
-      });
+        // Footnote (from template: x=0.3754", y=6.6723", font 10pt)
+        targetSlide.addText('Source: Company disclosures, industry databases', {
+          x: 0.38,
+          y: 6.67,
+          w: 12.54,
+          h: 0.42,
+          fontSize: 10,
+          fontFace: 'Segoe UI',
+          color: COLORS.black,
+          valign: 'top',
+        });
 
-      console.log('Target List slide generated');
+        console.log('Target List slide generated');
       } catch (targetListError) {
         console.error('ERROR generating Target List slide:', targetListError.message);
         console.error('Target List error stack:', targetListError.stack);
@@ -3388,809 +4132,1049 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
     // ===== INDIVIDUAL COMPANY PROFILE SLIDES =====
     // NOTE: M&A Strategies slide removed - belongs in UTB service only
+    let slidesGenerated = 0;
+    let slidesSkipped = 0;
+    const skippedCompanies = [];
     for (const company of companies) {
       try {
-      // Skip companies with no meaningful info (only has website, no business/location/metrics)
-      // Helper to check if value is a placeholder (e.g., "Not found", "N/A", etc.)
-      const isPlaceholder = (val) => {
-        if (!val) return true;
-        const lower = String(val).toLowerCase().trim();
-        const placeholders = ['not found', 'not specified', 'n/a', 'unknown', 'not available', 'none', 'not provided', 'not disclosed'];
-        return placeholders.includes(lower) || lower.length === 0;
-      };
+        // Skip companies with no meaningful info (only has website, no business/location/metrics)
+        // Helper to check if value is a placeholder (e.g., "Not found", "N/A", etc.)
+        const isPlaceholder = (val) => {
+          if (!val) return true;
+          const lower = String(val).toLowerCase().trim();
+          const placeholders = [
+            'not found',
+            'not specified',
+            'n/a',
+            'unknown',
+            'not available',
+            'none',
+            'not provided',
+            'not disclosed',
+          ];
+          return placeholders.includes(lower) || lower.length === 0;
+        };
 
-      const hasBusinessInfo = company.business && !isPlaceholder(company.business);
-      const hasLocation = company.location && !isPlaceholder(company.location);
-      const hasCompanyName = company.company_name && !isPlaceholder(company.company_name);
-      const hasMetrics = company.key_metrics && company.key_metrics.length > 0;
-      const hasBreakdown = company.breakdown_items && company.breakdown_items.length > 0;
+        const hasBusinessInfo = company.business && !isPlaceholder(company.business);
+        const hasLocation = company.location && !isPlaceholder(company.location);
+        const hasCompanyName = company.company_name && !isPlaceholder(company.company_name);
+        const hasMetrics = company.key_metrics && company.key_metrics.length > 0;
+        const hasBreakdown = company.breakdown_items && company.breakdown_items.length > 0;
 
-      // If company has NO meaningful data at all, skip it entirely
-      if (!hasCompanyName && !hasBusinessInfo && !hasLocation && !hasMetrics && !hasBreakdown) {
-        console.log(`  Skipping slide for ${company.website} - no meaningful info extracted (all fields are empty/placeholder)`);
-        continue;
-      }
-
-      console.log(`  Generating slide for: ${company.company_name || company.website}`);
-
-      // Step 1: Detect shortforms FIRST (before cleanup) to get footnote from original data with inline longforms
-      const shortformNote = detectShortforms(company);
-
-      // Step 2: Clean up inline longforms from tables (e.g., "PU (Polyurethane)" -> "PU")
-      // This makes tables cleaner; the longforms are already captured in shortformNote
-      cleanupInlineLongforms(company);
-
-      // NOTE: Business Overview slide removed - user requested single profile slide only
-
-      // Use master slide - lines are fixed in background and cannot be moved
-      const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-
-      // ===== TITLE + MESSAGE (combined in one text box) =====
-      const titleText = company.title || company.company_name || 'Company Profile';
-      const messageText = company.message || '';
-
-      // Create combined text with title (font 24) and message (font 16)
-      const titleContent = messageText ? [
-        { text: titleText, options: { fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, breakLine: true } },
-        { text: messageText, options: { fontSize: 16, fontFace: 'Segoe UI', color: COLORS.black } }
-      ] : titleText;
-
-      slide.addText(titleContent, {
-        x: 0.38, y: 0.07, w: 9.5, h: 0.9,
-        fontSize: 24, fontFace: 'Segoe UI',
-        color: COLORS.black, valign: 'bottom',
-        margin: [0, 0, 0, 0]  // No left/right margin
-      });
-
-      // ===== FLAG (top right) =====
-      const countryCode = getCountryCode(company.location);
-      if (countryCode) {
-        try {
-          const flagUrl = `https://flagcdn.com/w80/${countryCode.toLowerCase()}.png`;
-          const flagBase64 = await fetchImageAsBase64(flagUrl);
-          if (flagBase64) {
-            const flagX = 10.64, flagY = 0.22, flagW = 0.83, flagH = 0.55;
-            // Add flag image
-            slide.addImage({
-              data: `data:image/png;base64,${flagBase64}`,
-              x: flagX, y: flagY, w: flagW, h: flagH
-            });
-            // Add 1pt black outline around flag
-            slide.addShape(pptx.shapes.RECTANGLE, {
-              x: flagX, y: flagY, w: flagW, h: flagH,
-              fill: { type: 'none' },
-              line: { color: '000000', width: 1 }
-            });
-          }
-        } catch (e) {
-          console.log('Flag fetch failed for', countryCode);
+        // If company has NO meaningful data at all, skip it entirely
+        if (!hasCompanyName && !hasBusinessInfo && !hasLocation && !hasMetrics && !hasBreakdown) {
+          console.log(
+            `  Skipping slide for ${company.website} - no meaningful info extracted (all fields are empty/placeholder)`
+          );
+          slidesSkipped++;
+          skippedCompanies.push(company.website || 'unknown');
+          continue;
         }
-      }
 
-      // ===== LOGO (top right of slide) =====
-      // Use pre-extracted logo from processing pipeline (cascade: Clearbit → og:image → apple-touch-icon → img[logo] → favicon)
-      if (company._logo?.data) {
-        try {
-          console.log(`  Using pre-extracted logo (source: ${company._logo.source})`);
-          slide.addImage({
-            data: company._logo.data,
-            x: 12.1, y: 0.12, w: 0.7, h: 0.7,
-            sizing: { type: 'contain', w: 0.7, h: 0.7 }
-          });
-        } catch (e) {
-          console.log('Logo add failed for', company.website, e.message);
-        }
-      } else {
-        console.log(`  No logo available for ${company.website} - skipping (no placeholder)`);
-      }
+        console.log(`  Generating slide for: ${company.company_name || company.website}`);
 
-      // ===== SECTION HEADERS =====
-      // Left: "会社概要資料" - positioned per ref v4
-      slide.addText('会社概要資料', {
-        x: 0.37, y: 1.37, w: 6.1, h: 0.35,
-        fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'center'
-      });
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0.37, y: 1.79, w: 6.1, h: 0,
-        line: { color: COLORS.dk2, width: 1.75 }
-      });
+        // Step 1: Detect shortforms FIRST (before cleanup) to get footnote from original data with inline longforms
+        const shortformNote = detectShortforms(company);
 
-      // Right: Dynamic title based on breakdown_title - positioned at 6.86" x 1.37"
-      const rightSectionTitle = company.breakdown_title || 'Products and Applications';
-      slide.addText(rightSectionTitle, {
-        x: 6.86, y: 1.37, w: 6.1, h: 0.35,
-        fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'center'
-      });
-      slide.addShape(pptx.shapes.LINE, {
-        x: 6.86, y: 1.79, w: 6.1, h: 0,
-        line: { color: COLORS.dk2, width: 1.75 }
-      });
+        // Step 2: Clean up inline longforms from tables (e.g., "PU (Polyurethane)" -> "PU")
+        // This makes tables cleaner; the longforms are already captured in shortformNote
+        cleanupInlineLongforms(company);
 
-      // ===== LEFT TABLE (会社概要資料) =====
-      // Determine if single location (for HQ label)
-      const locationText = ensureString(company.location);
-      const branchNetworkSummary = getBranchNetworkSummaryFromCompany(company);
-      const hasBranchCoverage = !!branchNetworkSummary;
-      const locationLines = locationText.split('\n').filter(line => line.trim());
-      const isSingleLocation = !hasBranchCoverage &&
-        locationLines.length <= 1 &&
-        !locationText.toLowerCase().includes('branch') &&
-        !locationText.toLowerCase().includes('factory') &&
-        !locationText.toLowerCase().includes('warehouse');
-      const locationLabel = isSingleLocation ? 'HQ' : 'Location';
+        // NOTE: Business Overview slide removed - user requested single profile slide only
 
-      // Helper function to check if value is empty or placeholder text
-      const isEmptyValue = (val) => {
-        if (!val) return true;
-        const strVal = ensureString(val);
-        const lower = strVal.toLowerCase().trim();
-        const emptyPhrases = [
-          '', 'not specified', 'n/a', 'unknown', 'not available', 'not found',
-          'not explicitly mentioned', 'not mentioned', 'none', 'none specified',
-          'not disclosed', 'not provided', 'no information', 'no data',
-          'none explicitly mentioned'
-        ];
-        // Check exact match or if value contains placeholder phrases
-        if (emptyPhrases.includes(lower)) return true;
-        // Check if value contains placeholder phrases (e.g., "Number of Employees: Not specified")
-        const containsPhrases = ['not specified', 'not available', 'not found', 'not disclosed',
-                                  'not provided', 'not mentioned', 'not explicitly', 'none explicitly',
-                                  'no information', 'no data', 'n/a', 'unknown'];
-        for (const phrase of containsPhrases) {
-          if (lower.includes(phrase)) return true;
-        }
-        // CRITICAL: Detect alphabetical/numbered placeholder patterns like "Distributor A, B, C" or "Partner X, Y, Z"
-        // Pattern: word followed by single letter (A, B, C...) or number (1, 2, 3...)
-        const placeholderPatterns = [
-          /\b(distributor|partner|supplier|customer|client|vendor)\s+[a-c]\b/gi,
-          /\b(distributor|partner|supplier|customer|client|vendor)\s+[x-z]\b/gi,
-          /\b(distributor|partner|supplier|customer|client|vendor)\s+[1-3]\b/gi,
-          /\b[a-z]+\s+[a-c],\s*[a-z]+\s+[a-c]/gi,  // "Something A, Something B"
-          /\b[a-z]+\s+[x-z],\s*[a-z]+\s+[x-z]/gi,  // "Something X, Something Y"
-          /\b(brand|product|item|supplier|customer)\s*\d+\s*,/gi,  // "brand1, brand2" or "product 1, product 2"
-          /\bbrand\d+\b.*\bbrand\d+\b/gi,  // "brands1, brands2, brands3" pattern
-        ];
-        for (const pattern of placeholderPatterns) {
-          if (pattern.test(strVal)) return true;
-        }
-        // Also check for simple numbered placeholder patterns like "brands1, brands2"
-        if (/\b\w+[1-3]\s*,\s*\w+[1-3]/i.test(strVal)) return true;
-        return false;
-      };
+        // Use master slide - lines are fixed in background and cannot be moved
+        const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-      // Helper function to remove company suffixes and prefixes
-      const removeCompanySuffix = (name) => {
-        if (!name) return name;
-        return name
-          // Remove PT., CV. prefix from Indonesian companies
-          .replace(/^(PT\.?|CV\.?)\s+/gi, '')
-          // Remove suffixes
-          .replace(/\s*(Company\s+Limited|Co\.,?\s*Ltd\.?|Ltd\.?|Limited|Sdn\.?\s*Bhd\.?|Pte\.?\s*Ltd\.?|Inc\.?|Corp\.?|Corporation|LLC|GmbH|JSC|PT\.?|Tbk\.?|S\.?A\.?|PLC|Company)\s*$/gi, '')
-          .trim();
-      };
+        // ===== TITLE + MESSAGE (combined in one text box) =====
+        const titleText = company.title || company.company_name || 'Company Profile';
+        const messageText = company.message || '';
 
-      // Helper function to clean location value (remove JSON format and "HQ:" prefix)
-      // ALSO enforces Singapore 2-level rule at display time
-      const cleanLocationValue = (location, label) => {
-        if (!location) return location;
-        let cleaned = location;
+        // Create combined text with title (font 24) and message (font 16)
+        const titleContent = messageText
+          ? [
+              {
+                text: titleText,
+                options: {
+                  fontSize: 24,
+                  fontFace: 'Segoe UI',
+                  color: COLORS.black,
+                  breakLine: true,
+                },
+              },
+              {
+                text: messageText,
+                options: { fontSize: 16, fontFace: 'Segoe UI', color: COLORS.black },
+              },
+            ]
+          : titleText;
 
-        // Handle JSON format like {"HQ":"Chatuchak, Bangkok, Thailand"} or {"HQ":"CBD, Singapore"}
-        if (cleaned.includes('{') && cleaned.includes('}')) {
+        slide.addText(titleContent, {
+          x: 0.38,
+          y: 0.07,
+          w: 9.5,
+          h: 0.9,
+          fontSize: 24,
+          fontFace: 'Segoe UI',
+          color: COLORS.black,
+          valign: 'bottom',
+          margin: [0, 0, 0, 0], // No left/right margin
+        });
+
+        // ===== FLAG (top right) =====
+        const countryCode = getCountryCode(company.location);
+        if (countryCode) {
           try {
-            // Try to extract the value from JSON-like string
-            // First regex: /"HQ":"value"/ - match[1] is the value
-            // Second regex: /"key":"value"/ - match[1] is key, match[2] is value
-            const match = cleaned.match(/"HQ"\s*:\s*"([^"]+)"/i) || cleaned.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
-            if (match) {
-              // Prefer match[2] (value from second regex) over match[1] (could be key from second regex)
-              cleaned = match[2] || match[1] || cleaned;
+            const flagUrl = `https://flagcdn.com/w80/${countryCode.toLowerCase()}.png`;
+            const flagBase64 = await fetchImageAsBase64(flagUrl);
+            if (flagBase64) {
+              const flagX = 10.64,
+                flagY = 0.22,
+                flagW = 0.83,
+                flagH = 0.55;
+              // Add flag image
+              slide.addImage({
+                data: `data:image/png;base64,${flagBase64}`,
+                x: flagX,
+                y: flagY,
+                w: flagW,
+                h: flagH,
+              });
+              // Add 1pt black outline around flag
+              slide.addShape(pptx.shapes.RECTANGLE, {
+                x: flagX,
+                y: flagY,
+                w: flagW,
+                h: flagH,
+                fill: { type: 'none' },
+                line: { color: '000000', width: 1 },
+              });
             }
           } catch (e) {
-            // Fall through to normal cleaning
+            console.log('Flag fetch failed for', countryCode);
           }
         }
 
-        // If label is HQ, remove "- HQ:" or "HQ:" prefix from value
-        if (label === 'HQ') {
-          cleaned = cleaned.replace(/^-?\s*HQ:\s*/i, '').trim();
+        // ===== LOGO (top right of slide) =====
+        // Use pre-extracted logo from processing pipeline (cascade: Clearbit → og:image → apple-touch-icon → img[logo] → favicon)
+        if (company._logo?.data) {
+          try {
+            console.log(`  Using pre-extracted logo (source: ${company._logo.source})`);
+            slide.addImage({
+              data: company._logo.data,
+              x: 12.1,
+              y: 0.12,
+              w: 0.7,
+              h: 0.7,
+              sizing: { type: 'contain', w: 0.7, h: 0.7 },
+            });
+          } catch (e) {
+            console.log('Logo add failed for', company.website, e.message);
+          }
+        } else {
+          console.log(`  No logo available for ${company.website} - skipping (no placeholder)`);
         }
 
-        // FINAL SINGAPORE FIX: If location is just "Singapore", try to extract area from address
-        // or leave as-is (can't make up areas)
-        const parts = cleaned.split(',').map(p => p.trim()).filter(p => p);
-        const isSingapore = parts[parts.length - 1]?.toLowerCase() === 'singapore' ||
-                           cleaned.toLowerCase() === 'singapore';
+        // ===== SECTION HEADERS =====
+        // Left: "会社概要資料" - positioned per ref v4
+        slide.addText('会社概要資料', {
+          x: 0.37,
+          y: 1.37,
+          w: 6.1,
+          h: 0.35,
+          fontSize: 14,
+          fontFace: 'Segoe UI',
+          color: COLORS.black,
+          align: 'center',
+        });
+        slide.addShape(pptx.shapes.LINE, {
+          x: 0.37,
+          y: 1.79,
+          w: 6.1,
+          h: 0,
+          line: { color: COLORS.dk2, width: 1.75 },
+        });
 
-        if (isSingapore && parts.length > 2) {
-          // Too many levels for Singapore - keep only first part + Singapore
-          cleaned = `${parts[0]}, Singapore`;
+        // Right: Dynamic title based on breakdown_title - positioned at 6.86" x 1.37"
+        const rightSectionTitle = company.breakdown_title || 'Products and Applications';
+        slide.addText(rightSectionTitle, {
+          x: 6.86,
+          y: 1.37,
+          w: 6.1,
+          h: 0.35,
+          fontSize: 14,
+          fontFace: 'Segoe UI',
+          color: COLORS.black,
+          align: 'center',
+        });
+        slide.addShape(pptx.shapes.LINE, {
+          x: 6.86,
+          y: 1.79,
+          w: 6.1,
+          h: 0,
+          line: { color: COLORS.dk2, width: 1.75 },
+        });
+
+        // ===== LEFT TABLE (会社概要資料) =====
+        // Determine if single location (for HQ label)
+        const locationText = ensureString(company.location);
+        const branchNetworkSummary = getBranchNetworkSummaryFromCompany(company);
+        const hasBranchCoverage = !!branchNetworkSummary;
+        const locationLines = locationText.split('\n').filter((line) => line.trim());
+        const isSingleLocation =
+          !hasBranchCoverage &&
+          locationLines.length <= 1 &&
+          !locationText.toLowerCase().includes('branch') &&
+          !locationText.toLowerCase().includes('factory') &&
+          !locationText.toLowerCase().includes('warehouse');
+        const locationLabel = isSingleLocation ? 'HQ' : 'Location';
+
+        // Helper function to check if value is empty or placeholder text
+        const isEmptyValue = (val) => {
+          if (!val) return true;
+          const strVal = ensureString(val);
+          const lower = strVal.toLowerCase().trim();
+          const emptyPhrases = [
+            '',
+            'not specified',
+            'n/a',
+            'unknown',
+            'not available',
+            'not found',
+            'not explicitly mentioned',
+            'not mentioned',
+            'none',
+            'none specified',
+            'not disclosed',
+            'not provided',
+            'no information',
+            'no data',
+            'none explicitly mentioned',
+          ];
+          // Check exact match or if value contains placeholder phrases
+          if (emptyPhrases.includes(lower)) return true;
+          // Check if value contains placeholder phrases (e.g., "Number of Employees: Not specified")
+          const containsPhrases = [
+            'not specified',
+            'not available',
+            'not found',
+            'not disclosed',
+            'not provided',
+            'not mentioned',
+            'not explicitly',
+            'none explicitly',
+            'no information',
+            'no data',
+            'n/a',
+            'unknown',
+          ];
+          for (const phrase of containsPhrases) {
+            if (lower.includes(phrase)) return true;
+          }
+          // CRITICAL: Detect alphabetical/numbered placeholder patterns like "Distributor A, B, C" or "Partner X, Y, Z"
+          // Pattern: word followed by single letter (A, B, C...) or number (1, 2, 3...)
+          const placeholderPatterns = [
+            /\b(distributor|partner|supplier|customer|client|vendor)\s+[a-c]\b/gi,
+            /\b(distributor|partner|supplier|customer|client|vendor)\s+[x-z]\b/gi,
+            /\b(distributor|partner|supplier|customer|client|vendor)\s+[1-3]\b/gi,
+            /\b[a-z]+\s+[a-c],\s*[a-z]+\s+[a-c]/gi, // "Something A, Something B"
+            /\b[a-z]+\s+[x-z],\s*[a-z]+\s+[x-z]/gi, // "Something X, Something Y"
+            /\b(brand|product|item|supplier|customer)\s*\d+\s*,/gi, // "brand1, brand2" or "product 1, product 2"
+            /\bbrand\d+\b.*\bbrand\d+\b/gi, // "brands1, brands2, brands3" pattern
+          ];
+          for (const pattern of placeholderPatterns) {
+            if (pattern.test(strVal)) return true;
+          }
+          // Also check for simple numbered placeholder patterns like "brands1, brands2"
+          if (/\b\w+[1-3]\s*,\s*\w+[1-3]/i.test(strVal)) return true;
+          return false;
+        };
+
+        // Helper function to remove company suffixes and prefixes
+        const removeCompanySuffix = (name) => {
+          if (!name) return name;
+          return (
+            name
+              // Remove PT., CV. prefix from Indonesian companies
+              .replace(/^(PT\.?|CV\.?)\s+/gi, '')
+              // Remove suffixes
+              .replace(
+                /\s*(Company\s+Limited|Co\.,?\s*Ltd\.?|Ltd\.?|Limited|Sdn\.?\s*Bhd\.?|Pte\.?\s*Ltd\.?|Inc\.?|Corp\.?|Corporation|LLC|GmbH|JSC|PT\.?|Tbk\.?|S\.?A\.?|PLC|Company)\s*$/gi,
+                ''
+              )
+              .trim()
+          );
+        };
+
+        // Helper function to clean location value (remove JSON format and "HQ:" prefix)
+        // ALSO enforces Singapore 2-level rule at display time
+        const cleanLocationValue = (location, label) => {
+          if (!location) return location;
+          let cleaned = location;
+
+          // Handle JSON format like {"HQ":"Chatuchak, Bangkok, Thailand"} or {"HQ":"CBD, Singapore"}
+          if (cleaned.includes('{') && cleaned.includes('}')) {
+            try {
+              // Try to extract the value from JSON-like string
+              // First regex: /"HQ":"value"/ - match[1] is the value
+              // Second regex: /"key":"value"/ - match[1] is key, match[2] is value
+              const match =
+                cleaned.match(/"HQ"\s*:\s*"([^"]+)"/i) ||
+                cleaned.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
+              if (match) {
+                // Prefer match[2] (value from second regex) over match[1] (could be key from second regex)
+                cleaned = match[2] || match[1] || cleaned;
+              }
+            } catch (e) {
+              // Fall through to normal cleaning
+            }
+          }
+
+          // If label is HQ, remove "- HQ:" or "HQ:" prefix from value
+          if (label === 'HQ') {
+            cleaned = cleaned.replace(/^-?\s*HQ:\s*/i, '').trim();
+          }
+
+          // FINAL SINGAPORE FIX: If location is just "Singapore", try to extract area from address
+          // or leave as-is (can't make up areas)
+          const parts = cleaned
+            .split(',')
+            .map((p) => p.trim())
+            .filter((p) => p);
+          const isSingapore =
+            parts[parts.length - 1]?.toLowerCase() === 'singapore' ||
+            cleaned.toLowerCase() === 'singapore';
+
+          if (isSingapore && parts.length > 2) {
+            // Too many levels for Singapore - keep only first part + Singapore
+            cleaned = `${parts[0]}, Singapore`;
+          }
+
+          return cleaned;
+        };
+
+        // Base company info rows - only add if value exists
+        const tableData = [];
+
+        // Always add Name with hyperlink (remove company suffix)
+        // Use title as fallback if company_name is empty
+        const companyName = company.company_name || company.title || '';
+        if (!isEmptyValue(companyName)) {
+          const cleanName = removeCompanySuffix(companyName);
+          tableData.push(['Name', cleanName, company.website || null]);
         }
 
-        return cleaned;
-      };
+        // Add Est. Year if available
+        if (!isEmptyValue(company.established_year)) {
+          tableData.push(['Est. Year', company.established_year, null]);
+        }
 
-      // Base company info rows - only add if value exists
-      const tableData = [];
+        // Add Location row (HQ + branch footprint in same row when available)
+        if (!isEmptyValue(company.location) || hasBranchCoverage) {
+          const cleanLocation = !isEmptyValue(company.location)
+            ? cleanLocationValue(company.location, locationLabel)
+            : '';
+          const locationValue = [cleanLocation, branchNetworkSummary].filter(Boolean).join('\n');
+          tableData.push([locationLabel, locationValue, null]);
+        }
 
-      // Always add Name with hyperlink (remove company suffix)
-      // Use title as fallback if company_name is empty
-      const companyName = company.company_name || company.title || '';
-      if (!isEmptyValue(companyName)) {
-        const cleanName = removeCompanySuffix(companyName);
-        tableData.push(['Name', cleanName, company.website || null]);
-      }
+        // Add Shareholding row after HQ - always present with yellow highlight
+        // Fourth element: { highlight: true } indicates yellow background for value cell
+        tableData.push(['Shareholding', 'check speeda & DBD', { highlight: true }]);
 
-      // Add Est. Year if available
-      if (!isEmptyValue(company.established_year)) {
-        tableData.push(['Est. Year', company.established_year, null]);
-      }
+        // Add Business if available
+        if (!isEmptyValue(company.business)) {
+          tableData.push(['Business', company.business, null]);
+        }
 
-      // Add Location row (HQ + branch footprint in same row when available)
-      if (!isEmptyValue(company.location) || hasBranchCoverage) {
-        const cleanLocation = !isEmptyValue(company.location)
-          ? cleanLocationValue(company.location, locationLabel)
-          : '';
-        const locationValue = [cleanLocation, branchNetworkSummary].filter(Boolean).join('\n');
-        tableData.push([locationLabel, locationValue, null]);
-      }
+        // Track existing labels to prevent duplicates
+        const existingLabels = new Set(tableData.map((row) => row[0].toLowerCase()));
 
-      // Add Shareholding row after HQ - always present with yellow highlight
-      // Fourth element: { highlight: true } indicates yellow background for value cell
-      tableData.push(['Shareholding', 'check speeda & DBD', { highlight: true }]);
+        // Metrics to exclude (worthless or duplicate)
+        const EXCLUDED_METRICS = [
+          'market position',
+          'market share',
+          'market leader',
+          'operating hours',
+          'business hours',
+          'office hours',
+          'years of experience',
+          'experience',
+          'years in business',
+          'awards',
+          'recognitions',
+          'achievements',
+          'certification',
+          'certifications',
+          'iso',
+          'accreditation',
+          'accreditations',
+          // Garbage metrics - meaningless fluff
+          'quality standards',
+          'quality assurance',
+          'quality control',
+          'quality focus',
+          'innovation focus',
+          'innovation',
+          'r&d focus',
+          'research focus',
+          'customer service',
+          'service excellence',
+          'technical support',
+          'customer satisfaction',
+          'commitment',
+          'dedication',
+          'focus on',
+        ];
 
-      // Add Business if available
-      if (!isEmptyValue(company.business)) {
-        tableData.push(['Business', company.business, null]);
-      }
+        // Get the right table category to exclude from left table (prevent duplication)
+        const rightTableCategory = ensureString(company.breakdown_title).toLowerCase();
+        // Map breakdown titles to keywords to exclude
+        const categoryKeywords = {
+          customers: ['customer', 'client', 'buyer'],
+          services: ['service'],
+          'products and applications': ['product', 'application'],
+          'key suppliers': ['supplier', 'vendor', 'partner'],
+          'key partnerships': ['partner', 'partnership'],
+        };
+        const excludeKeywords = categoryKeywords[rightTableCategory] || [];
+        const companyNameForFilter = company.company_name || company.title || '';
 
-      // Track existing labels to prevent duplicates
-      const existingLabels = new Set(tableData.map(row => row[0].toLowerCase()));
+        // Add key metrics as separate rows if available (skip duplicates and empty values)
+        if (company.key_metrics && Array.isArray(company.key_metrics)) {
+          company.key_metrics.forEach((metric) => {
+            // Ensure label and value are strings (AI may return objects/arrays)
+            const metricLabel = ensureString(metric?.label);
+            const metricValue = ensureString(metric?.value);
 
-      // Metrics to exclude (worthless or duplicate)
-      const EXCLUDED_METRICS = [
-        'market position', 'market share', 'market leader',
-        'operating hours', 'business hours', 'office hours',
-        'years of experience', 'experience', 'years in business',
-        'awards', 'recognitions', 'achievements',
-        'certification', 'certifications', 'iso', 'accreditation', 'accreditations',
-        // Garbage metrics - meaningless fluff
-        'quality standards', 'quality assurance', 'quality control', 'quality focus',
-        'innovation focus', 'innovation', 'r&d focus', 'research focus',
-        'customer service', 'service excellence', 'technical support',
-        'customer satisfaction', 'commitment', 'dedication', 'focus on'
-      ];
+            if (metricLabel && metricValue && !isEmptyValue(metricValue)) {
+              const labelLower = metricLabel.toLowerCase();
+              const metricValueLower = metricValue.toLowerCase();
 
-      // Get the right table category to exclude from left table (prevent duplication)
-      const rightTableCategory = ensureString(company.breakdown_title).toLowerCase();
-      // Map breakdown titles to keywords to exclude
-      const categoryKeywords = {
-        'customers': ['customer', 'client', 'buyer'],
-        'services': ['service'],
-        'products and applications': ['product', 'application'],
-        'key suppliers': ['supplier', 'vendor', 'partner'],
-        'key partnerships': ['partner', 'partnership']
-      };
-      const excludeKeywords = categoryKeywords[rightTableCategory] || [];
-      const companyNameForFilter = company.company_name || company.title || '';
+              // Skip excluded metrics
+              const isExcluded = EXCLUDED_METRICS.some((ex) => labelLower.includes(ex));
+              const isBranchDuplicate =
+                hasBranchCoverage &&
+                (labelLower.includes('branch') ||
+                  (labelLower.includes('office') && metricValueLower.includes('branch')) ||
+                  (labelLower.includes('location') && metricValueLower.includes('branch')));
 
-      // Add key metrics as separate rows if available (skip duplicates and empty values)
-      if (company.key_metrics && Array.isArray(company.key_metrics)) {
-        company.key_metrics.forEach(metric => {
-          // Ensure label and value are strings (AI may return objects/arrays)
-          const metricLabel = ensureString(metric?.label);
-          const metricValue = ensureString(metric?.value);
+              // Skip if this category is already shown on the right table
+              const isInRightTable = excludeKeywords.some((kw) => labelLower.includes(kw));
 
-          if (metricLabel && metricValue && !isEmptyValue(metricValue)) {
-            const labelLower = metricLabel.toLowerCase();
-            const metricValueLower = metricValue.toLowerCase();
-
-            // Skip excluded metrics
-            const isExcluded = EXCLUDED_METRICS.some(ex => labelLower.includes(ex));
-            const isBranchDuplicate = hasBranchCoverage && (
-              labelLower.includes('branch') ||
-              (labelLower.includes('office') && metricValueLower.includes('branch')) ||
-              (labelLower.includes('location') && metricValueLower.includes('branch'))
-            );
-
-            // Skip if this category is already shown on the right table
-            const isInRightTable = excludeKeywords.some(kw => labelLower.includes(kw));
-
-            // Skip if this label already exists or is duplicate of business/location
-            if (!isExcluded &&
+              // Skip if this label already exists or is duplicate of business/location
+              if (
+                !isExcluded &&
                 !isBranchDuplicate &&
                 !isInRightTable &&
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
-                !labelLower.includes('location')) {
-              const displayMetricValue = segmentRelationshipBlobValue(metricLabel, metricValue, companyNameForFilter);
-              // Always normalize label to Title Case for consistent display
-              tableData.push([normalizeLabel(metricLabel), displayMetricValue, null]);
-              existingLabels.add(labelLower);
+                !labelLower.includes('location')
+              ) {
+                const displayMetricValue = segmentRelationshipBlobValue(
+                  metricLabel,
+                  metricValue,
+                  companyNameForFilter
+                );
+                // Always normalize label to Title Case for consistent display
+                tableData.push([normalizeLabel(metricLabel), displayMetricValue, null]);
+                existingLabels.add(labelLower);
+              }
             }
-          }
-        });
-      } else if (company.metrics && !isEmptyValue(company.metrics)) {
-        // Fallback for old format (single string)
-        tableData.push(['Key Metrics', company.metrics, null]);
-      }
-
-      // Add Principal Partners / Brands rows if available (from businessRelationships)
-      const relationships = company._businessRelationships || {};
-      const relationshipCoverageStatus = ensureString(company._relationshipCoverageStatus);
-
-      const cleanedPrincipals = filterGarbageNames(relationships.principals || [], companyNameForFilter);
-      const cleanedSuppliers = filterGarbageNames(relationships.suppliers || [], companyNameForFilter);
-      const cleanedBrands = filterGarbageNames(relationships.brands || [], companyNameForFilter);
-
-      if (cleanedPrincipals.length > 0) {
-        const principalSegments = (company._principalSegments && Object.keys(company._principalSegments).length > 0)
-          ? company._principalSegments
-          : buildPrincipalSegments(cleanedPrincipals, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
-        const principalSegmentLines = buildSegmentDisplayLines(principalSegments, {
-          maxLines: 4,
-          maxNamesPerLine: 4
-        });
-        const principalsList = fixAcronymCasing(
-          principalSegmentLines.length > 0
-            ? principalSegmentLines.join('\n')
-            : cleanedPrincipals.slice(0, 10).join(', ')
-        );
-        if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
-          tableData.push(['Principal Partners', principalsList, null]);
-          existingLabels.add('principal partners');
-          console.log(`    Added Principal Partners: ${principalsList}`);
-        }
-      } else {
-        console.log(`    No principals found in _businessRelationships`);
-      }
-
-      // Add Key Suppliers row and segment long supplier lists into readable grouped lines.
-      if (cleanedSuppliers.length > 0 && !existingLabels.has('key suppliers') && !existingLabels.has('suppliers')) {
-        const supplierSegments = (company._supplierSegments && Object.keys(company._supplierSegments).length > 0)
-          ? company._supplierSegments
-          : buildSupplierSegments(cleanedSuppliers, { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT });
-        const supplierSegmentLines = buildSegmentDisplayLines(supplierSegments, {
-          maxLines: 4,
-          maxNamesPerLine: 4
-        });
-        const suppliersList = fixAcronymCasing(
-          supplierSegmentLines.length > 0
-            ? supplierSegmentLines.join('\n')
-            : cleanedSuppliers.slice(0, 10).join(', ')
-        );
-        tableData.push(['Key Suppliers', suppliersList, null]);
-        existingLabels.add('key suppliers');
-        console.log(`    Added Key Suppliers: ${suppliersList.substring(0, 80)}...`);
-      }
-
-      // Add Principal Brands separately so brand names are not lost when principals are missing
-      if (cleanedBrands.length > 0 && !existingLabels.has('principal brands') && !existingLabels.has('brands carried')) {
-        const principalNameSet = new Set(cleanedPrincipals.map(name => name.toLowerCase()));
-        const brandOnly = cleanedBrands.filter(name => !principalNameSet.has(name.toLowerCase()));
-        const brandsToShow = brandOnly.length > 0 ? brandOnly : cleanedBrands;
-        const brandSegments = (company._brandSegments && Object.keys(company._brandSegments).length > 0)
-          ? company._brandSegments
-          : buildDeterministicSegments(brandsToShow, {
-            minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-            relationshipType: 'brands'
           });
-        const brandSegmentLines = buildSegmentDisplayLines(brandSegments, {
-          maxLines: 4,
-          maxNamesPerLine: 4
-        });
-        const brandsList = fixAcronymCasing(
-          brandSegmentLines.length > 0
-            ? brandSegmentLines.join('\n')
-            : brandsToShow.slice(0, 10).join(', ')
-        );
-        tableData.push(['Principal Brands', brandsList, null]);
-        existingLabels.add('principal brands');
-        console.log(`    Added Principal Brands: ${brandsList}`);
-      }
-
-      // Fail loudly in slide output if relationship coverage is still too weak after deep mode.
-      if (cleanedPrincipals.length === 0 && cleanedBrands.length === 0 &&
-          relationshipCoverageStatus === 'needs_manual_review' &&
-          !existingLabels.has('principal brands')) {
-        tableData.push(['Principal Brands', 'Manual review required (website does not expose reliable names)', null]);
-        existingLabels.add('principal brands');
-        console.log('    Added Principal Brands: Manual review required');
-      }
-
-      // Add Key Customers row if available and not already shown on right side
-      // Display as industry-segmented list: "Industry1: Cust1, Cust2\nIndustry2: Cust3"
-      if (relationships.customers && relationships.customers.length > 0) {
-        const rightTitle = ensureString(company.breakdown_title).toLowerCase();
-        const isCustomersOnRight = rightTitle.includes('customer') || rightTitle.includes('client');
-        if (!isCustomersOnRight && !existingLabels.has('customers') && !existingLabels.has('key customers')) {
-          const cleanedCustomers = filterGarbageNames(relationships.customers, companyNameForFilter);
-          if (cleanedCustomers.length > 0) {
-            let customersList;
-            const aiSegmentLines = buildSegmentDisplayLines(company._customerSegments, {
-              maxLines: 4,
-              maxNamesPerLine: 4
-            });
-            if (aiSegmentLines.length > 0) {
-              customersList = aiSegmentLines.join('\n');
-            } else {
-              const deterministicSegments = buildDeterministicSegments(cleanedCustomers, {
-                minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-                relationshipType: 'customers'
-              });
-              const fallbackSegmentLines = buildSegmentDisplayLines(deterministicSegments, {
-                maxLines: 4,
-                maxNamesPerLine: 4
-              });
-              customersList = fallbackSegmentLines.length > 0
-                ? fallbackSegmentLines.join('\n')
-                : cleanedCustomers.slice(0, 10).join(', ');
-            }
-            // Apply acronym fixing (VVF, BNI, PLN should be ALL CAPS)
-            customersList = fixAcronymCasing(customersList);
-            tableData.push(['Customers', customersList, null]);
-            existingLabels.add('customers');
-            console.log(`    Added Customers: ${customersList.substring(0, 80)}...`);
-          }
-        }
-      }
-
-      // Helper function to format cell text with bullet points
-      // Manually inserts BLACK SQUARE (■) at 82% size since pptxgenjs doesn't support bullet sizing
-      const formatCellText = (text) => {
-        if (!text || typeof text !== 'string') return text;
-
-        // Check if text has multiple lines or bullet markers
-        const hasMultipleLines = text.includes('\n');
-        const hasBulletMarkers = text.includes('■') || text.includes('•') || text.includes('\n-') || text.startsWith('-');
-
-        if (hasMultipleLines || hasBulletMarkers) {
-          // Split by newline and filter out empty lines
-          const lines = text.split('\n').filter(line => line.trim());
-
-          // Build text array with manual bullet insertion at smaller font
-          // 82% of 14pt = 11.5pt, use 11pt for bullet
-          const result = [];
-          lines.forEach((line, index) => {
-            const cleanLine = line.replace(/^[■▪\-•]\s*/, '').trim();
-            const isLastLine = index === lines.length - 1;
-
-            // Add bullet character at 82% size (11pt vs 14pt text)
-            result.push({
-              text: '■ ',
-              options: { fontSize: 11 }
-            });
-
-            // Add the actual text at full size
-            result.push({
-              text: cleanLine + (isLastLine ? '' : '\n'),
-              options: { fontSize: 14 }
-            });
-          });
-          return result;
-        }
-        return text;
-      };
-
-      const rows = tableData.map((row) => {
-        // Check if third element is an options object (for highlighting) or a URL string
-        const thirdElement = row[2];
-        const isHighlighted = thirdElement && typeof thirdElement === 'object' && thirdElement.highlight;
-        const isHyperlink = typeof thirdElement === 'string' && thirdElement.length > 0;
-
-        const valueCell = {
-          text: formatCellText(row[1]),
-          options: {
-            // Yellow highlight for Shareholding row, white otherwise
-            fill: { color: isHighlighted ? 'FFFF00' : COLORS.white },
-            color: COLORS.black,
-            align: 'left',
-            border: [
-              { pt: 1, color: COLORS.gray, type: 'dash' },
-              { pt: 0 },
-              { pt: 1, color: COLORS.gray, type: 'dash' },
-              { pt: 0 }
-            ]
-          }
-        };
-
-        // Add hyperlink if URL is provided (third element in row array)
-        if (isHyperlink) {
-          valueCell.options.hyperlink = { url: thirdElement, tooltip: 'Visit company website' };
-          valueCell.options.color = '0563C1'; // Blue hyperlink color
+        } else if (company.metrics && !isEmptyValue(company.metrics)) {
+          // Fallback for old format (single string)
+          tableData.push(['Key Metrics', company.metrics, null]);
         }
 
-        return [
-          {
-            text: row[0],
-            options: {
-              fill: { color: COLORS.accent3 },
-              color: COLORS.white,
-              align: 'center',
-              bold: false
-            }
-          },
-          valueCell
-        ];
-      });
-
-      const tableStartY = 1.85;
-      const rowHeight = 0.35;
-
-      // Skip table if no data (prevents PptxGenJS error "Array expected")
-      if (rows.length === 0) {
-        console.log(`  Skipping table for ${company.company_name || company.website} - no table data`);
-      } else {
-        slide.addTable(rows, {
-        x: 0.37, y: tableStartY,
-        w: 6.1,
-        colW: [1.4, 4.7],
-        rowH: rowHeight,
-        fontFace: 'Segoe UI',
-        fontSize: 14,
-        valign: 'middle',
-        border: { pt: 2.5, color: COLORS.white },
-        margin: [0, 0.04, 0, 0.04]
-        });
-      }
-
-      // ===== RIGHT SECTION (table-only layout) =====
-      // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'empty'
-      console.log(`  Right layout setting: ${rightLayout}`);
-
-      // Skip entire right section if empty layout selected
-      if (rightLayout === 'empty') {
-        console.log('  Skipping right section (empty layout selected)');
-      } else {
-        // TABLE LAYOUT: Show table format - THEMATIC (one category only based on breakdown_title)
-        // Right side should focus on ONE thing: products, OR customers, OR suppliers, etc.
-        // Row limit based on rightLayout: 'table-6' = 6 rows, 'table-unlimited' = no limit, 'table-half' = 3 rows (half height with 財務実績 section below)
-
-        // Determine max rows based on layout
-        let maxRows;
-        if (rightLayout === 'table-unlimited') {
-          maxRows = 999; // effectively no limit
-        } else if (rightLayout === 'table-half') {
-          maxRows = 3;  // Half page = only 3 rows to leave room for section below
-        } else {
-          maxRows = 6; // default for table-6
-        }
-
-        // Get business relationships
+        // Add Principal Partners / Brands rows if available (from businessRelationships)
         const relationships = company._businessRelationships || {};
-        const breakdownTitle = ensureString(company.breakdown_title).toLowerCase();
-        const companyNameForFilter = company.company_name || company.title || '';
+        const relationshipCoverageStatus = ensureString(company._relationshipCoverageStatus);
 
-        // Build right-side table - THEMATIC based on breakdown_title
-        let prioritizedItems = [];
+        const cleanedPrincipals = filterGarbageNames(
+          relationships.principals || [],
+          companyNameForFilter
+        );
+        const cleanedSuppliers = filterGarbageNames(
+          relationships.suppliers || [],
+          companyNameForFilter
+        );
+        const cleanedBrands = filterGarbageNames(relationships.brands || [], companyNameForFilter);
 
-        // Determine what category the right side should show based on breakdown_title
-        if (breakdownTitle.includes('customer') || breakdownTitle.includes('client')) {
-          // Show customers only - filter garbage data first
-          const cleanedCustomers = filterGarbageNames(relationships.customers || [], companyNameForFilter);
-          if (cleanedCustomers.length > 0) {
-            const aiSegmentLines = buildSegmentDisplayLines(company._customerSegments, {
-              maxLines: maxRows,
-              maxNamesPerLine: 4
-            });
-            if (aiSegmentLines.length > 0) {
-              aiSegmentLines.slice(0, maxRows).forEach(line => {
-                prioritizedItems.push({ label: 'Customer', value: fixAcronymCasing(line) });
-              });
-              console.log(`  Right side (Customers segmented): ${cleanedCustomers.length} items after filtering`);
-            } else {
-              const deterministicSegments = buildDeterministicSegments(cleanedCustomers, {
-                minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-                relationshipType: 'customers'
-              });
-              const fallbackSegmentLines = buildSegmentDisplayLines(deterministicSegments, {
-                maxLines: maxRows,
-                maxNamesPerLine: 4
-              });
-              if (fallbackSegmentLines.length > 0) {
-                fallbackSegmentLines.slice(0, maxRows).forEach(line => {
-                  prioritizedItems.push({ label: 'Customer', value: fixAcronymCasing(line) });
+        if (cleanedPrincipals.length > 0) {
+          const principalSegments =
+            company._principalSegments && Object.keys(company._principalSegments).length > 0
+              ? company._principalSegments
+              : buildPrincipalSegments(cleanedPrincipals, {
+                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
                 });
-                console.log(`  Right side (Customers segmented fallback): ${cleanedCustomers.length} items after filtering`);
-              } else {
-                cleanedCustomers.slice(0, maxRows).forEach(customer => {
-                  prioritizedItems.push({ label: 'Customer', value: customer });
-                });
-                console.log(`  Right side (Customers): ${cleanedCustomers.length} items after filtering`);
-              }
-            }
-          }
-        } else if (breakdownTitle.includes('supplier') || breakdownTitle.includes('principal') || breakdownTitle.includes('partner')) {
-          // Show suppliers/principals only - filter garbage data first
-          const cleanedPrincipals = filterGarbageNames(relationships.principals || [], companyNameForFilter);
-          if (cleanedPrincipals.length > 0) {
-            cleanedPrincipals.slice(0, maxRows).forEach(principal => {
-              prioritizedItems.push({ label: 'Principal', value: principal });
-            });
-            console.log(`  Right side (Principals): ${cleanedPrincipals.length} items after filtering`);
-          } else {
-            const cleanedSuppliers = filterGarbageNames(relationships.suppliers || [], companyNameForFilter);
-            if (cleanedSuppliers.length > 0) {
-              cleanedSuppliers.slice(0, maxRows).forEach(supplier => {
-                prioritizedItems.push({ label: 'Supplier', value: supplier });
-              });
-              console.log(`  Right side (Suppliers): ${cleanedSuppliers.length} items after filtering`);
-            }
-          }
-        } else if (breakdownTitle.includes('brand')) {
-          // Show brands only - filter garbage data first
-          const cleanedBrands = filterGarbageNames(relationships.brands || [], companyNameForFilter);
-          if (cleanedBrands.length > 0) {
-            const aiBrandSegmentLines = buildSegmentDisplayLines(company._brandSegments, {
-              maxLines: maxRows,
-              maxNamesPerLine: 4
-            });
-            if (aiBrandSegmentLines.length > 0) {
-              aiBrandSegmentLines.slice(0, maxRows).forEach(line => {
-                prioritizedItems.push({ label: 'Brand', value: fixAcronymCasing(line) });
-              });
-              console.log(`  Right side (Brands segmented): ${cleanedBrands.length} items after filtering`);
-            } else {
-              const deterministicBrandSegments = buildDeterministicSegments(cleanedBrands, {
-                minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-                relationshipType: 'brands'
-              });
-              const fallbackBrandSegmentLines = buildSegmentDisplayLines(deterministicBrandSegments, {
-                maxLines: maxRows,
-                maxNamesPerLine: 4
-              });
-              if (fallbackBrandSegmentLines.length > 0) {
-                fallbackBrandSegmentLines.slice(0, maxRows).forEach(line => {
-                  prioritizedItems.push({ label: 'Brand', value: fixAcronymCasing(line) });
-                });
-                console.log(`  Right side (Brands segmented fallback): ${cleanedBrands.length} items after filtering`);
-              } else {
-                cleanedBrands.slice(0, maxRows).forEach(brand => {
-                  prioritizedItems.push({ label: 'Brand', value: brand });
-                });
-                console.log(`  Right side (Brands): ${cleanedBrands.length} items after filtering`);
-              }
-            }
+          const principalSegmentLines = buildSegmentDisplayLines(principalSegments, {
+            maxLines: 4,
+            maxNamesPerLine: 4,
+          });
+          const principalsList = fixAcronymCasing(
+            principalSegmentLines.length > 0
+              ? principalSegmentLines.join('\n')
+              : cleanedPrincipals.slice(0, 10).join(', ')
+          );
+          if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
+            tableData.push(['Principal Partners', principalsList, null]);
+            existingLabels.add('principal partners');
+            console.log(`    Added Principal Partners: ${principalsList}`);
           }
         } else {
-          // Default: Products/Applications/Services - use breakdown_items
-          let validBreakdownItems = (company.breakdown_items || [])
-            .map(item => ({
-              label: normalizeLabel(ensureString(item?.label)),
-              value: ensureString(item?.value)
-            }))
-            .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
+          console.log(`    No principals found in _businessRelationships`);
+        }
 
-          // Truncate values to max 3 lines
-          validBreakdownItems = validBreakdownItems.map(item => {
-            let value = item.value;
-            const lines = value.split('\n');
-            if (lines.length > 3) {
-              value = lines.slice(0, 3).join('\n');
-            }
-            return { label: item.label, value };
+        // Add Key Suppliers row and segment long supplier lists into readable grouped lines.
+        if (
+          cleanedSuppliers.length > 0 &&
+          !existingLabels.has('key suppliers') &&
+          !existingLabels.has('suppliers')
+        ) {
+          const supplierSegments =
+            company._supplierSegments && Object.keys(company._supplierSegments).length > 0
+              ? company._supplierSegments
+              : buildSupplierSegments(cleanedSuppliers, {
+                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+                });
+          const supplierSegmentLines = buildSegmentDisplayLines(supplierSegments, {
+            maxLines: 4,
+            maxNamesPerLine: 4,
           });
+          const suppliersList = fixAcronymCasing(
+            supplierSegmentLines.length > 0
+              ? supplierSegmentLines.join('\n')
+              : cleanedSuppliers.slice(0, 10).join(', ')
+          );
+          tableData.push(['Key Suppliers', suppliersList, null]);
+          existingLabels.add('key suppliers');
+          console.log(`    Added Key Suppliers: ${suppliersList.substring(0, 80)}...`);
+        }
 
-          prioritizedItems = validBreakdownItems;
-          if (prioritizedItems.length === 0) {
-            const fallbackBrands = filterGarbageNames(
-              [...(relationships.brands || []), ...(relationships.principals || [])],
+        // Add Principal Brands separately so brand names are not lost when principals are missing
+        if (
+          cleanedBrands.length > 0 &&
+          !existingLabels.has('principal brands') &&
+          !existingLabels.has('brands carried')
+        ) {
+          const principalNameSet = new Set(cleanedPrincipals.map((name) => name.toLowerCase()));
+          const brandOnly = cleanedBrands.filter(
+            (name) => !principalNameSet.has(name.toLowerCase())
+          );
+          const brandsToShow = brandOnly.length > 0 ? brandOnly : cleanedBrands;
+          const brandSegments =
+            company._brandSegments && Object.keys(company._brandSegments).length > 0
+              ? company._brandSegments
+              : buildDeterministicSegments(brandsToShow, {
+                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+                  relationshipType: 'brands',
+                });
+          const brandSegmentLines = buildSegmentDisplayLines(brandSegments, {
+            maxLines: 4,
+            maxNamesPerLine: 4,
+          });
+          const brandsList = fixAcronymCasing(
+            brandSegmentLines.length > 0
+              ? brandSegmentLines.join('\n')
+              : brandsToShow.slice(0, 10).join(', ')
+          );
+          tableData.push(['Principal Brands', brandsList, null]);
+          existingLabels.add('principal brands');
+          console.log(`    Added Principal Brands: ${brandsList}`);
+        }
+
+        // Fail loudly in slide output if relationship coverage is still too weak after deep mode.
+        if (
+          cleanedPrincipals.length === 0 &&
+          cleanedBrands.length === 0 &&
+          relationshipCoverageStatus === 'needs_manual_review' &&
+          !existingLabels.has('principal brands')
+        ) {
+          tableData.push([
+            'Principal Brands',
+            'Manual review required (website does not expose reliable names)',
+            null,
+          ]);
+          existingLabels.add('principal brands');
+          console.log('    Added Principal Brands: Manual review required');
+        }
+
+        // Add Key Customers row if available and not already shown on right side
+        // Display as industry-segmented list: "Industry1: Cust1, Cust2\nIndustry2: Cust3"
+        if (relationships.customers && relationships.customers.length > 0) {
+          const rightTitle = ensureString(company.breakdown_title).toLowerCase();
+          const isCustomersOnRight =
+            rightTitle.includes('customer') || rightTitle.includes('client');
+          if (
+            !isCustomersOnRight &&
+            !existingLabels.has('customers') &&
+            !existingLabels.has('key customers')
+          ) {
+            const cleanedCustomers = filterGarbageNames(
+              relationships.customers,
               companyNameForFilter
             );
-            if (fallbackBrands.length > 0) {
-              prioritizedItems = fallbackBrands.map(name => ({ label: 'Brand', value: name }));
-              console.log(`  Right side fallback (Principal Brands): ${fallbackBrands.length} items`);
+            if (cleanedCustomers.length > 0) {
+              let customersList;
+              const aiSegmentLines = buildSegmentDisplayLines(company._customerSegments, {
+                maxLines: 4,
+                maxNamesPerLine: 4,
+              });
+              if (aiSegmentLines.length > 0) {
+                customersList = aiSegmentLines.join('\n');
+              } else {
+                const deterministicSegments = buildDeterministicSegments(cleanedCustomers, {
+                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+                  relationshipType: 'customers',
+                });
+                const fallbackSegmentLines = buildSegmentDisplayLines(deterministicSegments, {
+                  maxLines: 4,
+                  maxNamesPerLine: 4,
+                });
+                customersList =
+                  fallbackSegmentLines.length > 0
+                    ? fallbackSegmentLines.join('\n')
+                    : cleanedCustomers.slice(0, 10).join(', ');
+              }
+              // Apply acronym fixing (VVF, BNI, PLN should be ALL CAPS)
+              customersList = fixAcronymCasing(customersList);
+              tableData.push(['Customers', customersList, null]);
+              existingLabels.add('customers');
+              console.log(`    Added Customers: ${customersList.substring(0, 80)}...`);
             }
           }
-          console.log(`  Right side (Products/Apps): ${prioritizedItems.length} items`);
         }
 
-        // Limit to maxRows (based on rightLayout setting)
-        if (prioritizedItems.length > maxRows) {
-          prioritizedItems = prioritizedItems.slice(0, maxRows);
-        }
+        // Helper function to format cell text with bullet points
+        // Manually inserts BLACK SQUARE (■) at 82% size since pptxgenjs doesn't support bullet sizing
+        const formatCellText = (text) => {
+          if (!text || typeof text !== 'string') return text;
 
-        if (prioritizedItems.length >= 1) {
-          const rightTableData = prioritizedItems.map(item => [String(item.label || ''), String(item.value || '')]);
+          // Check if text has multiple lines or bullet markers
+          const hasMultipleLines = text.includes('\n');
+          const hasBulletMarkers =
+            text.includes('■') ||
+            text.includes('•') ||
+            text.includes('\n-') ||
+            text.startsWith('-');
 
-          // Calculate row height to distribute evenly
-          // For table-half: use shorter height (1.8") to leave room for 財務実績 section below
-          // For other layouts: use full height (4.75")
-          const rightTableHeight = rightLayout === 'table-half' ? 1.8 : 4.75;
-          const rightRowHeight = rightTableHeight / Math.max(rightTableData.length, 1);
+          if (hasMultipleLines || hasBulletMarkers) {
+            // Split by newline and filter out empty lines
+            const lines = text.split('\n').filter((line) => line.trim());
 
-          const rightRows = rightTableData.map((row) => [
+            // Build text array with manual bullet insertion at smaller font
+            // 82% of 14pt = 11.5pt, use 11pt for bullet
+            const result = [];
+            lines.forEach((line, index) => {
+              const cleanLine = line.replace(/^[■▪\-•]\s*/, '').trim();
+              const isLastLine = index === lines.length - 1;
+
+              // Add bullet character at 82% size (11pt vs 14pt text)
+              result.push({
+                text: '■ ',
+                options: { fontSize: 11 },
+              });
+
+              // Add the actual text at full size
+              result.push({
+                text: cleanLine + (isLastLine ? '' : '\n'),
+                options: { fontSize: 14 },
+              });
+            });
+            return result;
+          }
+          return text;
+        };
+
+        const rows = tableData.map((row) => {
+          // Check if third element is an options object (for highlighting) or a URL string
+          const thirdElement = row[2];
+          const isHighlighted =
+            thirdElement && typeof thirdElement === 'object' && thirdElement.highlight;
+          const isHyperlink = typeof thirdElement === 'string' && thirdElement.length > 0;
+
+          const valueCell = {
+            text: formatCellText(row[1]),
+            options: {
+              // Yellow highlight for Shareholding row, white otherwise
+              fill: { color: isHighlighted ? 'FFFF00' : COLORS.white },
+              color: COLORS.black,
+              align: 'left',
+              border: [
+                { pt: 1, color: COLORS.gray, type: 'dash' },
+                { pt: 0 },
+                { pt: 1, color: COLORS.gray, type: 'dash' },
+                { pt: 0 },
+              ],
+            },
+          };
+
+          // Add hyperlink if URL is provided (third element in row array)
+          if (isHyperlink) {
+            valueCell.options.hyperlink = { url: thirdElement, tooltip: 'Visit company website' };
+            valueCell.options.color = '0563C1'; // Blue hyperlink color
+          }
+
+          return [
             {
-              text: String(row[0] || ''),
+              text: row[0],
               options: {
                 fill: { color: COLORS.accent3 },
                 color: COLORS.white,
                 align: 'center',
-                bold: false
-              }
+                bold: false,
+              },
             },
-            {
-              text: String(row[1] || ''),
-              options: {
-                fill: { color: COLORS.white },
-                color: COLORS.black,
-                align: 'left',
-                border: [
-                  { pt: 1, color: COLORS.gray, type: 'dash' },
-                  { pt: 0 },
-                  { pt: 1, color: COLORS.gray, type: 'dash' },
-                  { pt: 0 }
-                ]
-              }
-            }
-          ]);
+            valueCell,
+          ];
+        });
 
-          slide.addTable(rightRows, {
-            x: 6.86, y: 1.91,
+        const tableStartY = 1.85;
+        const rowHeight = 0.35;
+
+        // Skip table if no data (prevents PptxGenJS error "Array expected")
+        if (rows.length === 0) {
+          console.log(
+            `  Skipping table for ${company.company_name || company.website} - no table data`
+          );
+        } else {
+          slide.addTable(rows, {
+            x: 0.37,
+            y: tableStartY,
             w: 6.1,
-            h: rightTableHeight,
             colW: [1.4, 4.7],
-            rowH: rightRowHeight,
+            rowH: rowHeight,
             fontFace: 'Segoe UI',
             fontSize: 14,
             valign: 'middle',
             border: { pt: 2.5, color: COLORS.white },
-            margin: [0, 0.04, 0, 0.04]
-          });
-
-        }
-
-        // For table-half: Add 財務実績 header and line below the table (even if no items)
-        if (rightLayout === 'table-half') {
-          // 財務実績 header - same format as top right header
-          slide.addText('財務実績', {
-            x: 6.86, y: 3.98, w: 6.1, h: 0.35,
-            fontSize: 14, fontFace: 'Segoe UI',
-            color: COLORS.black, align: 'center'
-          });
-          // Line below header
-          slide.addShape(pptx.shapes.LINE, {
-            x: 6.86, y: 4.33, w: 6.1, h: 0,
-            line: { color: COLORS.dk2, width: 1.75 }
+            margin: [0, 0.04, 0, 0.04],
           });
         }
-      } // End of rightLayout !== 'empty' else block
 
-      // ===== FOOTNOTE (single text box with stacked content) =====
-      const footnoteLines = [];
+        // ===== RIGHT SECTION (table-only layout) =====
+        // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'empty'
+        console.log(`  Right layout setting: ${rightLayout}`);
 
-      // Line 1: Note with shortform explanations (only uncommon ones)
-      // shortformNote was computed earlier before cleanupInlineLongforms
-      if (shortformNote) {
-        footnoteLines.push(shortformNote);
-      }
+        // Skip entire right section if empty layout selected
+        if (rightLayout === 'empty') {
+          console.log('  Skipping right section (empty layout selected)');
+        } else {
+          // TABLE LAYOUT: Show table format - THEMATIC (one category only based on breakdown_title)
+          // Right side should focus on ONE thing: products, OR customers, OR suppliers, etc.
+          // Row limit based on rightLayout: 'table-6' = 6 rows, 'table-unlimited' = no limit, 'table-half' = 3 rows (half height with 財務実績 section below)
 
-      // Line 2: Exchange rate - always add for countries with pre-set rates (especially SEA)
-      const exchangeRate = countryCode ? EXCHANGE_RATE_MAP[countryCode] : null;
-      if (exchangeRate) {
-        footnoteLines.push(exchangeRate);
-      }
+          // Determine max rows based on layout
+          let maxRows;
+          if (rightLayout === 'table-unlimited') {
+            maxRows = 999; // effectively no limit
+          } else if (rightLayout === 'table-half') {
+            maxRows = 3; // Half page = only 3 rows to leave room for section below
+          } else {
+            maxRows = 6; // default for table-6
+          }
 
-      // Line 3: Source
-      footnoteLines.push('Source: Company website');
+          // Get business relationships
+          const relationships = company._businessRelationships || {};
+          const breakdownTitle = ensureString(company.breakdown_title).toLowerCase();
+          const companyNameForFilter = company.company_name || company.title || '';
 
-      // Create single text box with all footnote content stacked
-      const footnoteContent = footnoteLines.join('\n');
-      const footnoteHeight = 0.18 * footnoteLines.length;
+          // Build right-side table - THEMATIC based on breakdown_title
+          let prioritizedItems = [];
 
-      slide.addText(footnoteContent, {
-        x: 0.38, y: 6.85, w: 12.5, h: footnoteHeight,
-        fontSize: 10, fontFace: 'Segoe UI',
-        color: COLORS.black, valign: 'top',
-        margin: [0, 0, 0, 0]  // No left/right margin
-      });
+          // Determine what category the right side should show based on breakdown_title
+          if (breakdownTitle.includes('customer') || breakdownTitle.includes('client')) {
+            // Show customers only - filter garbage data first
+            const cleanedCustomers = filterGarbageNames(
+              relationships.customers || [],
+              companyNameForFilter
+            );
+            if (cleanedCustomers.length > 0) {
+              const aiSegmentLines = buildSegmentDisplayLines(company._customerSegments, {
+                maxLines: maxRows,
+                maxNamesPerLine: 4,
+              });
+              if (aiSegmentLines.length > 0) {
+                aiSegmentLines.slice(0, maxRows).forEach((line) => {
+                  prioritizedItems.push({ label: 'Customer', value: fixAcronymCasing(line) });
+                });
+                console.log(
+                  `  Right side (Customers segmented): ${cleanedCustomers.length} items after filtering`
+                );
+              } else {
+                const deterministicSegments = buildDeterministicSegments(cleanedCustomers, {
+                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+                  relationshipType: 'customers',
+                });
+                const fallbackSegmentLines = buildSegmentDisplayLines(deterministicSegments, {
+                  maxLines: maxRows,
+                  maxNamesPerLine: 4,
+                });
+                if (fallbackSegmentLines.length > 0) {
+                  fallbackSegmentLines.slice(0, maxRows).forEach((line) => {
+                    prioritizedItems.push({ label: 'Customer', value: fixAcronymCasing(line) });
+                  });
+                  console.log(
+                    `  Right side (Customers segmented fallback): ${cleanedCustomers.length} items after filtering`
+                  );
+                } else {
+                  cleanedCustomers.slice(0, maxRows).forEach((customer) => {
+                    prioritizedItems.push({ label: 'Customer', value: customer });
+                  });
+                  console.log(
+                    `  Right side (Customers): ${cleanedCustomers.length} items after filtering`
+                  );
+                }
+              }
+            }
+          } else if (
+            breakdownTitle.includes('supplier') ||
+            breakdownTitle.includes('principal') ||
+            breakdownTitle.includes('partner')
+          ) {
+            // Show suppliers/principals only - filter garbage data first
+            const cleanedPrincipals = filterGarbageNames(
+              relationships.principals || [],
+              companyNameForFilter
+            );
+            if (cleanedPrincipals.length > 0) {
+              cleanedPrincipals.slice(0, maxRows).forEach((principal) => {
+                prioritizedItems.push({ label: 'Principal', value: principal });
+              });
+              console.log(
+                `  Right side (Principals): ${cleanedPrincipals.length} items after filtering`
+              );
+            } else {
+              const cleanedSuppliers = filterGarbageNames(
+                relationships.suppliers || [],
+                companyNameForFilter
+              );
+              if (cleanedSuppliers.length > 0) {
+                cleanedSuppliers.slice(0, maxRows).forEach((supplier) => {
+                  prioritizedItems.push({ label: 'Supplier', value: supplier });
+                });
+                console.log(
+                  `  Right side (Suppliers): ${cleanedSuppliers.length} items after filtering`
+                );
+              }
+            }
+          } else if (breakdownTitle.includes('brand')) {
+            // Show brands only - filter garbage data first
+            const cleanedBrands = filterGarbageNames(
+              relationships.brands || [],
+              companyNameForFilter
+            );
+            if (cleanedBrands.length > 0) {
+              const aiBrandSegmentLines = buildSegmentDisplayLines(company._brandSegments, {
+                maxLines: maxRows,
+                maxNamesPerLine: 4,
+              });
+              if (aiBrandSegmentLines.length > 0) {
+                aiBrandSegmentLines.slice(0, maxRows).forEach((line) => {
+                  prioritizedItems.push({ label: 'Brand', value: fixAcronymCasing(line) });
+                });
+                console.log(
+                  `  Right side (Brands segmented): ${cleanedBrands.length} items after filtering`
+                );
+              } else {
+                const deterministicBrandSegments = buildDeterministicSegments(cleanedBrands, {
+                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+                  relationshipType: 'brands',
+                });
+                const fallbackBrandSegmentLines = buildSegmentDisplayLines(
+                  deterministicBrandSegments,
+                  {
+                    maxLines: maxRows,
+                    maxNamesPerLine: 4,
+                  }
+                );
+                if (fallbackBrandSegmentLines.length > 0) {
+                  fallbackBrandSegmentLines.slice(0, maxRows).forEach((line) => {
+                    prioritizedItems.push({ label: 'Brand', value: fixAcronymCasing(line) });
+                  });
+                  console.log(
+                    `  Right side (Brands segmented fallback): ${cleanedBrands.length} items after filtering`
+                  );
+                } else {
+                  cleanedBrands.slice(0, maxRows).forEach((brand) => {
+                    prioritizedItems.push({ label: 'Brand', value: brand });
+                  });
+                  console.log(
+                    `  Right side (Brands): ${cleanedBrands.length} items after filtering`
+                  );
+                }
+              }
+            }
+          } else {
+            // Default: Products/Applications/Services - use breakdown_items
+            let validBreakdownItems = (company.breakdown_items || [])
+              .map((item) => ({
+                label: normalizeLabel(ensureString(item?.label)),
+                value: ensureString(item?.value),
+              }))
+              .filter(
+                (item) =>
+                  item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value)
+              );
+
+            // Truncate values to max 3 lines
+            validBreakdownItems = validBreakdownItems.map((item) => {
+              let value = item.value;
+              const lines = value.split('\n');
+              if (lines.length > 3) {
+                value = lines.slice(0, 3).join('\n');
+              }
+              return { label: item.label, value };
+            });
+
+            prioritizedItems = validBreakdownItems;
+            if (prioritizedItems.length === 0) {
+              const fallbackBrands = filterGarbageNames(
+                [...(relationships.brands || []), ...(relationships.principals || [])],
+                companyNameForFilter
+              );
+              if (fallbackBrands.length > 0) {
+                prioritizedItems = fallbackBrands.map((name) => ({ label: 'Brand', value: name }));
+                console.log(
+                  `  Right side fallback (Principal Brands): ${fallbackBrands.length} items`
+                );
+              }
+            }
+            console.log(`  Right side (Products/Apps): ${prioritizedItems.length} items`);
+          }
+
+          // Limit to maxRows (based on rightLayout setting)
+          if (prioritizedItems.length > maxRows) {
+            prioritizedItems = prioritizedItems.slice(0, maxRows);
+          }
+
+          if (prioritizedItems.length >= 1) {
+            const rightTableData = prioritizedItems.map((item) => [
+              String(item.label || ''),
+              String(item.value || ''),
+            ]);
+
+            // Calculate row height to distribute evenly
+            // For table-half: use shorter height (1.8") to leave room for 財務実績 section below
+            // For other layouts: use full height (4.75")
+            const rightTableHeight = rightLayout === 'table-half' ? 1.8 : 4.75;
+            const rightRowHeight = rightTableHeight / Math.max(rightTableData.length, 1);
+
+            const rightRows = rightTableData.map((row) => [
+              {
+                text: String(row[0] || ''),
+                options: {
+                  fill: { color: COLORS.accent3 },
+                  color: COLORS.white,
+                  align: 'center',
+                  bold: false,
+                },
+              },
+              {
+                text: String(row[1] || ''),
+                options: {
+                  fill: { color: COLORS.white },
+                  color: COLORS.black,
+                  align: 'left',
+                  border: [
+                    { pt: 1, color: COLORS.gray, type: 'dash' },
+                    { pt: 0 },
+                    { pt: 1, color: COLORS.gray, type: 'dash' },
+                    { pt: 0 },
+                  ],
+                },
+              },
+            ]);
+
+            slide.addTable(rightRows, {
+              x: 6.86,
+              y: 1.91,
+              w: 6.1,
+              h: rightTableHeight,
+              colW: [1.4, 4.7],
+              rowH: rightRowHeight,
+              fontFace: 'Segoe UI',
+              fontSize: 14,
+              valign: 'middle',
+              border: { pt: 2.5, color: COLORS.white },
+              margin: [0, 0.04, 0, 0.04],
+            });
+          }
+
+          // For table-half: Add 財務実績 header and line below the table (even if no items)
+          if (rightLayout === 'table-half') {
+            // 財務実績 header - same format as top right header
+            slide.addText('財務実績', {
+              x: 6.86,
+              y: 3.98,
+              w: 6.1,
+              h: 0.35,
+              fontSize: 14,
+              fontFace: 'Segoe UI',
+              color: COLORS.black,
+              align: 'center',
+            });
+            // Line below header
+            slide.addShape(pptx.shapes.LINE, {
+              x: 6.86,
+              y: 4.33,
+              w: 6.1,
+              h: 0,
+              line: { color: COLORS.dk2, width: 1.75 },
+            });
+          }
+        } // End of rightLayout !== 'empty' else block
+
+        // ===== FOOTNOTE (single text box with stacked content) =====
+        const footnoteLines = [];
+
+        // Line 1: Note with shortform explanations (only uncommon ones)
+        // shortformNote was computed earlier before cleanupInlineLongforms
+        if (shortformNote) {
+          footnoteLines.push(shortformNote);
+        }
+
+        // Line 2: Exchange rate - always add for countries with pre-set rates (especially SEA)
+        const exchangeRate = countryCode ? EXCHANGE_RATE_MAP[countryCode] : null;
+        if (exchangeRate) {
+          footnoteLines.push(exchangeRate);
+        }
+
+        // Line 3: Source
+        footnoteLines.push('Source: Company website');
+
+        // Create single text box with all footnote content stacked
+        const footnoteContent = footnoteLines.join('\n');
+        const footnoteHeight = 0.18 * footnoteLines.length;
+
+        slide.addText(footnoteContent, {
+          x: 0.38,
+          y: 6.85,
+          w: 12.5,
+          h: footnoteHeight,
+          fontSize: 10,
+          fontFace: 'Segoe UI',
+          color: COLORS.black,
+          valign: 'top',
+          margin: [0, 0, 0, 0], // No left/right margin
+        });
+        slidesGenerated++;
       } catch (slideError) {
-        console.error(`  ERROR generating slide for ${company.company_name || company.website}:`, slideError.message);
+        console.error(
+          `  ERROR generating slide for ${company.company_name || company.website}:`,
+          slideError.message
+        );
         console.error('  Slide error stack:', slideError.stack);
         // Continue with next company instead of failing entire PPTX
       }
+    }
+
+    // Coverage summary
+    console.log(
+      `PPTX slide coverage: ${slidesGenerated}/${companies.length} generated, ${slidesSkipped} skipped`
+    );
+    if (skippedCompanies.length > 0) {
+      console.log(`  Skipped companies: ${skippedCompanies.join(', ')}`);
     }
 
     // Generate base64
@@ -4200,26 +5184,26 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
     return {
       success: true,
-      content: base64Content
+      content: base64Content,
     };
   } catch (error) {
     console.error('PptxGenJS error:', error);
     console.error('PptxGenJS error stack:', error.stack);
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
 
 // Currency exchange mapping by country
 const CURRENCY_EXCHANGE = {
-  'philippines': '為替レート: PHP 100M = 3億円',
-  'thailand': '為替レート: THB 100M = 5億円',
-  'malaysia': '為替レート: MYR 10M = 3億円',
-  'indonesia': '為替レート: IDR 10B = 1億円',
-  'singapore': '為替レート: SGD 1M = 1億円',
-  'vietnam': '為替レート: VND 100B = 6億円'
+  philippines: '為替レート: PHP 100M = 3億円',
+  thailand: '為替レート: THB 100M = 5億円',
+  malaysia: '為替レート: MYR 10M = 3億円',
+  indonesia: '為替レート: IDR 10B = 1億円',
+  singapore: '為替レート: SGD 1M = 1億円',
+  vietnam: '為替レート: VND 100B = 6億円',
 };
 
 // Scrape website and convert to clean text (similar to fetchWebsite but returns more content)
@@ -4236,10 +5220,11 @@ async function scrapeWebsite(url) {
 
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
       signal: controller.signal,
-      redirect: 'follow'
+      redirect: 'follow',
     });
     clearTimeout(timeout);
 
@@ -4290,35 +5275,117 @@ function discoverPagesFromNavigation(html, origin) {
   // discovered via link text analysis below, not hardcoded URL patterns
   const priorityKeywords = {
     // Highest priority - relationship pages (critical for principal/brand/customer extraction)
-    'partners': 1, 'partner': 1, 'principal': 1, 'principals': 1, 'suppliers': 1, 'supplier': 1,
-    'brands': 1, 'brand': 1, 'clients': 1, 'client': 1, 'customers': 1, 'customer': 1,
-    'trusted': 1, 'trusted-by': 1, 'distributor': 1, 'dealers': 1, 'dealer': 1,
+    partners: 1,
+    partner: 1,
+    principal: 1,
+    principals: 1,
+    suppliers: 1,
+    supplier: 1,
+    brands: 1,
+    brand: 1,
+    clients: 1,
+    client: 1,
+    customers: 1,
+    customer: 1,
+    trusted: 1,
+    'trusted-by': 1,
+    distributor: 1,
+    dealers: 1,
+    dealer: 1,
     // Manufacturing/production info
-    'manufacturing': 2, 'production': 2, 'factory': 2, 'facilities': 2, 'plant': 2,
-    'capabilities': 3, 'capacity': 3, 'operations': 3,
+    manufacturing: 2,
+    production: 2,
+    factory: 2,
+    facilities: 2,
+    plant: 2,
+    capabilities: 3,
+    capacity: 3,
+    operations: 3,
     // Company info
-    'about': 4, 'about-us': 4, 'aboutus': 4, 'company': 4, 'profile': 4, 'company-profile': 4,
-    'history': 5, 'milestone': 5, 'journey': 5, 'story': 5,
+    about: 4,
+    'about-us': 4,
+    aboutus: 4,
+    company: 4,
+    profile: 4,
+    'company-profile': 4,
+    history: 5,
+    milestone: 5,
+    journey: 5,
+    story: 5,
     // Products and services
-    'products': 6, 'product': 6, 'services': 6, 'service': 6, 'solutions': 6,
-    'wholesale': 5, 'catalog': 5, 'catalogue': 5, 'collections': 5, 'collection': 5, 'range': 5,
+    products: 6,
+    product: 6,
+    services: 6,
+    service: 6,
+    solutions: 6,
+    wholesale: 5,
+    catalog: 5,
+    catalogue: 5,
+    collections: 5,
+    collection: 5,
+    range: 5,
     // Contact and location
-    'contact': 7, 'contact-us': 7, 'contactus': 7, 'location': 7, 'locations': 7,
+    contact: 7,
+    'contact-us': 7,
+    contactus: 7,
+    location: 7,
+    locations: 7,
     // Quality and certifications
-    'quality': 8, 'certification': 8, 'certifications': 8, 'awards': 8,
+    quality: 8,
+    certification: 8,
+    certifications: 8,
+    awards: 8,
     // Team
-    'team': 9, 'leadership': 9, 'management': 9
+    team: 9,
+    leadership: 9,
+    management: 9,
   };
 
   // Pages to SKIP - not useful for company profiles
   const skipKeywords = [
-    'blog', 'news', 'article', 'post', 'press', 'media',
-    'career', 'careers', 'jobs', 'vacancy', 'vacancies', 'recruitment',
-    'privacy', 'policy', 'terms', 'legal', 'disclaimer', 'cookie',
-    'login', 'signin', 'signup', 'register', 'account', 'cart', 'checkout',
-    'faq', 'help', 'support', 'sitemap', 'search',
-    'facebook', 'twitter', 'linkedin', 'instagram', 'youtube', 'whatsapp',
-    '.pdf', '.doc', '.xls', '.zip', '.jpg', '.png', '.gif'
+    'blog',
+    'news',
+    'article',
+    'post',
+    'press',
+    'media',
+    'career',
+    'careers',
+    'jobs',
+    'vacancy',
+    'vacancies',
+    'recruitment',
+    'privacy',
+    'policy',
+    'terms',
+    'legal',
+    'disclaimer',
+    'cookie',
+    'login',
+    'signin',
+    'signup',
+    'register',
+    'account',
+    'cart',
+    'checkout',
+    'faq',
+    'help',
+    'support',
+    'sitemap',
+    'search',
+    'facebook',
+    'twitter',
+    'linkedin',
+    'instagram',
+    'youtube',
+    'whatsapp',
+    '.pdf',
+    '.doc',
+    '.xls',
+    '.zip',
+    '.jpg',
+    '.png',
+    '.gif',
   ];
 
   // Extract all internal links from the page
@@ -4329,8 +5396,14 @@ function discoverPagesFromNavigation(html, origin) {
     let href = match[1].trim();
 
     // Skip empty, javascript:, mailto:, tel:, anchors
-    if (!href || href.startsWith('javascript:') || href.startsWith('mailto:') ||
-        href.startsWith('tel:') || href.startsWith('#') || href.length > 200) {
+    if (
+      !href ||
+      href.startsWith('javascript:') ||
+      href.startsWith('mailto:') ||
+      href.startsWith('tel:') ||
+      href.startsWith('#') ||
+      href.length > 200
+    ) {
       continue;
     }
 
@@ -4358,15 +5431,22 @@ function discoverPagesFromNavigation(html, origin) {
     if (!normalizedPath) normalizedPath = '/';
 
     // Skip homepage (already scraped)
-    if (normalizedPath === '/' || normalizedPath === '/index.html' || normalizedPath === '/index.php' ||
-        normalizedPath === '/home' || normalizedPath === '/en' || normalizedPath === '/th' ||
-        normalizedPath === '/id' || normalizedPath === '/vn') {
+    if (
+      normalizedPath === '/' ||
+      normalizedPath === '/index.html' ||
+      normalizedPath === '/index.php' ||
+      normalizedPath === '/home' ||
+      normalizedPath === '/en' ||
+      normalizedPath === '/th' ||
+      normalizedPath === '/id' ||
+      normalizedPath === '/vn'
+    ) {
       continue;
     }
 
     // Skip unwanted pages
     const pathLower = normalizedPath.toLowerCase();
-    if (skipKeywords.some(kw => pathLower.includes(kw))) {
+    if (skipKeywords.some((kw) => pathLower.includes(kw))) {
       continue;
     }
 
@@ -4374,7 +5454,7 @@ function discoverPagesFromNavigation(html, origin) {
   }
 
   // Convert to array and sort by priority
-  const urlsWithPriority = Array.from(discoveredUrls).map(url => {
+  const urlsWithPriority = Array.from(discoveredUrls).map((url) => {
     const path = new URL(url).pathname.toLowerCase();
     const pathDepth = (path.match(/\//g) || []).length;
 
@@ -4395,7 +5475,7 @@ function discoverPagesFromNavigation(html, origin) {
   // Sort by priority (lower = more important)
   urlsWithPriority.sort((a, b) => a.priority - b.priority);
 
-  return urlsWithPriority.map(item => item.url);
+  return urlsWithPriority.map((item) => item.url);
 }
 
 async function discoverPagesFromSitemap(origin, options = {}) {
@@ -4408,9 +5488,24 @@ async function discoverPagesFromSitemap(origin, options = {}) {
   const discovered = new Set();
 
   const priorityTokens = [
-    'partner', 'principal', 'supplier', 'brand', 'client', 'customer', 'trusted',
-    'products', 'product', 'wholesale', 'catalog', 'catalogue', 'collections', 'collection',
-    'distributor', 'dealers', 'references', 'portfolio'
+    'partner',
+    'principal',
+    'supplier',
+    'brand',
+    'client',
+    'customer',
+    'trusted',
+    'products',
+    'product',
+    'wholesale',
+    'catalog',
+    'catalogue',
+    'collections',
+    'collection',
+    'distributor',
+    'dealers',
+    'references',
+    'portfolio',
   ];
   const skipTokens = ['blog', 'news', 'career', 'privacy', 'terms', 'policy', 'legal', 'faq'];
 
@@ -4427,7 +5522,7 @@ async function discoverPagesFromSitemap(origin, options = {}) {
       const response = await fetch(sitemapUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         redirect: 'follow',
-        signal: controller.signal
+        signal: controller.signal,
       });
       clearTimeout(timeout);
       if (!response.ok) continue;
@@ -4455,8 +5550,13 @@ async function discoverPagesFromSitemap(origin, options = {}) {
           if (!visitedSitemaps.has(normalizedUrl)) sitemapQueue.push(normalizedUrl);
           continue;
         }
-        if (normalizedPath === '/' || normalizedPath === '/index.html' || normalizedPath === '/index.php') continue;
-        if (skipTokens.some(token => normalizedPath.includes(token))) continue;
+        if (
+          normalizedPath === '/' ||
+          normalizedPath === '/index.html' ||
+          normalizedPath === '/index.php'
+        )
+          continue;
+        if (skipTokens.some((token) => normalizedPath.includes(token))) continue;
 
         discovered.add(normalizedUrl);
       }
@@ -4465,16 +5565,16 @@ async function discoverPagesFromSitemap(origin, options = {}) {
     }
   }
 
-  const scored = Array.from(discovered).map(url => {
+  const scored = Array.from(discovered).map((url) => {
     const path = new URL(url).pathname.toLowerCase();
     let score = 5;
-    if (priorityTokens.some(token => path.includes(token))) score = 0;
+    if (priorityTokens.some((token) => path.includes(token))) score = 0;
     else if (path.split('/').filter(Boolean).length <= 1) score = 2;
     return { url, score, len: path.length };
   });
 
-  scored.sort((a, b) => (a.score - b.score) || (a.len - b.len));
-  return scored.map(item => item.url);
+  scored.sort((a, b) => a.score - b.score || a.len - b.len);
+  return scored.map((item) => item.url);
 }
 
 // Scrape multiple pages from a website using dynamic page discovery
@@ -4495,7 +5595,7 @@ async function scrapeMultiplePages(baseUrl) {
       homepage: null,
       allContent: '',
       allRawHtml: '',
-      pagesScraped: []
+      pagesScraped: [],
     };
 
     // Step 1: Scrape homepage first
@@ -4528,14 +5628,53 @@ async function scrapeMultiplePages(baseUrl) {
     // NOTE: We don't hardcode language-specific paths - the link text analysis above
     // will catch local language pages like /klien-kami based on their link text
     const fallbackPaths = [
-      '/manufacturing', '/production', '/factory', '/facilities', '/plant',
-      '/capabilities', '/capacity', '/operations',
-      '/about', '/about-us', '/about.html', '/aboutus', '/company', '/profile', '/company-profile',
-      '/contact', '/contact-us', '/contact.html', '/contactus',
-      '/products', '/product', '/our-products', '/services', '/wholesale', '/catalog', '/catalogue', '/collections', '/collection', '/range',
-      '/clients', '/customers', '/partners', '/our-clients', '/our-customers', '/our-partners',
-      '/principals', '/principal-partners', '/suppliers', '/vendors', '/brands', '/our-brands',
-      '/brand-portfolio', '/distributors', '/dealer', '/dealers', '/trusted-by', '/references'
+      '/manufacturing',
+      '/production',
+      '/factory',
+      '/facilities',
+      '/plant',
+      '/capabilities',
+      '/capacity',
+      '/operations',
+      '/about',
+      '/about-us',
+      '/about.html',
+      '/aboutus',
+      '/company',
+      '/profile',
+      '/company-profile',
+      '/contact',
+      '/contact-us',
+      '/contact.html',
+      '/contactus',
+      '/products',
+      '/product',
+      '/our-products',
+      '/services',
+      '/wholesale',
+      '/catalog',
+      '/catalogue',
+      '/collections',
+      '/collection',
+      '/range',
+      '/clients',
+      '/customers',
+      '/partners',
+      '/our-clients',
+      '/our-customers',
+      '/our-partners',
+      '/principals',
+      '/principal-partners',
+      '/suppliers',
+      '/vendors',
+      '/brands',
+      '/our-brands',
+      '/brand-portfolio',
+      '/distributors',
+      '/dealer',
+      '/dealers',
+      '/trusted-by',
+      '/references',
     ];
 
     for (const path of fallbackPaths) {
@@ -4577,7 +5716,7 @@ async function scrapeMultiplePages(baseUrl) {
       content: results.allContent.substring(0, 80000), // Increased limit for more pages
       rawHtml: results.allRawHtml,
       pagesScraped: results.pagesScraped,
-      url: baseUrl
+      url: baseUrl,
     };
   } catch (e) {
     // Fallback to single page if multi-page fails
@@ -4610,12 +5749,15 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
         console.log(`  [Logo] Found via Clearbit`);
         return { data: `data:image/png;base64,${logoBase64}`, source: 'clearbit' };
       }
-    } catch { /* continue to next */ }
+    } catch {
+      /* continue to next */
+    }
 
     // 2. Try apple-touch-icon (high-quality brand icon, very reliable)
     if (rawHtml) {
-      const appleIconMatch = rawHtml.match(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i) ||
-                             rawHtml.match(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon["']/i);
+      const appleIconMatch =
+        rawHtml.match(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i) ||
+        rawHtml.match(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon["']/i);
       if (appleIconMatch && appleIconMatch[1]) {
         try {
           let iconUrl = appleIconMatch[1];
@@ -4627,7 +5769,9 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
               return { data: `data:image/png;base64,${logoBase64}`, source: 'apple-touch-icon' };
             }
           }
-        } catch { /* continue */ }
+        } catch {
+          /* continue */
+        }
       }
     }
 
@@ -4639,12 +5783,15 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
         console.log(`  [Logo] Found via Google favicon for ${domain}`);
         return { data: `data:image/png;base64,${logoBase64}`, source: 'google-favicon' };
       }
-    } catch { /* continue */ }
+    } catch {
+      /* continue */
+    }
 
     // 4. Try finding <img> with explicit "logo" filename (more strict matching)
     if (rawHtml) {
       // Only match images where the filename itself contains "logo" (e.g., logo.png, company-logo.svg)
-      const strictLogoPattern = /<img[^>]*src=["']([^"']*\/[^"']*logo[^"']*\.(png|jpg|jpeg|svg|webp))["']/gi;
+      const strictLogoPattern =
+        /<img[^>]*src=["']([^"']*\/[^"']*logo[^"']*\.(png|jpg|jpeg|svg|webp))["']/gi;
       const matches = [...rawHtml.matchAll(strictLogoPattern)];
       for (const match of matches) {
         if (match[1]) {
@@ -4660,15 +5807,18 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
                 return { data: `data:image/png;base64,${logoBase64}`, source: 'html-img' };
               }
             }
-          } catch { /* continue */ }
+          } catch {
+            /* continue */
+          }
         }
       }
     }
 
     // 5. Try og:image as last resort (often returns promotional images, not logos)
     if (rawHtml) {
-      const ogImageMatch = rawHtml.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
-                           rawHtml.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+      const ogImageMatch =
+        rawHtml.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+        rawHtml.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
       if (ogImageMatch && ogImageMatch[1]) {
         try {
           let ogUrl = ogImageMatch[1];
@@ -4683,7 +5833,9 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
               }
             }
           }
-        } catch { /* continue */ }
+        } catch {
+          /* continue */
+        }
       }
     }
 
@@ -4722,7 +5874,7 @@ function extractMetricsFromText(text) {
     /(\d+)の?\s*(?:事務所|支店|店舗|拠点)/gi, // Japanese
     /across\s+(\d+)\s+(?:countries|cities|regions)/gi,
     /in\s+(\d+)\s+(?:countries|cities|locations)/gi,
-    /presence\s+in\s+(\d+)\s+(?:countries|cities)/gi
+    /presence\s+in\s+(\d+)\s+(?:countries|cities)/gi,
   ];
 
   for (const pattern of officePatterns) {
@@ -4731,7 +5883,8 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0]);
-        if (num >= 2 && num <= 500) { // Reasonable range
+        if (num >= 2 && num <= 500) {
+          // Reasonable range
           metrics.office_count = num;
           metrics.office_text = match[0];
           break;
@@ -4762,7 +5915,7 @@ function extractMetricsFromText(text) {
     /(\d{1,3}(?:,\d{3})*|\d+)名?(?:员工|職員|雇员)/gi, // Chinese
     /(?:员工|職員)\s*(\d{1,3}(?:,\d{3})*|\d+)(?:人|名)/gi, // Chinese (reversed)
     /(\d{1,3}(?:,\d{3})*|\d+)名?の?\s*(?:従業員|社員|スタッフ)/gi, // Japanese
-    /(?:従業員|社員)\s*(\d{1,3}(?:,\d{3})*|\d+)(?:人|名)/gi // Japanese (reversed)
+    /(?:従業員|社員)\s*(\d{1,3}(?:,\d{3})*|\d+)(?:人|名)/gi, // Japanese (reversed)
   ];
 
   for (const pattern of employeePatterns) {
@@ -4771,7 +5924,8 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 5 && num <= 1000000) { // Reasonable range
+        if (num >= 5 && num <= 1000000) {
+          // Reasonable range
           metrics.employee_count = num;
           metrics.employee_text = match[0];
           break;
@@ -4811,7 +5965,7 @@ function extractMetricsFromText(text) {
     /(?:उत्पादन क्षमता|क्षमता).*?(\d{1,3}(?:,\d{3})*)\s*टन/gi,
     // Bengali: "800 টন/মাস", "উৎপাদন ক্ষমতা 800 টন"
     /(\d{1,3}(?:,\d{3})*)\s*(?:টন)(?:\/মাস|\/বছর)/gi,
-    /(?:উৎপাদন ক্ষমতা|ক্ষমতা).*?(\d{1,3}(?:,\d{3})*)\s*টন/gi
+    /(?:উৎপাদন ক্ষমতা|ক্ষমতা).*?(\d{1,3}(?:,\d{3})*)\s*টন/gi,
   ];
 
   for (const pattern of capacityPatterns) {
@@ -4845,7 +5999,7 @@ function extractMetricsFromText(text) {
     // Hindi: "250 मशीन", "उपकरण 250"
     /(\d{1,3}(?:,\d{3})*)\s*(?:मशीन|मशीनें|उपकरण)/gi,
     // Bengali: "250 মেশিন", "যন্ত্রপাতি 250"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:মেশিন|যন্ত্র|যন্ত্রপাতি)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:মেশিন|যন্ত্র|যন্ত্রপাতি)/gi,
   ];
 
   for (const pattern of machinePatterns) {
@@ -4854,7 +6008,8 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 2 && num <= 10000) { // Reasonable range for machines (lowered from 10)
+        if (num >= 2 && num <= 10000) {
+          // Reasonable range for machines (lowered from 10)
           metrics.machine_count = num;
           metrics.machine_text = match[0];
           break;
@@ -4885,7 +6040,7 @@ function extractMetricsFromText(text) {
     // Hindi: "700 भागीदार", "वितरक 700"
     /(\d{1,3}(?:,\d{3})*)\s*(?:भागीदार|वितरक|डीलर|एजेंट)/gi,
     // Bengali: "700 অংশীদার", "পরিবেশক 700"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:অংশীদার|পরিবেশক|ডিলার|এজেন্ট)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:অংশীদার|পরিবেশক|ডিলার|এজেন্ট)/gi,
   ];
 
   for (const pattern of partnerPatterns) {
@@ -4894,7 +6049,8 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 2 && num <= 10000) { // Reasonable range for partners (lowered from 10)
+        if (num >= 2 && num <= 10000) {
+          // Reasonable range for partners (lowered from 10)
           metrics.partner_count = num;
           metrics.partner_text = match[0];
           break;
@@ -4907,7 +6063,7 @@ function extractMetricsFromText(text) {
   // Capture region names like "Southeast Asia, South Asia, North Africa"
   const exportRegionPatterns = [
     /(?:export(?:ing|s)?|market(?:s)?|expand(?:ed)?)\s+(?:to|into|in)\s+([A-Za-z\s,]+(?:Asia|Africa|Europe|America|Middle East)[A-Za-z\s,]*)/gi,
-    /(?:Southeast Asia|South Asia|North Africa|Middle East|Europe|North America|Latin America|East Asia|Central Asia|Sub-Saharan Africa)[,\s]+(?:and\s+)?(?:Southeast Asia|South Asia|North Africa|Middle East|Europe|North America|Latin America|East Asia|Central Asia|Sub-Saharan Africa)/gi
+    /(?:Southeast Asia|South Asia|North Africa|Middle East|Europe|North America|Latin America|East Asia|Central Asia|Sub-Saharan Africa)[,\s]+(?:and\s+)?(?:Southeast Asia|South Asia|North Africa|Middle East|Europe|North America|Latin America|East Asia|Central Asia|Sub-Saharan Africa)/gi,
   ];
 
   for (const pattern of exportRegionPatterns) {
@@ -4927,7 +6083,7 @@ function extractMetricsFromText(text) {
     /(\d+)\s*ปี\s*(?:ประสบการณ์|ในอุตสาหกรรม)/gi, // Thai
     /(\d+)\s*năm\s*(?:kinh nghiệm|hoạt động)/gi, // Vietnamese
     /(\d+)\s*tahun\s*(?:pengalaman|beroperasi)/gi, // Indonesian
-    /(\d+)년\s*(?:경험|역사|전통)/gi // Korean
+    /(\d+)년\s*(?:경험|역사|전통)/gi, // Korean
   ];
 
   for (const pattern of yearsPatterns) {
@@ -4937,7 +6093,7 @@ function extractMetricsFromText(text) {
       if (numMatch) {
         const num = parseInt(numMatch[0]);
         if ((num >= 1 && num <= 100) || (num >= 1900 && num <= 2025)) {
-          metrics.years_experience = num <= 100 ? num : (2025 - num);
+          metrics.years_experience = num <= 100 ? num : 2025 - num;
           metrics.years_text = match[0];
           break;
         }
@@ -4949,14 +6105,14 @@ function extractMetricsFromText(text) {
   const certPatterns = [
     /ISO\s*\d{4,5}(?::\d{4})?/gi,
     /HACCP|GMP|HALAL|FDA|CE|BSCI|WRAP|SEDEX|OEKO-TEX|FSC|PEFC/gi,
-    /(?:certified|certification|accredited)\s+(?:by|with)\s+[A-Z][A-Za-z\s]+/gi
+    /(?:certified|certification|accredited)\s+(?:by|with)\s+[A-Z][A-Za-z\s]+/gi,
   ];
 
   const certs = [];
   for (const pattern of certPatterns) {
     const matches = text.match(pattern);
     if (matches) {
-      certs.push(...matches.map(m => m.toUpperCase().trim()));
+      certs.push(...matches.map((m) => m.toUpperCase().trim()));
     }
   }
   if (certs.length > 0) {
@@ -4970,7 +6126,7 @@ function extractMetricsFromText(text) {
     /sell(?:ing|s)?\s+to\s+(\d+)\s+(?:countries|nations|markets)/gi,
     /distribut(?:e|ing|ion)\s+to\s+(\d+)\s+(?:countries|markets)/gi,
     /(?:present|presence|available)\s+in\s+(\d+)\s+(?:countries|markets)/gi,
-    /(\d+)\s+export\s+(?:countries|destinations|markets)/gi
+    /(\d+)\s+export\s+(?:countries|destinations|markets)/gi,
   ];
 
   for (const pattern of exportPatterns) {
@@ -4995,7 +6151,7 @@ function extractMetricsFromText(text) {
     /procur(?:e|ing|ement)\s+from\s+(\d+)\s+(?:countries|nations)/gi,
     /import(?:ing|s)?\s+from\s+(\d+)\s+(?:countries|nations|origins)/gi,
     /(?:raw materials?|ingredients?|products?)\s+from\s+(\d+)\s+(?:countries|origins)/gi,
-    /(\d+)\s+(?:source|procurement|origin)\s+countries/gi
+    /(\d+)\s+(?:source|procurement|origin)\s+countries/gi,
   ];
 
   for (const pattern of sourcePatterns) {
@@ -5030,7 +6186,7 @@ function extractMetricsFromText(text) {
     // Korean: 평 (pyeong), 제곱미터
     /(\d{1,3}(?:,\d{3})*)\s*(?:평|제곱미터|㎡)/gi,
     // General
-    /(\d{1,3}(?:,\d{3})*)\s*(?:rai|acres?|hectares?|ha)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:rai|acres?|hectares?|ha)/gi,
   ];
 
   for (const pattern of factorySizePatterns) {
@@ -5056,7 +6212,7 @@ function extractMetricsFromText(text) {
     // Chinese: "500种产品", "500款"
     /(\d{1,3}(?:,\d{3})*)\s*(?:种|種|款|个|個)?\s*(?:产品|產品|商品)/gi,
     // Korean: "500개 제품"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:개|종)?\s*(?:제품|상품|품목)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개|종)?\s*(?:제품|상품|품목)/gi,
   ];
 
   for (const pattern of productCountPatterns) {
@@ -5065,7 +6221,8 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 3 && num <= 100000) { // Lowered from 10
+        if (num >= 3 && num <= 100000) {
+          // Lowered from 10
           metrics.product_count = num;
           metrics.product_text = match[0];
           break;
@@ -5089,7 +6246,7 @@ function extractMetricsFromText(text) {
     // Chinese: "500家客户"
     /(\d{1,3}(?:,\d{3})*)\s*(?:家|位|个|個)?\s*(?:客户|客戶|顾客|顧客)/gi,
     // Korean: "500개 고객"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:개|명)?\s*(?:고객|거래처|클라이언트)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개|명)?\s*(?:고객|거래처|클라이언트)/gi,
   ];
 
   for (const pattern of customerCountPatterns) {
@@ -5098,7 +6255,8 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 3 && num <= 1000000) { // Lowered from 5
+        if (num >= 3 && num <= 1000000) {
+          // Lowered from 5
           metrics.customer_count = num;
           metrics.customer_text = match[0];
           break;
@@ -5123,7 +6281,7 @@ function extractMetricsFromText(text) {
     // Chinese: "100辆卡车"
     /(\d{1,3}(?:,\d{3})*)\s*(?:辆|輛|台|臺)\s*(?:卡车|貨車|车辆|車輛|运输车|運輸車)/gi,
     // Korean: "100대 트럭"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:대|台)\s*(?:트럭|차량|운송차)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:대|台)\s*(?:트럭|차량|운송차)/gi,
   ];
 
   for (const pattern of fleetPatterns) {
@@ -5132,7 +6290,8 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 2 && num <= 10000) { // Lowered from 5
+        if (num >= 2 && num <= 10000) {
+          // Lowered from 5
           metrics.fleet_count = num;
           metrics.fleet_text = match[0];
           break;
@@ -5156,7 +6315,7 @@ function extractMetricsFromText(text) {
     // Chinese: "100家门店"
     /(\d{1,3}(?:,\d{3})*)\s*(?:家|个|個)?\s*(?:门店|門店|店铺|店鋪|分店|零售店)/gi,
     // Korean: "100개 매장"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:개|곳)?\s*(?:매장|점포|지점|대리점)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개|곳)?\s*(?:매장|점포|지점|대리점)/gi,
   ];
 
   for (const pattern of outletPatterns) {
@@ -5189,7 +6348,7 @@ function extractMetricsFromText(text) {
     // Chinese: "50个品牌"
     /(\d{1,3}(?:,\d{3})*)\s*(?:个|個)?\s*(?:品牌|牌子)/gi,
     // Korean: "50개 브랜드"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:개)?\s*(?:브랜드|상표)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개)?\s*(?:브랜드|상표)/gi,
   ];
 
   for (const pattern of brandCountPatterns) {
@@ -5219,7 +6378,7 @@ function extractMetricsFromText(text) {
     /(\d{1,3}(?:,\d{3})*)\s*(?:sản phẩm|đơn vị|chiếc)(?:\/ngày|\/tháng)/gi,
     // Chinese: "日产10,000件"
     /(?:日产|月产|日產|月產).*?(\d{1,3}(?:,\d{3})*)/gi,
-    /(\d{1,3}(?:,\d{3})*)\s*(?:件|个|個)(?:\/天|\/月|每天|每月)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:件|个|個)(?:\/天|\/月|每天|每月)/gi,
   ];
 
   for (const pattern of outputPatterns) {
@@ -5244,7 +6403,7 @@ function extractMetricsFromText(text) {
     // Chinese: "10个仓库"
     /(\d{1,3}(?:,\d{3})*)\s*(?:个|個)?\s*(?:仓库|倉庫|配送中心)/gi,
     // Korean: "10개 물류센터"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:개)?\s*(?:물류센터|창고|배송센터)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개)?\s*(?:물류센터|창고|배송센터)/gi,
   ];
 
   for (const pattern of warehousePatterns) {
@@ -5275,7 +6434,7 @@ function extractMetricsFromText(text) {
     // Chinese: "50个国家"
     /(\d+)\s*(?:个|個)?\s*(?:国家|國家|市场|市場)/gi,
     // Korean: "50개국"
-    /(\d+)\s*(?:개국|개 국가|개 시장)/gi
+    /(\d+)\s*(?:개국|개 국가|개 시장)/gi,
   ];
 
   for (const pattern of countryPresencePatterns) {
@@ -5308,7 +6467,7 @@ function extractMetricsFromText(text) {
     // Chinese: "500个项目"
     /(\d{1,3}(?:,\d{3})*)\s*(?:个|個)?\s*(?:项目|項目|工程)/gi,
     // Korean: "500개 프로젝트"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:개)?\s*(?:프로젝트|공사|시공)/gi
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개)?\s*(?:프로젝트|공사|시공)/gi,
   ];
 
   for (const pattern of projectPatterns) {
@@ -5317,7 +6476,8 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 3 && num <= 100000) { // Lowered from 10
+        if (num >= 3 && num <= 100000) {
+          // Lowered from 10
           metrics.project_count = num;
           metrics.project_text = match[0];
           break;
@@ -5425,7 +6585,8 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 5 && num <= 10000) { // Lowered from 20
+      if (num >= 5 && num <= 10000) {
+        // Lowered from 20
         metrics.bed_count = num;
         metrics.bed_text = match[0];
         break;
@@ -5451,7 +6612,8 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 3 && num <= 10000) { // Lowered from 5
+      if (num >= 3 && num <= 10000) {
+        // Lowered from 5
         metrics.doctor_count = num;
         metrics.doctor_text = match[0];
         break;
@@ -5480,7 +6642,8 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 10 && num <= 1000000) { // Lowered from 50
+      if (num >= 10 && num <= 1000000) {
+        // Lowered from 50
         metrics.student_count = num;
         metrics.student_text = match[0];
         break;
@@ -5504,7 +6667,8 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 3 && num <= 10000) { // Lowered from 10
+      if (num >= 3 && num <= 10000) {
+        // Lowered from 10
         metrics.course_count = num;
         metrics.course_text = match[0];
         break;
@@ -5531,7 +6695,8 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 3 && num <= 100000) { // Lowered from 10
+      if (num >= 3 && num <= 100000) {
+        // Lowered from 10
         metrics.unit_count = num;
         metrics.unit_text = match[0];
         break;
@@ -5557,7 +6722,8 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseFloat(String(match[1]).replace(/,/g, ''));
-      if (num >= 3 && num <= 1000000) { // Lowered from 10
+      if (num >= 3 && num <= 1000000) {
+        // Lowered from 10
         metrics.acreage = num;
         metrics.acreage_text = match[0];
         break;
@@ -5586,7 +6752,8 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 10 && num <= 1000000000) { // Lowered from 100
+      if (num >= 10 && num <= 1000000000) {
+        // Lowered from 100
         metrics.user_count = num;
         metrics.user_text = match[0];
         break;
@@ -5612,7 +6779,8 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 100 && num <= 10000000000) { // Lowered from 1000
+      if (num >= 100 && num <= 10000000000) {
+        // Lowered from 1000
         metrics.download_count = num;
         metrics.download_text = match[0];
         break;
@@ -5656,7 +6824,8 @@ function extractBranchLocationSummary(content, officeCount = null) {
   const text = ensureString(content).replace(/\s+/g, ' ').trim();
   if (!text) return '';
   const branchEvidenceSnippets = [];
-  const branchEvidencePattern = /[^.!?;|]{0,120}\b(?:branches?|offices?|locations?|depots?|warehouses?)\b[^.!?;|]{0,160}/gi;
+  const branchEvidencePattern =
+    /[^.!?;|]{0,120}\b(?:branches?|offices?|locations?|depots?|warehouses?)\b[^.!?;|]{0,160}/gi;
   let branchEvidenceMatch;
   while ((branchEvidenceMatch = branchEvidencePattern.exec(text)) !== null) {
     const snippet = ensureString(branchEvidenceMatch[0]).replace(/\s+/g, ' ').trim();
@@ -5684,42 +6853,51 @@ function extractBranchLocationSummary(content, officeCount = null) {
     seventeen: 17,
     eighteen: 18,
     nineteen: 19,
-    twenty: 20
+    twenty: 20,
   };
 
   const parseCount = (value) => {
     const parsed = Number.parseInt(String(value || '').replace(/,/g, ''), 10);
-    if (!Number.isFinite(parsed) || parsed < 2 || parsed > 80) return 0;
+    if (!Number.isFinite(parsed) || parsed < 2 || parsed > 500) return 0;
     return parsed;
   };
 
   let extractedCount = 0;
   if (!extractedCount) {
-    const countMatch = branchEvidenceText.match(/(?:over|more than|around|approximately|about|at least)?\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:branches?|offices?|locations?|depots?|warehouses?)/i);
+    const countMatch = branchEvidenceText.match(
+      /(?:over|more than|around|approximately|about|at least)?\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:branches?|offices?|locations?|depots?|warehouses?)/i
+    );
     if (countMatch) extractedCount = parseCount(countMatch[1]);
   }
   if (!extractedCount) {
-    const wordCountMatch = branchEvidenceText.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b\s*(?:branches?|offices?|locations?|depots?|warehouses?)/i);
+    const wordCountMatch = branchEvidenceText.match(
+      /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b\s*(?:branches?|offices?|locations?|depots?|warehouses?)/i
+    );
     if (wordCountMatch) extractedCount = numberWordMap[wordCountMatch[1].toLowerCase()] || 0;
   }
   const officeCountFallback = parseCount(officeCount);
-  if (!extractedCount && officeCountFallback > 0 && officeCountFallback <= 40 && branchEvidenceSnippets.length > 0) {
-    extractedCount = officeCountFallback;
+  if (!extractedCount && officeCountFallback > 0 && officeCountFallback <= 500) {
+    if (
+      branchEvidenceSnippets.length > 0 ||
+      /(?:branches?|offices?|locations?|outlets?|stores?|cities|regions)/i.test(text)
+    ) {
+      extractedCount = officeCountFallback;
+    }
   }
 
   const extractedTokens = [];
   const coverageFragments = [];
   const patterns = [
     /(?:branches?|offices?|locations?|depots?|warehouses?)\s*(?:in|across|at|throughout|covering)\s+([^.!?;|]{10,220})/gi,
-    /(?:branch|office|location)\s*(?:network|coverage)?\s*[:\-]\s*([^.!?;|]{10,220})/gi,
-    /(?:with|has|have|operates?)\s+\d{1,3}\s*(?:branches?|offices?|locations?)\s*(?:in|across|at)\s+([^.!?;|]{10,220})/gi
+    /(?:branch|office|location)\s*(?:network|coverage)?\s*[:-]\s*([^.!?;|]{10,220})/gi,
+    /(?:with|has|have|operates?)\s+\d{1,3}\s*(?:branches?|offices?|locations?)\s*(?:in|across|at)\s+([^.!?;|]{10,220})/gi,
   ];
 
   const cleanCoverageFragment = (rawValue) => {
     return ensureString(rawValue)
       .replace(/\b(?:to|for|with|which|that|where|offering|providing|serving)\b.*$/i, '')
       .replace(/\s+/g, ' ')
-      .replace(/[,:;.\-]+$/g, '')
+      .replace(/[,:;.-]+$/g, '')
       .trim();
   };
 
@@ -5734,11 +6912,31 @@ function extractBranchLocationSummary(content, officeCount = null) {
   }
 
   const stopTokens = new Set([
-    'branch', 'branches', 'office', 'offices', 'location', 'locations',
-    'warehouse', 'warehouses', 'depot', 'depots',
-    'nationwide', 'domestic', 'international',
-    'region', 'regions', 'state', 'states', 'country', 'countries',
-    'metropolitan', 'metropolitan area', 'area', 'areas', 'and', 'or'
+    'branch',
+    'branches',
+    'office',
+    'offices',
+    'location',
+    'locations',
+    'warehouse',
+    'warehouses',
+    'depot',
+    'depots',
+    'nationwide',
+    'domestic',
+    'international',
+    'region',
+    'regions',
+    'state',
+    'states',
+    'country',
+    'countries',
+    'metropolitan',
+    'metropolitan area',
+    'area',
+    'areas',
+    'and',
+    'or',
   ]);
 
   const dedup = new Set();
@@ -5747,9 +6945,12 @@ function extractBranchLocationSummary(content, officeCount = null) {
     let token = ensureString(rawToken)
       .replace(/[()]/g, ' ')
       .replace(/\b(?:to|for|with|which|that|where|offering|providing|serving)\b.*$/i, '')
-      .replace(/\b(?:branch|branches|office|offices|location|locations|warehouse|warehouses|depot|depots)\b/gi, '')
+      .replace(
+        /\b(?:branch|branches|office|offices|location|locations|warehouse|warehouses|depot|depots)\b/gi,
+        ''
+      )
       .replace(/\s+/g, ' ')
-      .replace(/[,:;.\-]+$/g, '')
+      .replace(/[,:;.-]+$/g, '')
       .trim();
 
     if (!token) continue;
@@ -5760,7 +6961,12 @@ function extractBranchLocationSummary(content, officeCount = null) {
     if (token.length < 3 || token.length > 45) continue;
     const tokenWords = token.split(' ').filter(Boolean);
     if (tokenWords.length > 4) continue;
-    if (/\b(service|services|servicing|provide|providing|supply|supplying|support|supporting|products?|industry|nationally|foodservice|distribution|network|allow|while|studying|delivery|region|regions|website|about|story)\b/i.test(lower)) continue;
+    if (
+      /\b(service|services|servicing|provide|providing|supply|supplying|support|supporting|products?|industry|nationally|foodservice|distribution|network|allow|while|studying|delivery|region|regions|website|about|story)\b/i.test(
+        lower
+      )
+    )
+      continue;
 
     const normalizedKey = lower.replace(/\s+/g, ' ');
     if (dedup.has(normalizedKey)) continue;
@@ -5802,8 +7008,8 @@ function extractBranchLocationSummary(content, officeCount = null) {
   if (/\ball states?\s+in\s+australia\b/i.test(text)) addRegion('all states in Australia');
   if (/\ball regions?\s+in\s+new zealand\b/i.test(text)) addRegion('all regions in New Zealand');
 
-  const uniqueRegions = Array.from(new Set(regions.map(r => r.toLowerCase())))
-    .map(lower => regions.find(r => r.toLowerCase() === lower))
+  const uniqueRegions = Array.from(new Set(regions.map((r) => r.toLowerCase())))
+    .map((lower) => regions.find((r) => r.toLowerCase() === lower))
     .filter(Boolean);
 
   const regionPriority = (region) => {
@@ -5822,7 +7028,7 @@ function extractBranchLocationSummary(content, officeCount = null) {
   }
 
   const broadRegions = new Set(['australia', 'new zealand', 'singapore', 'malaysia']);
-  const specificLocations = cities.filter(name => {
+  const specificLocations = cities.filter((name) => {
     const lower = ensureString(name).toLowerCase();
     if (!lower) return false;
     if (broadRegions.has(lower)) return false;
@@ -5864,7 +7070,8 @@ function getBranchNetworkSummaryFromCompany(company) {
     const value = ensureString(metric?.value).trim();
     if (!value) continue;
     if (label.includes('branch network') || label.includes('branch')) return value;
-    if ((label.includes('office') || label.includes('location')) && /\bbranches?\b/i.test(value)) return value;
+    if ((label.includes('office') || label.includes('location')) && /\bbranches?\b/i.test(value))
+      return value;
   }
 
   return '';
@@ -5876,7 +7083,8 @@ function extractStructuredAddress(rawHtml) {
 
   try {
     // Find JSON-LD script tags
-    const jsonLdPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    const jsonLdPattern =
+      /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
     let match;
 
     while ((match = jsonLdPattern.exec(rawHtml)) !== null) {
@@ -5888,7 +7096,10 @@ function extractStructuredAddress(rawHtml) {
 
         for (const schema of schemas) {
           // Look for Organization, LocalBusiness, or Corporation
-          if (schema['@type'] && /Organization|LocalBusiness|Corporation|Company/i.test(schema['@type'])) {
+          if (
+            schema['@type'] &&
+            /Organization|LocalBusiness|Corporation|Company/i.test(schema['@type'])
+          ) {
             const address = schema.address;
             if (address) {
               // Address could be a string or PostalAddress object
@@ -5904,8 +7115,12 @@ function extractStructuredAddress(rawHtml) {
                   formatted: [
                     address.addressLocality,
                     address.addressRegion,
-                    typeof address.addressCountry === 'object' ? address.addressCountry.name : address.addressCountry
-                  ].filter(Boolean).join(', ')
+                    typeof address.addressCountry === 'object'
+                      ? address.addressCountry.name
+                      : address.addressCountry,
+                  ]
+                    .filter(Boolean)
+                    .join(', '),
                 };
               }
             }
@@ -5928,7 +7143,10 @@ async function extractFullAddress(scrapedContent, websiteUrl, currentLocation) {
   // Check if current location needs fixing
   if (!currentLocation) return null;
 
-  const parts = currentLocation.split(',').map(p => p.trim()).filter(p => p);
+  const parts = currentLocation
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p);
   const isSingapore = parts[parts.length - 1]?.toLowerCase() === 'singapore';
 
   // 2 levels for all countries (state/province, country)
@@ -5937,27 +7155,34 @@ async function extractFullAddress(scrapedContent, websiteUrl, currentLocation) {
     return currentLocation; // Already valid
   }
 
-  console.log(`  [HQ Retry] Location "${currentLocation}" has ${parts.length} levels, need ${requiredLevels}. Re-extracting...`);
+  console.log(
+    `  [HQ Retry] Location "${currentLocation}" has ${parts.length} levels, need ${requiredLevels}. Re-extracting...`
+  );
 
   try {
     // Look for Contact page content in scraped content
-    const contactSection = scrapedContent.match(/=== \/CONTACT[^=]*===([\s\S]*?)(?:===|$)/i)?.[1] || '';
+    const contactSection =
+      scrapedContent.match(/=== \/CONTACT[^=]*===([\s\S]*?)(?:===|$)/i)?.[1] || '';
     const contentToSearch = contactSection || scrapedContent;
 
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-5.1',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an address extraction specialist. Extract the headquarters location.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-5.1',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an address extraction specialist. Extract the headquarters location.
 
 TASK: Find the location and return EXACTLY 2 levels: "State/Province, Country"
 
-${isSingapore ? `
+${
+  isSingapore
+    ? `
 SINGAPORE FORMAT (2 levels): "Area/District, Singapore"
 Examples: "Jurong West, Singapore", "Tuas, Singapore", "Woodlands, Singapore"
 Look for: postal codes (6 digits), street names, building names to identify the area.
-` : `
+`
+    : `
 FORMAT (2 levels): "State/Province, Country"
 Examples:
 - Thailand: "Bangkok, Thailand" or "Samut Prakan, Thailand"
@@ -5967,29 +7192,38 @@ Examples:
 - Philippines: "Metro Manila, Philippines" or "Cebu, Philippines"
 
 CRITICAL: Extract the STATE/PROVINCE level (not city/district) + Country
-`}
+`
+}
 
 Current incomplete location: "${currentLocation}"
 You MUST find more specific location details from the content.
 
 Return JSON: { "location": "Province, Country" } or { "location": "Area, Singapore" }
-If you cannot find more details, return: { "location": "" }`
-        },
-        {
-          role: 'user',
-          content: `Find the complete headquarters address from this content:\n\n${contentToSearch.substring(0, 15000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.1
-    }));
+If you cannot find more details, return: { "location": "" }`,
+          },
+          {
+            role: 'user',
+            content: `Find the complete headquarters address from this content:\n\n${contentToSearch.substring(0, 15000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+      })
+    );
 
     if (response.usage) {
-      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = JSON.parse(response.choices[0].message.content);
     if (result.location && result.location !== currentLocation) {
-      const newParts = result.location.split(',').map(p => p.trim()).filter(p => p);
+      const newParts = result.location
+        .split(',')
+        .map((p) => p.trim())
+        .filter((p) => p);
       if (newParts.length >= requiredLevels) {
         console.log(`  [HQ Retry] SUCCESS: "${currentLocation}" → "${result.location}"`);
         return result.location;
@@ -6006,63 +7240,125 @@ If you cannot find more details, return: { "location": "" }`
 
 // ===== FIX #5: Extract categorized business relationships from section context =====
 // Returns: { customers: [], suppliers: [], principals: [], brands: [] }
+// Strip noise tags (scripts, forms, iframes, comments) but keep structural HTML
+// for section detection (divs, imgs, anchors with class/id attributes)
+function cleanHtmlForExtraction(html) {
+  if (!html) return '';
+  return html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<form[^>]*>[\s\S]*?<\/form>/gi, '')
+    .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
+    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<input[^>]*\/?>/gi, '')
+    .replace(/<select[^>]*>[\s\S]*?<\/select>/gi, '')
+    .replace(/<textarea[^>]*>[\s\S]*?<\/textarea>/gi, '')
+    .replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+}
+
 function extractBusinessRelationships(rawHtml) {
   if (!rawHtml) return { customers: [], suppliers: [], principals: [], brands: [] };
 
   const results = {
-    customers: new Set(),    // Companies we sell to
-    suppliers: new Set(),    // Companies we buy from
-    principals: new Set(),   // Companies we represent/distribute for
-    brands: new Set()        // Brands we carry/distribute
+    customers: new Set(), // Companies we sell to
+    suppliers: new Set(), // Companies we buy from
+    principals: new Set(), // Companies we represent/distribute for
+    brands: new Set(), // Brands we carry/distribute
   };
 
   // Category-specific section keywords (English + Indonesian + Thai + Vietnamese + Malay + Chinese)
   const categoryKeywords = {
     customers: [
       // English
-      'client', 'customer', 'served', 'trusted by', 'work with', 'our clients', 'our customers', 'they trust us',
+      'client',
+      'customer',
+      'served',
+      'trusted by',
+      'work with',
+      'our clients',
+      'our customers',
+      'they trust us',
       // Indonesian
-      'pelanggan', 'klien', 'mitra-pelanggan',
+      'pelanggan',
+      'klien',
+      'mitra-pelanggan',
       // Thai
-      'ลูกค้า', 'ผู้ใช้บริการ',
+      'ลูกค้า',
+      'ผู้ใช้บริการ',
       // Vietnamese
       'khách hàng',
       // Chinese
-      '客户', '客戶'
+      '客户',
+      '客戶',
     ],
     suppliers: [
       // English
-      'supplier', 'vendor', 'source', 'procurement', 'our suppliers', 'supply chain', 'raw material',
+      'supplier',
+      'vendor',
+      'source',
+      'procurement',
+      'our suppliers',
+      'supply chain',
+      'raw material',
       // Indonesian
-      'pemasok', 'vendor',
+      'pemasok',
+      'vendor',
       // Thai
-      'ผู้จัดจำหน่าย', 'ซัพพลายเออร์'
+      'ผู้จัดจำหน่าย',
+      'ซัพพลายเออร์',
     ],
     principals: [
       // English
-      'principal', 'represent', 'authorized', 'distributor for', 'agency', 'our principals', 'we represent',
-      'partner', 'our partners', 'technology partner', 'strategic partner',
+      'principal',
+      'represent',
+      'authorized',
+      'distributor for',
+      'agency',
+      'our principals',
+      'we represent',
+      'partner',
+      'our partners',
+      'technology partner',
+      'strategic partner',
       // Indonesian
-      'mitra', 'mitra-utama', 'mitra bisnis', 'mitra kami', 'partner',
+      'mitra',
+      'mitra-utama',
+      'mitra bisnis',
+      'mitra kami',
+      'partner',
       // Thai
-      'พันธมิตร', 'ตัวแทนจำหน่าย', 'เอเจนซี่',
+      'พันธมิตร',
+      'ตัวแทนจำหน่าย',
+      'เอเจนซี่',
       // Vietnamese
-      'đối tác', 'đại lý',
+      'đối tác',
+      'đại lý',
       // Chinese
-      '合作伙伴', '合作夥伴', '代理'
+      '合作伙伴',
+      '合作夥伴',
+      '代理',
     ],
     brands: [
       // English
-      'brand', 'carry', 'distribute', 'portfolio', 'our brands', 'brands we', 'product line',
+      'brand',
+      'carry',
+      'distribute',
+      'portfolio',
+      'our brands',
+      'brands we',
+      'product line',
       // Indonesian
-      'merek', 'brand-kami',
+      'merek',
+      'brand-kami',
       // Thai
-      'แบรนด์', 'ยี่ห้อ',
+      'แบรนด์',
+      'ยี่ห้อ',
       // Vietnamese
       'thương hiệu',
       // Chinese
-      '品牌'
-    ]
+      '品牌',
+    ],
   };
 
   // Extract names from a section
@@ -6106,7 +7402,8 @@ function extractBusinessRelationships(rawHtml) {
     }
 
     // Method 6: Image filenames (including lazy-loaded data-src)
-    const imgSrcPattern = /<img[^>]*(?:src|data-src|data-lazy-src|data-original)=["']([^"']+)["'][^>]*>/gi;
+    const imgSrcPattern =
+      /<img[^>]*(?:src|data-src|data-lazy-src|data-original)=["']([^"']+)["'][^>]*>/gi;
     while ((match = imgSrcPattern.exec(sectionHtml)) !== null) {
       const src = match[1];
       if (src.startsWith('data:')) continue; // Skip data URIs
@@ -6115,7 +7412,10 @@ function extractBusinessRelationships(rawHtml) {
         // Enhanced preprocessing before cleanCustomerName
         const preprocessed = filename
           .replace(/[-_]/g, ' ')
-          .replace(/logo|img|image|graphic|vector|icon|photo|picture|thumb|thumbnail|banner|\d+/gi, '')
+          .replace(
+            /logo|img|image|graphic|vector|icon|photo|picture|thumb|thumbnail|banner|\d+/gi,
+            ''
+          )
           .replace(/\s+/g, ' ')
           .trim();
         // Only process if meaningful text remains (3+ chars)
@@ -6144,7 +7444,8 @@ function extractBusinessRelationships(rawHtml) {
     }
 
     // Method 9: data-* attributes used by JS logo sliders/carousels
-    const dataAttrPattern = /<(?:img|a|div|li)[^>]*(?:data-name|data-title|data-company|data-brand)=["']([^"']+)["'][^>]*>/gi;
+    const dataAttrPattern =
+      /<(?:img|a|div|li)[^>]*(?:data-name|data-title|data-company|data-brand)=["']([^"']+)["'][^>]*>/gi;
     while ((match = dataAttrPattern.exec(sectionHtml)) !== null) {
       const name = cleanCustomerName(match[1]);
       if (name) names.add(name);
@@ -6174,13 +7475,13 @@ function extractBusinessRelationships(rawHtml) {
     while ((match = sectionPattern.exec(rawHtml)) !== null) {
       const sectionHtml = match[1] || match[0];
       const names = extractNamesFromSection(sectionHtml);
-      names.forEach(name => results[category].add(name));
+      names.forEach((name) => results[category].add(name));
     }
 
     while ((match = headingPattern.exec(rawHtml)) !== null) {
       const sectionHtml = match[1] || match[0];
       const names = extractNamesFromSection(sectionHtml);
-      names.forEach(name => results[category].add(name));
+      names.forEach((name) => results[category].add(name));
     }
   }
 
@@ -6189,7 +7490,7 @@ function extractBusinessRelationships(rawHtml) {
     customers: Array.from(results.customers).slice(0, 30),
     suppliers: Array.from(results.suppliers).slice(0, 30),
     principals: Array.from(results.principals).slice(0, 30),
-    brands: Array.from(results.brands).slice(0, 30)
+    brands: Array.from(results.brands).slice(0, 30),
   };
 }
 
@@ -6197,20 +7498,20 @@ function extractBusinessRelationships(rawHtml) {
 function extractCustomersFromSections(rawHtml) {
   const relationships = extractBusinessRelationships(rawHtml);
   // Return all as one array for backward compatibility
-  return [...new Set([
-    ...relationships.customers,
-    ...relationships.suppliers,
-    ...relationships.principals,
-    ...relationships.brands
-  ])].slice(0, 30);
+  return [
+    ...new Set([
+      ...relationships.customers,
+      ...relationships.suppliers,
+      ...relationships.principals,
+      ...relationships.brands,
+    ]),
+  ].slice(0, 30);
 }
 
 // Normalize relationship name arrays (dedupe + cleaning)
 function uniqueRelationshipNames(names) {
   if (!Array.isArray(names)) return [];
-  const normalized = names
-    .map(name => cleanCustomerName(ensureString(name)))
-    .filter(Boolean);
+  const normalized = names.map((name) => cleanCustomerName(ensureString(name))).filter(Boolean);
   return Array.from(new Set(normalized)).slice(0, 30);
 }
 
@@ -6221,9 +7522,27 @@ function extractRelationshipsFromMetrics(keyMetrics) {
   if (!Array.isArray(keyMetrics) || keyMetrics.length === 0) return extracted;
 
   const genericTerms = new Set([
-    'customer', 'customers', 'client', 'clients', 'supplier', 'suppliers', 'vendor', 'vendors',
-    'principal', 'principals', 'partner', 'partners', 'brand', 'brands',
-    'nationwide', 'domestic', 'international', 'global', 'regional', 'various', 'multiple'
+    'customer',
+    'customers',
+    'client',
+    'clients',
+    'supplier',
+    'suppliers',
+    'vendor',
+    'vendors',
+    'principal',
+    'principals',
+    'partner',
+    'partners',
+    'brand',
+    'brands',
+    'nationwide',
+    'domestic',
+    'international',
+    'global',
+    'regional',
+    'various',
+    'multiple',
   ]);
 
   const parseNames = (value) => {
@@ -6231,7 +7550,10 @@ function extractRelationshipsFromMetrics(keyMetrics) {
     let text = ensureString(value)
       .replace(/^[\s\-■•▪]+/gm, '')
       .replace(/\b(?:including|includes|include|such as|namely)\b/gi, ',')
-      .replace(/\b\d{1,3}(?:,\d{3})*\+?\s*(?:customers?|clients?|suppliers?|vendors?|partners?|principals?|brands?)\b/gi, '')
+      .replace(
+        /\b\d{1,3}(?:,\d{3})*\+?\s*(?:customers?|clients?|suppliers?|vendors?|partners?|principals?|brands?)\b/gi,
+        ''
+      )
       .replace(/[;|]/g, ',');
 
     const rawParts = text.split(/,|\n|\/|\band\b/gi);
@@ -6292,7 +7614,7 @@ function extractRelationshipsFromMetrics(keyMetrics) {
     customers: uniqueRelationshipNames(extracted.customers),
     suppliers: uniqueRelationshipNames(extracted.suppliers),
     principals: uniqueRelationshipNames(extracted.principals),
-    brands: uniqueRelationshipNames(extracted.brands)
+    brands: uniqueRelationshipNames(extracted.brands),
   };
 }
 
@@ -6303,7 +7625,7 @@ function extractRelationshipsFromPageUrls(pagesScraped = []) {
     customers: new Set(),
     suppliers: new Set(),
     principals: new Set(),
-    brands: new Set()
+    brands: new Set(),
   };
 
   if (!Array.isArray(pagesScraped) || pagesScraped.length === 0) {
@@ -6311,26 +7633,91 @@ function extractRelationshipsFromPageUrls(pagesScraped = []) {
   }
 
   const categoryHints = {
-    customers: ['customer', 'customers', 'client', 'clients', 'trusted-by', 'our-customers', 'our-clients', 'khach-hang', 'pelanggan', 'klien'],
+    customers: [
+      'customer',
+      'customers',
+      'client',
+      'clients',
+      'trusted-by',
+      'our-customers',
+      'our-clients',
+      'khach-hang',
+      'pelanggan',
+      'klien',
+    ],
     suppliers: ['supplier', 'suppliers', 'vendor', 'vendors', 'our-supplier', 'our-suppliers'],
-    principals: ['principal', 'principals', 'partner', 'partners', 'principal-partners', 'distributor', 'distributors', 'dealer', 'dealers', 'mitra', 'doi-tac'],
-    brands: ['brand', 'brands', 'shop-by-brand', 'brand-portfolio', 'our-brands', 'merek', 'thuong-hieu']
+    principals: [
+      'principal',
+      'principals',
+      'partner',
+      'partners',
+      'principal-partners',
+      'distributor',
+      'distributors',
+      'dealer',
+      'dealers',
+      'mitra',
+      'doi-tac',
+    ],
+    brands: [
+      'brand',
+      'brands',
+      'shop-by-brand',
+      'brand-portfolio',
+      'our-brands',
+      'merek',
+      'thuong-hieu',
+    ],
   };
 
   const allHintTokens = new Set(Object.values(categoryHints).flat());
   const genericSegments = new Set([
-    'about', 'about-us', 'aboutus', 'contact', 'contact-us', 'contactus',
-    'products', 'product', 'services', 'service', 'company', 'profile', 'home',
-    'our', 'us', 'en', 'en-us', 'en-nz', 'en-au', 'en-gb', 'page', 'pages',
-    'category', 'categories', 'tag', 'tags', 'value', 'shop', 'shop-by-brand',
-    'our-services', 'our-company', 'our-supplier', 'suppliers-list', 'registration',
-    'new', 'special', 'featured', 'all', 'index', 'wholesale'
+    'about',
+    'about-us',
+    'aboutus',
+    'contact',
+    'contact-us',
+    'contactus',
+    'products',
+    'product',
+    'services',
+    'service',
+    'company',
+    'profile',
+    'home',
+    'our',
+    'us',
+    'en',
+    'en-us',
+    'en-nz',
+    'en-au',
+    'en-gb',
+    'page',
+    'pages',
+    'category',
+    'categories',
+    'tag',
+    'tags',
+    'value',
+    'shop',
+    'shop-by-brand',
+    'our-services',
+    'our-company',
+    'our-supplier',
+    'suppliers-list',
+    'registration',
+    'new',
+    'special',
+    'featured',
+    'all',
+    'index',
+    'wholesale',
   ]);
 
   const detectCategory = (normalizedSegment) => {
     if (!normalizedSegment) return null;
     for (const [category, hints] of Object.entries(categoryHints)) {
-      if (hints.some(hint => normalizedSegment.includes(hint))) {
+      if (hints.some((hint) => normalizedSegment.includes(hint))) {
         return category;
       }
     }
@@ -6373,9 +7760,9 @@ function extractRelationshipsFromPageUrls(pagesScraped = []) {
     if (!category || !value) return;
     ensureString(value)
       .split(/,|\/|;|\|/)
-      .map(v => v.trim())
+      .map((v) => v.trim())
       .filter(Boolean)
-      .forEach(part => addCandidate(category, part));
+      .forEach((part) => addCandidate(category, part));
   };
 
   for (const rawUrl of pagesScraped) {
@@ -6393,9 +7780,9 @@ function extractRelationshipsFromPageUrls(pagesScraped = []) {
 
       const rawSegments = decodedPath
         .split('/')
-        .map(s => s.trim())
+        .map((s) => s.trim())
         .filter(Boolean);
-      const normalizedSegments = rawSegments.map(segment =>
+      const normalizedSegments = rawSegments.map((segment) =>
         ensureString(segment)
           .toLowerCase()
           .replace(/\.(html?|php|aspx?)$/i, '')
@@ -6431,7 +7818,7 @@ function extractRelationshipsFromPageUrls(pagesScraped = []) {
     customers: uniqueRelationshipNames(Array.from(extracted.customers)),
     suppliers: uniqueRelationshipNames(Array.from(extracted.suppliers)),
     principals: uniqueRelationshipNames(Array.from(extracted.principals)),
-    brands: uniqueRelationshipNames(Array.from(extracted.brands))
+    brands: uniqueRelationshipNames(Array.from(extracted.brands)),
   };
 }
 
@@ -6446,10 +7833,11 @@ function extractRelationshipsFromStructuredData(rawHtml) {
     customers: new Set(),
     suppliers: new Set(),
     principals: new Set(),
-    brands: new Set()
+    brands: new Set(),
   };
 
-  const scriptPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const scriptPattern =
+    /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
 
   const collectNames = (value, targetSet) => {
     if (!value || !targetSet) return;
@@ -6461,7 +7849,7 @@ function extractRelationshipsFromStructuredData(rawHtml) {
     }
 
     if (Array.isArray(value)) {
-      value.forEach(item => collectNames(item, targetSet));
+      value.forEach((item) => collectNames(item, targetSet));
       return;
     }
 
@@ -6485,7 +7873,7 @@ function extractRelationshipsFromStructuredData(rawHtml) {
     if (!node) return;
 
     if (Array.isArray(node)) {
-      node.forEach(item => walk(item));
+      node.forEach((item) => walk(item));
       return;
     }
 
@@ -6533,7 +7921,7 @@ function extractRelationshipsFromStructuredData(rawHtml) {
     customers: uniqueRelationshipNames(Array.from(extracted.customers)),
     suppliers: uniqueRelationshipNames(Array.from(extracted.suppliers)),
     principals: uniqueRelationshipNames(Array.from(extracted.principals)),
-    brands: uniqueRelationshipNames(Array.from(extracted.brands))
+    brands: uniqueRelationshipNames(Array.from(extracted.brands)),
   };
 }
 
@@ -6548,7 +7936,7 @@ function extractRelationshipsFromEmbeddedData(rawHtml) {
     customers: new Set(),
     suppliers: new Set(),
     principals: new Set(),
-    brands: new Set()
+    brands: new Set(),
   };
 
   const addNames = (value, targetSet) => {
@@ -6561,7 +7949,7 @@ function extractRelationshipsFromEmbeddedData(rawHtml) {
     }
 
     if (Array.isArray(value)) {
-      value.forEach(item => addNames(item, targetSet));
+      value.forEach((item) => addNames(item, targetSet));
       return;
     }
 
@@ -6579,7 +7967,7 @@ function extractRelationshipsFromEmbeddedData(rawHtml) {
     if (!node) return;
 
     if (Array.isArray(node)) {
-      node.forEach(item => walkObject(item));
+      node.forEach((item) => walkObject(item));
       return;
     }
 
@@ -6588,12 +7976,22 @@ function extractRelationshipsFromEmbeddedData(rawHtml) {
     for (const [key, value] of Object.entries(node)) {
       const keyLower = ensureString(key).toLowerCase();
 
-      if (keyLower.includes('brand') || keyLower.includes('vendor') || keyLower.includes('manufacturer') || keyLower.includes('productbrand')) {
+      if (
+        keyLower.includes('brand') ||
+        keyLower.includes('vendor') ||
+        keyLower.includes('manufacturer') ||
+        keyLower.includes('productbrand')
+      ) {
         addNames(value, extracted.brands);
       } else if (keyLower.includes('supplier') || keyLower.includes('vendors')) {
         addNames(value, extracted.suppliers);
         addNames(value, extracted.principals);
-      } else if (keyLower.includes('principal') || keyLower.includes('partner') || keyLower.includes('distributor') || keyLower.includes('dealer')) {
+      } else if (
+        keyLower.includes('principal') ||
+        keyLower.includes('partner') ||
+        keyLower.includes('distributor') ||
+        keyLower.includes('dealer')
+      ) {
         addNames(value, extracted.principals);
       } else if (keyLower.includes('customer') || keyLower.includes('client')) {
         addNames(value, extracted.customers);
@@ -6604,7 +8002,8 @@ function extractRelationshipsFromEmbeddedData(rawHtml) {
   };
 
   // 1) Parse application/json script blocks
-  const jsonScriptPattern = /<script[^>]*type=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const jsonScriptPattern =
+    /<script[^>]*type=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match;
   while ((match = jsonScriptPattern.exec(rawHtml)) !== null) {
     const block = ensureString(match[1]).trim();
@@ -6618,9 +8017,16 @@ function extractRelationshipsFromEmbeddedData(rawHtml) {
 
   // 2) Extract from JS object literals (key: "value")
   const simpleKeyValuePatterns = [
-    { regex: /["'](?:brand|product_brand|vendor|manufacturer)["']\s*:\s*["']([^"']{2,80})["']/gi, target: 'brands' },
-    { regex: /["'](?:supplier|principal|partner|distributor|dealer)["']\s*:\s*["']([^"']{2,80})["']/gi, target: 'principals' },
-    { regex: /["'](?:customer|client)["']\s*:\s*["']([^"']{2,80})["']/gi, target: 'customers' }
+    {
+      regex: /["'](?:brand|product_brand|vendor|manufacturer)["']\s*:\s*["']([^"']{2,80})["']/gi,
+      target: 'brands',
+    },
+    {
+      regex:
+        /["'](?:supplier|principal|partner|distributor|dealer)["']\s*:\s*["']([^"']{2,80})["']/gi,
+      target: 'principals',
+    },
+    { regex: /["'](?:customer|client)["']\s*:\s*["']([^"']{2,80})["']/gi, target: 'customers' },
   ];
 
   for (const patternDef of simpleKeyValuePatterns) {
@@ -6636,8 +8042,11 @@ function extractRelationshipsFromEmbeddedData(rawHtml) {
   // 3) Data attributes on elements
   const dataAttributePatterns = [
     { regex: /data-(?:brand|vendor|manufacturer)=["']([^"']{2,80})["']/gi, target: 'brands' },
-    { regex: /data-(?:principal|partner|supplier|distributor|dealer)=["']([^"']{2,80})["']/gi, target: 'principals' },
-    { regex: /data-(?:customer|client)=["']([^"']{2,80})["']/gi, target: 'customers' }
+    {
+      regex: /data-(?:principal|partner|supplier|distributor|dealer)=["']([^"']{2,80})["']/gi,
+      target: 'principals',
+    },
+    { regex: /data-(?:customer|client)=["']([^"']{2,80})["']/gi, target: 'customers' },
   ];
 
   for (const patternDef of dataAttributePatterns) {
@@ -6654,7 +8063,7 @@ function extractRelationshipsFromEmbeddedData(rawHtml) {
     customers: uniqueRelationshipNames(Array.from(extracted.customers)),
     suppliers: uniqueRelationshipNames(Array.from(extracted.suppliers)),
     principals: uniqueRelationshipNames(Array.from(extracted.principals)),
-    brands: uniqueRelationshipNames(Array.from(extracted.brands))
+    brands: uniqueRelationshipNames(Array.from(extracted.brands)),
   };
 }
 
@@ -6698,18 +8107,23 @@ async function fetchJsonResource(url, timeoutMs = 15000) {
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json,text/plain,*/*'
+        Accept: 'application/json,text/plain,*/*',
       },
       redirect: 'follow',
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeout);
 
     if (!response.ok) return null;
 
     const rawBuffer = await readResponseBuffer(response);
-    const decodedBuffer = decodeMaybeCompressedBuffer(rawBuffer, response.headers?.get?.('content-encoding') || '');
-    const text = ensureString(decodedBuffer.toString('utf8')).replace(/^\uFEFF/, '').trim();
+    const decodedBuffer = decodeMaybeCompressedBuffer(
+      rawBuffer,
+      response.headers?.get?.('content-encoding') || ''
+    );
+    const text = ensureString(decodedBuffer.toString('utf8'))
+      .replace(/^\uFEFF/, '')
+      .trim();
     if (!text) return null;
 
     try {
@@ -6741,7 +8155,7 @@ function extractBrandFromProductTitle(title) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  const tailMatch = normalized.match(/([A-Za-z][A-Za-z&'\/-]{1,})$/);
+  const tailMatch = normalized.match(/([A-Za-z][A-Za-z&'/-]{1,})$/);
   if (!tailMatch) return '';
 
   const rawCandidate = tailMatch[1].replace(/[-_]+/g, ' ').trim();
@@ -6750,9 +8164,28 @@ function extractBrandFromProductTitle(title) {
 
   const lower = candidate.toLowerCase();
   const stopWords = new Set([
-    'original', 'frozen', 'gluten free', 'free', 'pre order', 'pack', 'value pack',
-    'new', 'classic', 'premium', 'regular', 'assorted', 'mixed',
-    'mm', 'cm', 'm', 'g', 'kg', 'mg', 'ml', 'l', 'x'
+    'original',
+    'frozen',
+    'gluten free',
+    'free',
+    'pre order',
+    'pack',
+    'value pack',
+    'new',
+    'classic',
+    'premium',
+    'regular',
+    'assorted',
+    'mixed',
+    'mm',
+    'cm',
+    'm',
+    'g',
+    'kg',
+    'mg',
+    'ml',
+    'l',
+    'x',
   ]);
   if (stopWords.has(lower)) return '';
   if (candidate.split(/\s+/).length > 2) return '';
@@ -6788,7 +8221,9 @@ async function extractRelationshipsFromProductFeeds(baseUrl) {
 
   // Shopify storefront feed
   for (let page = 1; page <= 2; page++) {
-    const shopifyProducts = await fetchJsonResource(`${origin}/products.json?limit=250&page=${page}`);
+    const shopifyProducts = await fetchJsonResource(
+      `${origin}/products.json?limit=250&page=${page}`
+    );
     if (!shopifyProducts || !Array.isArray(shopifyProducts.products)) break;
     shopifyDetected = true;
 
@@ -6806,7 +8241,14 @@ async function extractRelationshipsFromProductFeeds(baseUrl) {
   if (shopifyDetected) {
     const collections = await fetchJsonResource(`${origin}/collections.json?limit=250&page=1`);
     if (collections && Array.isArray(collections.collections)) {
-      const genericCollectionTitles = new Set(['all', 'all products', 'products', 'featured', 'new arrivals', 'sale']);
+      const genericCollectionTitles = new Set([
+        'all',
+        'all products',
+        'products',
+        'featured',
+        'new arrivals',
+        'sale',
+      ]);
       for (const collection of collections.collections) {
         const title = cleanCustomerName(ensureString(collection?.title));
         if (title && !genericCollectionTitles.has(title.toLowerCase())) brandSet.add(title);
@@ -6817,7 +8259,9 @@ async function extractRelationshipsFromProductFeeds(baseUrl) {
   // WordPress/WooCommerce product feed
   if (!shopifyDetected || brandSet.size < 2) {
     for (let page = 1; page <= 2; page++) {
-      const wpProducts = await fetchJsonResource(`${origin}/wp-json/wp/v2/product?per_page=100&page=${page}`);
+      const wpProducts = await fetchJsonResource(
+        `${origin}/wp-json/wp/v2/product?per_page=100&page=${page}`
+      );
       if (!Array.isArray(wpProducts) || wpProducts.length === 0) break;
 
       for (const product of wpProducts) {
@@ -6836,14 +8280,18 @@ async function extractRelationshipsFromProductFeeds(baseUrl) {
   }
 
   const brands = uniqueRelationshipNames(Array.from(brandSet));
-  const products = Array.from(new Set(
-    Array.from(productSet)
-      .map(name => ensureString(name).trim())
-      .filter(name => name.length >= 3 && name.length <= 120)
-  )).slice(0, 40);
+  const products = Array.from(
+    new Set(
+      Array.from(productSet)
+        .map((name) => ensureString(name).trim())
+        .filter((name) => name.length >= 3 && name.length <= 120)
+    )
+  ).slice(0, 40);
 
   if (brands.length > 0 || products.length > 0) {
-    console.log(`    Product feed extraction: ${brands.length} brands, ${products.length} products`);
+    console.log(
+      `    Product feed extraction: ${brands.length} brands, ${products.length} products`
+    );
   }
 
   return {
@@ -6851,7 +8299,7 @@ async function extractRelationshipsFromProductFeeds(baseUrl) {
     suppliers: [],
     principals: brands,
     brands,
-    products
+    products,
   };
 }
 
@@ -6867,13 +8315,14 @@ async function extractRelationshipsFromContentAI(scrapedContent, options = {}) {
   const normalizedSource = normalizeTextForComparison(content);
 
   try {
-    const response = await withRetry(async () => {
-      return await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You extract business relationship names from website text.
+    const response = await withRetry(
+      async () => {
+        return await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `You extract business relationship names from website text.
 
 Return ONLY JSON with this shape:
 {
@@ -6887,24 +8336,31 @@ Rules:
 - Focus on external names: principal partners, brands carried/distributed, key customers.
 - Do not invent names.
 - Do not return generic phrases, menu labels, or action text.
-- Keep each list concise and clean.`
-          },
-          {
-            role: 'user',
-            content: `Company name to exclude: ${companyName || '(unknown)'}
+- Keep each list concise and clean.`,
+            },
+            {
+              role: 'user',
+              content: `Company name to exclude: ${companyName || '(unknown)'}
 
 Website text:
-${content.substring(0, 60000)}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.1,
-        max_tokens: 1200
-      });
-    }, 2, 3000);
+${content.substring(0, 60000)}`,
+            },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+          max_tokens: 1200,
+        });
+      },
+      2,
+      3000
+    );
 
     if (response.usage) {
-      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
 
     const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
@@ -6918,10 +8374,11 @@ ${content.substring(0, 60000)}`
         if (!cleaned) continue;
 
         const normalizedName = cleaned.toLowerCase().replace(/\s+/g, '');
-        if (companyNormalized && normalizedName && (
-          normalizedName.includes(companyNormalized) ||
-          companyNormalized.includes(normalizedName)
-        )) {
+        if (
+          companyNormalized &&
+          normalizedName &&
+          (normalizedName.includes(companyNormalized) || companyNormalized.includes(normalizedName))
+        ) {
           continue;
         }
 
@@ -6939,10 +8396,12 @@ ${content.substring(0, 60000)}`
       customers: verifyNames(parsed.customers),
       suppliers: [],
       principals: verifyNames(parsed.principals),
-      brands: verifyNames(parsed.brands)
+      brands: verifyNames(parsed.brands),
     };
 
-    console.log(`    Relationship AI fallback: ${result.principals.length} principals, ${result.customers.length} customers, ${result.brands.length} brands`);
+    console.log(
+      `    Relationship AI fallback: ${result.principals.length} principals, ${result.customers.length} customers, ${result.brands.length} brands`
+    );
     return result;
   } catch (error) {
     console.log(`    Relationship AI fallback error: ${error.message}`);
@@ -6952,9 +8411,10 @@ ${content.substring(0, 60000)}`
 
 // If product/application rows are empty, use relationship data as fallback for right-side content.
 function applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelationships) {
-  const base = (productsBreakdown && typeof productsBreakdown === 'object') ? { ...productsBreakdown } : {};
+  const base =
+    productsBreakdown && typeof productsBreakdown === 'object' ? { ...productsBreakdown } : {};
   const breakdownItems = Array.isArray(base.breakdown_items) ? base.breakdown_items : [];
-  const hasBreakdownRows = breakdownItems.some(item => {
+  const hasBreakdownRows = breakdownItems.some((item) => {
     const label = ensureString(item?.label).trim();
     const value = ensureString(item?.value).trim();
     return label && value;
@@ -6964,20 +8424,20 @@ function applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelatio
     return {
       ...base,
       breakdown_title: ensureString(base.breakdown_title) || 'Products and Applications',
-      breakdown_items: breakdownItems
+      breakdown_items: breakdownItems,
     };
   }
 
   const relationships = businessRelationships || {};
   const principalBrands = uniqueRelationshipNames([
     ...(relationships.brands || []),
-    ...(relationships.principals || [])
+    ...(relationships.principals || []),
   ]);
   if (principalBrands.length > 0) {
     return {
       ...base,
       breakdown_title: 'Principal Brands',
-      breakdown_items: []
+      breakdown_items: [],
     };
   }
 
@@ -6986,14 +8446,14 @@ function applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelatio
     return {
       ...base,
       breakdown_title: 'Key Customers',
-      breakdown_items: []
+      breakdown_items: [],
     };
   }
 
   return {
     ...base,
     breakdown_title: ensureString(base.breakdown_title) || 'Products and Applications',
-    breakdown_items: []
+    breakdown_items: [],
   };
 }
 
@@ -7018,19 +8478,62 @@ function scoreScreenshotPage(url) {
   }
 
   // Lower score = higher priority
-  const highPriority = [
-    'partner', 'principal', 'supplier', 'brand', 'client', 'customer', 'trusted', 'distributor', 'dealer',
-    'mitra', 'klien', 'pelanggan', 'merek', 'doi-tac', 'khach-hang', 'thuong-hieu',
-    'products', 'product', 'collections', 'collection', 'wholesale', 'catalog', 'catalogue', 'range', 'linecard'
+  const relationshipPriority = [
+    'partner',
+    'principal',
+    'supplier',
+    'brand',
+    'client',
+    'customer',
+    'trusted',
+    'distributor',
+    'dealer',
+    'mitra',
+    'klien',
+    'pelanggan',
+    'merek',
+    'doi-tac',
+    'khach-hang',
+    'thuong-hieu',
   ];
-  const mediumPriority = ['portfolio', 'reference', 'project', 'case', 'company', 'profile', 'service'];
+  const productPriority = [
+    'products',
+    'product',
+    'collections',
+    'collection',
+    'wholesale',
+    'catalog',
+    'catalogue',
+    'range',
+    'linecard',
+  ];
+  const mediumPriority = [
+    'portfolio',
+    'reference',
+    'project',
+    'case',
+    'company',
+    'profile',
+    'service',
+  ];
   const fallbackOnly = ['about', 'contact'];
-  const lowPriority = ['blog', 'news', 'career', 'privacy', 'terms', 'policy', 'legal', 'faq', 'help'];
+  const lowPriority = [
+    'blog',
+    'news',
+    'career',
+    'privacy',
+    'terms',
+    'policy',
+    'legal',
+    'faq',
+    'help',
+  ];
 
-  if (highPriority.some(k => path.includes(k))) return 0;
-  if (mediumPriority.some(k => path.includes(k))) return 2;
-  if (fallbackOnly.some(k => path.includes(k))) return 6;
-  if (lowPriority.some(k => path.includes(k))) return 9;
+  if (relationshipPriority.some((k) => path.includes(k))) return 0;
+  if (productPriority.some((k) => path.includes(k))) return 2;
+  if (mediumPriority.some((k) => path.includes(k))) return 4;
+  if (fallbackOnly.some((k) => path.includes(k))) return 6;
+  if (lowPriority.some((k) => path.includes(k))) return 9;
   return 5;
 }
 
@@ -7041,18 +8544,50 @@ function buildScreenshotFallbackCandidates(baseUrl) {
     const normalized = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
     const origin = new URL(normalized).origin;
     const fallbackPaths = [
-      '/partners', '/partner', '/our-partners',
-      '/principals', '/principal', '/principal-partners',
-      '/brands', '/brand', '/our-brands', '/brand-portfolio',
-      '/clients', '/client', '/our-clients',
-      '/customers', '/customer', '/our-customers', '/trusted-by',
-      '/suppliers', '/supplier', '/vendors', '/distributors', '/dealers',
-      '/products', '/product', '/our-products', '/collections', '/catalogue', '/catalog', '/wholesale', '/range',
-      '/portfolio', '/references', '/case-studies',
-      '/mitra', '/klien', '/pelanggan', '/merek', '/partner-kami', '/klien-kami',
-      '/doi-tac', '/khach-hang', '/thuong-hieu'
+      '/partners',
+      '/partner',
+      '/our-partners',
+      '/principals',
+      '/principal',
+      '/principal-partners',
+      '/brands',
+      '/brand',
+      '/our-brands',
+      '/brand-portfolio',
+      '/clients',
+      '/client',
+      '/our-clients',
+      '/customers',
+      '/customer',
+      '/our-customers',
+      '/trusted-by',
+      '/suppliers',
+      '/supplier',
+      '/vendors',
+      '/distributors',
+      '/dealers',
+      '/products',
+      '/product',
+      '/our-products',
+      '/collections',
+      '/catalogue',
+      '/catalog',
+      '/wholesale',
+      '/range',
+      '/portfolio',
+      '/references',
+      '/case-studies',
+      '/mitra',
+      '/klien',
+      '/pelanggan',
+      '/merek',
+      '/partner-kami',
+      '/klien-kami',
+      '/doi-tac',
+      '/khach-hang',
+      '/thuong-hieu',
     ];
-    return fallbackPaths.map(path => `${origin}${path}`);
+    return fallbackPaths.map((path) => `${origin}${path}`);
   } catch {
     return [];
   }
@@ -7073,8 +8608,12 @@ function buildScreenshotPageQueue(baseUrl, pagesScraped = []) {
 
   // Prioritize URLs that were successfully scraped first.
   // Fallback candidates are appended only if there is remaining capacity.
-  const verifiedCandidates = [baseUrl, homepageCandidate, ...(Array.isArray(pagesScraped) ? pagesScraped : [])]
-    .map(url => ensureString(url).trim())
+  const verifiedCandidates = [
+    baseUrl,
+    homepageCandidate,
+    ...(Array.isArray(pagesScraped) ? pagesScraped : []),
+  ]
+    .map((url) => ensureString(url).trim())
     .filter(Boolean);
 
   const verifiedDedup = new Map();
@@ -7125,7 +8664,8 @@ async function extractPartnersFromScreenshot(websiteUrl, options = {}) {
   if (!websiteUrl) return { customers: [], brands: [], principals: [] };
 
   const screenshotApiKey = process.env.SCREENSHOT_API_KEY;
-  const screenshotApiUrl = process.env.SCREENSHOT_API_URL || 'https://shot.screenshotapi.net/screenshot';
+  const screenshotApiUrl =
+    process.env.SCREENSHOT_API_URL || 'https://shot.screenshotapi.net/screenshot';
   const width = Math.max(1024, Math.min(parseInt(options.width || '1280', 10), 2560));
   const delayMs = Math.max(2000, Math.min(parseInt(options.delayMs || '3000', 10), 10000));
 
@@ -7150,14 +8690,14 @@ async function extractPartnersFromScreenshot(websiteUrl, options = {}) {
       wait_for_event: 'load',
       delay: delayMs,
       full_page: 'true',
-      width
+      width,
     });
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
 
     const response = await fetch(`${screenshotApiUrl}?${screenshotParams}`, {
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeout);
 
@@ -7166,31 +8706,35 @@ async function extractPartnersFromScreenshot(websiteUrl, options = {}) {
       return { customers: [], brands: [], principals: [] };
     }
 
-    const imageBuffer = await response.buffer();
+    const imageBuffer = await readResponseBuffer(response);
     if (imageBuffer.length < 10000) {
       console.log('    Screenshot: Image too small, likely failed');
       return { customers: [], brands: [], principals: [] };
     }
 
     const base64Image = imageBuffer.toString('base64');
-    console.log(`    Screenshot: Got ${Math.round(imageBuffer.length / 1024)}KB image, analyzing with Vision...`);
+    console.log(
+      `    Screenshot: Got ${Math.round(imageBuffer.length / 1024)}KB image, analyzing with Vision...`
+    );
 
-    const visionResponse = await withRetry(async () => {
-      return await openai.chat.completions.create({
-        model: 'gpt-5.1',
-        messages: [{
-          role: 'user',
-          content: [
+    const visionResponse = await withRetry(
+      async () => {
+        return await openai.chat.completions.create({
+          model: 'gpt-5.1',
+          messages: [
             {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/png;base64,${base64Image}`,
-                detail: 'high'
-              }
-            },
-            {
-              type: 'text',
-              text: `Analyze this FULL-PAGE company website screenshot. Scan the ENTIRE image from top to bottom.
+              role: 'user',
+              content: [
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:image/png;base64,${base64Image}`,
+                    detail: 'high',
+                  },
+                },
+                {
+                  type: 'text',
+                  text: `Analyze this FULL-PAGE company website screenshot. Scan the ENTIRE image from top to bottom.
 
 Look for sections such as:
 - Our Partners / Principal Partners / Partners / Suppliers
@@ -7209,17 +8753,25 @@ Return ONLY valid JSON:
 Rules:
 - Be exhaustive: list all readable names
 - Do not include section headers or generic words like "logo"
-- Return JSON only, no explanation`
-            }
-          ]
-        }],
-        max_completion_tokens: 1200,
-        temperature: 0.1
-      });
-    }, 2, 3000);
+- Return JSON only, no explanation`,
+                },
+              ],
+            },
+          ],
+          max_completion_tokens: 1200,
+          temperature: 0.1,
+        });
+      },
+      2,
+      3000
+    );
 
     if (visionResponse.usage) {
-      recordTokens('gpt-5.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        visionResponse.usage.prompt_tokens || 0,
+        visionResponse.usage.completion_tokens || 0
+      );
     }
     const responseText = visionResponse.choices[0]?.message?.content || '{}';
 
@@ -7234,17 +8786,19 @@ Rules:
     const cleanNames = (arr) => {
       if (!Array.isArray(arr)) return [];
       return arr
-        .map(name => cleanCustomerName(String(name)))
-        .filter(name => name && name.length >= 2);
+        .map((name) => cleanCustomerName(String(name)))
+        .filter((name) => name && name.length >= 2);
     };
 
     const result = {
       customers: cleanNames(parsed.customers),
       brands: cleanNames(parsed.brands),
-      principals: cleanNames(parsed.principals)
+      principals: cleanNames(parsed.principals),
     };
 
-    console.log(`    Screenshot: Found ${result.principals.length} principals, ${result.customers.length} customers, ${result.brands.length} brands`);
+    console.log(
+      `    Screenshot: Found ${result.principals.length} principals, ${result.customers.length} customers, ${result.brands.length} brands`
+    );
     return result;
   } catch (error) {
     console.log(`    Screenshot: Error - ${error.message}`);
@@ -7259,22 +8813,22 @@ async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], option
   const queue = buildScreenshotPageQueue(baseUrl, pagesScraped);
   if (queue.length === 0) return { customers: [], brands: [], principals: [] };
   console.log(`    Screenshot queue: ${queue.length} page(s)`);
-  const queueKeys = new Set(queue.map(url => normalizeUrlForDedup(url)));
+  const queueKeys = new Set(queue.map((url) => normalizeUrlForDedup(url)));
   const triedPages = new Set(queueKeys);
 
   const merged = {
     customers: new Set(),
     brands: new Set(),
-    principals: new Set()
+    principals: new Set(),
   };
 
   for (let i = 0; i < queue.length; i++) {
     const pageUrl = queue[i];
     console.log(`    Screenshot sweep ${i + 1}/${queue.length}: ${pageUrl}`);
     const pageResult = await extractPartnersFromScreenshot(pageUrl);
-    (pageResult.customers || []).forEach(v => merged.customers.add(v));
-    (pageResult.brands || []).forEach(v => merged.brands.add(v));
-    (pageResult.principals || []).forEach(v => merged.principals.add(v));
+    (pageResult.customers || []).forEach((v) => merged.customers.add(v));
+    (pageResult.brands || []).forEach((v) => merged.brands.add(v));
+    (pageResult.principals || []).forEach((v) => merged.principals.add(v));
   }
 
   let totalFound = merged.customers.size + merged.brands.size + merged.principals.size;
@@ -7284,14 +8838,19 @@ async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], option
   // If first pass found little, retry top pages in higher resolution.
   if ((totalFound < 3 || principalBrandFound < 2) && queue.length > 0) {
     const retryPages = queue.slice(0, Math.min(3, queue.length));
-    console.log(`    Screenshot sweep retry: low coverage (total=${totalFound}, principals+brands=${principalBrandFound}), trying high-resolution capture...`);
+    console.log(
+      `    Screenshot sweep retry: low coverage (total=${totalFound}, principals+brands=${principalBrandFound}), trying high-resolution capture...`
+    );
     for (const pageUrl of retryPages) {
       retriedPages.add(normalizeUrlForDedup(pageUrl));
       triedPages.add(normalizeUrlForDedup(pageUrl));
-      const retryResult = await extractPartnersFromScreenshot(pageUrl, { width: 1920, delayMs: 5000 });
-      (retryResult.customers || []).forEach(v => merged.customers.add(v));
-      (retryResult.brands || []).forEach(v => merged.brands.add(v));
-      (retryResult.principals || []).forEach(v => merged.principals.add(v));
+      const retryResult = await extractPartnersFromScreenshot(pageUrl, {
+        width: 1920,
+        delayMs: 5000,
+      });
+      (retryResult.customers || []).forEach((v) => merged.customers.add(v));
+      (retryResult.brands || []).forEach((v) => merged.brands.add(v));
+      (retryResult.principals || []).forEach((v) => merged.principals.add(v));
     }
     totalFound = merged.customers.size + merged.brands.size + merged.principals.size;
     principalBrandFound = merged.brands.size + merged.principals.size;
@@ -7300,18 +8859,23 @@ async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], option
   // If principals/brands are still weak, target relationship-heavy URLs not retried yet.
   if (principalBrandFound < 2 && queue.length > 0) {
     const targetedPages = queue
-      .filter(url => scoreScreenshotPage(url) <= 1)
-      .filter(url => !retriedPages.has(normalizeUrlForDedup(url)))
+      .filter((url) => scoreScreenshotPage(url) <= 1)
+      .filter((url) => !retriedPages.has(normalizeUrlForDedup(url)))
       .slice(0, 2);
 
     if (targetedPages.length > 0) {
-      console.log(`    Screenshot targeted retry: principals/brands still low (${principalBrandFound}), probing relationship pages...`);
+      console.log(
+        `    Screenshot targeted retry: principals/brands still low (${principalBrandFound}), probing relationship pages...`
+      );
       for (const pageUrl of targetedPages) {
         triedPages.add(normalizeUrlForDedup(pageUrl));
-        const retryResult = await extractPartnersFromScreenshot(pageUrl, { width: 2160, delayMs: 6000 });
-        (retryResult.customers || []).forEach(v => merged.customers.add(v));
-        (retryResult.brands || []).forEach(v => merged.brands.add(v));
-        (retryResult.principals || []).forEach(v => merged.principals.add(v));
+        const retryResult = await extractPartnersFromScreenshot(pageUrl, {
+          width: 2160,
+          delayMs: 6000,
+        });
+        (retryResult.customers || []).forEach((v) => merged.customers.add(v));
+        (retryResult.brands || []).forEach((v) => merged.brands.add(v));
+        (retryResult.principals || []).forEach((v) => merged.principals.add(v));
       }
       totalFound = merged.customers.size + merged.brands.size + merged.principals.size;
       principalBrandFound = merged.brands.size + merged.principals.size;
@@ -7321,9 +8885,9 @@ async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], option
   // If still weak, probe additional scraped pages outside the queue cap.
   if (principalBrandFound < 2 && Array.isArray(pagesScraped) && pagesScraped.length > 0) {
     const extraPages = pagesScraped
-      .map(url => ensureString(url).trim())
+      .map((url) => ensureString(url).trim())
       .filter(Boolean)
-      .filter(url => !triedPages.has(normalizeUrlForDedup(url)))
+      .filter((url) => !triedPages.has(normalizeUrlForDedup(url)))
       .sort((a, b) => {
         const scoreDiff = scoreScreenshotPage(a) - scoreScreenshotPage(b);
         if (scoreDiff !== 0) return scoreDiff;
@@ -7332,13 +8896,18 @@ async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], option
       .slice(0, 3);
 
     if (extraPages.length > 0) {
-      console.log(`    Screenshot overflow retry: principals/brands still low (${principalBrandFound}), checking extra scraped pages...`);
+      console.log(
+        `    Screenshot overflow retry: principals/brands still low (${principalBrandFound}), checking extra scraped pages...`
+      );
       for (const pageUrl of extraPages) {
         triedPages.add(normalizeUrlForDedup(pageUrl));
-        const retryResult = await extractPartnersFromScreenshot(pageUrl, { width: 1920, delayMs: 5000 });
-        (retryResult.customers || []).forEach(v => merged.customers.add(v));
-        (retryResult.brands || []).forEach(v => merged.brands.add(v));
-        (retryResult.principals || []).forEach(v => merged.principals.add(v));
+        const retryResult = await extractPartnersFromScreenshot(pageUrl, {
+          width: 1920,
+          delayMs: 5000,
+        });
+        (retryResult.customers || []).forEach((v) => merged.customers.add(v));
+        (retryResult.brands || []).forEach((v) => merged.brands.add(v));
+        (retryResult.principals || []).forEach((v) => merged.principals.add(v));
       }
       totalFound = merged.customers.size + merged.brands.size + merged.principals.size;
       principalBrandFound = merged.brands.size + merged.principals.size;
@@ -7346,11 +8915,16 @@ async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], option
   }
 
   // Deep mode: scan more scraped pages with slower/high-resolution capture.
-  if (deepMode && principalBrandFound < 2 && Array.isArray(pagesScraped) && pagesScraped.length > 0) {
+  if (
+    deepMode &&
+    principalBrandFound < 2 &&
+    Array.isArray(pagesScraped) &&
+    pagesScraped.length > 0
+  ) {
     const deepPages = pagesScraped
-      .map(url => ensureString(url).trim())
+      .map((url) => ensureString(url).trim())
       .filter(Boolean)
-      .filter(url => !triedPages.has(normalizeUrlForDedup(url)))
+      .filter((url) => !triedPages.has(normalizeUrlForDedup(url)))
       .sort((a, b) => {
         const scoreDiff = scoreScreenshotPage(a) - scoreScreenshotPage(b);
         if (scoreDiff !== 0) return scoreDiff;
@@ -7359,24 +8933,31 @@ async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], option
       .slice(0, 6);
 
     if (deepPages.length > 0) {
-      console.log(`    Screenshot deep retry: principals/brands still low (${principalBrandFound}), running extended sweep...`);
+      console.log(
+        `    Screenshot deep retry: principals/brands still low (${principalBrandFound}), running extended sweep...`
+      );
       for (const pageUrl of deepPages) {
         triedPages.add(normalizeUrlForDedup(pageUrl));
-        const retryResult = await extractPartnersFromScreenshot(pageUrl, { width: 2300, delayMs: 7000 });
-        (retryResult.customers || []).forEach(v => merged.customers.add(v));
-        (retryResult.brands || []).forEach(v => merged.brands.add(v));
-        (retryResult.principals || []).forEach(v => merged.principals.add(v));
+        const retryResult = await extractPartnersFromScreenshot(pageUrl, {
+          width: 2300,
+          delayMs: 7000,
+        });
+        (retryResult.customers || []).forEach((v) => merged.customers.add(v));
+        (retryResult.brands || []).forEach((v) => merged.brands.add(v));
+        (retryResult.principals || []).forEach((v) => merged.principals.add(v));
       }
       totalFound = merged.customers.size + merged.brands.size + merged.principals.size;
       principalBrandFound = merged.brands.size + merged.principals.size;
     }
   }
 
-  console.log(`    Screenshot sweep total: ${merged.principals.size} principals, ${merged.customers.size} customers, ${merged.brands.size} brands`);
+  console.log(
+    `    Screenshot sweep total: ${merged.principals.size} principals, ${merged.customers.size} customers, ${merged.brands.size} brands`
+  );
   return {
     customers: Array.from(merged.customers),
     brands: Array.from(merged.brands),
-    principals: Array.from(merged.principals)
+    principals: Array.from(merged.principals),
   };
 }
 
@@ -7398,7 +8979,8 @@ async function extractBasicInfoFromScreenshot(websiteUrl, options = {}) {
   }
 
   const screenshotApiKey = process.env.SCREENSHOT_API_KEY;
-  const screenshotApiUrl = process.env.SCREENSHOT_API_URL || 'https://shot.screenshotapi.net/screenshot';
+  const screenshotApiUrl =
+    process.env.SCREENSHOT_API_URL || 'https://shot.screenshotapi.net/screenshot';
   const width = Math.max(1100, Math.min(parseInt(options.width || '1400', 10), 2400));
   const delayMs = Math.max(2500, Math.min(parseInt(options.delayMs || '4500', 10), 12000));
 
@@ -7416,13 +8998,13 @@ async function extractBasicInfoFromScreenshot(websiteUrl, options = {}) {
       wait_for_event: 'load',
       delay: delayMs,
       full_page: 'true',
-      width
+      width,
     });
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     const response = await fetch(`${screenshotApiUrl}?${screenshotParams}`, {
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeout);
 
@@ -7431,29 +9013,31 @@ async function extractBasicInfoFromScreenshot(websiteUrl, options = {}) {
       return { company_name: '', established_year: '', location: '' };
     }
 
-    const imageBuffer = await response.buffer();
+    const imageBuffer = await readResponseBuffer(response);
     if (!imageBuffer || imageBuffer.length < 10000) {
       console.log('    Screenshot fallback: image too small');
       return { company_name: '', established_year: '', location: '' };
     }
 
     const base64Image = imageBuffer.toString('base64');
-    const visionResponse = await withRetry(async () => {
-      return await openai.chat.completions.create({
-        model: 'gpt-5.1',
-        messages: [{
-          role: 'user',
-          content: [
+    const visionResponse = await withRetry(
+      async () => {
+        return await openai.chat.completions.create({
+          model: 'gpt-5.1',
+          messages: [
             {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/png;base64,${base64Image}`,
-                detail: 'high'
-              }
-            },
-            {
-              type: 'text',
-              text: `Extract company basic info from this full-page website screenshot.
+              role: 'user',
+              content: [
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:image/png;base64,${base64Image}`,
+                    detail: 'high',
+                  },
+                },
+                {
+                  type: 'text',
+                  text: `Extract company basic info from this full-page website screenshot.
 
 Return ONLY valid JSON:
 {
@@ -7468,17 +9052,25 @@ Rules:
 - location must be HQ-style and concise (state/province + country).
 - For Singapore use "Area, Singapore" only when area is visible.
 - For Australia, prefer full state name + "Australia" if state abbreviation is visible.
-- Return JSON only, no explanation.`
-            }
-          ]
-        }],
-        max_completion_tokens: 500,
-        temperature: 0.1
-      });
-    }, 2, 3000);
+- Return JSON only, no explanation.`,
+                },
+              ],
+            },
+          ],
+          max_completion_tokens: 500,
+          temperature: 0.1,
+        });
+      },
+      2,
+      3000
+    );
 
     if (visionResponse.usage) {
-      recordTokens('gpt-5.1', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        visionResponse.usage.prompt_tokens || 0,
+        visionResponse.usage.completion_tokens || 0
+      );
     }
 
     const content = visionResponse.choices[0]?.message?.content || '{}';
@@ -7493,7 +9085,7 @@ Rules:
     return {
       company_name: ensureString(parsed.company_name),
       established_year: ensureString(parsed.established_year),
-      location: ensureString(parsed.location)
+      location: ensureString(parsed.location),
     };
   } catch (error) {
     console.log(`    Screenshot fallback: error - ${error.message}`);
@@ -7533,21 +9125,22 @@ function buildScreenshotFallbackCompanyData(websiteUrl, scrapeError, basicInfo =
     _relationshipCoverageStatus: 'needs_manual_review',
     _partialExtraction: true,
     _screenshotFallbackUsed: true,
-    _sourceError: `Failed to scrape: ${ensureString(scrapeError)}`
+    _sourceError: `Failed to scrape: ${ensureString(scrapeError)}`,
   };
 }
 
 // Segment customers by industry using AI (for cleaner display)
 // Returns: { "Industry1": ["Cust1", "Cust2"], "Industry2": ["Cust3"] }
 async function segmentCustomersByIndustry(customers, openai) {
-  if (!customers || customers.length < 3) return null;  // Only segment if we have enough customers
+  if (!customers || customers.length < 3) return null; // Only segment if we have enough customers
 
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: [{
-        role: 'user',
-        content: `Group these company names by industry. Use SHORT industry labels (1-2 words max).
+      messages: [
+        {
+          role: 'user',
+          content: `Group these company names by industry. Use SHORT industry labels (1-2 words max).
 
 Companies: ${customers.slice(0, 15).join(', ')}
 
@@ -7558,14 +9151,19 @@ Rules:
 - Maximum 5 industry groups
 - Each company goes in only one industry
 - If unsure of industry, use "Others"
-- Return ONLY valid JSON, no explanation`
-      }],
+- Return ONLY valid JSON, no explanation`,
+        },
+      ],
       max_tokens: 500,
-      temperature: 0.1
+      temperature: 0.1,
     });
 
     if (response.usage) {
-      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const responseText = response.choices[0]?.message?.content || '{}';
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -7577,7 +9175,7 @@ Rules:
         const cleaned = {};
         for (const [industry, names] of Object.entries(parsed)) {
           if (Array.isArray(names) && names.length > 0) {
-            cleaned[industry] = names.map(n => String(n)).filter(n => n.length > 0);
+            cleaned[industry] = names.map((n) => String(n)).filter((n) => n.length > 0);
           }
         }
         if (Object.keys(cleaned).length > 0) {
@@ -7601,7 +9199,7 @@ function chunkArray(items, chunkSize) {
 }
 
 function inferSegmentTheme(names, relationshipType = 'group') {
-  const list = Array.isArray(names) ? names.map(name => ensureString(name).toLowerCase()) : [];
+  const list = Array.isArray(names) ? names.map((name) => ensureString(name).toLowerCase()) : [];
   if (list.length === 0) return '';
 
   const type = ensureString(relationshipType).toLowerCase();
@@ -7626,20 +9224,62 @@ function inferSegmentTheme(names, relationshipType = 'group') {
 
   if (type === 'customer' || type === 'customers') {
     return scoreThemes([
-      ['Retail', /\b(retail|supermarket|market|store|shop|mart|grocery|liquor)\b/i],
+      ['Retail', /\b(retail|supermarket|market|store|shop|mart|grocery|liquor|convenience)\b/i],
       ['Wholesalers', /\b(wholesale|wholesaler|distributor|trading|import|export)\b/i],
-      ['Foodservice', /\b(restaurant|cafe|hotel|pizza|fast\s*food|cater|canteen|qsr|bakery|bar)\b/i],
-      ['Institutions', /\b(school|college|university|hospital|clinic|aged\s*care|retirement|office|corporate|venue|club|government)\b/i]
+      [
+        'Foodservice',
+        /\b(restaurant|cafe|hotel|pizza|fast\s*food|cater|canteen|qsr|bakery|bar)\b/i,
+      ],
+      [
+        'Institutions',
+        /\b(school|college|university|hospital|clinic|aged\s*care|retirement|office|corporate|venue|club|government)\b/i,
+      ],
+      [
+        'Manufacturing',
+        /\b(manufactur|factory|plant|assembly|production|industrial|foundry|mill)\b/i,
+      ],
+      [
+        'Construction',
+        /\b(construct|building|contractor|architect|engineer|property|real\s*estate|developer)\b/i,
+      ],
+      ['Automotive', /\b(auto|automotive|car|vehicle|motor|dealer|garage|fleet|truck)\b/i],
+      ['Technology', /\b(tech|software|digital|IT|cloud|data|cyber|telecom|system|solutions)\b/i],
+      ['Energy', /\b(energy|oil|gas|power|solar|wind|electric|petroleum|mining|fuel)\b/i],
+      ['Healthcare', /\b(pharma|medical|health|biotech|lab|diagnostic|therapeutic|dental)\b/i],
+      ['Financial', /\b(bank|insurance|finance|invest|capital|fund|securities|asset)\b/i],
+      [
+        'Logistics',
+        /\b(logistics|shipping|freight|transport|warehouse|supply\s*chain|courier|cargo)\b/i,
+      ],
+      ['Agriculture', /\b(agri|farm|plantation|crop|livestock|feed|seed|fertiliz)\b/i],
     ]);
   }
 
-  if (type === 'brand' || type === 'brands' || type === 'principal' || type === 'principals' || type === 'supplier' || type === 'suppliers') {
+  if (
+    type === 'brand' ||
+    type === 'brands' ||
+    type === 'principal' ||
+    type === 'principals' ||
+    type === 'supplier' ||
+    type === 'suppliers'
+  ) {
     return scoreThemes([
       ['Packaging', /\b(pack|packaging|container|wrap|utensil)\b/i],
       ['Dairy', /\b(dairy|milk|cheese|cream|yogurt|butter)\b/i],
       ['Frozen Foods', /\b(frozen|chilled|cold)\b/i],
-      ['Beverages', /\b(beverage|drink|juice|tea|coffee|wine|beer)\b/i],
-      ['Food Brands', /\b(food|snack|sauce|condiment|ingredient|bakery)\b/i]
+      ['Beverages', /\b(beverage|drink|juice|tea|coffee|wine|beer|spirits)\b/i],
+      ['Food Brands', /\b(food|snack|sauce|condiment|ingredient|bakery)\b/i],
+      ['Chemicals', /\b(chemical|polymer|resin|adhesive|coating|lubricant|solvent)\b/i],
+      ['Electronics', /\b(electronic|semiconductor|sensor|circuit|component|chip|display)\b/i],
+      [
+        'Equipment',
+        /\b(equipment|machine|tool|instrument|pump|valve|motor|generator|compressor)\b/i,
+      ],
+      [
+        'Materials',
+        /\b(steel|metal|aluminum|copper|rubber|plastic|glass|ceramic|timber|wood|concrete)\b/i,
+      ],
+      ['Textiles', /\b(textile|fabric|yarn|garment|apparel|clothing|leather|fiber)\b/i],
     ]);
   }
 
@@ -7656,14 +9296,14 @@ function buildFallbackSegmentLabel(names, relationshipType = 'group', index = 0)
     principal: 'Principal',
     principals: 'Principal',
     brand: 'Brand',
-    brands: 'Brand'
+    brands: 'Brand',
   };
   const prefix = prefixMap[type] || 'Group';
   const thematicLabel = inferSegmentTheme(names, relationshipType);
   if (thematicLabel) return thematicLabel;
   const initials = (Array.isArray(names) ? names : [])
-    .map(name => ensureString(name).trim().charAt(0).toUpperCase())
-    .filter(ch => /[A-Z]/.test(ch));
+    .map((name) => ensureString(name).trim().charAt(0).toUpperCase())
+    .filter((ch) => /[A-Z]/.test(ch));
   if (initials.length > 0) {
     const sorted = Array.from(new Set(initials)).sort();
     const first = sorted[0];
@@ -7675,10 +9315,7 @@ function buildFallbackSegmentLabel(names, relationshipType = 'group', index = 0)
 }
 
 function normalizeSegmentLabel(label, names, relationshipType = 'group', index = 0) {
-  let cleanLabel = ensureString(label)
-    .replace(/[_\-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  let cleanLabel = ensureString(label).replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!cleanLabel) {
     return buildFallbackSegmentLabel(names, relationshipType, index);
   }
@@ -7711,8 +9348,13 @@ function normalizeMeaningfulSegmentMap(segmentMap, relationshipType = 'group') {
 }
 
 async function segmentRelationshipNamesByAI(names, relationshipType, openai, options = {}) {
-  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
-  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const parsedMinCount = Number.parseInt(
+    String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT),
+    10
+  );
+  const minCount = Number.isFinite(parsedMinCount)
+    ? Math.max(3, parsedMinCount)
+    : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(names || []);
   if (cleaned.length < minCount) return null;
   if (!openai) return buildDeterministicSegments(cleaned, { minCount, relationshipType });
@@ -7722,9 +9364,10 @@ async function segmentRelationshipNamesByAI(names, relationshipType, openai, opt
     const promptNames = cleaned.slice(0, 40).join(', ');
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: [{
-        role: 'user',
-        content: `Group these ${relationship} names into meaningful business categories for a slide.
+      messages: [
+        {
+          role: 'user',
+          content: `Group these ${relationship} names into meaningful business categories for a slide.
 
 Names: ${promptNames}
 
@@ -7740,14 +9383,19 @@ Rules:
 - Maximum 5 categories.
 - Each name appears once only.
 - Use only names provided above.
-- Return JSON only, no explanation.`
-      }],
+- Return JSON only, no explanation.`,
+        },
+      ],
       max_tokens: 600,
-      temperature: 0.1
+      temperature: 0.1,
     });
 
     if (response.usage) {
-      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
 
     const responseText = response.choices[0]?.message?.content || '{}';
@@ -7762,7 +9410,7 @@ Rules:
     }
 
     // Keep only original names to avoid model hallucination.
-    const sourceLookup = new Map(cleaned.map(name => [name.toLowerCase(), name]));
+    const sourceLookup = new Map(cleaned.map((name) => [name.toLowerCase(), name]));
     const used = new Set();
     const filteredMap = {};
     const parsedEntries = Object.entries(parsed).slice(0, 8);
@@ -7784,9 +9432,11 @@ Rules:
     }
 
     // Add any missing names to a fallback bucket so all extracted names remain visible.
-    const missing = cleaned.filter(name => !used.has(name.toLowerCase()));
+    const missing = cleaned.filter((name) => !used.has(name.toLowerCase()));
     if (missing.length > 0) {
-      filteredMap[buildFallbackSegmentLabel(missing, relationship, Object.keys(filteredMap).length)] = missing;
+      filteredMap[
+        buildFallbackSegmentLabel(missing, relationship, Object.keys(filteredMap).length)
+      ] = missing;
     }
 
     const normalized = normalizeMeaningfulSegmentMap(filteredMap, relationship);
@@ -7799,8 +9449,13 @@ Rules:
 }
 
 function buildDeterministicSegments(names, options = {}) {
-  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
-  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const parsedMinCount = Number.parseInt(
+    String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT),
+    10
+  );
+  const minCount = Number.isFinite(parsedMinCount)
+    ? Math.max(3, parsedMinCount)
+    : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const parsedChunkSize = Number.parseInt(String(options.chunkSize ?? 3), 10);
   const chunkSize = Number.isFinite(parsedChunkSize) ? Math.max(2, parsedChunkSize) : 3;
   const relationshipType = ensureString(options.relationshipType || 'group').toLowerCase();
@@ -7834,18 +9489,20 @@ function normalizeSegmentMap(segmentMap) {
 }
 
 async function buildCustomerSegments(customers, openai, options = {}) {
-  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
-  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const parsedMinCount = Number.parseInt(
+    String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT),
+    10
+  );
+  const minCount = Number.isFinite(parsedMinCount)
+    ? Math.max(3, parsedMinCount)
+    : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(customers || []);
   if (cleaned.length < minCount) return null;
 
   if (openai) {
-    const aiSegments = await segmentRelationshipNamesByAI(
-      cleaned,
-      'customers',
-      openai,
-      { minCount }
-    );
+    const aiSegments = await segmentRelationshipNamesByAI(cleaned, 'customers', openai, {
+      minCount,
+    });
     const normalizedAi = normalizeMeaningfulSegmentMap(aiSegments, 'customers');
     if (Object.keys(normalizedAi).length > 0) return normalizedAi;
   }
@@ -7854,24 +9511,39 @@ async function buildCustomerSegments(customers, openai, options = {}) {
 }
 
 function buildBrandSegments(brands, options = {}) {
-  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
-  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const parsedMinCount = Number.parseInt(
+    String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT),
+    10
+  );
+  const minCount = Number.isFinite(parsedMinCount)
+    ? Math.max(3, parsedMinCount)
+    : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(brands || []);
   if (cleaned.length < minCount) return null;
   return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'brands' });
 }
 
 function buildPrincipalSegments(principals, options = {}) {
-  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
-  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const parsedMinCount = Number.parseInt(
+    String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT),
+    10
+  );
+  const minCount = Number.isFinite(parsedMinCount)
+    ? Math.max(3, parsedMinCount)
+    : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(principals || []);
   if (cleaned.length < minCount) return null;
   return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'principals' });
 }
 
 function buildSupplierSegments(suppliers, options = {}) {
-  const parsedMinCount = Number.parseInt(String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT), 10);
-  const minCount = Number.isFinite(parsedMinCount) ? Math.max(3, parsedMinCount) : RELATIONSHIP_SEGMENT_MIN_COUNT;
+  const parsedMinCount = Number.parseInt(
+    String(options.minCount ?? RELATIONSHIP_SEGMENT_MIN_COUNT),
+    10
+  );
+  const minCount = Number.isFinite(parsedMinCount)
+    ? Math.max(3, parsedMinCount)
+    : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(suppliers || []);
   if (cleaned.length < minCount) return null;
   return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'suppliers' });
@@ -7882,7 +9554,8 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
   const value = ensureString(metricValue);
   const labelLower = label.toLowerCase();
   const valueLower = value.toLowerCase();
-  const hasRelationshipSignal = /(customer|client|supplier|vendor|principal|partner|brand|distributor)/.test(labelLower) ||
+  const hasRelationshipSignal =
+    /(customer|client|supplier|vendor|principal|partner|brand|distributor)/.test(labelLower) ||
     /(customer|client|supplier|vendor|principal|partner|brand|distributor)/.test(valueLower);
   if (!hasRelationshipSignal) {
     return value;
@@ -7898,7 +9571,7 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
     ...(extracted.customers || []),
     ...(extracted.suppliers || []),
     ...(extracted.principals || []),
-    ...(extracted.brands || [])
+    ...(extracted.brands || []),
   ]);
   const filteredNames = filterGarbageNames(parsedNames, companyName);
 
@@ -7906,13 +9579,19 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
     return value;
   }
 
-  const relationshipType = labelLower.includes('customer') || labelLower.includes('client') ? 'customers'
-    : (labelLower.includes('supplier') || labelLower.includes('vendor') ? 'suppliers'
-      : (labelLower.includes('principal') || labelLower.includes('partner') ? 'principals'
-        : (labelLower.includes('brand') ? 'brands' : 'group')));
+  const relationshipType =
+    labelLower.includes('customer') || labelLower.includes('client')
+      ? 'customers'
+      : labelLower.includes('supplier') || labelLower.includes('vendor')
+        ? 'suppliers'
+        : labelLower.includes('principal') || labelLower.includes('partner')
+          ? 'principals'
+          : labelLower.includes('brand')
+            ? 'brands'
+            : 'group';
   const segmented = buildDeterministicSegments(filteredNames, {
     minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-    relationshipType
+    relationshipType,
   });
   const lines = buildSegmentDisplayLines(segmented, { maxLines: 4, maxNamesPerLine: 4 });
   if (lines.length === 0) return value;
@@ -7930,8 +9609,7 @@ function buildSegmentDisplayLines(segmentMap, options = {}) {
   const totalNames = entries.reduce((sum, [, arr]) => sum + arr.length, 0);
   let shownCount = 0;
 
-  outer:
-  for (let idx = 0; idx < entries.length; idx++) {
+  outer: for (let idx = 0; idx < entries.length; idx++) {
     const [label, names] = entries[idx];
     const chunks = chunkArray(names, maxNamesPerLine);
     for (const chunk of chunks) {
@@ -7956,130 +9634,369 @@ function detectBusinessType(businessDescription, scrapedContent) {
   // B2C keywords (restaurants, hotels, retail, consumer products)
   const b2cKeywords = [
     // English
-    'restaurant', 'cafe', 'coffee', 'bakery', 'food service', 'catering',
-    'hotel', 'resort', 'hospitality', 'accommodation', 'lodging',
-    'retail', 'shop', 'store', 'boutique', 'mall', 'outlet',
-    'salon', 'spa', 'beauty', 'wellness', 'fitness', 'gym',
-    'clinic', 'dental', 'medical center', 'healthcare',
-    'school', 'education', 'training center', 'academy',
-    'entertainment', 'cinema', 'theater', 'amusement',
-    'consumer', 'b2c', 'end user', 'retail customer',
-    'menu', 'dine', 'dining', 'cuisine', 'chef',
-    'fashion', 'clothing', 'apparel', 'accessories',
-    'supermarket', 'grocery', 'convenience store', 'minimart',
+    'restaurant',
+    'cafe',
+    'coffee',
+    'bakery',
+    'food service',
+    'catering',
+    'hotel',
+    'resort',
+    'hospitality',
+    'accommodation',
+    'lodging',
+    'retail',
+    'shop',
+    'store',
+    'boutique',
+    'mall',
+    'outlet',
+    'salon',
+    'spa',
+    'beauty',
+    'wellness',
+    'fitness',
+    'gym',
+    'clinic',
+    'dental',
+    'medical center',
+    'healthcare',
+    'school',
+    'education',
+    'training center',
+    'academy',
+    'entertainment',
+    'cinema',
+    'theater',
+    'amusement',
+    'consumer',
+    'b2c',
+    'end user',
+    'retail customer',
+    'menu',
+    'dine',
+    'dining',
+    'cuisine',
+    'chef',
+    'fashion',
+    'clothing',
+    'apparel',
+    'accessories',
+    'supermarket',
+    'grocery',
+    'convenience store',
+    'minimart',
     // Indonesian
-    'restoran', 'kafe', 'warung', 'kedai kopi', 'rumah makan', 'toko roti',
-    'penginapan', 'losmen', 'homestay', 'villa',
-    'toko', 'gerai', 'pusat perbelanjaan',
-    'klinik', 'apotek', 'puskesmas',
-    'sekolah', 'kursus', 'bimbel', 'les',
-    'bioskop', 'tempat hiburan',
-    'swalayan', 'minimarket', 'indomaret', 'alfamart',
+    'restoran',
+    'kafe',
+    'warung',
+    'kedai kopi',
+    'rumah makan',
+    'toko roti',
+    'penginapan',
+    'losmen',
+    'homestay',
+    'villa',
+    'toko',
+    'gerai',
+    'pusat perbelanjaan',
+    'klinik',
+    'apotek',
+    'puskesmas',
+    'sekolah',
+    'kursus',
+    'bimbel',
+    'les',
+    'bioskop',
+    'tempat hiburan',
+    'swalayan',
+    'minimarket',
+    'indomaret',
+    'alfamart',
     // Thai
-    'ร้านอาหาร', 'คาเฟ่', 'ร้านกาแฟ', 'ร้านเบเกอรี่', 'ภัตตาคาร',
-    'โรงแรม', 'รีสอร์ท', 'ที่พัก', 'เกสต์เฮาส์',
-    'ร้านค้า', 'ร้านขายของ', 'ห้างสรรพสินค้า', 'ศูนย์การค้า',
-    'คลินิก', 'ร้านขายยา', 'สถานพยาบาล',
-    'โรงเรียน', 'สถาบันกวดวิชา', 'ศูนย์ฝึกอบรม',
-    'โรงภาพยนตร์', 'สถานบันเทิง',
-    'ซุปเปอร์มาร์เก็ต', 'ร้านสะดวกซื้อ', 'เซเว่น', 'โลตัส',
+    'ร้านอาหาร',
+    'คาเฟ่',
+    'ร้านกาแฟ',
+    'ร้านเบเกอรี่',
+    'ภัตตาคาร',
+    'โรงแรม',
+    'รีสอร์ท',
+    'ที่พัก',
+    'เกสต์เฮาส์',
+    'ร้านค้า',
+    'ร้านขายของ',
+    'ห้างสรรพสินค้า',
+    'ศูนย์การค้า',
+    'คลินิก',
+    'ร้านขายยา',
+    'สถานพยาบาล',
+    'โรงเรียน',
+    'สถาบันกวดวิชา',
+    'ศูนย์ฝึกอบรม',
+    'โรงภาพยนตร์',
+    'สถานบันเทิง',
+    'ซุปเปอร์มาร์เก็ต',
+    'ร้านสะดวกซื้อ',
+    'เซเว่น',
+    'โลตัส',
     // Vietnamese
-    'nhà hàng', 'quán ăn', 'quán cà phê', 'tiệm bánh', 'quán ăn nhanh',
-    'khách sạn', 'nhà nghỉ', 'homestay', 'resort',
-    'cửa hàng', 'siêu thị', 'trung tâm thương mại', 'chợ',
-    'phòng khám', 'nhà thuốc', 'bệnh viện',
-    'trường học', 'trung tâm đào tạo', 'học viện',
-    'rạp chiếu phim', 'khu vui chơi',
+    'nhà hàng',
+    'quán ăn',
+    'quán cà phê',
+    'tiệm bánh',
+    'quán ăn nhanh',
+    'khách sạn',
+    'nhà nghỉ',
+    'homestay',
+    'resort',
+    'cửa hàng',
+    'siêu thị',
+    'trung tâm thương mại',
+    'chợ',
+    'phòng khám',
+    'nhà thuốc',
+    'bệnh viện',
+    'trường học',
+    'trung tâm đào tạo',
+    'học viện',
+    'rạp chiếu phim',
+    'khu vui chơi',
     // Malay (Malaysia/Brunei)
-    'restoran', 'kedai makan', 'warung', 'kopitiam', 'kedai kopi',
-    'hotel', 'resort', 'penginapan', 'chalet',
-    'kedai', 'pasar raya', 'pusat membeli-belah',
-    'klinik', 'farmasi', 'pusat kesihatan',
-    'sekolah', 'pusat latihan', 'akademi',
-    'pawagam', 'pusat hiburan',
+    'restoran',
+    'kedai makan',
+    'warung',
+    'kopitiam',
+    'kedai kopi',
+    'hotel',
+    'resort',
+    'penginapan',
+    'chalet',
+    'kedai',
+    'pasar raya',
+    'pusat membeli-belah',
+    'klinik',
+    'farmasi',
+    'pusat kesihatan',
+    'sekolah',
+    'pusat latihan',
+    'akademi',
+    'pawagam',
+    'pusat hiburan',
     // Filipino/Tagalog
-    'kainan', 'karinderya', 'kapihan', 'panaderya', 'fastfood',
-    'otel', 'resort', 'inn', 'pension house',
-    'tindahan', 'mall', 'palengke', 'merkado',
-    'klinika', 'botika', 'ospital',
-    'paaralan', 'eskwelahan', 'training center',
-    'sinehan', 'pasyalan',
+    'kainan',
+    'karinderya',
+    'kapihan',
+    'panaderya',
+    'fastfood',
+    'otel',
+    'resort',
+    'inn',
+    'pension house',
+    'tindahan',
+    'mall',
+    'palengke',
+    'merkado',
+    'klinika',
+    'botika',
+    'ospital',
+    'paaralan',
+    'eskwelahan',
+    'training center',
+    'sinehan',
+    'pasyalan',
     // Burmese (Myanmar)
-    'စားသောက်ဆိုင်', 'ကော်ဖီဆိုင်', 'မုန့်ဆိုင်',
-    'ဟိုတယ်', 'တည်းခိုခန်း',
-    'ဆိုင်', 'စျေး',
+    'စားသောက်ဆိုင်',
+    'ကော်ဖီဆိုင်',
+    'မုန့်ဆိုင်',
+    'ဟိုတယ်',
+    'တည်းခိုခန်း',
+    'ဆိုင်',
+    'စျေး',
     // Khmer (Cambodia)
-    'ភោជនីយដ្ឋាន', 'ហាងកាហ្វេ', 'ហាងនំ',
-    'សណ្ឋាគារ', 'ផ្ទះសំណាក់',
-    'ហាង', 'ផ្សារ',
+    'ភោជនីយដ្ឋាន',
+    'ហាងកាហ្វេ',
+    'ហាងនំ',
+    'សណ្ឋាគារ',
+    'ផ្ទះសំណាក់',
+    'ហាង',
+    'ផ្សារ',
     // Lao
-    'ຮ້ານອາຫານ', 'ຮ້ານກາເຟ',
-    'ໂຮງແຮມ', 'ເຮືອນພັກ',
-    'ຮ້ານຄ້າ', 'ຕະຫຼາດ'
+    'ຮ້ານອາຫານ',
+    'ຮ້ານກາເຟ',
+    'ໂຮງແຮມ',
+    'ເຮືອນພັກ',
+    'ຮ້ານຄ້າ',
+    'ຕະຫຼາດ',
   ];
 
   // Project-based keywords (construction, engineering, development)
   const projectKeywords = [
     // English
-    'construction', 'contractor', 'builder', 'developer',
-    'engineering', 'epc', 'design and build', 'turnkey',
-    'infrastructure', 'civil works', 'building project',
-    'architecture', 'interior design', 'renovation',
-    'property development', 'real estate development',
-    'installation', 'commissioning', 'project management',
-    'marine', 'offshore', 'shipyard', 'vessel',
-    'power plant', 'oil and gas', 'refinery',
-    'completed project', 'project portfolio', 'project reference',
-    'our project', 'past project', 'recent project',
+    'construction',
+    'contractor',
+    'builder',
+    'developer',
+    'engineering',
+    'epc',
+    'design and build',
+    'turnkey',
+    'infrastructure',
+    'civil works',
+    'building project',
+    'architecture',
+    'interior design',
+    'renovation',
+    'property development',
+    'real estate development',
+    'installation',
+    'commissioning',
+    'project management',
+    'marine',
+    'offshore',
+    'shipyard',
+    'vessel',
+    'power plant',
+    'oil and gas',
+    'refinery',
+    'completed project',
+    'project portfolio',
+    'project reference',
+    'our project',
+    'past project',
+    'recent project',
     // Indonesian
-    'konstruksi', 'kontraktor', 'pemborong', 'pengembang', 'developer',
-    'rekayasa', 'sipil', 'bangunan', 'gedung', 'proyek',
-    'arsitektur', 'desain interior', 'renovasi', 'pembangunan',
-    'properti', 'perumahan', 'real estate',
-    'instalasi', 'pemasangan', 'manajemen proyek',
-    'galangan kapal', 'pelabuhan', 'dermaga',
-    'pembangkit listrik', 'migas', 'kilang',
-    'proyek selesai', 'portofolio proyek', 'referensi proyek',
+    'konstruksi',
+    'kontraktor',
+    'pemborong',
+    'pengembang',
+    'developer',
+    'rekayasa',
+    'sipil',
+    'bangunan',
+    'gedung',
+    'proyek',
+    'arsitektur',
+    'desain interior',
+    'renovasi',
+    'pembangunan',
+    'properti',
+    'perumahan',
+    'real estate',
+    'instalasi',
+    'pemasangan',
+    'manajemen proyek',
+    'galangan kapal',
+    'pelabuhan',
+    'dermaga',
+    'pembangkit listrik',
+    'migas',
+    'kilang',
+    'proyek selesai',
+    'portofolio proyek',
+    'referensi proyek',
     // Thai
-    'ก่อสร้าง', 'ผู้รับเหมา', 'รับเหมา', 'นักพัฒนา',
-    'วิศวกรรม', 'งานโครงสร้าง', 'โครงการก่อสร้าง',
-    'สถาปัตยกรรม', 'ออกแบบภายใน', 'ตกแต่งภายใน', 'ปรับปรุง',
-    'อสังหาริมทรัพย์', 'พัฒนาที่ดิน', 'บ้านจัดสรร', 'คอนโด',
-    'ติดตั้ง', 'บริหารโครงการ',
-    'อู่ต่อเรือ', 'ท่าเรือ',
-    'โรงไฟฟ้า', 'น้ำมันและก๊าซ', 'โรงกลั่น',
-    'โครงการที่เสร็จ', 'ผลงานโครงการ',
+    'ก่อสร้าง',
+    'ผู้รับเหมา',
+    'รับเหมา',
+    'นักพัฒนา',
+    'วิศวกรรม',
+    'งานโครงสร้าง',
+    'โครงการก่อสร้าง',
+    'สถาปัตยกรรม',
+    'ออกแบบภายใน',
+    'ตกแต่งภายใน',
+    'ปรับปรุง',
+    'อสังหาริมทรัพย์',
+    'พัฒนาที่ดิน',
+    'บ้านจัดสรร',
+    'คอนโด',
+    'ติดตั้ง',
+    'บริหารโครงการ',
+    'อู่ต่อเรือ',
+    'ท่าเรือ',
+    'โรงไฟฟ้า',
+    'น้ำมันและก๊าซ',
+    'โรงกลั่น',
+    'โครงการที่เสร็จ',
+    'ผลงานโครงการ',
     // Vietnamese
-    'xây dựng', 'nhà thầu', 'thầu xây dựng', 'chủ đầu tư',
-    'kỹ thuật', 'công trình dân dụng', 'dự án xây dựng',
-    'kiến trúc', 'thiết kế nội thất', 'cải tạo', 'sửa chữa',
-    'bất động sản', 'phát triển bất động sản', 'chung cư', 'nhà phố',
-    'lắp đặt', 'quản lý dự án',
-    'nhà máy đóng tàu', 'cảng biển',
-    'nhà máy điện', 'dầu khí', 'lọc dầu',
-    'dự án hoàn thành', 'danh mục dự án',
+    'xây dựng',
+    'nhà thầu',
+    'thầu xây dựng',
+    'chủ đầu tư',
+    'kỹ thuật',
+    'công trình dân dụng',
+    'dự án xây dựng',
+    'kiến trúc',
+    'thiết kế nội thất',
+    'cải tạo',
+    'sửa chữa',
+    'bất động sản',
+    'phát triển bất động sản',
+    'chung cư',
+    'nhà phố',
+    'lắp đặt',
+    'quản lý dự án',
+    'nhà máy đóng tàu',
+    'cảng biển',
+    'nhà máy điện',
+    'dầu khí',
+    'lọc dầu',
+    'dự án hoàn thành',
+    'danh mục dự án',
     // Malay
-    'pembinaan', 'kontraktor', 'pemaju', 'developer',
-    'kejuruteraan', 'sivil', 'projek bangunan',
-    'arkitek', 'rekabentuk dalaman', 'pengubahsuaian',
-    'hartanah', 'pembangunan hartanah', 'perumahan',
-    'pemasangan', 'pengurusan projek',
-    'limbungan kapal', 'pelabuhan',
-    'loji kuasa', 'minyak dan gas', 'kilang penapisan',
+    'pembinaan',
+    'kontraktor',
+    'pemaju',
+    'developer',
+    'kejuruteraan',
+    'sivil',
+    'projek bangunan',
+    'arkitek',
+    'rekabentuk dalaman',
+    'pengubahsuaian',
+    'hartanah',
+    'pembangunan hartanah',
+    'perumahan',
+    'pemasangan',
+    'pengurusan projek',
+    'limbungan kapal',
+    'pelabuhan',
+    'loji kuasa',
+    'minyak dan gas',
+    'kilang penapisan',
     // Filipino
-    'konstruksyon', 'kontratista', 'developer', 'tagapagpaunlad',
-    'inhinyeriya', 'proyektong sibil', 'gusali',
-    'arkitektura', 'interior design', 'renovasyon',
-    'real estate', 'bahay', 'condominium',
-    'instalasyon', 'pamamahala ng proyekto',
-    'shipyard', 'pantalan',
-    'planta ng kuryente', 'langis at gas',
+    'konstruksyon',
+    'kontratista',
+    'developer',
+    'tagapagpaunlad',
+    'inhinyeriya',
+    'proyektong sibil',
+    'gusali',
+    'arkitektura',
+    'interior design',
+    'renovasyon',
+    'real estate',
+    'bahay',
+    'condominium',
+    'instalasyon',
+    'pamamahala ng proyekto',
+    'shipyard',
+    'pantalan',
+    'planta ng kuryente',
+    'langis at gas',
     // Burmese
-    'ဆောက်လုပ်ရေး', 'ကန်ထရိုက်တာ', 'အင်ဂျင်နီယာ',
+    'ဆောက်လုပ်ရေး',
+    'ကန်ထရိုက်တာ',
+    'အင်ဂျင်နီယာ',
     // Khmer
-    'សំណង់', 'អ្នកម៉ៅការ', 'វិស្វកម្ម',
+    'សំណង់',
+    'អ្នកម៉ៅការ',
+    'វិស្វកម្ម',
     // Lao
-    'ກໍ່ສ້າງ', 'ຜູ້ຮັບເໝົາ', 'ວິສະວະກຳ'
+    'ກໍ່ສ້າງ',
+    'ຜູ້ຮັບເໝົາ',
+    'ວິສະວະກຳ',
   ];
 
   // Count keyword matches
@@ -8104,12 +10021,12 @@ function detectBusinessType(businessDescription, scrapedContent) {
   return null; // Let AI decide
 }
 
-
 // Helper: Clean and validate customer name
 function cleanCustomerName(text) {
   if (!text || typeof text !== 'string') return '';
 
-  let name = text.trim()
+  let name = text
+    .trim()
     .replace(/<[^>]+>/g, '') // Remove HTML
     .replace(/&amp;/g, '&') // Decode HTML entity
     .replace(/&nbsp;/g, ' ')
@@ -8125,32 +10042,65 @@ function cleanCustomerName(text) {
     .replace(/\]+$/, '')
     .replace(/^"+/, '')
     .replace(/"+$/, '')
-    .replace(/^\'+/, '')
-    .replace(/\'+$/, '')
+    .replace(/^'+/, '')
+    .replace(/'+$/, '')
     .replace(/\s*\((?=[^)]*\d)[^)]*\)\s*$/i, '')
     .replace(/\s+/g, ' ')
     .trim();
 
   // Skip generic terms
   const skipTerms = [
-    'logo', 'image', 'photo', 'icon', 'banner', 'client', 'customer', 'partner',
-    'view', 'click', 'here', 'more', 'read', 'learn', 'see', 'our', 'the', 'and',
-    'trusted', 'brands', 'companies', 'clients', 'partners', 'customers'
+    'logo',
+    'image',
+    'photo',
+    'icon',
+    'banner',
+    'client',
+    'customer',
+    'partner',
+    'view',
+    'click',
+    'here',
+    'more',
+    'read',
+    'learn',
+    'see',
+    'our',
+    'the',
+    'and',
+    'trusted',
+    'brands',
+    'companies',
+    'clients',
+    'partners',
+    'customers',
   ];
   const navigationTerms = [
-    'become a customer', 'order online', 'shipping & returns', 'terms & conditions',
-    'privacy policy', 'my account', 'login', 'forgot password', 'reviews',
-    'download application form', 'contact us'
+    'become a customer',
+    'order online',
+    'shipping & returns',
+    'terms & conditions',
+    'privacy policy',
+    'my account',
+    'login',
+    'forgot password',
+    'reviews',
+    'download application form',
+    'contact us',
   ];
 
   const lowerName = name.toLowerCase();
-  if (skipTerms.some(term => lowerName === term || lowerName.startsWith(term + ' '))) {
+  if (skipTerms.some((term) => lowerName === term || lowerName.startsWith(term + ' '))) {
     return '';
   }
   if (navigationTerms.includes(lowerName)) {
     return '';
   }
-  if (/(download|application form|login|sign in|sign up|order online|privacy policy|terms|returns|my account|reviews?)/i.test(lowerName)) {
+  if (
+    /(download|application form|login|sign in|sign up|order online|privacy policy|terms|returns|my account|reviews?)/i.test(
+      lowerName
+    )
+  ) {
     return '';
   }
 
@@ -8174,7 +10124,7 @@ function cleanCustomerName(text) {
     /^(img|image|pic|photo|logo|icon)[-_]/i, // Image prefixes
   ];
 
-  if (imageGarbagePatterns.some(pattern => pattern.test(name))) {
+  if (imageGarbagePatterns.some((pattern) => pattern.test(name))) {
     return '';
   }
 
@@ -8198,7 +10148,7 @@ function cleanCustomerName(text) {
     /group\s+of\s+people/i,
   ];
 
-  if (descriptionPatterns.some(pattern => pattern.test(name))) {
+  if (descriptionPatterns.some((pattern) => pattern.test(name))) {
     return '';
   }
 
@@ -8238,12 +10188,13 @@ function cleanCustomerName(text) {
 // - This is the most important extraction - wrong HQ ruins the profile
 async function extractBasicInfo(scrapedContent, websiteUrl) {
   try {
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-5.1',
-      messages: [
-        {
-          role: 'system',
-          content: `You extract company information from website content.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-5.1',
+        messages: [
+          {
+            role: 'system',
+            content: `You extract company information from website content.
 
 OUTPUT JSON with these fields:
 - company_name: Company name with first letter of each word capitalized. Remove suffixes like Limited, Ltd, Sdn Bhd, Pte Ltd, PT, Inc, Corp, Company.
@@ -8284,20 +10235,25 @@ RULES:
 - Extract province/state from actual address on website
 - Most Thai industrial companies are NOT in Bangkok - check actual address!
 - If you cannot find an address, leave location empty
-- Return ONLY valid JSON`
-        },
-        {
-          role: 'user',
-          content: `Website: ${websiteUrl}
-Content: ${scrapedContent.substring(0, 25000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    }));
+- Return ONLY valid JSON`,
+          },
+          {
+            role: 'user',
+            content: `Website: ${websiteUrl}
+Content: ${scrapedContent.substring(0, 25000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      })
+    );
 
     if (response.usage) {
-      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -8372,6 +10328,7 @@ function validateAndFixHQFormat(location, websiteUrl) {
   let loc = location.trim();
 
   // SAFETY: Reject non-ASCII (Thai/Chinese/Vietnamese) text entirely
+  // eslint-disable-next-line no-control-regex
   if (/[^\x00-\x7F]/.test(loc)) {
     console.log(`  [HQ Fix] REJECTED non-English location: "${loc}"`);
     return ''; // Return empty - extraction prompt should have given English
@@ -8410,7 +10367,7 @@ function validateAndFixHQFormat(location, websiteUrl) {
     'nusa tenggara timur': 'East Nusa Tenggara',
     'kepulauan riau': 'Riau Islands',
     'di yogyakarta': 'Yogyakarta',
-    'daerah istimewa yogyakarta': 'Yogyakarta'
+    'daerah istimewa yogyakarta': 'Yogyakarta',
   };
 
   // Check and normalize Indonesian province names
@@ -8423,7 +10380,10 @@ function validateAndFixHQFormat(location, websiteUrl) {
     }
   }
 
-  const parts = loc.split(',').map(p => p.trim()).filter(p => p);
+  const parts = loc
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p);
   const lastPart = parts[parts.length - 1]?.toLowerCase() || '';
   const inferredCountry = inferCountryFromWebsite(websiteUrl);
 
@@ -8465,8 +10425,8 @@ function validateAndFixHQFormat(location, websiteUrl) {
     // If domain strongly indicates country, avoid dropping to empty.
     if (inferredCountry) {
       if (only.toLowerCase() === inferredCountry.toLowerCase()) {
-        console.log(`  [HQ Warning] Location missing province: "${loc}"`);
-        return '';
+        console.log(`  [HQ Warning] Location missing province, keeping country: "${loc}"`);
+        return inferredCountry;
       }
       return `${only}, ${inferredCountry}`;
     }
@@ -8488,12 +10448,13 @@ async function extractBusinessInfo(scrapedContent, basicInfo) {
   const currencyExchange = CURRENCY_EXCHANGE[hqCountry] || '';
 
   try {
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You extract business information from website content for M&A discussion slides.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You extract business information from website content for M&A discussion slides.
 
 INPUT:
 - HTML content from company website
@@ -8543,24 +10504,29 @@ RULES:
 - All bullet points must use "- " (dash followed by space)
 - Each bullet point on new line using "\\n"
 - Keep it to the MOST KEY items only (3 bullet points max)
-- Return ONLY valid JSON`
-        },
-        {
-          role: 'user',
-          content: `Company: ${basicInfo.company_name}
+- Return ONLY valid JSON`,
+          },
+          {
+            role: 'user',
+            content: `Company: ${basicInfo.company_name}
 Established: ${basicInfo.established_year}
 Location: ${basicInfo.location}
 
 Website Content:
-${scrapedContent.substring(0, 25000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    }));
+${scrapedContent.substring(0, 25000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      })
+    );
 
     if (response.usage) {
-      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -8573,12 +10539,13 @@ ${scrapedContent.substring(0, 25000)}`
 // Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractKeyMetrics(scrapedContent, previousData) {
   try {
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an M&A analyst extracting COMPREHENSIVE key business metrics for potential buyers evaluating this company.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an M&A analyst extracting COMPREHENSIVE key business metrics for potential buyers evaluating this company.
 
 CRITICAL - VISIBLE STATISTICS FIRST:
 Before anything else, scan the ENTIRE page for ANY prominently displayed numbers/statistics:
@@ -8750,23 +10717,28 @@ RULES:
 - If you cannot find actual customer/supplier names, DO NOT include those metrics at all
 - NEVER make up data - only include what's explicitly stated on the website
 - SHORT LIST FORMATTING: If only 2-3 items, write comma-separated inline (e.g., "Singapore, Sri Lanka"), NOT point form
-- Return ONLY valid JSON`
-        },
-        {
-          role: 'user',
-          content: `Company: ${previousData.company_name}
+- Return ONLY valid JSON`,
+          },
+          {
+            role: 'user',
+            content: `Company: ${previousData.company_name}
 Industry/Business: ${previousData.business}
 
 Website Content (extract ALL M&A-relevant metrics):
-${scrapedContent.substring(0, 35000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3
-    }));
+${scrapedContent.substring(0, 35000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+      })
+    );
 
     if (response.usage) {
-      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -8781,12 +10753,13 @@ async function extractKeyMetricsWithFocus(scrapedContent, context) {
   try {
     console.log('    Running focused re-extraction for missed items...');
 
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-5.1',  // Use stronger model for focused extraction
-      messages: [
-        {
-          role: 'system',
-          content: `You are extracting SPECIFIC metrics that were missed in the first extraction pass.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-5.1', // Use stronger model for focused extraction
+        messages: [
+          {
+            role: 'system',
+            content: `You are extracting SPECIFIC metrics that were missed in the first extraction pass.
 
 ## ALREADY EXTRACTED (do NOT duplicate):
 ${context.existingMetrics || 'None yet'}
@@ -8811,23 +10784,28 @@ RULES:
 - Do NOT include items already in "ALREADY EXTRACTED"
 - If you cannot find a missed item in the content, skip it
 - Return empty array if nothing new found
-- Return ONLY valid JSON`
-        },
-        {
-          role: 'user',
-          content: `Company: ${context.company_name}
+- Return ONLY valid JSON`,
+          },
+          {
+            role: 'user',
+            content: `Company: ${context.company_name}
 Business: ${context.business}
 
 Content to search:
-${scrapedContent.substring(0, 30000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    }));
+${scrapedContent.substring(0, 30000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      })
+    );
 
     if (response.usage) {
-      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -8840,12 +10818,13 @@ ${scrapedContent.substring(0, 30000)}`
 // Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractProductsBreakdown(scrapedContent, previousData) {
   try {
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an M&A analyst creating the RIGHT-SIDE content for a company profile slide.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an M&A analyst creating the RIGHT-SIDE content for a company profile slide.
 
 FIRST: Determine the BUSINESS TYPE:
 1. PROJECT-BASED: Construction, building materials, engineering, architecture, contractors
@@ -8912,70 +10891,75 @@ CRITICAL:
 - Output must be TABLE-READY text only (label + value).
 - Do NOT output image URLs or image-related fields.
 
-Return ONLY valid JSON.`
-        },
-        {
-          role: 'user',
-          content: `Company: ${previousData.company_name}
+Return ONLY valid JSON.`,
+          },
+          {
+            role: 'user',
+            content: `Company: ${previousData.company_name}
 Industry/Business: ${previousData.business}
 
 Website Content:
-${scrapedContent.substring(0, 35000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3
-    }));
+${scrapedContent.substring(0, 35000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+      })
+    );
 
     if (response.usage) {
-      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = JSON.parse(response.choices[0].message.content);
 
     // Validate based on business type (table-first)
     if (result.business_type === 'project' && result.projects) {
       result.projects = result.projects
-        .filter(p => p && typeof p === 'object' && p.name)
-        .map(p => ({
+        .filter((p) => p && typeof p === 'object' && p.name)
+        .map((p) => ({
           name: String(p.name || ''),
           image_url: String(p.image_url || ''),
-          metrics: Array.isArray(p.metrics) ? p.metrics.map(m => String(m)) : []
+          metrics: Array.isArray(p.metrics) ? p.metrics.map((m) => String(m)) : [],
         }))
         .slice(0, 4); // Max 4 projects
       result.breakdown_title = ensureString(result.breakdown_title) || 'Past Projects';
       result.breakdown_items = result.projects
-        .map(project => ({
+        .map((project) => ({
           label: project.name,
-          value: (project.metrics || []).join('; ').trim() || 'Project reference'
+          value: (project.metrics || []).join('; ').trim() || 'Project reference',
         }))
-        .filter(item => item.label && item.value);
+        .filter((item) => item.label && item.value);
     } else if (result.business_type === 'consumer' && result.products) {
       result.products = result.products
-        .filter(p => p && typeof p === 'object' && p.name)
-        .map(p => ({
+        .filter((p) => p && typeof p === 'object' && p.name)
+        .map((p) => ({
           name: String(p.name || ''),
           image_url: String(p.image_url || ''),
-          description: String(p.description || '')
+          description: String(p.description || ''),
         }))
         .slice(0, 4); // Max 4 products
       result.breakdown_title = ensureString(result.breakdown_title) || 'Product Range';
       result.breakdown_items = result.products
-        .map(product => ({
+        .map((product) => ({
           label: product.name,
-          value: product.description || 'Product offering'
+          value: product.description || 'Product offering',
         }))
-        .filter(item => item.label && item.value);
+        .filter((item) => item.label && item.value);
     } else {
       // Default to industrial/table format
       result.business_type = 'industrial';
       if (result.breakdown_items && Array.isArray(result.breakdown_items)) {
         result.breakdown_items = result.breakdown_items
-          .filter(item => item && typeof item === 'object')
-          .map(item => ({
+          .filter((item) => item && typeof item === 'object')
+          .map((item) => ({
             label: String(item.label || ''),
-            value: String(item.value || '')
+            value: String(item.value || ''),
           }))
-          .filter(item => item.label && item.value);
+          .filter((item) => item.label && item.value);
       } else {
         result.breakdown_items = [];
       }
@@ -8984,7 +10968,11 @@ ${scrapedContent.substring(0, 35000)}`
     return result;
   } catch (e) {
     console.error('Agent 3b (products) error:', e.message);
-    return { business_type: 'industrial', breakdown_title: 'Products and Applications', breakdown_items: [] };
+    return {
+      business_type: 'industrial',
+      breakdown_title: 'Products and Applications',
+      breakdown_items: [],
+    };
   }
 }
 
@@ -8992,12 +10980,13 @@ ${scrapedContent.substring(0, 35000)}`
 // Using GPT-4o-mini with retry for rate limits
 async function extractFinancialMetrics(scrapedContent, previousData) {
   try {
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an M&A analyst extracting financial performance metrics from website content.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an M&A analyst extracting financial performance metrics from website content.
 
 Focus on financial metrics important for M&A evaluation:
 
@@ -9026,23 +11015,28 @@ IMPORTANT RULES:
 - Maximum 4 financial metrics
 - Do NOT make up financial figures
 
-Return ONLY valid JSON.`
-        },
-        {
-          role: 'user',
-          content: `Company: ${previousData.company_name}
+Return ONLY valid JSON.`,
+          },
+          {
+            role: 'user',
+            content: `Company: ${previousData.company_name}
 Industry/Business: ${previousData.business}
 
 Website Content (extract financial metrics):
-${scrapedContent.substring(0, 15000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    }));
+${scrapedContent.substring(0, 15000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      })
+    );
 
     if (response.usage) {
-      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -9063,12 +11057,13 @@ async function searchMissingInfo(companyName, website, missingFields) {
 
     // Use OpenAI Search model which has web search capability
     // Wrapped with retry for rate limits
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-5-search-api',
-      messages: [
-        {
-          role: 'user',
-          content: `Search for information about "${companyName}" (website: ${website}).
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-5-search-api',
+        messages: [
+          {
+            role: 'user',
+            content: `Search for information about "${companyName}" (website: ${website}).
 
 I need to find:
 ${missingFields.includes('established_year') ? '- When was this company founded/established? (year only)' : ''}
@@ -9081,13 +11076,18 @@ Return ONLY a JSON object with these fields (include only fields you can find wi
 }
 
 If you cannot find reliable information for a field, omit it from the response.
-Return ONLY valid JSON, no explanations.`
-        }
-      ]
-    }));
+Return ONLY valid JSON, no explanations.`,
+          },
+        ],
+      })
+    );
 
     if (response.usage) {
-      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5-search-api',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const content = response.choices[0].message.content || '';
 
@@ -9168,7 +11168,7 @@ I need M&A-relevant metrics for an acquisition discussion. Find:
    - Joint ventures
    - Major suppliers
 
-Already have: ${existingMetrics.map(m => m.label).join(', ')}
+Already have: ${existingMetrics.map((m) => m.label).join(', ')}
 
 Return ONLY a JSON object:
 {
@@ -9180,20 +11180,26 @@ Return ONLY a JSON object:
 }
 
 Only include metrics you can verify. Do not repeat metrics already provided.
-Return ONLY valid JSON.`
-        }
-      ]
+Return ONLY valid JSON.`,
+        },
+      ],
     });
 
     if (response.usage) {
-      recordTokens('gpt-5-search-api', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5-search-api',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const content = response.choices[0].message.content || '';
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const result = JSON.parse(jsonMatch[0]);
-      console.log(`  Found ${result.additional_metrics?.length || 0} additional metrics via web search`);
+      console.log(
+        `  Found ${result.additional_metrics?.length || 0} additional metrics via web search`
+      );
       return result;
     }
 
@@ -9218,14 +11224,17 @@ async function generateMECESegments(targetDescription, companies) {
       // Extract product/service names from breakdown_items if available
       let products = '';
       if (c.breakdown_items && Array.isArray(c.breakdown_items)) {
-        products = c.breakdown_items.map(item => item.label || item.name || '').filter(Boolean).join(', ');
+        products = c.breakdown_items
+          .map((item) => item.label || item.name || '')
+          .filter(Boolean)
+          .join(', ');
       }
       return {
         id: i + 1,
         name: c.title || c.company_name || 'Unknown',
         business: c.business || '',
         products: products,
-        location: c.location || ''
+        location: c.location || '',
       };
     });
 
@@ -9268,24 +11277,28 @@ OUTPUT JSON:
   }
 }
 
-Return ONLY valid JSON.`
+Return ONLY valid JSON.`,
         },
         {
           role: 'user',
           content: `Target Description: ${targetDescription}
 
 Companies:
-${companySummaries.map(c => `${c.id}. ${c.name}\n   Business: ${c.business}${c.products ? `\n   Products: ${c.products}` : ''}\n   Location: ${c.location}`).join('\n\n')}
+${companySummaries.map((c) => `${c.id}. ${c.name}\n   Business: ${c.business}${c.products ? `\n   Products: ${c.products}` : ''}\n   Location: ${c.location}`).join('\n\n')}
 
-Create segments for these ${targetDescription} companies. Ensure EVERY company has at least one tick.`
-        }
+Create segments for these ${targetDescription} companies. Ensure EVERY company has at least one tick.`,
+        },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.3
+      temperature: 0.3,
     });
 
     if (response.usage) {
-      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = JSON.parse(response.choices[0].message.content);
     console.log(`Generated ${result.segments?.length || 0} MECE segments`);
@@ -9298,7 +11311,7 @@ Create segments for these ${targetDescription} companies. Ensure EVERY company h
       result.segments.forEach((seg, segIdx) => {
         // Check if ANY company has a tick for this segment
         const hasTick = Object.values(result.companySegments).some(
-          ticks => Array.isArray(ticks) && ticks[segIdx] === true
+          (ticks) => Array.isArray(ticks) && ticks[segIdx] === true
         );
         if (hasTick) {
           segmentsWithTicks.push(seg);
@@ -9313,7 +11326,7 @@ Create segments for these ${targetDescription} companies. Ensure EVERY company h
         result.segments = segmentsWithTicks;
         for (const companyId of Object.keys(result.companySegments)) {
           const oldTicks = result.companySegments[companyId];
-          result.companySegments[companyId] = indicesToKeep.map(idx => oldTicks[idx] || false);
+          result.companySegments[companyId] = indicesToKeep.map((idx) => oldTicks[idx] || false);
         }
         console.log(`  Filtered to ${result.segments.length} segments with ticks`);
       }
@@ -9321,10 +11334,12 @@ Create segments for these ${targetDescription} companies. Ensure EVERY company h
       // WARNING: Check for companies with NO ticks at all
       for (const companyId of Object.keys(result.companySegments)) {
         const ticks = result.companySegments[companyId];
-        const hasTick = Array.isArray(ticks) && ticks.some(t => t === true);
+        const hasTick = Array.isArray(ticks) && ticks.some((t) => t === true);
         if (!hasTick) {
-          const company = companySummaries.find(c => c.id === parseInt(companyId));
-          console.warn(`  WARNING: Company "${company?.name || companyId}" has NO segment ticks - check segmentation!`);
+          const company = companySummaries.find((c) => c.id === parseInt(companyId));
+          console.warn(
+            `  WARNING: Company "${company?.name || companyId}" has NO segment ticks - check segmentation!`
+          );
         }
       }
     }
@@ -9348,19 +11363,27 @@ async function generateMAStrategies(targetDescription, companies) {
 
     // Group companies by region
     const regionMap = {};
-    companies.forEach(c => {
+    companies.forEach((c) => {
       const location = ensureString(c.location).toLowerCase();
       let region = 'Other';
 
       // Southeast Asia
-      if (location.includes('singapore') || location.includes('malaysia') ||
-          location.includes('thailand') || location.includes('vietnam') ||
-          location.includes('indonesia') || location.includes('philippines')) {
+      if (
+        location.includes('singapore') ||
+        location.includes('malaysia') ||
+        location.includes('thailand') ||
+        location.includes('vietnam') ||
+        location.includes('indonesia') ||
+        location.includes('philippines')
+      ) {
         region = 'Southeast Asia';
       }
       // Greater China
-      else if (location.includes('china') || location.includes('hong kong') ||
-               location.includes('taiwan')) {
+      else if (
+        location.includes('china') ||
+        location.includes('hong kong') ||
+        location.includes('taiwan')
+      ) {
         region = 'Greater China';
       }
       // Northeast Asia (Japan, Korea)
@@ -9368,8 +11391,12 @@ async function generateMAStrategies(targetDescription, companies) {
         region = 'Northeast Asia';
       }
       // South Asia
-      else if (location.includes('india') || location.includes('bangladesh') ||
-               location.includes('pakistan') || location.includes('sri lanka')) {
+      else if (
+        location.includes('india') ||
+        location.includes('bangladesh') ||
+        location.includes('pakistan') ||
+        location.includes('sri lanka')
+      ) {
         region = 'South Asia';
       }
 
@@ -9380,10 +11407,10 @@ async function generateMAStrategies(targetDescription, companies) {
     // Prepare region summaries
     const regionSummaries = Object.entries(regionMap).map(([region, comps]) => ({
       region,
-      companies: comps.map(c => ({
+      companies: comps.map((c) => ({
         name: c.title || c.company_name || 'Unknown',
-        business: c.business || ''
-      }))
+        business: c.business || '',
+      })),
     }));
 
     const response = await openai.chat.completions.create({
@@ -9423,24 +11450,28 @@ IMPORTANT:
 - Each rationale should explain the business value
 - Only include regions that have companies in the input
 
-Return ONLY valid JSON.`
+Return ONLY valid JSON.`,
         },
         {
           role: 'user',
           content: `Target Industry: ${targetDescription}
 
 Regions and Companies:
-${regionSummaries.map(r => `${r.region}:\n${r.companies.map(c => `  - ${c.name}: ${c.business}`).join('\n')}`).join('\n\n')}
+${regionSummaries.map((r) => `${r.region}:\n${r.companies.map((c) => `  - ${c.name}: ${c.business}`).join('\n')}`).join('\n\n')}
 
-Generate M&A strategies for each region WITHOUT mentioning specific company names.`
-        }
+Generate M&A strategies for each region WITHOUT mentioning specific company names.`,
+        },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.4
+      temperature: 0.4,
     });
 
     if (response.usage) {
-      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = JSON.parse(response.choices[0].message.content);
     console.log(`Generated ${result.strategies?.length || 0} regional M&A strategies`);
@@ -9490,27 +11521,31 @@ CRITICAL RULE: You can ONLY REMOVE or FIX data. You CANNOT ADD new data.
 ${sourceSection}
 
 ## EXTRACTED DATA (verify each item against source):
-${JSON.stringify({
-      ...companyData,
-      // Truncate large arrays to avoid token overflow
-      breakdown_items: (companyData.breakdown_items || []).slice(0, 10),
-      key_metrics: (companyData.key_metrics || []).slice(0, 15),
-      // Remove internal fields not needed for validation
-      _businessRelationships: undefined,
-      _productProjectImages: undefined,
-      rawContent: undefined
-    }, null, 2)}
+${JSON.stringify(
+  {
+    ...companyData,
+    // Truncate large arrays to avoid token overflow
+    breakdown_items: (companyData.breakdown_items || []).slice(0, 10),
+    key_metrics: (companyData.key_metrics || []).slice(0, 15),
+    // Remove internal fields not needed for validation
+    _businessRelationships: undefined,
+    _productProjectImages: undefined,
+    rawContent: undefined,
+  },
+  null,
+  2
+)}
 
 ## YOUR TASKS:
 
 ### 1. VALIDATE HQ/LOCATION
 - Search SOURCE for actual address/location
-- If extracted location cannot be verified in source, keep it but note the uncertainty
+- Keep existing non-empty location unless source clearly contradicts it
 - FORMAT: "Province/State, Country" (e.g., "Bangkok, Thailand", "Selangor, Malaysia")
 - Singapore: Must have real area name - "Jurong", "Tuas", "Woodlands", "Changi", etc.
   - INVALID areas to REMOVE: "Central" (not a real place), "Singapore" alone
   - If postal code visible: 60xxxx=Jurong, 62xxxx=Tuas, 7xxxxx=Woodlands
-  - If cannot find real area in source, leave location empty rather than guess
+  - If cannot find real area in source, keep existing location value and add a validation note
 - TRANSLATE to English if in Thai/Chinese/etc.
 
 ### 2. VERIFY KEY METRICS (REMOVE WHAT CAN'T BE VERIFIED)
@@ -9518,6 +11553,7 @@ For EACH metric in key_metrics:
 - Search SOURCE for evidence of this data
 - If you CANNOT find the number/claim in the source content, REMOVE the metric
 - Example: If key_metrics says "300 employees" but source has no mention of 300 or employees, REMOVE IT
+- Exception: do NOT remove "Branch Network" / branch metrics if source lists 2+ service locations/cities/branches
 - If metric has placeholder pattern (brand1, Customer A, etc.), REMOVE IT
 - If metric has "0" value (e.g., "0 Customers", "0 Projects"), REMOVE IT
 - If metric says "Not specified", "N/A", "Unknown", REMOVE IT
@@ -9562,22 +11598,33 @@ REMOVE any metric containing:
 }
 
 REMEMBER: You can only REMOVE or FIX. Never ADD new data. If in doubt, REMOVE.
+If evidence is ambiguous for location or branch network, KEEP existing value and add a note.
 
 Return ONLY valid JSON.`;
 
     // Wrap OpenAI call with retry for rate limits
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-5.1',
-      messages: [
-        { role: 'system', content: 'You are a data validation agent. Compare extracted data against source content and fix any discrepancies. Add any missing information found in the source.' },
-        { role: 'user', content: prompt }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    }));
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-5.1',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a data validation agent. Compare extracted data against source content, remove clear errors, and preserve valid existing location/branch info when uncertain.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      })
+    );
 
     if (response.usage) {
-      recordTokens('gpt-5.1', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-5.1',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content;
 
@@ -9602,7 +11649,7 @@ Return ONLY valid JSON.`;
 
     // Log what was fixed/added
     if (validated.validation_notes && validated.validation_notes.length > 0) {
-      validated.validation_notes.forEach(note => {
+      validated.validation_notes.forEach((note) => {
         console.log(`    [Validator] ${note}`);
       });
     }
@@ -9617,10 +11664,36 @@ Return ONLY valid JSON.`;
 
     // SAFETY: Reject validator location if it contains non-ASCII (Thai/Chinese/Vietnamese)
     // Keep original location instead
-    let finalLocation = validated.location || companyData.location;
+    const validatedLocationText = ensureString(validated.location).trim();
+    const originalLocationText = ensureString(companyData.location).trim();
+    let finalLocation = validatedLocationText || originalLocationText;
+    // eslint-disable-next-line no-control-regex
     if (finalLocation && /[^\x00-\x7F]/.test(finalLocation)) {
-      console.log(`    [Validator] REJECTED non-English location: "${finalLocation}" - keeping original`);
-      finalLocation = companyData.location; // Keep original English location
+      console.log(
+        `    [Validator] REJECTED non-English location: "${finalLocation}" - keeping original`
+      );
+      finalLocation = originalLocationText; // Keep original English location
+    }
+
+    const sourceMetrics = Array.isArray(companyData.key_metrics) ? companyData.key_metrics : [];
+    const validatedMetrics = Array.isArray(validated.key_metrics)
+      ? validated.key_metrics
+      : sourceMetrics;
+    const finalKeyMetrics = Array.isArray(validatedMetrics) ? [...validatedMetrics] : [];
+
+    const hasBranchMetric = finalKeyMetrics.some((metric) => {
+      const label = ensureString(metric?.label).toLowerCase();
+      const value = ensureString(metric?.value);
+      if (!value) return false;
+      return (
+        label.includes('branch') || label.includes('branch network') || /\bbranches?\b/i.test(value)
+      );
+    });
+
+    const branchNetworkSummary = ensureString(companyData._branchNetworkSummary).trim();
+    if (!hasBranchMetric && branchNetworkSummary) {
+      finalKeyMetrics.push({ label: 'Branch Network', value: branchNetworkSummary });
+      console.log('    [Validator] Restored Branch Network metric from deterministic extraction');
     }
 
     const mergedData = {
@@ -9631,15 +11704,15 @@ Return ONLY valid JSON.`;
       business: validated.business || companyData.business,
       message: validated.message || companyData.message,
       title: cleanedTitle || cleanedCompanyName,
-      key_metrics: validated.key_metrics || companyData.key_metrics,
+      key_metrics: finalKeyMetrics,
       breakdown_title: validated.breakdown_title || companyData.breakdown_title,
-      breakdown_items: validated.breakdown_items || companyData.breakdown_items
+      breakdown_items: validated.breakdown_items || companyData.breakdown_items,
     };
 
     return {
       data: mergedData,
       issuesFound: validated.issues_found || false,
-      missedItems: validated.missed_items || []
+      missedItems: validated.missed_items || [],
     };
   } catch (e) {
     console.error('Validator error:', e.message);
@@ -9649,7 +11722,7 @@ Return ONLY valid JSON.`;
 
 // Build profile slides email HTML (simple version with PPTX attached)
 function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
-  const companyNames = companies.map(c => c.title || c.company_name).join(', ');
+  const companyNames = companies.map((c) => c.title || c.company_name).join(', ');
 
   let html = `
     <h2>Profile Slides</h2>
@@ -9682,7 +11755,7 @@ function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
   if (errors.length > 0) {
     html += `<br><h3 style="color: #dc2626;">Failed Extractions</h3>`;
     html += `<ul>`;
-    errors.forEach(e => {
+    errors.forEach((e) => {
       html += `<li><strong>${e.website}</strong>: ${e.error}</li>`;
     });
     html += `</ul>`;
@@ -9708,11 +11781,21 @@ async function processSingleWebsite(website, index, total) {
       console.log(`  [${index + 1}] Failed to scrape: ${scraped.error}`);
 
       if (isBlockedScrapeError(scraped.error) && process.env.SCREENSHOT_API_KEY) {
-        console.log(`  [${index + 1}] Step 1b: Blocked by website, attempting screenshot fallback for company/location...`);
+        console.log(
+          `  [${index + 1}] Step 1b: Blocked by website, attempting screenshot fallback for company/location...`
+        );
         const screenshotBasicInfo = await extractBasicInfoFromScreenshot(trimmedWebsite);
-        if (screenshotBasicInfo.company_name || screenshotBasicInfo.location || screenshotBasicInfo.established_year) {
+        if (
+          screenshotBasicInfo.company_name ||
+          screenshotBasicInfo.location ||
+          screenshotBasicInfo.established_year
+        ) {
           console.log(`  [${index + 1}] Screenshot fallback succeeded (name/location recovered)`);
-          return buildScreenshotFallbackCompanyData(trimmedWebsite, scraped.error, screenshotBasicInfo);
+          return buildScreenshotFallbackCompanyData(
+            trimmedWebsite,
+            scraped.error,
+            screenshotBasicInfo
+          );
         }
         console.log(`  [${index + 1}] Screenshot fallback did not recover enough data`);
       }
@@ -9725,22 +11808,30 @@ async function processSingleWebsite(website, index, total) {
         title: companyName,
         location: '',
         _inaccessible: true,
-        _error: `Failed to scrape: ${scraped.error}`
+        _error: `Failed to scrape: ${scraped.error}`,
       };
     }
     const pagesScrapedCount = scraped.pagesScraped?.length || 1;
-    console.log(`  [${index + 1}] Scraped ${scraped.content.length} characters from ${pagesScrapedCount} pages`);
+    console.log(
+      `  [${index + 1}] Scraped ${scraped.content.length} characters from ${pagesScrapedCount} pages`
+    );
     if (scraped.pagesScraped) {
       console.log(`  [${index + 1}] Pages scraped: ${scraped.pagesScraped.join(', ')}`);
     }
     // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
-    console.log(`  [${index + 1}] Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
+    console.log(
+      `  [${index + 1}] Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`
+    );
 
     // Step 1a: Pre-extract metrics using deterministic regex (no AI hallucination)
     console.log(`  [${index + 1}] Step 1a: Pre-extracting metrics with regex...`);
     const regexMetrics = extractMetricsFromText(scraped.content);
     if (Object.keys(regexMetrics).length > 0) {
-      console.log(`  [${index + 1}] Regex found: ${Object.keys(regexMetrics).filter(k => !k.endsWith('_text')).join(', ')}`);
+      console.log(
+        `  [${index + 1}] Regex found: ${Object.keys(regexMetrics)
+          .filter((k) => !k.endsWith('_text'))
+          .join(', ')}`
+      );
     }
 
     // Step 1b: Extract structured address from JSON-LD (if available)
@@ -9769,7 +11860,9 @@ async function processSingleWebsite(website, index, total) {
     const contentForExtraction = markerResult?.markedContent || scraped.content;
     const usingMarkedContent = !!markerResult?.markedContent;
     if (usingMarkedContent) {
-      console.log(`  [${index + 1}] Using marked content (${markerResult.markedLength} chars from ${markerResult.originalLength})`);
+      console.log(
+        `  [${index + 1}] Using marked content (${markerResult.markedLength} chars from ${markerResult.originalLength})`
+      );
     } else {
       console.log(`  [${index + 1}] Marker failed, using truncated raw content`);
     }
@@ -9780,7 +11873,8 @@ async function processSingleWebsite(website, index, total) {
     console.log(`  [${index + 1}] Step 3: Extracting company name, year, location...`);
     const basicInfo = await extractBasicInfo(scraped.content, trimmedWebsite);
     console.log(`  [${index + 1}] Company: ${basicInfo.company_name || 'Not found'}`);
-    if (basicInfo.location) console.log(`  [${index + 1}] Location extracted: ${basicInfo.location}`);
+    if (basicInfo.location)
+      console.log(`  [${index + 1}] Location extracted: ${basicInfo.location}`);
 
     // Step 4: Extract business details
     console.log(`  [${index + 1}] Step 4: Extracting business, message, footnote, title...`);
@@ -9790,14 +11884,14 @@ async function processSingleWebsite(website, index, total) {
     console.log(`  [${index + 1}] Step 5: Extracting key metrics...`);
     const metricsInfo = await extractKeyMetrics(contentForExtraction, {
       company_name: basicInfo.company_name,
-      business: businessInfo.business
+      business: businessInfo.business,
     });
 
     // Step 5b: Extract products/applications breakdown for right table
     console.log(`  [${index + 1}] Step 5b: Extracting products/applications breakdown...`);
     const productsBreakdown = await extractProductsBreakdown(contentForExtraction, {
       company_name: basicInfo.company_name,
-      business: businessInfo.business
+      business: businessInfo.business,
     });
 
     // Step 6: Search online for missing mandatory info (established_year, location)
@@ -9808,7 +11902,9 @@ async function processSingleWebsite(website, index, total) {
 
     let searchedInfo = {};
     if (missingFields.length > 0 && basicInfo.company_name) {
-      console.log(`  [${index + 1}] Step 6: Searching online for missing mandatory info: ${missingFields.join(', ')}...`);
+      console.log(
+        `  [${index + 1}] Step 6: Searching online for missing mandatory info: ${missingFields.join(', ')}...`
+      );
       searchedInfo = await searchMissingInfo(basicInfo.company_name, trimmedWebsite, missingFields);
     }
 
@@ -9818,7 +11914,9 @@ async function processSingleWebsite(website, index, total) {
     // ===== QUOTE VERIFICATION =====
     // Filter AI-extracted metrics by verifying source quotes exist in scraped content
     // This prevents hallucination by requiring proof for every claim
-    console.log(`  [${index + 1}] Step 5c: Verifying ${rawKeyMetrics.length} AI-extracted metrics against source content...`);
+    console.log(
+      `  [${index + 1}] Step 5c: Verifying ${rawKeyMetrics.length} AI-extracted metrics against source content...`
+    );
     const allKeyMetrics = filterMetricsByVerification(rawKeyMetrics, scraped.content, index + 1);
 
     // ===== PRIORITIZE REGEX OVER AI =====
@@ -9828,7 +11926,10 @@ async function processSingleWebsite(website, index, total) {
     const regexCoveredTypes = new Set();
 
     // Build regex metrics first (these are guaranteed accurate)
-    const branchNetworkSummary = extractBranchLocationSummary(scraped.content, regexMetrics.office_count);
+    const branchNetworkSummary = extractBranchLocationSummary(
+      scraped.content,
+      regexMetrics.office_count
+    );
     if (branchNetworkSummary) {
       regexBasedMetrics.push({ value: branchNetworkSummary, label: 'Branch Network' });
       regexCoveredTypes.add('branch');
@@ -9841,27 +11942,45 @@ async function processSingleWebsite(website, index, total) {
     // Years experience is NOT a key metric - skip it
     // (Operating for X years provides no investment insight)
     if (regexMetrics.export_countries) {
-      regexBasedMetrics.push({ value: String(regexMetrics.export_countries), label: 'Export Countries' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.export_countries),
+        label: 'Export Countries',
+      });
       regexCoveredTypes.add('export');
     }
     if (regexMetrics.source_countries) {
-      regexBasedMetrics.push({ value: String(regexMetrics.source_countries), label: 'Source Countries' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.source_countries),
+        label: 'Source Countries',
+      });
       regexCoveredTypes.add('source');
     }
     if (regexMetrics.capacity_text) {
-      regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.capacity_text), label: 'Production Capacity' });
+      regexBasedMetrics.push({
+        value: translateUnitsToEnglish(regexMetrics.capacity_text),
+        label: 'Production Capacity',
+      });
       regexCoveredTypes.add('capacity');
     }
     if (regexMetrics.certifications?.length > 0) {
-      regexBasedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
+      regexBasedMetrics.push({
+        value: regexMetrics.certifications.join(', '),
+        label: 'Certifications',
+      });
       regexCoveredTypes.add('certif');
     }
     if (regexMetrics.machine_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.machine_count) + '+', label: 'Machines' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.machine_count) + '+',
+        label: 'Machines',
+      });
       regexCoveredTypes.add('machine');
     }
     if (regexMetrics.partner_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.partner_count) + '+', label: 'Business Partners' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.partner_count) + '+',
+        label: 'Business Partners',
+      });
       regexCoveredTypes.add('partner');
     }
     if (regexMetrics.export_regions) {
@@ -9869,11 +11988,17 @@ async function processSingleWebsite(website, index, total) {
       regexCoveredTypes.add('market');
     }
     if (regexMetrics.product_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.product_count) + '+', label: 'Products' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.product_count) + '+',
+        label: 'Products',
+      });
       regexCoveredTypes.add('product');
     }
     if (regexMetrics.customer_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.customer_count) + '+', label: 'Customers' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.customer_count) + '+',
+        label: 'Customers',
+      });
       regexCoveredTypes.add('customer');
     }
     if (regexMetrics.fleet_count) {
@@ -9885,27 +12010,45 @@ async function processSingleWebsite(website, index, total) {
       regexCoveredTypes.add('outlet');
     }
     if (regexMetrics.brand_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.brand_count) + '+', label: 'Brands Carried' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.brand_count) + '+',
+        label: 'Brands Carried',
+      });
       regexCoveredTypes.add('brand');
     }
     if (regexMetrics.output_text) {
-      regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.output_text), label: 'Output' });
+      regexBasedMetrics.push({
+        value: translateUnitsToEnglish(regexMetrics.output_text),
+        label: 'Output',
+      });
       regexCoveredTypes.add('output');
     }
     if (regexMetrics.warehouse_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.warehouse_count) + '+', label: 'Warehouses' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.warehouse_count) + '+',
+        label: 'Warehouses',
+      });
       regexCoveredTypes.add('warehouse');
     }
     if (regexMetrics.country_presence) {
-      regexBasedMetrics.push({ value: String(regexMetrics.country_presence) + '+', label: 'Countries' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.country_presence) + '+',
+        label: 'Countries',
+      });
       regexCoveredTypes.add('countr');
     }
     if (regexMetrics.project_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.project_count) + '+', label: 'Projects Completed' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.project_count) + '+',
+        label: 'Projects Completed',
+      });
       regexCoveredTypes.add('project');
     }
     if (regexMetrics.factory_size) {
-      regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.factory_size), label: 'Factory Size' });
+      regexBasedMetrics.push({
+        value: translateUnitsToEnglish(regexMetrics.factory_size),
+        label: 'Factory Size',
+      });
       regexCoveredTypes.add('factory');
     }
     if (regexMetrics.award_count) {
@@ -9929,7 +12072,10 @@ async function processSingleWebsite(website, index, total) {
       regexCoveredTypes.add('doctor');
     }
     if (regexMetrics.student_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.student_count) + '+', label: 'Students' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.student_count) + '+',
+        label: 'Students',
+      });
       regexCoveredTypes.add('student');
     }
     if (regexMetrics.course_count) {
@@ -9938,12 +12084,17 @@ async function processSingleWebsite(website, index, total) {
     }
     if (regexMetrics.unit_count) {
       // Use unit_text for context (e.g., "150+ Vivotek CCTV units" not just "150+ Units")
-      const unitLabel = regexMetrics.unit_text ? translateUnitsToEnglish(regexMetrics.unit_text) : String(regexMetrics.unit_count) + '+ Units';
+      const unitLabel = regexMetrics.unit_text
+        ? translateUnitsToEnglish(regexMetrics.unit_text)
+        : String(regexMetrics.unit_count) + '+ Units';
       regexBasedMetrics.push({ value: unitLabel, label: 'Units Installed' });
       regexCoveredTypes.add('unit');
     }
     if (regexMetrics.acreage) {
-      regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.acreage_text), label: 'Land Area' });
+      regexBasedMetrics.push({
+        value: translateUnitsToEnglish(regexMetrics.acreage_text),
+        label: 'Land Area',
+      });
       regexCoveredTypes.add('acre');
     }
     if (regexMetrics.user_count) {
@@ -9951,7 +12102,10 @@ async function processSingleWebsite(website, index, total) {
       regexCoveredTypes.add('user');
     }
     if (regexMetrics.download_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.download_count) + '+', label: 'Downloads' });
+      regexBasedMetrics.push({
+        value: String(regexMetrics.download_count) + '+',
+        label: 'Downloads',
+      });
       regexCoveredTypes.add('download');
     }
     if (regexMetrics.menu_count) {
@@ -9965,13 +12119,15 @@ async function processSingleWebsite(website, index, total) {
     for (const aiMetric of allKeyMetrics) {
       const labelLower = aiMetric.label.toLowerCase();
       // Check if regex already covered this type
-      const alreadyCovered = [...regexCoveredTypes].some(type => labelLower.includes(type));
+      const alreadyCovered = [...regexCoveredTypes].some((type) => labelLower.includes(type));
       if (!alreadyCovered) {
         mergedMetrics.push(aiMetric);
       }
     }
 
-    console.log(`  [${index + 1}] Merged metrics: ${regexBasedMetrics.length} from regex + ${mergedMetrics.length - regexBasedMetrics.length} from AI = ${mergedMetrics.length} total`);
+    console.log(
+      `  [${index + 1}] Merged metrics: ${regexBasedMetrics.length} from regex + ${mergedMetrics.length - regexBasedMetrics.length} from AI = ${mergedMetrics.length} total`
+    );
 
     // Determine location priority: website extraction -> structured data -> web search fallback.
     let finalLocation = ensureString(basicInfo.location);
@@ -9994,15 +12150,22 @@ async function processSingleWebsite(website, index, total) {
     let validatedLocation = validateAndFixHQFormat(finalLocation, trimmedWebsite);
 
     // Retry extraction when HQ is missing/incomplete after validation.
-    const validatedParts = ensureString(validatedLocation).split(',').map(p => p.trim()).filter(p => p);
+    const validatedParts = ensureString(validatedLocation)
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p);
     const requiredLevels = 2; // 2 levels for all countries (state/province, country)
-    const needsLocationRetry = !!finalLocation && (validatedParts.length < requiredLevels);
+    const needsLocationRetry = !!finalLocation && validatedParts.length < requiredLevels;
     if (needsLocationRetry) {
-      console.log(`  [${index + 1}] Step 6b: HQ incomplete (${validatedParts.length}/${requiredLevels} levels), retrying...`);
+      console.log(
+        `  [${index + 1}] Step 6b: HQ incomplete (${validatedParts.length}/${requiredLevels} levels), retrying...`
+      );
       const retrySeed = validatedLocation || finalLocation;
       const improvedLocation = await extractFullAddress(scraped.content, trimmedWebsite, retrySeed);
       if (improvedLocation) {
-        validatedLocation = validateAndFixHQFormat(improvedLocation, trimmedWebsite) || ensureString(improvedLocation).trim();
+        validatedLocation =
+          validateAndFixHQFormat(improvedLocation, trimmedWebsite) ||
+          ensureString(improvedLocation).trim();
       }
     }
     if (!validatedLocation && regionalLocationHint) {
@@ -10011,16 +12174,24 @@ async function processSingleWebsite(website, index, total) {
     } else if (validatedLocation && regionalLocationHint) {
       const inferredCountry = inferCountryFromWebsite(trimmedWebsite);
       if (inferredCountry === 'Australia') {
-        const hasState = Object.values(AU_STATE_MAP).some(state => validatedLocation.toLowerCase().includes(state.toLowerCase()));
+        const hasState = Object.values(AU_STATE_MAP).some((state) =>
+          validatedLocation.toLowerCase().includes(state.toLowerCase())
+        );
         if (!hasState) {
           validatedLocation = regionalLocationHint;
-          console.log(`  [${index + 1}] Replacing city-level location with AU regional hint: ${validatedLocation}`);
+          console.log(
+            `  [${index + 1}] Replacing city-level location with AU regional hint: ${validatedLocation}`
+          );
         }
       } else if (inferredCountry === 'New Zealand') {
-        const hasRegion = Object.values(NZ_REGION_MAP).some(region => validatedLocation.toLowerCase().includes(region.toLowerCase()));
+        const hasRegion = Object.values(NZ_REGION_MAP).some((region) =>
+          validatedLocation.toLowerCase().includes(region.toLowerCase())
+        );
         if (!hasRegion) {
           validatedLocation = regionalLocationHint;
-          console.log(`  [${index + 1}] Replacing city-level location with NZ regional hint: ${validatedLocation}`);
+          console.log(
+            `  [${index + 1}] Replacing city-level location with NZ regional hint: ${validatedLocation}`
+          );
         }
       }
     }
@@ -10030,22 +12201,31 @@ async function processSingleWebsite(website, index, total) {
     const detectedType = detectBusinessType(businessInfo.business, scraped.content);
     // Only use keyword detection as fallback when AI didn't provide classification
     if (!productsBreakdown.business_type && detectedType) {
-      console.log(`  [${index + 1}] Business type: "${detectedType}" (keyword fallback, AI had no classification)`);
+      console.log(
+        `  [${index + 1}] Business type: "${detectedType}" (keyword fallback, AI had no classification)`
+      );
       businessType = detectedType;
     }
 
     // Step 6c: Extract business relationships from page metadata/text
     console.log(`  [${index + 1}] Step 6c: Extracting business relationships...`);
-    const businessRelationships = extractBusinessRelationships(scraped.rawHtml);
+    const cleanedHtml = cleanHtmlForExtraction(scraped.rawHtml);
+    const businessRelationships = extractBusinessRelationships(cleanedHtml);
     const metricRelationships = extractRelationshipsFromMetrics(mergedMetrics);
     const urlRelationships = extractRelationshipsFromPageUrls(scraped.pagesScraped || []);
-    const structuredRelationships = extractRelationshipsFromStructuredData(scraped.rawHtml);
-    const embeddedRelationships = extractRelationshipsFromEmbeddedData(scraped.rawHtml);
+    const structuredRelationships = extractRelationshipsFromStructuredData(cleanedHtml);
+    const embeddedRelationships = extractRelationshipsFromEmbeddedData(cleanedHtml);
     const catalogFeedRelationships = await extractRelationshipsFromProductFeeds(trimmedWebsite);
     let screenshotResults = { customers: [], brands: [], principals: [] };
     if (process.env.SCREENSHOT_API_KEY) {
-      console.log(`  [${index + 1}] Step 6d: Reading partner/client logos from website screenshots...`);
-      screenshotResults = await extractPartnersFromScreenshots(trimmedWebsite, scraped.pagesScraped || [], { deepMode: true });
+      console.log(
+        `  [${index + 1}] Step 6d: Reading partner/client logos from website screenshots...`
+      );
+      screenshotResults = await extractPartnersFromScreenshots(
+        trimmedWebsite,
+        scraped.pagesScraped || [],
+        { deepMode: true }
+      );
     }
     businessRelationships.customers = uniqueRelationshipNames([
       ...(businessRelationships.customers || []),
@@ -10054,14 +12234,14 @@ async function processSingleWebsite(website, index, total) {
       ...(structuredRelationships.customers || []),
       ...(embeddedRelationships.customers || []),
       ...(catalogFeedRelationships.customers || []),
-      ...(screenshotResults.customers || [])
+      ...(screenshotResults.customers || []),
     ]);
     businessRelationships.suppliers = uniqueRelationshipNames([
       ...(businessRelationships.suppliers || []),
       ...(metricRelationships.suppliers || []),
       ...(urlRelationships.suppliers || []),
       ...(structuredRelationships.suppliers || []),
-      ...(embeddedRelationships.suppliers || [])
+      ...(embeddedRelationships.suppliers || []),
     ]);
     businessRelationships.principals = uniqueRelationshipNames([
       ...(businessRelationships.principals || []),
@@ -10070,7 +12250,7 @@ async function processSingleWebsite(website, index, total) {
       ...(structuredRelationships.principals || []),
       ...(embeddedRelationships.principals || []),
       ...(catalogFeedRelationships.principals || []),
-      ...(screenshotResults.principals || [])
+      ...(screenshotResults.principals || []),
     ]);
     businessRelationships.brands = uniqueRelationshipNames([
       ...(businessRelationships.brands || []),
@@ -10079,57 +12259,85 @@ async function processSingleWebsite(website, index, total) {
       ...(structuredRelationships.brands || []),
       ...(embeddedRelationships.brands || []),
       ...(catalogFeedRelationships.brands || []),
-      ...(screenshotResults.brands || [])
+      ...(screenshotResults.brands || []),
     ]);
-    let principalBrandCoverage = businessRelationships.principals.length + businessRelationships.brands.length;
+    let principalBrandCoverage =
+      businessRelationships.principals.length + businessRelationships.brands.length;
     if (principalBrandCoverage < 2) {
-      console.log(`  [${index + 1}] Step 6e: Relationship coverage low (${principalBrandCoverage}), running AI text fallback...`);
+      console.log(
+        `  [${index + 1}] Step 6e: Relationship coverage low (${principalBrandCoverage}), running AI text fallback...`
+      );
       const aiRelationships = await extractRelationshipsFromContentAI(scraped.content, {
-        company_name: basicInfo.company_name
+        company_name: basicInfo.company_name,
       });
       businessRelationships.customers = uniqueRelationshipNames([
         ...(businessRelationships.customers || []),
-        ...(aiRelationships.customers || [])
+        ...(aiRelationships.customers || []),
       ]);
       businessRelationships.principals = uniqueRelationshipNames([
         ...(businessRelationships.principals || []),
-        ...(aiRelationships.principals || [])
+        ...(aiRelationships.principals || []),
       ]);
       businessRelationships.brands = uniqueRelationshipNames([
         ...(businessRelationships.brands || []),
-        ...(aiRelationships.brands || [])
+        ...(aiRelationships.brands || []),
       ]);
-      principalBrandCoverage = businessRelationships.principals.length + businessRelationships.brands.length;
-      console.log(`  [${index + 1}] Step 6e: Coverage after AI fallback = ${principalBrandCoverage}`);
+      principalBrandCoverage =
+        businessRelationships.principals.length + businessRelationships.brands.length;
+      console.log(
+        `  [${index + 1}] Step 6e: Coverage after AI fallback = ${principalBrandCoverage}`
+      );
     }
     const relationshipCoverageStatus = principalBrandCoverage < 2 ? 'needs_manual_review' : 'ok';
     if (relationshipCoverageStatus === 'needs_manual_review') {
-      console.log(`  [${index + 1}] Step 6f: Principal/brand coverage still low (${principalBrandCoverage}) - marking manual review required`);
+      console.log(
+        `  [${index + 1}] Step 6f: Principal/brand coverage still low (${principalBrandCoverage}) - marking manual review required`
+      );
     }
 
-    let finalBreakdown = applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelationships);
-    if ((!Array.isArray(finalBreakdown.breakdown_items) || finalBreakdown.breakdown_items.length === 0) &&
-        Array.isArray(catalogFeedRelationships.products) &&
-        catalogFeedRelationships.products.length > 0) {
+    let finalBreakdown = applyRelationshipFallbackToBreakdown(
+      productsBreakdown,
+      businessRelationships
+    );
+    if (
+      (!Array.isArray(finalBreakdown.breakdown_items) ||
+        finalBreakdown.breakdown_items.length === 0) &&
+      Array.isArray(catalogFeedRelationships.products) &&
+      catalogFeedRelationships.products.length > 0
+    ) {
       finalBreakdown = {
         ...finalBreakdown,
         breakdown_title: 'Products and Applications',
-        breakdown_items: catalogFeedRelationships.products.slice(0, 8).map(name => ({
+        breakdown_items: catalogFeedRelationships.products.slice(0, 8).map((name) => ({
           label: 'Product',
-          value: name
-        }))
+          value: name,
+        })),
       };
-      console.log(`  [${index + 1}] Using product feed fallback for right table (${finalBreakdown.breakdown_items.length} items)`);
+      console.log(
+        `  [${index + 1}] Using product feed fallback for right table (${finalBreakdown.breakdown_items.length} items)`
+      );
     }
 
     // Build display-ready relationship segments so large customer/brand lists are readable.
     const segmentNameFilter = basicInfo.company_name || businessInfo.title || '';
-    const cleanedCustomersForSegments = filterGarbageNames(businessRelationships.customers || [], segmentNameFilter);
-    const cleanedSuppliersForSegments = filterGarbageNames(businessRelationships.suppliers || [], segmentNameFilter);
-    const cleanedPrincipalsForSegments = filterGarbageNames(businessRelationships.principals || [], segmentNameFilter);
-    const cleanedBrandsForSegments = filterGarbageNames(businessRelationships.brands || [], segmentNameFilter);
+    const cleanedCustomersForSegments = filterGarbageNames(
+      businessRelationships.customers || [],
+      segmentNameFilter
+    );
+    const cleanedSuppliersForSegments = filterGarbageNames(
+      businessRelationships.suppliers || [],
+      segmentNameFilter
+    );
+    const cleanedPrincipalsForSegments = filterGarbageNames(
+      businessRelationships.principals || [],
+      segmentNameFilter
+    );
+    const cleanedBrandsForSegments = filterGarbageNames(
+      businessRelationships.brands || [],
+      segmentNameFilter
+    );
     const customerSegments = await buildCustomerSegments(cleanedCustomersForSegments, openai, {
-      minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
+      minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
     });
     const supplierSegments = await segmentRelationshipNamesByAI(
       cleanedSuppliersForSegments,
@@ -10169,14 +12377,14 @@ async function processSingleWebsite(website, index, total) {
       message: ensureString(businessInfo.message),
       footnote: ensureString(businessInfo.footnote),
       title: ensureString(businessInfo.title),
-      key_metrics: mergedMetrics,  // Merged: AI + regex (ground truth)
+      key_metrics: mergedMetrics, // Merged: AI + regex (ground truth)
       // Right-side content (varies by business type)
       business_type: businessType,
       breakdown_title: ensureString(finalBreakdown.breakdown_title) || 'Products and Applications',
       breakdown_items: finalBreakdown.breakdown_items || [],
-      projects: productsBreakdown.projects || [],  // For project-based businesses
-      products: productsBreakdown.products || [],  // For consumer-facing businesses
-      metrics: ensureString(metricsInfo.metrics),  // Fallback for old format
+      projects: productsBreakdown.projects || [], // For project-based businesses
+      products: productsBreakdown.products || [], // For consumer-facing businesses
+      metrics: ensureString(metricsInfo.metrics), // Fallback for old format
       // Pre-extracted logo (from cascade: Clearbit → og:image → apple-touch-icon → img[logo] → favicon)
       _logo: logoResult,
       // Categorized business relationships (customers, suppliers, principals, brands)
@@ -10192,18 +12400,26 @@ async function processSingleWebsite(website, index, total) {
       // Branch footprint summary for Location row (e.g., "5 branches across ...")
       _branchNetworkSummary: branchNetworkSummary,
       // Relationship coverage quality gate (used to fail loudly in slide output)
-      _relationshipCoverageStatus: relationshipCoverageStatus
+      _relationshipCoverageStatus: relationshipCoverageStatus,
     };
 
     // Log metrics count before review
-    console.log(`  [${index + 1}] Metrics extracted before review: ${companyData.key_metrics?.length || 0}`);
+    console.log(
+      `  [${index + 1}] Metrics extracted before review: ${companyData.key_metrics?.length || 0}`
+    );
     if (companyData.key_metrics?.length > 0) {
-      console.log(`  [${index + 1}] Raw metrics: ${companyData.key_metrics.map(m => m.label).join(', ')}`);
+      console.log(
+        `  [${index + 1}] Raw metrics: ${companyData.key_metrics.map((m) => m.label).join(', ')}`
+      );
     }
 
     // Step 7: Run AI validator to compare extraction vs source and fix issues
     // IMPORTANT: Pass RAW scraped content (not marked content) so validator can catch what Marker missed
-    const validatorResult = await reviewAndCleanData(companyData, scraped.content, markerResult?.markers);
+    const validatorResult = await reviewAndCleanData(
+      companyData,
+      scraped.content,
+      markerResult?.markers
+    );
     companyData = validatorResult.data;
 
     // Step 7b: ITERATIVE EXTRACTION - If validator found missed items, try to extract them
@@ -10212,13 +12428,15 @@ async function processSingleWebsite(website, index, total) {
     const needsReExtraction = validatorResult.issuesFound && hasMissedItems;
 
     if (needsReExtraction) {
-      console.log(`  [${index + 1}] Step 7b: Re-extracting ${validatorResult.missedItems.length} missed items...`);
-      validatorResult.missedItems.forEach(item => console.log(`    - ${item}`));
+      console.log(
+        `  [${index + 1}] Step 7b: Re-extracting ${validatorResult.missedItems.length} missed items...`
+      );
+      validatorResult.missedItems.forEach((item) => console.log(`    - ${item}`));
 
       // Build focused prompt with explicit missed items
       const missedItemsText = validatorResult.missedItems.join('\n- ');
       const existingMetricsText = (companyData.key_metrics || [])
-        .map(m => `${m.value} ${m.label}`)
+        .map((m) => `${m.value} ${m.label}`)
         .join(', ');
 
       // Re-run metrics extraction with explicit focus on missed items
@@ -10227,16 +12445,21 @@ async function processSingleWebsite(website, index, total) {
         company_name: companyData.company_name,
         business: companyData.business,
         existingMetrics: existingMetricsText,
-        missedItems: missedItemsText
+        missedItems: missedItemsText,
       });
 
       // Merge new metrics with existing (avoid duplicates by checking both label and value)
       if (reExtractedMetrics.key_metrics?.length > 0) {
-        const existingLabels = new Set((companyData.key_metrics || []).map(m => m.label?.toLowerCase()));
-        const existingValues = new Set((companyData.key_metrics || []).map(m => m.value?.toLowerCase()));
-        const newMetrics = reExtractedMetrics.key_metrics.filter(m =>
-          !existingLabels.has(m.label?.toLowerCase()) &&
-          !existingValues.has(m.value?.toLowerCase())
+        const existingLabels = new Set(
+          (companyData.key_metrics || []).map((m) => m.label?.toLowerCase())
+        );
+        const existingValues = new Set(
+          (companyData.key_metrics || []).map((m) => m.value?.toLowerCase())
+        );
+        const newMetrics = reExtractedMetrics.key_metrics.filter(
+          (m) =>
+            !existingLabels.has(m.label?.toLowerCase()) &&
+            !existingValues.has(m.value?.toLowerCase())
         );
         if (newMetrics.length > 0) {
           console.log(`  [${index + 1}] Added ${newMetrics.length} new metrics from re-extraction`);
@@ -10246,7 +12469,11 @@ async function processSingleWebsite(website, index, total) {
 
       // Re-run validator one more time to catch anything else
       // Use raw content so it can validate against full source
-      const finalValidation = await reviewAndCleanData(companyData, scraped.content, markerResult?.markers);
+      const finalValidation = await reviewAndCleanData(
+        companyData,
+        scraped.content,
+        markerResult?.markers
+      );
       companyData = finalValidation.data;
     }
 
@@ -10256,10 +12483,14 @@ async function processSingleWebsite(website, index, total) {
     companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
     const metricsAfter = companyData.key_metrics?.length || 0;
     if (metricsBefore !== metricsAfter) {
-      console.log(`  [${index + 1}] Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`);
+      console.log(
+        `  [${index + 1}] Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`
+      );
     }
 
-    console.log(`  [${index + 1}] ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
+    console.log(
+      `  [${index + 1}] ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`
+    );
 
     // Memory cleanup: Release large objects to prevent OOM on Railway
     // scraped.content and rawHtml can be 1-5MB per website, must release before next iteration
@@ -10269,15 +12500,82 @@ async function processSingleWebsite(website, index, total) {
     }
 
     return companyData;
-
   } catch (error) {
     console.error(`  [${index + 1}] Error processing ${trimmedWebsite}:`, error.message);
     return {
       website: trimmedWebsite,
       error: error.message,
-      step: 0
+      step: 0,
     };
   }
+}
+
+// Quality gate: validate profile data before PPT generation
+function validateProfileData(companies) {
+  const issues = [];
+  let thinCount = 0;
+
+  for (const company of companies) {
+    const name = company.company_name || company.website || 'unknown';
+    const companyIssues = [];
+
+    // Check for placeholder/missing fields
+    const isPlaceholder = (val) => {
+      if (!val) return true;
+      const lower = String(val).toLowerCase().trim();
+      return (
+        [
+          'not found',
+          'not specified',
+          'n/a',
+          'unknown',
+          'not available',
+          'none',
+          'not provided',
+          'not disclosed',
+        ].includes(lower) || lower.length === 0
+      );
+    };
+
+    if (isPlaceholder(company.company_name)) companyIssues.push('no company name');
+    if (isPlaceholder(company.business)) companyIssues.push('no business description');
+    if (isPlaceholder(company.location)) companyIssues.push('no location');
+    if (!company.key_metrics || company.key_metrics.length === 0) companyIssues.push('no metrics');
+    if (!company.breakdown_items || company.breakdown_items.length === 0)
+      companyIssues.push('no breakdown');
+
+    // Check for placeholder text that leaked into actual values
+    const placeholderLeaks = [];
+    for (const metric of company.key_metrics || []) {
+      const val = String(metric.value || '').toLowerCase();
+      if (/not (found|specified|available|disclosed|provided)/.test(val) || val === 'n/a') {
+        placeholderLeaks.push(`metric "${metric.label}": "${metric.value}"`);
+      }
+    }
+    if (placeholderLeaks.length > 0)
+      companyIssues.push(`placeholder leaks: ${placeholderLeaks.join('; ')}`);
+
+    // Thin company = missing 3+ critical fields
+    if (companyIssues.length >= 3) {
+      thinCount++;
+      issues.push(`  THIN: ${name} — ${companyIssues.join(', ')}`);
+    } else if (companyIssues.length > 0) {
+      issues.push(`  WARN: ${name} — ${companyIssues.join(', ')}`);
+    }
+  }
+
+  // Log quality report
+  const totalCompanies = companies.length;
+  const thinPct = totalCompanies > 0 ? Math.round((thinCount / totalCompanies) * 100) : 0;
+  console.log(`\nQUALITY GATE: ${totalCompanies} companies, ${thinCount} thin (${thinPct}%)`);
+  if (issues.length > 0) {
+    console.log(issues.join('\n'));
+  }
+  if (thinPct > 50) {
+    console.log(`  WARNING: Over 50% of companies have thin data — output quality will be poor`);
+  }
+
+  return { totalCompanies, thinCount, thinPct, issues };
 }
 
 // Process websites in parallel batches
@@ -10294,18 +12592,33 @@ async function processWebsitesInParallel(websites) {
     const batch = websites.slice(batchStart, batchEnd);
 
     console.log(`\n${'─'.repeat(40)}`);
-    console.log(`BATCH ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}: Processing ${batch.length} websites in parallel (${batchStart + 1}-${batchEnd} of ${total})`);
+    console.log(
+      `BATCH ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}: Processing ${batch.length} websites in parallel (${batchStart + 1}-${batchEnd} of ${total})`
+    );
     console.log('─'.repeat(40));
 
-    // Process batch in parallel
+    // Process batch in parallel (allSettled prevents one rejection from dropping the whole batch)
     const batchPromises = batch.map((website, i) =>
       processSingleWebsite(website, batchStart + i, total)
     );
 
-    const batchResults = await Promise.all(batchPromises);
+    const batchSettled = await Promise.allSettled(batchPromises);
 
     // Add non-null results and clear batch immediately to free memory
-    for (const result of batchResults) {
+    for (let i = 0; i < batchSettled.length; i++) {
+      const outcome = batchSettled[i];
+      if (outcome.status === 'rejected') {
+        console.error(
+          `  BATCH ERROR: ${batch[i]} rejected: ${outcome.reason?.message || outcome.reason}`
+        );
+        results.push({
+          website: batch[i],
+          error: String(outcome.reason?.message || outcome.reason),
+          step: 0,
+        });
+        continue;
+      }
+      const result = outcome.value;
       if (result) {
         // Clear large scraped content before storing
         if (result.scrapedContent) result.scrapedContent = null;
@@ -10314,7 +12627,7 @@ async function processWebsitesInParallel(websites) {
       }
     }
     // Clear batch array reference
-    batchResults.length = 0;
+    batchSettled.length = 0;
 
     // Force garbage collection between batches (critical for Railway 450MB limit)
     if (global.gc) {
@@ -10325,7 +12638,7 @@ async function processWebsitesInParallel(websites) {
     // Add small delay between batches if processing many websites (50+)
     // Prevents memory pressure from accumulating too fast
     if (websites.length >= 20 && batchStart + PARALLEL_BATCH_SIZE < websites.length) {
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500));
     }
   }
 
@@ -10366,85 +12679,105 @@ app.post('/api/profile-slides', async (req, res) => {
     message: 'Request received. Results will be emailed within 5-10 minutes.',
     companies: [],
     errors: [],
-    total: websites.length
+    total: websites.length,
   });
 
-  const tracker = createTracker('profile-slides', email, { targetDescription, websiteCount: websites.length });
+  const tracker = createTracker('profile-slides', email, {
+    targetDescription,
+    websiteCount: websites.length,
+  });
 
   trackingContext.run(tracker, async () => {
-  // Process in background using parallel batch processing
-  try {
-    // Process websites in parallel batches of 4 for ~3x faster processing
-    const results = await processWebsitesInParallel(websites);
-
-    // Separate successful companies, inaccessible websites, and errors
-    const companies = results.filter(r => !r.error && !r._inaccessible);
-    const inaccessibleWebsites = results.filter(r => r._inaccessible);
-    const errors = results.filter(r => r.error && !r._inaccessible);
-
-    console.log(`\n${'='.repeat(50)}`);
-    console.log(`PROFILE SLIDES EXTRACTION COMPLETE`);
-    console.log(`Extracted: ${companies.length}/${websites.length} successful`);
-    if (inaccessibleWebsites.length > 0) {
-      console.log(`Inaccessible (will appear on summary only): ${inaccessibleWebsites.length}`);
-    }
-    console.log('='.repeat(50));
-
-    // Memory cleanup before PPTX generation (which is memory-intensive)
-    // Clear the results array since we only need companies/errors now
-    results.length = 0;
-    if (global.gc) global.gc();
-    logMemoryUsage('before PPTX generation');
-
-    // Generate PPTX using PptxGenJS (with target list slide)
-    // Pass inaccessible websites to include on summary slide
-    let pptxResult = null;
-    if (companies.length > 0 || inaccessibleWebsites.length > 0) {
-      pptxResult = await generatePPTX(companies, targetDescription, inaccessibleWebsites, rightLayout || 'table-6');
-      logMemoryUsage('after PPTX generation');
-      // Force GC after PPTX generation to free memory before email
-      if (global.gc) global.gc();
-    }
-
-    // Build email content
-    const companyNames = companies.slice(0, 3).map(c => c.title || c.company_name).join(', ');
-    const subject = `Profile Slides: ${companies.length} companies${companyNames ? ` (${companyNames}${companies.length > 3 ? '...' : ''})` : ''}`;
-    const htmlContent = buildProfileSlidesEmailHTML(companies, errors, pptxResult?.success);
-
-    // Send email with PPTX attachment
-    const attachment = pptxResult?.success ? {
-      content: pptxResult.content,
-      name: `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`
-    } : null;
-
-    await sendEmail(email, subject, htmlContent, attachment);
-
-    console.log(`Email sent to ${email}${attachment ? ' with PPTX attachment' : ''}`);
-    console.log('='.repeat(50));
-
-    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
-    await tracker.finish({
-      websitesProcessed: websites.length,
-      companiesExtracted: companies.length,
-      errors: errors.length,
-    });
-
-    // Memory cleanup after email sent
-    if (pptxResult) pptxResult.content = null;
-    pptxResult = null;
-
-  } catch (error) {
-    console.error('Profile slides error:', error);
-    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+    // Process in background using parallel batch processing
     try {
-      await sendEmail(email, 'Profile Slides - Error', `<p>Error processing your request: ${error.message}</p>`);
-    } catch (e) {
-      console.error('Failed to send error email:', e);
+      // Process websites in parallel batches of 4 for ~3x faster processing
+      const results = await processWebsitesInParallel(websites);
+
+      // Separate successful companies, inaccessible websites, and errors
+      const companies = results.filter((r) => !r.error && !r._inaccessible);
+      const inaccessibleWebsites = results.filter((r) => r._inaccessible);
+      const errors = results.filter((r) => r.error && !r._inaccessible);
+
+      console.log(`\n${'='.repeat(50)}`);
+      console.log(`PROFILE SLIDES EXTRACTION COMPLETE`);
+      console.log(`Extracted: ${companies.length}/${websites.length} successful`);
+      if (inaccessibleWebsites.length > 0) {
+        console.log(`Inaccessible (will appear on summary only): ${inaccessibleWebsites.length}`);
+      }
+      console.log('='.repeat(50));
+
+      // Memory cleanup before PPTX generation (which is memory-intensive)
+      // Clear the results array since we only need companies/errors now
+      results.length = 0;
+      if (global.gc) global.gc();
+      logMemoryUsage('before PPTX generation');
+
+      // Quality gate: validate data before generating PPTX
+      if (companies.length > 0) {
+        validateProfileData(companies);
+      }
+
+      // Generate PPTX using PptxGenJS (with target list slide)
+      // Pass inaccessible websites to include on summary slide
+      let pptxResult = null;
+      if (companies.length > 0 || inaccessibleWebsites.length > 0) {
+        pptxResult = await generatePPTX(
+          companies,
+          targetDescription,
+          inaccessibleWebsites,
+          rightLayout || 'table-6'
+        );
+        logMemoryUsage('after PPTX generation');
+        // Force GC after PPTX generation to free memory before email
+        if (global.gc) global.gc();
+      }
+
+      // Build email content
+      const companyNames = companies
+        .slice(0, 3)
+        .map((c) => c.title || c.company_name)
+        .join(', ');
+      const subject = `Profile Slides: ${companies.length} companies${companyNames ? ` (${companyNames}${companies.length > 3 ? '...' : ''})` : ''}`;
+      const htmlContent = buildProfileSlidesEmailHTML(companies, errors, pptxResult?.success);
+
+      // Send email with PPTX attachment
+      const attachment = pptxResult?.success
+        ? {
+            content: pptxResult.content,
+            name: `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`,
+          }
+        : null;
+
+      await sendEmail(email, subject, htmlContent, attachment);
+
+      console.log(`Email sent to ${email}${attachment ? ' with PPTX attachment' : ''}`);
+      console.log('='.repeat(50));
+
+      // Finalize tracking (real token counts recorded via recordTokens in wrappers)
+      await tracker.finish({
+        websitesProcessed: websites.length,
+        companiesExtracted: companies.length,
+        errors: errors.length,
+      });
+
+      // Memory cleanup after email sent
+      if (pptxResult) pptxResult.content = null;
+      pptxResult = null;
+    } catch (error) {
+      console.error('Profile slides error:', error);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+      try {
+        await sendEmail(
+          email,
+          'Profile Slides - Error',
+          `<p>Error processing your request: ${error.message}</p>`
+        );
+      } catch (e) {
+        console.error('Failed to send error email:', e);
+      }
     }
-  }
   }); // end trackingContext.run
 });
-
 
 // ============ GENERATE PPT ENDPOINT (returns content, no email) ============
 // Used by v6 search to generate PPT and attach to its own email
@@ -10485,11 +12818,19 @@ app.post('/api/generate-ppt', async (req, res) => {
           console.log(`  Failed to scrape: ${scraped.error}`);
 
           if (isBlockedScrapeError(scraped.error) && process.env.SCREENSHOT_API_KEY) {
-            console.log('  Step 1b: Blocked by website, attempting screenshot fallback for company/location...');
+            console.log(
+              '  Step 1b: Blocked by website, attempting screenshot fallback for company/location...'
+            );
             const screenshotBasicInfo = await extractBasicInfoFromScreenshot(website);
-            if (screenshotBasicInfo.company_name || screenshotBasicInfo.location || screenshotBasicInfo.established_year) {
+            if (
+              screenshotBasicInfo.company_name ||
+              screenshotBasicInfo.location ||
+              screenshotBasicInfo.established_year
+            ) {
               console.log('  Screenshot fallback succeeded (name/location recovered)');
-              results.push(buildScreenshotFallbackCompanyData(website, scraped.error, screenshotBasicInfo));
+              results.push(
+                buildScreenshotFallbackCompanyData(website, scraped.error, screenshotBasicInfo)
+              );
               continue;
             }
             console.log('  Screenshot fallback did not recover enough data');
@@ -10503,20 +12844,28 @@ app.post('/api/generate-ppt', async (req, res) => {
             title: companyName,
             location: '',
             _inaccessible: true,
-            _error: `Failed to scrape: ${scraped.error}`
+            _error: `Failed to scrape: ${scraped.error}`,
           });
           console.log(`  Marked as inaccessible: ${companyName}`);
           continue;
         }
         const pagesScrapedCount = scraped.pagesScraped?.length || 1;
-        console.log(`  Scraped ${scraped.content.length} characters from ${pagesScrapedCount} pages`);
+        console.log(
+          `  Scraped ${scraped.content.length} characters from ${pagesScrapedCount} pages`
+        );
         // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
-        console.log(`  Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
+        console.log(
+          `  Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`
+        );
 
         // Step 1a: Pre-extract metrics using deterministic regex
         const regexMetrics = extractMetricsFromText(scraped.content);
         if (Object.keys(regexMetrics).length > 0) {
-          console.log(`  Regex found: ${Object.keys(regexMetrics).filter(k => !k.endsWith('_text')).join(', ')}`);
+          console.log(
+            `  Regex found: ${Object.keys(regexMetrics)
+              .filter((k) => !k.endsWith('_text'))
+              .join(', ')}`
+          );
         }
 
         // Step 1b: Extract structured address from JSON-LD
@@ -10550,14 +12899,14 @@ app.post('/api/generate-ppt', async (req, res) => {
         console.log('  Step 4: Extracting key metrics...');
         const metricsInfo = await extractKeyMetrics(scraped.content, {
           company_name: basicInfo.company_name,
-          business: businessInfo.business
+          business: businessInfo.business,
         });
 
         // Step 4b: Extract products/applications breakdown
         console.log('  Step 4b: Extracting products/applications breakdown...');
         const productsBreakdown = await extractProductsBreakdown(scraped.content, {
           company_name: basicInfo.company_name,
-          business: businessInfo.business
+          business: businessInfo.business,
         });
 
         // Step 5: Search online for missing mandatory info
@@ -10567,7 +12916,9 @@ app.post('/api/generate-ppt', async (req, res) => {
 
         let searchedInfo = {};
         if (missingFields.length > 0 && basicInfo.company_name) {
-          console.log(`  Step 5: Searching online for missing info: ${missingFields.join(', ')}...`);
+          console.log(
+            `  Step 5: Searching online for missing info: ${missingFields.join(', ')}...`
+          );
           searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
         }
 
@@ -10578,32 +12929,112 @@ app.post('/api/generate-ppt', async (req, res) => {
         // Build regex metrics first (deterministic, no hallucination)
         const regexBasedMetrics = [];
         const regexCoveredTypes = new Set();
-        const branchNetworkSummary = extractBranchLocationSummary(scraped.content, regexMetrics.office_count);
+        const branchNetworkSummary = extractBranchLocationSummary(
+          scraped.content,
+          regexMetrics.office_count
+        );
         if (branchNetworkSummary) {
           regexBasedMetrics.push({ value: branchNetworkSummary, label: 'Branch Network' });
           regexCoveredTypes.add('branch');
           regexCoveredTypes.add('office');
         }
-        if (regexMetrics.employee_count) { regexBasedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' }); regexCoveredTypes.add('employee'); }
-        if (regexMetrics.years_experience) { regexBasedMetrics.push({ value: String(regexMetrics.years_experience), label: 'Years Experience' }); regexCoveredTypes.add('year'); }
-        if (regexMetrics.export_countries) { regexBasedMetrics.push({ value: String(regexMetrics.export_countries), label: 'Export Countries' }); regexCoveredTypes.add('export'); }
-        if (regexMetrics.source_countries) { regexBasedMetrics.push({ value: String(regexMetrics.source_countries), label: 'Source Countries' }); regexCoveredTypes.add('source'); }
-        if (regexMetrics.capacity_text) { regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.capacity_text), label: 'Production Capacity' }); regexCoveredTypes.add('capacity'); }
-        if (regexMetrics.certifications?.length > 0) { regexBasedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' }); regexCoveredTypes.add('certif'); }
-        if (regexMetrics.machine_count) { regexBasedMetrics.push({ value: String(regexMetrics.machine_count) + '+', label: 'Machines' }); regexCoveredTypes.add('machine'); }
-        if (regexMetrics.partner_count) { regexBasedMetrics.push({ value: String(regexMetrics.partner_count) + '+', label: 'Business Partners' }); regexCoveredTypes.add('partner'); }
-        if (regexMetrics.export_regions) { regexBasedMetrics.push({ value: regexMetrics.export_regions, label: 'Export Markets' }); regexCoveredTypes.add('market'); }
-        if (regexMetrics.product_count) { regexBasedMetrics.push({ value: String(regexMetrics.product_count) + '+', label: 'Products' }); regexCoveredTypes.add('product'); }
-        if (regexMetrics.customer_count) { regexBasedMetrics.push({ value: String(regexMetrics.customer_count) + '+', label: 'Customers' }); regexCoveredTypes.add('customer'); }
-        if (regexMetrics.fleet_count) { regexBasedMetrics.push({ value: String(regexMetrics.fleet_count) + '+', label: 'Vehicles' }); regexCoveredTypes.add('vehicle'); }
-        if (regexMetrics.factory_size) { regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.factory_size), label: 'Factory Size' }); regexCoveredTypes.add('factory'); }
+        if (regexMetrics.employee_count) {
+          regexBasedMetrics.push({
+            value: String(regexMetrics.employee_count),
+            label: 'Employees',
+          });
+          regexCoveredTypes.add('employee');
+        }
+        if (regexMetrics.years_experience) {
+          regexBasedMetrics.push({
+            value: String(regexMetrics.years_experience),
+            label: 'Years Experience',
+          });
+          regexCoveredTypes.add('year');
+        }
+        if (regexMetrics.export_countries) {
+          regexBasedMetrics.push({
+            value: String(regexMetrics.export_countries),
+            label: 'Export Countries',
+          });
+          regexCoveredTypes.add('export');
+        }
+        if (regexMetrics.source_countries) {
+          regexBasedMetrics.push({
+            value: String(regexMetrics.source_countries),
+            label: 'Source Countries',
+          });
+          regexCoveredTypes.add('source');
+        }
+        if (regexMetrics.capacity_text) {
+          regexBasedMetrics.push({
+            value: translateUnitsToEnglish(regexMetrics.capacity_text),
+            label: 'Production Capacity',
+          });
+          regexCoveredTypes.add('capacity');
+        }
+        if (regexMetrics.certifications?.length > 0) {
+          regexBasedMetrics.push({
+            value: regexMetrics.certifications.join(', '),
+            label: 'Certifications',
+          });
+          regexCoveredTypes.add('certif');
+        }
+        if (regexMetrics.machine_count) {
+          regexBasedMetrics.push({
+            value: String(regexMetrics.machine_count) + '+',
+            label: 'Machines',
+          });
+          regexCoveredTypes.add('machine');
+        }
+        if (regexMetrics.partner_count) {
+          regexBasedMetrics.push({
+            value: String(regexMetrics.partner_count) + '+',
+            label: 'Business Partners',
+          });
+          regexCoveredTypes.add('partner');
+        }
+        if (regexMetrics.export_regions) {
+          regexBasedMetrics.push({ value: regexMetrics.export_regions, label: 'Export Markets' });
+          regexCoveredTypes.add('market');
+        }
+        if (regexMetrics.product_count) {
+          regexBasedMetrics.push({
+            value: String(regexMetrics.product_count) + '+',
+            label: 'Products',
+          });
+          regexCoveredTypes.add('product');
+        }
+        if (regexMetrics.customer_count) {
+          regexBasedMetrics.push({
+            value: String(regexMetrics.customer_count) + '+',
+            label: 'Customers',
+          });
+          regexCoveredTypes.add('customer');
+        }
+        if (regexMetrics.fleet_count) {
+          regexBasedMetrics.push({
+            value: String(regexMetrics.fleet_count) + '+',
+            label: 'Vehicles',
+          });
+          regexCoveredTypes.add('vehicle');
+        }
+        if (regexMetrics.factory_size) {
+          regexBasedMetrics.push({
+            value: translateUnitsToEnglish(regexMetrics.factory_size),
+            label: 'Factory Size',
+          });
+          regexCoveredTypes.add('factory');
+        }
 
         // Add AI metrics only for types not covered by regex
         const mergedMetrics = [...regexBasedMetrics];
         for (const aiMetric of allKeyMetrics) {
           const labelLower = aiMetric.label.toLowerCase();
-          const alreadyCovered = [...regexCoveredTypes].some(type => labelLower.includes(type));
-          if (!alreadyCovered) { mergedMetrics.push(aiMetric); }
+          const alreadyCovered = [...regexCoveredTypes].some((type) => labelLower.includes(type));
+          if (!alreadyCovered) {
+            mergedMetrics.push(aiMetric);
+          }
         }
 
         // Determine location priority: website extraction -> structured data -> web search fallback.
@@ -10627,15 +13058,22 @@ app.post('/api/generate-ppt', async (req, res) => {
         let validatedLocation = validateAndFixHQFormat(finalLocation, website);
 
         // Retry extraction when HQ is missing/incomplete after validation.
-        const validatedParts = ensureString(validatedLocation).split(',').map(p => p.trim()).filter(p => p);
+        const validatedParts = ensureString(validatedLocation)
+          .split(',')
+          .map((p) => p.trim())
+          .filter((p) => p);
         const requiredLevels = 2; // 2 levels for all countries (state/province, country)
-        const needsLocationRetry = !!finalLocation && (validatedParts.length < requiredLevels);
+        const needsLocationRetry = !!finalLocation && validatedParts.length < requiredLevels;
         if (needsLocationRetry) {
-          console.log(`  HQ incomplete (${validatedParts.length}/${requiredLevels} levels), retrying...`);
+          console.log(
+            `  HQ incomplete (${validatedParts.length}/${requiredLevels} levels), retrying...`
+          );
           const retrySeed = validatedLocation || finalLocation;
           const improvedLocation = await extractFullAddress(scraped.content, website, retrySeed);
           if (improvedLocation) {
-            validatedLocation = validateAndFixHQFormat(improvedLocation, website) || ensureString(improvedLocation).trim();
+            validatedLocation =
+              validateAndFixHQFormat(improvedLocation, website) ||
+              ensureString(improvedLocation).trim();
           }
         }
         if (!validatedLocation && regionalLocationHint) {
@@ -10644,16 +13082,24 @@ app.post('/api/generate-ppt', async (req, res) => {
         } else if (validatedLocation && regionalLocationHint) {
           const inferredCountry = inferCountryFromWebsite(website);
           if (inferredCountry === 'Australia') {
-            const hasState = Object.values(AU_STATE_MAP).some(state => validatedLocation.toLowerCase().includes(state.toLowerCase()));
+            const hasState = Object.values(AU_STATE_MAP).some((state) =>
+              validatedLocation.toLowerCase().includes(state.toLowerCase())
+            );
             if (!hasState) {
               validatedLocation = regionalLocationHint;
-              console.log(`  Replacing city-level location with AU regional hint: ${validatedLocation}`);
+              console.log(
+                `  Replacing city-level location with AU regional hint: ${validatedLocation}`
+              );
             }
           } else if (inferredCountry === 'New Zealand') {
-            const hasRegion = Object.values(NZ_REGION_MAP).some(region => validatedLocation.toLowerCase().includes(region.toLowerCase()));
+            const hasRegion = Object.values(NZ_REGION_MAP).some((region) =>
+              validatedLocation.toLowerCase().includes(region.toLowerCase())
+            );
             if (!hasRegion) {
               validatedLocation = regionalLocationHint;
-              console.log(`  Replacing city-level location with NZ regional hint: ${validatedLocation}`);
+              console.log(
+                `  Replacing city-level location with NZ regional hint: ${validatedLocation}`
+              );
             }
           }
         }
@@ -10663,7 +13109,9 @@ app.post('/api/generate-ppt', async (req, res) => {
         const detectedType = detectBusinessType(businessInfo.business, scraped.content);
         // Only use keyword detection as fallback when AI didn't provide classification
         if (!productsBreakdown.business_type && detectedType) {
-          console.log(`  Business type: "${detectedType}" (keyword fallback, AI had no classification)`);
+          console.log(
+            `  Business type: "${detectedType}" (keyword fallback, AI had no classification)`
+          );
           businessType = detectedType;
         }
 
@@ -10679,7 +13127,11 @@ app.post('/api/generate-ppt', async (req, res) => {
         let screenshotResults = { customers: [], brands: [], principals: [] };
         if (process.env.SCREENSHOT_API_KEY) {
           console.log('  Step 5c: Reading partner/client logos from website screenshots...');
-          screenshotResults = await extractPartnersFromScreenshots(website, scraped.pagesScraped || [], { deepMode: true });
+          screenshotResults = await extractPartnersFromScreenshots(
+            website,
+            scraped.pagesScraped || [],
+            { deepMode: true }
+          );
         }
         businessRelationships.customers = uniqueRelationshipNames([
           ...(businessRelationships.customers || []),
@@ -10688,14 +13140,14 @@ app.post('/api/generate-ppt', async (req, res) => {
           ...(structuredRelationships.customers || []),
           ...(embeddedRelationships.customers || []),
           ...(catalogFeedRelationships.customers || []),
-          ...(screenshotResults.customers || [])
+          ...(screenshotResults.customers || []),
         ]);
         businessRelationships.suppliers = uniqueRelationshipNames([
           ...(businessRelationships.suppliers || []),
           ...(metricRelationships.suppliers || []),
           ...(urlRelationships.suppliers || []),
           ...(structuredRelationships.suppliers || []),
-          ...(embeddedRelationships.suppliers || [])
+          ...(embeddedRelationships.suppliers || []),
         ]);
         businessRelationships.principals = uniqueRelationshipNames([
           ...(businessRelationships.principals || []),
@@ -10704,7 +13156,7 @@ app.post('/api/generate-ppt', async (req, res) => {
           ...(structuredRelationships.principals || []),
           ...(embeddedRelationships.principals || []),
           ...(catalogFeedRelationships.principals || []),
-          ...(screenshotResults.principals || [])
+          ...(screenshotResults.principals || []),
         ]);
         businessRelationships.brands = uniqueRelationshipNames([
           ...(businessRelationships.brands || []),
@@ -10713,57 +13165,84 @@ app.post('/api/generate-ppt', async (req, res) => {
           ...(structuredRelationships.brands || []),
           ...(embeddedRelationships.brands || []),
           ...(catalogFeedRelationships.brands || []),
-          ...(screenshotResults.brands || [])
+          ...(screenshotResults.brands || []),
         ]);
-        let principalBrandCoverage = businessRelationships.principals.length + businessRelationships.brands.length;
+        let principalBrandCoverage =
+          businessRelationships.principals.length + businessRelationships.brands.length;
         if (principalBrandCoverage < 2) {
-          console.log(`  Step 5d: Relationship coverage low (${principalBrandCoverage}), running AI text fallback...`);
+          console.log(
+            `  Step 5d: Relationship coverage low (${principalBrandCoverage}), running AI text fallback...`
+          );
           const aiRelationships = await extractRelationshipsFromContentAI(scraped.content, {
-            company_name: basicInfo.company_name
+            company_name: basicInfo.company_name,
           });
           businessRelationships.customers = uniqueRelationshipNames([
             ...(businessRelationships.customers || []),
-            ...(aiRelationships.customers || [])
+            ...(aiRelationships.customers || []),
           ]);
           businessRelationships.principals = uniqueRelationshipNames([
             ...(businessRelationships.principals || []),
-            ...(aiRelationships.principals || [])
+            ...(aiRelationships.principals || []),
           ]);
           businessRelationships.brands = uniqueRelationshipNames([
             ...(businessRelationships.brands || []),
-            ...(aiRelationships.brands || [])
+            ...(aiRelationships.brands || []),
           ]);
-          principalBrandCoverage = businessRelationships.principals.length + businessRelationships.brands.length;
+          principalBrandCoverage =
+            businessRelationships.principals.length + businessRelationships.brands.length;
           console.log(`  Step 5d: Coverage after AI fallback = ${principalBrandCoverage}`);
         }
-        const relationshipCoverageStatus = principalBrandCoverage < 2 ? 'needs_manual_review' : 'ok';
+        const relationshipCoverageStatus =
+          principalBrandCoverage < 2 ? 'needs_manual_review' : 'ok';
         if (relationshipCoverageStatus === 'needs_manual_review') {
-          console.log(`  Step 5e: Principal/brand coverage still low (${principalBrandCoverage}) - marking manual review required`);
+          console.log(
+            `  Step 5e: Principal/brand coverage still low (${principalBrandCoverage}) - marking manual review required`
+          );
         }
 
-        let finalBreakdown = applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelationships);
-        if ((!Array.isArray(finalBreakdown.breakdown_items) || finalBreakdown.breakdown_items.length === 0) &&
-            Array.isArray(catalogFeedRelationships.products) &&
-            catalogFeedRelationships.products.length > 0) {
+        let finalBreakdown = applyRelationshipFallbackToBreakdown(
+          productsBreakdown,
+          businessRelationships
+        );
+        if (
+          (!Array.isArray(finalBreakdown.breakdown_items) ||
+            finalBreakdown.breakdown_items.length === 0) &&
+          Array.isArray(catalogFeedRelationships.products) &&
+          catalogFeedRelationships.products.length > 0
+        ) {
           finalBreakdown = {
             ...finalBreakdown,
             breakdown_title: 'Products and Applications',
-            breakdown_items: catalogFeedRelationships.products.slice(0, 8).map(name => ({
+            breakdown_items: catalogFeedRelationships.products.slice(0, 8).map((name) => ({
               label: 'Product',
-              value: name
-            }))
+              value: name,
+            })),
           };
-          console.log(`  Using product feed fallback for right table (${finalBreakdown.breakdown_items.length} items)`);
+          console.log(
+            `  Using product feed fallback for right table (${finalBreakdown.breakdown_items.length} items)`
+          );
         }
 
         // Build display-ready relationship segments so large customer/brand lists are readable.
         const segmentNameFilter = basicInfo.company_name || businessInfo.title || '';
-        const cleanedCustomersForSegments = filterGarbageNames(businessRelationships.customers || [], segmentNameFilter);
-        const cleanedSuppliersForSegments = filterGarbageNames(businessRelationships.suppliers || [], segmentNameFilter);
-        const cleanedPrincipalsForSegments = filterGarbageNames(businessRelationships.principals || [], segmentNameFilter);
-        const cleanedBrandsForSegments = filterGarbageNames(businessRelationships.brands || [], segmentNameFilter);
+        const cleanedCustomersForSegments = filterGarbageNames(
+          businessRelationships.customers || [],
+          segmentNameFilter
+        );
+        const cleanedSuppliersForSegments = filterGarbageNames(
+          businessRelationships.suppliers || [],
+          segmentNameFilter
+        );
+        const cleanedPrincipalsForSegments = filterGarbageNames(
+          businessRelationships.principals || [],
+          segmentNameFilter
+        );
+        const cleanedBrandsForSegments = filterGarbageNames(
+          businessRelationships.brands || [],
+          segmentNameFilter
+        );
         const customerSegments = await buildCustomerSegments(cleanedCustomersForSegments, openai, {
-          minCount: RELATIONSHIP_SEGMENT_MIN_COUNT
+          minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
         });
         const supplierSegments = await segmentRelationshipNamesByAI(
           cleanedSuppliersForSegments,
@@ -10795,7 +13274,9 @@ app.post('/api/generate-ppt', async (req, res) => {
         let companyData = {
           website: scraped.url,
           company_name: ensureString(basicInfo.company_name),
-          established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
+          established_year: ensureString(
+            basicInfo.established_year || searchedInfo.established_year
+          ),
           location: validatedLocation,
           business: ensureString(businessInfo.business),
           message: ensureString(businessInfo.message),
@@ -10804,10 +13285,11 @@ app.post('/api/generate-ppt', async (req, res) => {
           key_metrics: mergedMetrics,
           // Right-side content (varies by business type)
           business_type: businessType,
-          breakdown_title: ensureString(finalBreakdown.breakdown_title) || 'Products and Applications',
+          breakdown_title:
+            ensureString(finalBreakdown.breakdown_title) || 'Products and Applications',
           breakdown_items: finalBreakdown.breakdown_items || [],
-          projects: productsBreakdown.projects || [],  // For project-based businesses
-          products: productsBreakdown.products || [],  // For consumer-facing businesses
+          projects: productsBreakdown.projects || [], // For project-based businesses
+          products: productsBreakdown.products || [], // For consumer-facing businesses
           metrics: ensureString(metricsInfo.metrics),
           // Pre-extracted logo
           _logo: logoResult,
@@ -10824,7 +13306,7 @@ app.post('/api/generate-ppt', async (req, res) => {
           // Branch footprint summary for Location row (e.g., "5 branches across ...")
           _branchNetworkSummary: branchNetworkSummary,
           // Relationship coverage quality gate (used to fail loudly in slide output)
-          _relationshipCoverageStatus: relationshipCoverageStatus
+          _relationshipCoverageStatus: relationshipCoverageStatus,
         };
 
         // Step 6: Run AI validator to compare extraction vs source and fix issues
@@ -10846,13 +13328,12 @@ app.post('/api/generate-ppt', async (req, res) => {
           scraped.content = null;
           scraped.rawHtml = null;
         }
-
       } catch (error) {
         console.error(`  Error processing ${website}:`, error.message);
         results.push({
           website,
           error: error.message,
-          step: 0
+          step: 0,
         });
       }
 
@@ -10860,9 +13341,9 @@ app.post('/api/generate-ppt', async (req, res) => {
     }
 
     // Separate successful companies, inaccessible websites, and errors
-    const companies = results.filter(r => !r.error && !r._inaccessible);
-    const inaccessibleWebsites = results.filter(r => r._inaccessible);
-    const errors = results.filter(r => r.error && !r._inaccessible);
+    const companies = results.filter((r) => !r.error && !r._inaccessible);
+    const inaccessibleWebsites = results.filter((r) => r._inaccessible);
+    const errors = results.filter((r) => r.error && !r._inaccessible);
 
     console.log(`\n${'='.repeat(50)}`);
     console.log(`EXTRACTION COMPLETE: ${companies.length}/${websites.length} successful`);
@@ -10877,7 +13358,12 @@ app.post('/api/generate-ppt', async (req, res) => {
     // Generate PPTX - pass inaccessible websites to include on summary slide
     let pptxResult = null;
     if (companies.length > 0 || inaccessibleWebsites.length > 0) {
-      pptxResult = await generatePPTX(companies, targetDescription, inaccessibleWebsites, rightLayout || 'table-6');
+      pptxResult = await generatePPTX(
+        companies,
+        targetDescription,
+        inaccessibleWebsites,
+        rightLayout || 'table-6'
+      );
     }
 
     if (pptxResult?.success) {
@@ -10887,22 +13373,21 @@ app.post('/api/generate-ppt', async (req, res) => {
         content: pptxResult.content,
         filename: `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`,
         companiesProcessed: companies.length,
-        errors: errors.length
+        errors: errors.length,
       });
     } else {
       return res.json({
         success: false,
         error: 'Failed to generate PPT',
         companiesProcessed: companies.length,
-        errors: errors.length
+        errors: errors.length,
       });
     }
-
   } catch (error) {
     console.error('Generate PPT error:', error);
     return res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 });
