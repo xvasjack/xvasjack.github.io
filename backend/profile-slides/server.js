@@ -315,10 +315,28 @@ function filterGarbageNames(names, companyName = '') {
         'carousel',
         'video',
         'animation',
+        'wix',
+        'shopify',
+        'woocommerce',
+        'wordpress',
+        'elementor',
+        'facebook',
+        'instagram',
+        'linkedin',
+        'youtube',
+        'tiktok',
+        'twitter',
       ];
       if (genericTerms.includes(lower.trim())) return false;
       if (
-        /(download|login|sign in|sign up|register|application form|order online|reviews?|privacy policy|terms)/i.test(
+        /\b(facebook|instagram|linkedin|youtube|tiktok|twitter|x\.com|sana commerce|woocommerce|shopify|wix|wordpress|elementor|mailchimp|klaviyo|hubspot|google analytics)\b/i.test(
+          lower
+        )
+      )
+        return false;
+      if (/\b[a-z0-9-]+\.(?:com|net|org|io|co\.nz|com\.au|co|app)\b/i.test(lower)) return false;
+      if (
+        /(download|login|sign in|sign up|register|application form|order online|reviews?|privacy policy|terms|create account|my account|represent an account|forgot password|wishlist|checkout|cart)/i.test(
           lower
         )
       )
@@ -375,11 +393,64 @@ function filterGarbageNames(names, companyName = '') {
     .map((name) => toTitleCase(stripCompanySuffix(name))); // Strip suffixes and title case
 }
 
+function mergeRelationshipNamesByTrust(sourceMap = {}, companyName = '', options = {}) {
+  const defaultWeights = {
+    section: 4,
+    metric: 4,
+    structured: 3,
+    url: 2,
+    screenshot: 2,
+    feed: 1,
+    embedded: 1,
+    ai: 1,
+  };
+  const weights = { ...defaultWeights, ...(options.weights || {}) };
+  const parsedMinScore = Number.parseInt(String(options.minScore ?? 3), 10);
+  const minScore = Number.isFinite(parsedMinScore) ? Math.max(1, parsedMinScore) : 3;
+  const requireMultiSource = Boolean(options.requireMultiSource);
+
+  const tally = new Map();
+  const addFromSource = (sourceName, names) => {
+    const cleanedNames = filterGarbageNames(uniqueRelationshipNames(names || []), companyName);
+    const weight = Number(weights[sourceName] || 1);
+    for (const name of cleanedNames) {
+      const key = name.toLowerCase();
+      if (!key) continue;
+      const existing = tally.get(key) || { name, score: 0, sources: new Set() };
+      existing.score += weight;
+      existing.sources.add(sourceName);
+      tally.set(key, existing);
+    }
+  };
+
+  for (const [sourceName, names] of Object.entries(sourceMap || {})) {
+    addFromSource(sourceName, names);
+  }
+
+  const kept = Array.from(tally.values())
+    .filter((entry) => {
+      if (entry.score >= minScore) return true;
+      if (entry.sources.size >= 2) return true;
+      if (requireMultiSource) return false;
+      return false;
+    })
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.sources.size !== a.sources.size) return b.sources.size - a.sources.size;
+      return a.name.localeCompare(b.name);
+    })
+    .map((entry) => entry.name);
+
+  return uniqueRelationshipNames(kept);
+}
+
 // ===== TOKEN ESTIMATION =====
 // Rough estimate: 1 token ≈ 4 characters for English text
 // GPT-4o limit: 128K tokens ≈ 512K chars, but leave margin for response
 const MAX_INPUT_CHARS = 100000; // ~25K tokens, safe margin for 128K limit
 const RELATIONSHIP_SEGMENT_MIN_COUNT = 5; // Segment long relationship lists for readable slide output
+const PROFILE_STRICT_QUALITY_GATE = process.env.PROFILE_STRICT_QUALITY_GATE !== 'false';
+const PROFILE_REQUIRE_FULL_COVERAGE = process.env.PROFILE_REQUIRE_FULL_COVERAGE !== 'false';
 const AU_STATE_MAP = {
   nsw: 'New South Wales',
   'new south wales': 'New South Wales',
@@ -1200,6 +1271,39 @@ async function withRetry(apiCall, maxRetries = 3, baseDelay = 2000) {
     }
   }
   throw lastError;
+}
+
+// OpenAI compatibility guard:
+// Some model endpoints reject `max_tokens` and require `max_completion_tokens`.
+// If that exact error appears, retry once with the compatible field.
+async function createChatCompletionWithCompatibility(
+  requestOptions,
+  fallbackMaxCompletionTokens = 0
+) {
+  try {
+    return await openai.chat.completions.create(requestOptions);
+  } catch (error) {
+    const message = String(error?.message || '');
+    if (!message.includes("Unsupported parameter: 'max_tokens'")) {
+      throw error;
+    }
+
+    const retryOptions = { ...requestOptions };
+    if (Object.prototype.hasOwnProperty.call(retryOptions, 'max_tokens')) {
+      delete retryOptions.max_tokens;
+    }
+
+    if (
+      !Object.prototype.hasOwnProperty.call(retryOptions, 'max_completion_tokens') &&
+      Number.isFinite(fallbackMaxCompletionTokens) &&
+      fallbackMaxCompletionTokens > 0
+    ) {
+      retryOptions.max_completion_tokens = fallbackMaxCompletionTokens;
+    }
+
+    console.log('    OpenAI compatibility retry: replacing max_tokens with max_completion_tokens');
+    return await openai.chat.completions.create(retryOptions);
+  }
 }
 
 // ============ FETCH WITH TIMEOUT AND RETRY (for Gemini) ============
@@ -5872,9 +5976,6 @@ function extractMetricsFromText(text) {
     /(\d+)\s*(?:कार्यालय|शाखा)/gi, // Hindi
     /(\d+)个?\s*(?:办事处|分公司|门店|办公室)/gi, // Chinese
     /(\d+)の?\s*(?:事務所|支店|店舗|拠点)/gi, // Japanese
-    /across\s+(\d+)\s+(?:countries|cities|regions)/gi,
-    /in\s+(\d+)\s+(?:countries|cities|locations)/gi,
-    /presence\s+in\s+(\d+)\s+(?:countries|cities)/gi,
   ];
 
   for (const pattern of officePatterns) {
@@ -6877,10 +6978,7 @@ function extractBranchLocationSummary(content, officeCount = null) {
   }
   const officeCountFallback = parseCount(officeCount);
   if (!extractedCount && officeCountFallback > 0 && officeCountFallback <= 500) {
-    if (
-      branchEvidenceSnippets.length > 0 ||
-      /(?:branches?|offices?|locations?|outlets?|stores?|cities|regions)/i.test(text)
-    ) {
+    if (branchEvidenceSnippets.length > 0) {
       extractedCount = officeCountFallback;
     }
   }
@@ -6891,6 +6989,7 @@ function extractBranchLocationSummary(content, officeCount = null) {
     /(?:branches?|offices?|locations?|depots?|warehouses?)\s*(?:in|across|at|throughout|covering)\s+([^.!?;|]{10,220})/gi,
     /(?:branch|office|location)\s*(?:network|coverage)?\s*[:-]\s*([^.!?;|]{10,220})/gi,
     /(?:with|has|have|operates?)\s+\d{1,3}\s*(?:branches?|offices?|locations?)\s*(?:in|across|at)\s+([^.!?;|]{10,220})/gi,
+    /(?:our\s+)?(?:branches?|offices?|locations?)\s*(?:include|includes|are|:)\s*([^.!?;|]{10,220})/gi,
   ];
 
   const cleanCoverageFragment = (rawValue) => {
@@ -6931,6 +7030,19 @@ function extractBranchLocationSummary(content, officeCount = null) {
     'states',
     'country',
     'countries',
+    'across',
+    'along',
+    'throughout',
+    'covering',
+    'include',
+    'includes',
+    'available',
+    'service',
+    'services',
+    'delivery',
+    'distribution',
+    'support',
+    'nationwide coverage',
     'metropolitan',
     'metropolitan area',
     'area',
@@ -6967,6 +7079,7 @@ function extractBranchLocationSummary(content, officeCount = null) {
       )
     )
       continue;
+    if (/^(?:across|along|throughout|covering|include|includes)$/i.test(token)) continue;
 
     const normalizedKey = lower.replace(/\s+/g, ' ');
     if (dedup.has(normalizedKey)) continue;
@@ -7053,11 +7166,34 @@ function extractBranchLocationSummary(content, officeCount = null) {
     return `${coverageCount} branches`;
   }
 
-  if (primaryRegion) {
-    return `Branch network across ${primaryRegion}`;
+  return '';
+}
+
+function detectBranchEvidence(content, officeCount = null) {
+  const text = ensureString(content).replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+
+  const parsedOfficeCount = Number.parseInt(String(officeCount || ''), 10);
+  if (Number.isFinite(parsedOfficeCount) && parsedOfficeCount >= 2) return true;
+
+  const directCountPattern =
+    /(?:\b\d{1,3}(?:,\d{3})*\b|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s*(?:\+|plus)?\s*(?:branches?|offices?|locations?|depots?|warehouses?|outlets?|stores?)/i;
+  if (directCountPattern.test(text)) return true;
+
+  const networkKeywordPattern =
+    /\b(?:branches?|offices?|depots?|warehouses?|outlets?|stores?|locations)\b/i;
+  const broadCoveragePattern =
+    /\b(?:across|throughout|nationwide|all states?|all regions?|multiple|network)\b/i;
+  const multiPlacePattern =
+    /\b(?:in|across|at|covering)\s+[A-Za-z][^.!?;]{0,120}(?:,| and )\s*[A-Za-z]/i;
+  if (
+    networkKeywordPattern.test(text) &&
+    (broadCoveragePattern.test(text) || multiPlacePattern.test(text))
+  ) {
+    return true;
   }
 
-  return '';
+  return false;
 }
 
 function getBranchNetworkSummaryFromCompany(company) {
@@ -8646,13 +8782,42 @@ function buildScreenshotPageQueue(baseUrl, pagesScraped = []) {
   });
 
   const queue = [];
-  if (primary) queue.push(primary);
-  queue.push(...verifiedRest);
+  const queueKeys = new Set();
+  const pushUnique = (list) => {
+    for (const candidate of list) {
+      if (queue.length >= maxPages) break;
+      const clean = ensureString(candidate).trim();
+      if (!clean) continue;
+      const key = normalizeUrlForDedup(clean);
+      if (queueKeys.has(key)) continue;
+      queue.push(clean);
+      queueKeys.add(key);
+    }
+  };
 
-  const remainingSlots = Math.max(0, maxPages - queue.length);
-  if (remainingSlots > 0) {
-    queue.push(...fallbackUrls.slice(0, remainingSlots));
-  }
+  if (primary) pushUnique([primary]);
+
+  const verifiedRelationship = verifiedRest.filter((url) => scoreScreenshotPage(url) <= 1);
+  const verifiedPreferred = verifiedRest.filter((url) => {
+    const score = scoreScreenshotPage(url);
+    return score > 1 && score <= 4;
+  });
+  const verifiedLow = verifiedRest.filter((url) => scoreScreenshotPage(url) > 4);
+
+  const fallbackRelationship = fallbackUrls.filter((url) => scoreScreenshotPage(url) <= 1);
+  const fallbackPreferred = fallbackUrls.filter((url) => {
+    const score = scoreScreenshotPage(url);
+    return score > 1 && score <= 4;
+  });
+  const fallbackLow = fallbackUrls.filter((url) => scoreScreenshotPage(url) > 4);
+
+  // Force relationship pages into the queue before product/deep paths.
+  pushUnique(verifiedRelationship);
+  pushUnique(fallbackRelationship.slice(0, 4));
+  pushUnique(verifiedPreferred);
+  pushUnique(fallbackPreferred);
+  pushUnique(verifiedLow);
+  pushUnique(fallbackLow);
 
   return queue.slice(0, maxPages);
 }
@@ -8719,22 +8884,23 @@ async function extractPartnersFromScreenshot(websiteUrl, options = {}) {
 
     const visionResponse = await withRetry(
       async () => {
-        return await openai.chat.completions.create({
-          model: 'gpt-5.1',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/png;base64,${base64Image}`,
-                    detail: 'high',
+        return await createChatCompletionWithCompatibility(
+          {
+            model: 'gpt-5.1',
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:image/png;base64,${base64Image}`,
+                      detail: 'high',
+                    },
                   },
-                },
-                {
-                  type: 'text',
-                  text: `Analyze this FULL-PAGE company website screenshot. Scan the ENTIRE image from top to bottom.
+                  {
+                    type: 'text',
+                    text: `Analyze this FULL-PAGE company website screenshot. Scan the ENTIRE image from top to bottom.
 
 Look for sections such as:
 - Our Partners / Principal Partners / Partners / Suppliers
@@ -8754,13 +8920,15 @@ Rules:
 - Be exhaustive: list all readable names
 - Do not include section headers or generic words like "logo"
 - Return JSON only, no explanation`,
-                },
-              ],
-            },
-          ],
-          max_completion_tokens: 1200,
-          temperature: 0.1,
-        });
+                  },
+                ],
+              },
+            ],
+            max_completion_tokens: 1200,
+            temperature: 0.1,
+          },
+          1200
+        );
       },
       2,
       3000
@@ -9022,22 +9190,23 @@ async function extractBasicInfoFromScreenshot(websiteUrl, options = {}) {
     const base64Image = imageBuffer.toString('base64');
     const visionResponse = await withRetry(
       async () => {
-        return await openai.chat.completions.create({
-          model: 'gpt-5.1',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/png;base64,${base64Image}`,
-                    detail: 'high',
+        return await createChatCompletionWithCompatibility(
+          {
+            model: 'gpt-5.1',
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:image/png;base64,${base64Image}`,
+                      detail: 'high',
+                    },
                   },
-                },
-                {
-                  type: 'text',
-                  text: `Extract company basic info from this full-page website screenshot.
+                  {
+                    type: 'text',
+                    text: `Extract company basic info from this full-page website screenshot.
 
 Return ONLY valid JSON:
 {
@@ -9053,13 +9222,15 @@ Rules:
 - For Singapore use "Area, Singapore" only when area is visible.
 - For Australia, prefer full state name + "Australia" if state abbreviation is visible.
 - Return JSON only, no explanation.`,
-                },
-              ],
-            },
-          ],
-          max_completion_tokens: 500,
-          temperature: 0.1,
-        });
+                  },
+                ],
+              },
+            ],
+            max_completion_tokens: 500,
+            temperature: 0.1,
+          },
+          500
+        );
       },
       2,
       3000
@@ -9122,6 +9293,7 @@ function buildScreenshotFallbackCompanyData(websiteUrl, scrapeError, basicInfo =
     _principalSegments: null,
     _brandSegments: null,
     _branchNetworkSummary: '',
+    _branchEvidenceDetected: false,
     _relationshipCoverageStatus: 'needs_manual_review',
     _partialExtraction: true,
     _screenshotFallbackUsed: true,
@@ -9288,30 +9460,26 @@ function inferSegmentTheme(names, relationshipType = 'group') {
 
 function buildFallbackSegmentLabel(names, relationshipType = 'group', index = 0) {
   const type = ensureString(relationshipType).toLowerCase();
-  const prefixMap = {
-    customer: 'Customer',
-    customers: 'Customer',
-    supplier: 'Supplier',
-    suppliers: 'Supplier',
-    principal: 'Principal',
-    principals: 'Principal',
-    brand: 'Brand',
-    brands: 'Brand',
+  const baseLabelMap = {
+    customer: 'Key Customers',
+    customers: 'Key Customers',
+    supplier: 'Key Suppliers',
+    suppliers: 'Key Suppliers',
+    principal: 'Principal Partners',
+    principals: 'Principal Partners',
+    brand: 'Principal Brands',
+    brands: 'Principal Brands',
   };
-  const prefix = prefixMap[type] || 'Group';
+  const baseLabel = baseLabelMap[type] || 'Key Groups';
   const thematicLabel = inferSegmentTheme(names, relationshipType);
   if (thematicLabel) return thematicLabel;
-  const initials = (Array.isArray(names) ? names : [])
-    .map((name) => ensureString(name).trim().charAt(0).toUpperCase())
-    .filter((ch) => /[A-Z]/.test(ch));
-  if (initials.length > 0) {
-    const sorted = Array.from(new Set(initials)).sort();
-    const first = sorted[0];
-    const last = sorted[sorted.length - 1];
-    if (first === last) return `${prefix} ${first}`;
-    return `${prefix} ${first}-${last}`;
-  }
-  return `${prefix} Group ${index + 1}`;
+
+  if (index === 0) return baseLabel;
+  if (index === 1) return `Additional ${baseLabel}`;
+  if (index === 2) return `More ${baseLabel}`;
+  const extraPrefixes = ['Further', 'Extended', 'Regional', 'Focused'];
+  const prefix = extraPrefixes[(index - 3) % extraPrefixes.length];
+  return `${prefix} ${baseLabel}`;
 }
 
 function normalizeSegmentLabel(label, names, relationshipType = 'group', index = 0) {
@@ -9320,6 +9488,20 @@ function normalizeSegmentLabel(label, names, relationshipType = 'group', index =
     return buildFallbackSegmentLabel(names, relationshipType, index);
   }
   if (/^(segment|group)\s*\d+$/i.test(cleanLabel) || /^(segment|group)$/i.test(cleanLabel)) {
+    return buildFallbackSegmentLabel(names, relationshipType, index);
+  }
+  const type = ensureString(relationshipType).toLowerCase();
+  const typeWord =
+    type === 'customers'
+      ? 'customer'
+      : type === 'suppliers'
+        ? 'supplier'
+        : type === 'principals'
+          ? 'principal'
+          : type === 'brands'
+            ? 'brand'
+            : '';
+  if (typeWord && new RegExp(`^${typeWord}\\s*[a-z](?:\\s*-\\s*[a-z])?$`, 'i').test(cleanLabel)) {
     return buildFallbackSegmentLabel(names, relationshipType, index);
   }
   if (/^others?$/i.test(cleanLabel)) {
@@ -9561,12 +9743,31 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
     return value;
   }
 
+  const hasLowQualityBucketLabel =
+    /(?:^|\n)\s*(?:[-■•▪]\s*)?(?:customer|customers|supplier|suppliers|principal|principals|partner|partners|brand|brands)\s*[a-z](?:\s*-\s*[a-z])?\s*:/i.test(
+      value
+    );
+  const normalizedRelationshipValue = value
+    .split('\n')
+    .map((line) =>
+      ensureString(line)
+        .replace(
+          /^\s*(?:[-■•▪]\s*)?(?:customer|customers|supplier|suppliers|principal|principals|partner|partners|brand|brands)\s*[a-z](?:\s*-\s*[a-z])?\s*:\s*/i,
+          ''
+        )
+        .trim()
+    )
+    .filter(Boolean)
+    .join('\n');
+
   // If already grouped into lines, keep the original grouping.
-  if (value.includes('\n') && value.includes(':')) {
+  if (value.includes('\n') && value.includes(':') && !hasLowQualityBucketLabel) {
     return fixAcronymCasing(value);
   }
 
-  const extracted = extractRelationshipsFromMetrics([{ label, value }]);
+  const extracted = extractRelationshipsFromMetrics([
+    { label, value: normalizedRelationshipValue },
+  ]);
   const parsedNames = uniqueRelationshipNames([
     ...(extracted.customers || []),
     ...(extracted.suppliers || []),
@@ -9576,7 +9777,10 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
   const filteredNames = filterGarbageNames(parsedNames, companyName);
 
   if (filteredNames.length < RELATIONSHIP_SEGMENT_MIN_COUNT) {
-    return value;
+    if (filteredNames.length > 0) {
+      return fixAcronymCasing(filteredNames.join(', '));
+    }
+    return normalizedRelationshipValue || value;
   }
 
   const relationshipType =
@@ -10074,6 +10278,18 @@ function cleanCustomerName(text) {
     'clients',
     'partners',
     'customers',
+    'wix',
+    'shopify',
+    'woocommerce',
+    'wordpress',
+    'elementor',
+    'facebook',
+    'instagram',
+    'linkedin',
+    'youtube',
+    'tiktok',
+    'twitter',
+    'sana commerce',
   ];
   const navigationTerms = [
     'become a customer',
@@ -10087,6 +10303,13 @@ function cleanCustomerName(text) {
     'reviews',
     'download application form',
     'contact us',
+    'create account',
+    'my account',
+    'forgot password',
+    'represent an account',
+    'cart',
+    'checkout',
+    'wishlist',
   ];
 
   const lowerName = name.toLowerCase();
@@ -10097,10 +10320,20 @@ function cleanCustomerName(text) {
     return '';
   }
   if (
-    /(download|application form|login|sign in|sign up|order online|privacy policy|terms|returns|my account|reviews?)/i.test(
+    /(download|application form|login|sign in|sign up|order online|privacy policy|terms|returns|my account|create account|forgot password|represent an account|wishlist|checkout|cart|reviews?)/i.test(
       lowerName
     )
   ) {
+    return '';
+  }
+  if (
+    /\b(facebook|instagram|linkedin|youtube|tiktok|twitter|x\.com|sana commerce|woocommerce|shopify|wix|wordpress|elementor|mailchimp|klaviyo|hubspot|google analytics)\b/i.test(
+      lowerName
+    )
+  ) {
+    return '';
+  }
+  if (/\b[a-z0-9-]+\.(?:com|net|org|io|co\.nz|com\.au|co|app)\b/i.test(lowerName)) {
     return '';
   }
 
@@ -11930,6 +12163,7 @@ async function processSingleWebsite(website, index, total) {
       scraped.content,
       regexMetrics.office_count
     );
+    const branchEvidenceDetected = detectBranchEvidence(scraped.content, regexMetrics.office_count);
     if (branchNetworkSummary) {
       regexBasedMetrics.push({ value: branchNetworkSummary, label: 'Branch Network' });
       regexCoveredTypes.add('branch');
@@ -12213,7 +12447,7 @@ async function processSingleWebsite(website, index, total) {
     const businessRelationships = extractBusinessRelationships(cleanedHtml);
     const metricRelationships = extractRelationshipsFromMetrics(mergedMetrics);
     const urlRelationships = extractRelationshipsFromPageUrls(scraped.pagesScraped || []);
-    const structuredRelationships = extractRelationshipsFromStructuredData(cleanedHtml);
+    const structuredRelationships = extractRelationshipsFromStructuredData(scraped.rawHtml);
     const embeddedRelationships = extractRelationshipsFromEmbeddedData(cleanedHtml);
     const catalogFeedRelationships = await extractRelationshipsFromProductFeeds(trimmedWebsite);
     let screenshotResults = { customers: [], brands: [], principals: [] };
@@ -12227,40 +12461,57 @@ async function processSingleWebsite(website, index, total) {
         { deepMode: true }
       );
     }
-    businessRelationships.customers = uniqueRelationshipNames([
-      ...(businessRelationships.customers || []),
-      ...(metricRelationships.customers || []),
-      ...(urlRelationships.customers || []),
-      ...(structuredRelationships.customers || []),
-      ...(embeddedRelationships.customers || []),
-      ...(catalogFeedRelationships.customers || []),
-      ...(screenshotResults.customers || []),
-    ]);
-    businessRelationships.suppliers = uniqueRelationshipNames([
-      ...(businessRelationships.suppliers || []),
-      ...(metricRelationships.suppliers || []),
-      ...(urlRelationships.suppliers || []),
-      ...(structuredRelationships.suppliers || []),
-      ...(embeddedRelationships.suppliers || []),
-    ]);
-    businessRelationships.principals = uniqueRelationshipNames([
-      ...(businessRelationships.principals || []),
-      ...(metricRelationships.principals || []),
-      ...(urlRelationships.principals || []),
-      ...(structuredRelationships.principals || []),
-      ...(embeddedRelationships.principals || []),
-      ...(catalogFeedRelationships.principals || []),
-      ...(screenshotResults.principals || []),
-    ]);
-    businessRelationships.brands = uniqueRelationshipNames([
-      ...(businessRelationships.brands || []),
-      ...(metricRelationships.brands || []),
-      ...(urlRelationships.brands || []),
-      ...(structuredRelationships.brands || []),
-      ...(embeddedRelationships.brands || []),
-      ...(catalogFeedRelationships.brands || []),
-      ...(screenshotResults.brands || []),
-    ]);
+    const relationshipCompanyName = basicInfo.company_name || businessInfo.title || '';
+    businessRelationships.customers = mergeRelationshipNamesByTrust(
+      {
+        section: businessRelationships.customers || [],
+        metric: metricRelationships.customers || [],
+        url: urlRelationships.customers || [],
+        structured: structuredRelationships.customers || [],
+        embedded: embeddedRelationships.customers || [],
+        feed: catalogFeedRelationships.customers || [],
+        screenshot: screenshotResults.customers || [],
+      },
+      relationshipCompanyName,
+      { minScore: 3 }
+    );
+    businessRelationships.suppliers = mergeRelationshipNamesByTrust(
+      {
+        section: businessRelationships.suppliers || [],
+        metric: metricRelationships.suppliers || [],
+        url: urlRelationships.suppliers || [],
+        structured: structuredRelationships.suppliers || [],
+        embedded: embeddedRelationships.suppliers || [],
+      },
+      relationshipCompanyName,
+      { minScore: 3 }
+    );
+    businessRelationships.principals = mergeRelationshipNamesByTrust(
+      {
+        section: businessRelationships.principals || [],
+        metric: metricRelationships.principals || [],
+        url: urlRelationships.principals || [],
+        structured: structuredRelationships.principals || [],
+        embedded: embeddedRelationships.principals || [],
+        feed: catalogFeedRelationships.principals || [],
+        screenshot: screenshotResults.principals || [],
+      },
+      relationshipCompanyName,
+      { minScore: 3 }
+    );
+    businessRelationships.brands = mergeRelationshipNamesByTrust(
+      {
+        section: businessRelationships.brands || [],
+        metric: metricRelationships.brands || [],
+        url: urlRelationships.brands || [],
+        structured: structuredRelationships.brands || [],
+        embedded: embeddedRelationships.brands || [],
+        feed: catalogFeedRelationships.brands || [],
+        screenshot: screenshotResults.brands || [],
+      },
+      relationshipCompanyName,
+      { minScore: 3 }
+    );
     let principalBrandCoverage =
       businessRelationships.principals.length + businessRelationships.brands.length;
     if (principalBrandCoverage < 2) {
@@ -12270,18 +12521,37 @@ async function processSingleWebsite(website, index, total) {
       const aiRelationships = await extractRelationshipsFromContentAI(scraped.content, {
         company_name: basicInfo.company_name,
       });
-      businessRelationships.customers = uniqueRelationshipNames([
-        ...(businessRelationships.customers || []),
-        ...(aiRelationships.customers || []),
-      ]);
-      businessRelationships.principals = uniqueRelationshipNames([
-        ...(businessRelationships.principals || []),
-        ...(aiRelationships.principals || []),
-      ]);
-      businessRelationships.brands = uniqueRelationshipNames([
-        ...(businessRelationships.brands || []),
-        ...(aiRelationships.brands || []),
-      ]);
+      businessRelationships.customers = mergeRelationshipNamesByTrust(
+        {
+          section: businessRelationships.customers || [],
+          ai: aiRelationships.customers || [],
+        },
+        relationshipCompanyName,
+        { minScore: 3 }
+      );
+      businessRelationships.principals = mergeRelationshipNamesByTrust(
+        {
+          section: businessRelationships.principals || [],
+          metric: metricRelationships.principals || [],
+          structured: structuredRelationships.principals || [],
+          screenshot: screenshotResults.principals || [],
+          ai: aiRelationships.principals || [],
+        },
+        relationshipCompanyName,
+        { minScore: 3 }
+      );
+      businessRelationships.brands = mergeRelationshipNamesByTrust(
+        {
+          section: businessRelationships.brands || [],
+          metric: metricRelationships.brands || [],
+          structured: structuredRelationships.brands || [],
+          screenshot: screenshotResults.brands || [],
+          feed: catalogFeedRelationships.brands || [],
+          ai: aiRelationships.brands || [],
+        },
+        relationshipCompanyName,
+        { minScore: 3 }
+      );
       principalBrandCoverage =
         businessRelationships.principals.length + businessRelationships.brands.length;
       console.log(
@@ -12399,6 +12669,7 @@ async function processSingleWebsite(website, index, total) {
       _brandSegments: brandSegments,
       // Branch footprint summary for Location row (e.g., "5 branches across ...")
       _branchNetworkSummary: branchNetworkSummary,
+      _branchEvidenceDetected: branchEvidenceDetected,
       // Relationship coverage quality gate (used to fail loudly in slide output)
       _relationshipCoverageStatus: relationshipCoverageStatus,
     };
@@ -12510,72 +12781,208 @@ async function processSingleWebsite(website, index, total) {
   }
 }
 
-// Quality gate: validate profile data before PPT generation
-function validateProfileData(companies) {
+function isPlaceholderValue(val) {
+  if (!val) return true;
+  const lower = String(val).toLowerCase().trim();
+  return (
+    [
+      'not found',
+      'not specified',
+      'n/a',
+      'unknown',
+      'not available',
+      'none',
+      'not provided',
+      'not disclosed',
+      'manual review required',
+    ].includes(lower) || lower.length === 0
+  );
+}
+
+function collectLowQualitySegmentLabels(segmentMap, relationshipType = 'group') {
+  if (!segmentMap || typeof segmentMap !== 'object') return [];
+  const labels = Object.keys(segmentMap).map((label) => ensureString(label).trim());
+  if (labels.length === 0) return [];
+
   const issues = [];
-  let thinCount = 0;
+  const type = ensureString(relationshipType).toLowerCase();
+  const typeWord =
+    type === 'customers'
+      ? 'customer'
+      : type === 'suppliers'
+        ? 'supplier'
+        : type === 'principals'
+          ? 'principal'
+          : type === 'brands'
+            ? 'brand'
+            : '';
 
-  for (const company of companies) {
-    const name = company.company_name || company.website || 'unknown';
-    const companyIssues = [];
-
-    // Check for placeholder/missing fields
-    const isPlaceholder = (val) => {
-      if (!val) return true;
-      const lower = String(val).toLowerCase().trim();
-      return (
-        [
-          'not found',
-          'not specified',
-          'n/a',
-          'unknown',
-          'not available',
-          'none',
-          'not provided',
-          'not disclosed',
-        ].includes(lower) || lower.length === 0
-      );
-    };
-
-    if (isPlaceholder(company.company_name)) companyIssues.push('no company name');
-    if (isPlaceholder(company.business)) companyIssues.push('no business description');
-    if (isPlaceholder(company.location)) companyIssues.push('no location');
-    if (!company.key_metrics || company.key_metrics.length === 0) companyIssues.push('no metrics');
-    if (!company.breakdown_items || company.breakdown_items.length === 0)
-      companyIssues.push('no breakdown');
-
-    // Check for placeholder text that leaked into actual values
-    const placeholderLeaks = [];
-    for (const metric of company.key_metrics || []) {
-      const val = String(metric.value || '').toLowerCase();
-      if (/not (found|specified|available|disclosed|provided)/.test(val) || val === 'n/a') {
-        placeholderLeaks.push(`metric "${metric.label}": "${metric.value}"`);
-      }
+  for (const label of labels) {
+    const lower = label.toLowerCase();
+    if (!label) continue;
+    if (/^(segment|group)\s*\d*$/i.test(label)) {
+      issues.push(label);
+      continue;
     }
-    if (placeholderLeaks.length > 0)
-      companyIssues.push(`placeholder leaks: ${placeholderLeaks.join('; ')}`);
-
-    // Thin company = missing 3+ critical fields
-    if (companyIssues.length >= 3) {
-      thinCount++;
-      issues.push(`  THIN: ${name} — ${companyIssues.join(', ')}`);
-    } else if (companyIssues.length > 0) {
-      issues.push(`  WARN: ${name} — ${companyIssues.join(', ')}`);
+    if (typeWord && new RegExp(`^${typeWord}\\s*[a-z](?:\\s*-\\s*[a-z])?$`, 'i').test(label)) {
+      issues.push(label);
+      continue;
     }
   }
 
-  // Log quality report
+  return Array.from(new Set(issues));
+}
+
+// Quality gate: validate profile data before PPT generation.
+// Returns blocking issues so bad/low-confidence outputs do not get sent.
+function validateProfileData(companies) {
+  const issues = [];
+  let thinCount = 0;
+  const blockedCompanies = [];
+
+  for (const company of companies) {
+    const name = company.company_name || company.website || 'unknown';
+    const warningIssues = [];
+    const blockingIssues = [];
+
+    if (isPlaceholderValue(company.company_name)) {
+      warningIssues.push('no company name');
+      blockingIssues.push('missing company name');
+    }
+    if (isPlaceholderValue(company.business)) {
+      warningIssues.push('no business description');
+      blockingIssues.push('missing business description');
+    }
+    if (isPlaceholderValue(company.location)) {
+      warningIssues.push('no location');
+      blockingIssues.push('missing location');
+    }
+
+    const breakdownItems = Array.isArray(company.breakdown_items) ? company.breakdown_items : [];
+    if (breakdownItems.length === 0) {
+      warningIssues.push('no breakdown');
+      blockingIssues.push('missing products/applications breakdown');
+    }
+
+    const keyMetrics = Array.isArray(company.key_metrics) ? company.key_metrics : [];
+    if (keyMetrics.length === 0) {
+      warningIssues.push('no metrics');
+    }
+
+    const placeholderLeaks = [];
+    for (const metric of keyMetrics) {
+      const val = ensureString(metric?.value).toLowerCase();
+      if (/not (found|specified|available|disclosed|provided)/.test(val) || val === 'n/a') {
+        placeholderLeaks.push(`metric "${metric?.label}": "${metric?.value}"`);
+      }
+    }
+    if (placeholderLeaks.length > 0) {
+      warningIssues.push(`placeholder leaks: ${placeholderLeaks.join('; ')}`);
+      blockingIssues.push('contains placeholder metric values');
+    }
+
+    const companyNameForFilter = ensureString(company.company_name || company.title);
+    const relationships = company._businessRelationships || {};
+    const cleanedPrincipals = filterGarbageNames(
+      relationships.principals || [],
+      companyNameForFilter
+    );
+    const cleanedBrands = filterGarbageNames(relationships.brands || [], companyNameForFilter);
+    const principalBrandCoverage = cleanedPrincipals.length + cleanedBrands.length;
+
+    if (principalBrandCoverage < 2) {
+      blockingIssues.push(`principal/brand coverage too low (${principalBrandCoverage})`);
+    }
+    if (ensureString(company._relationshipCoverageStatus) === 'needs_manual_review') {
+      blockingIssues.push('relationship coverage flagged for manual review');
+    }
+
+    const branchEvidenceDetected = Boolean(company._branchEvidenceDetected);
+    const branchSummary = ensureString(getBranchNetworkSummaryFromCompany(company)).trim();
+    if (branchEvidenceDetected && !branchSummary) {
+      blockingIssues.push('branch evidence found but branch summary missing');
+    }
+    if (/\balong\b/i.test(branchSummary)) {
+      blockingIssues.push('branch summary contains invalid token');
+    }
+
+    const inferredCountry = inferCountryFromWebsite(ensureString(company.website));
+    const locationLower = ensureString(company.location).toLowerCase();
+    const branchLower = branchSummary.toLowerCase();
+    if (inferredCountry === 'New Zealand') {
+      if (/\baustralia\b/.test(locationLower) && !/\bnew zealand\b/.test(locationLower)) {
+        blockingIssues.push('location country mismatch with website domain');
+      }
+      if (/\baustralia\b/.test(branchLower) && !/\bnew zealand\b/.test(branchLower)) {
+        blockingIssues.push('branch country mismatch with website domain');
+      }
+    }
+    if (inferredCountry === 'Australia') {
+      if (/\bnew zealand\b/.test(locationLower) && !/\baustralia\b/.test(locationLower)) {
+        blockingIssues.push('location country mismatch with website domain');
+      }
+      if (/\bnew zealand\b/.test(branchLower) && !/\baustralia\b/.test(branchLower)) {
+        blockingIssues.push('branch country mismatch with website domain');
+      }
+    }
+
+    const lowQualitySegmentLabels = [
+      ...collectLowQualitySegmentLabels(company._customerSegments, 'customers'),
+      ...collectLowQualitySegmentLabels(company._supplierSegments, 'suppliers'),
+      ...collectLowQualitySegmentLabels(company._principalSegments, 'principals'),
+      ...collectLowQualitySegmentLabels(company._brandSegments, 'brands'),
+    ];
+    if (lowQualitySegmentLabels.length > 0) {
+      blockingIssues.push(`low-quality segment labels (${lowQualitySegmentLabels.join(', ')})`);
+    }
+
+    if (company._screenshotFallbackUsed) {
+      blockingIssues.push('screenshot-only fallback used');
+    }
+
+    if (warningIssues.length >= 3) {
+      thinCount++;
+      issues.push(`  THIN: ${name} — ${warningIssues.join(', ')}`);
+    } else if (warningIssues.length > 0) {
+      issues.push(`  WARN: ${name} — ${warningIssues.join(', ')}`);
+    }
+
+    if (blockingIssues.length > 0) {
+      blockedCompanies.push({
+        company: name,
+        website: ensureString(company.website),
+        reasons: Array.from(new Set(blockingIssues)),
+      });
+      issues.push(`  BLOCK: ${name} — ${Array.from(new Set(blockingIssues)).join(', ')}`);
+    }
+  }
+
   const totalCompanies = companies.length;
   const thinPct = totalCompanies > 0 ? Math.round((thinCount / totalCompanies) * 100) : 0;
-  console.log(`\nQUALITY GATE: ${totalCompanies} companies, ${thinCount} thin (${thinPct}%)`);
+  const blockingCount = blockedCompanies.length;
+
+  console.log(
+    `\nQUALITY GATE: ${totalCompanies} companies, ${thinCount} thin (${thinPct}%), ${blockingCount} blocked`
+  );
   if (issues.length > 0) {
     console.log(issues.join('\n'));
   }
   if (thinPct > 50) {
     console.log(`  WARNING: Over 50% of companies have thin data — output quality will be poor`);
   }
+  if (blockingCount > 0) {
+    console.log(`  BLOCKING: ${blockingCount} companies failed strict quality checks`);
+  }
 
-  return { totalCompanies, thinCount, thinPct, issues };
+  return {
+    totalCompanies,
+    thinCount,
+    thinPct,
+    issues,
+    blockingCount,
+    blockedCompanies,
+    hasBlockingIssues: blockingCount > 0,
+  };
 }
 
 // Process websites in parallel batches
@@ -12713,8 +13120,65 @@ app.post('/api/profile-slides', async (req, res) => {
       logMemoryUsage('before PPTX generation');
 
       // Quality gate: validate data before generating PPTX
-      if (companies.length > 0) {
-        validateProfileData(companies);
+      const qualityReport =
+        companies.length > 0
+          ? validateProfileData(companies)
+          : {
+              totalCompanies: 0,
+              thinCount: 0,
+              thinPct: 0,
+              issues: [],
+              blockingCount: 0,
+              blockedCompanies: [],
+              hasBlockingIssues: false,
+            };
+
+      const coverageFailures = [];
+      if (PROFILE_REQUIRE_FULL_COVERAGE) {
+        if (errors.length > 0) {
+          errors.forEach((e) => {
+            coverageFailures.push({
+              website: ensureString(e.website),
+              error: `Extraction failed: ${ensureString(e.error) || 'unknown error'}`,
+            });
+          });
+        }
+        if (inaccessibleWebsites.length > 0) {
+          inaccessibleWebsites.forEach((c) => {
+            coverageFailures.push({
+              website: ensureString(c.website),
+              error: `Inaccessible website: ${ensureString(c._error) || 'could not scrape website content'}`,
+            });
+          });
+        }
+      }
+
+      const qualityFailures = [];
+      if (PROFILE_STRICT_QUALITY_GATE && qualityReport.blockedCompanies.length > 0) {
+        qualityReport.blockedCompanies.forEach((blocked) => {
+          qualityFailures.push({
+            website: ensureString(blocked.website) || ensureString(blocked.company),
+            error: `Quality gate failed: ${(blocked.reasons || []).join('; ')}`,
+          });
+        });
+      }
+
+      const shouldBlockOutput = coverageFailures.length > 0 || qualityFailures.length > 0;
+      if (shouldBlockOutput) {
+        const gatingErrors = [...coverageFailures, ...qualityFailures];
+        const subject = `Profile Slides - Manual Review Required (${gatingErrors.length} blocking issue${gatingErrors.length === 1 ? '' : 's'})`;
+        const htmlContent = buildProfileSlidesEmailHTML(companies, gatingErrors, false);
+        await sendEmail(email, subject, htmlContent, null);
+        console.log(`Email sent to ${email} without PPTX (blocked by strict quality gate)`);
+        console.log('='.repeat(50));
+
+        await tracker.finish({
+          status: 'quality_blocked',
+          websitesProcessed: websites.length,
+          companiesExtracted: companies.length,
+          blockedIssues: gatingErrors.length,
+        });
+        return;
       }
 
       // Generate PPTX using PptxGenJS (with target list slide)
@@ -12933,6 +13397,10 @@ app.post('/api/generate-ppt', async (req, res) => {
           scraped.content,
           regexMetrics.office_count
         );
+        const branchEvidenceDetected = detectBranchEvidence(
+          scraped.content,
+          regexMetrics.office_count
+        );
         if (branchNetworkSummary) {
           regexBasedMetrics.push({ value: branchNetworkSummary, label: 'Branch Network' });
           regexCoveredTypes.add('branch');
@@ -13117,12 +13585,13 @@ app.post('/api/generate-ppt', async (req, res) => {
 
         // Step 5b: Extract business relationships from page metadata/text
         console.log('  Step 5b: Extracting business relationships...');
-        const businessRelationships = extractBusinessRelationships(scraped.rawHtml);
+        const cleanedHtml = cleanHtmlForExtraction(scraped.rawHtml);
+        const businessRelationships = extractBusinessRelationships(cleanedHtml);
 
         const metricRelationships = extractRelationshipsFromMetrics(mergedMetrics);
         const urlRelationships = extractRelationshipsFromPageUrls(scraped.pagesScraped || []);
         const structuredRelationships = extractRelationshipsFromStructuredData(scraped.rawHtml);
-        const embeddedRelationships = extractRelationshipsFromEmbeddedData(scraped.rawHtml);
+        const embeddedRelationships = extractRelationshipsFromEmbeddedData(cleanedHtml);
         const catalogFeedRelationships = await extractRelationshipsFromProductFeeds(website);
         let screenshotResults = { customers: [], brands: [], principals: [] };
         if (process.env.SCREENSHOT_API_KEY) {
@@ -13133,40 +13602,57 @@ app.post('/api/generate-ppt', async (req, res) => {
             { deepMode: true }
           );
         }
-        businessRelationships.customers = uniqueRelationshipNames([
-          ...(businessRelationships.customers || []),
-          ...(metricRelationships.customers || []),
-          ...(urlRelationships.customers || []),
-          ...(structuredRelationships.customers || []),
-          ...(embeddedRelationships.customers || []),
-          ...(catalogFeedRelationships.customers || []),
-          ...(screenshotResults.customers || []),
-        ]);
-        businessRelationships.suppliers = uniqueRelationshipNames([
-          ...(businessRelationships.suppliers || []),
-          ...(metricRelationships.suppliers || []),
-          ...(urlRelationships.suppliers || []),
-          ...(structuredRelationships.suppliers || []),
-          ...(embeddedRelationships.suppliers || []),
-        ]);
-        businessRelationships.principals = uniqueRelationshipNames([
-          ...(businessRelationships.principals || []),
-          ...(metricRelationships.principals || []),
-          ...(urlRelationships.principals || []),
-          ...(structuredRelationships.principals || []),
-          ...(embeddedRelationships.principals || []),
-          ...(catalogFeedRelationships.principals || []),
-          ...(screenshotResults.principals || []),
-        ]);
-        businessRelationships.brands = uniqueRelationshipNames([
-          ...(businessRelationships.brands || []),
-          ...(metricRelationships.brands || []),
-          ...(urlRelationships.brands || []),
-          ...(structuredRelationships.brands || []),
-          ...(embeddedRelationships.brands || []),
-          ...(catalogFeedRelationships.brands || []),
-          ...(screenshotResults.brands || []),
-        ]);
+        const relationshipCompanyName = basicInfo.company_name || businessInfo.title || '';
+        businessRelationships.customers = mergeRelationshipNamesByTrust(
+          {
+            section: businessRelationships.customers || [],
+            metric: metricRelationships.customers || [],
+            url: urlRelationships.customers || [],
+            structured: structuredRelationships.customers || [],
+            embedded: embeddedRelationships.customers || [],
+            feed: catalogFeedRelationships.customers || [],
+            screenshot: screenshotResults.customers || [],
+          },
+          relationshipCompanyName,
+          { minScore: 3 }
+        );
+        businessRelationships.suppliers = mergeRelationshipNamesByTrust(
+          {
+            section: businessRelationships.suppliers || [],
+            metric: metricRelationships.suppliers || [],
+            url: urlRelationships.suppliers || [],
+            structured: structuredRelationships.suppliers || [],
+            embedded: embeddedRelationships.suppliers || [],
+          },
+          relationshipCompanyName,
+          { minScore: 3 }
+        );
+        businessRelationships.principals = mergeRelationshipNamesByTrust(
+          {
+            section: businessRelationships.principals || [],
+            metric: metricRelationships.principals || [],
+            url: urlRelationships.principals || [],
+            structured: structuredRelationships.principals || [],
+            embedded: embeddedRelationships.principals || [],
+            feed: catalogFeedRelationships.principals || [],
+            screenshot: screenshotResults.principals || [],
+          },
+          relationshipCompanyName,
+          { minScore: 3 }
+        );
+        businessRelationships.brands = mergeRelationshipNamesByTrust(
+          {
+            section: businessRelationships.brands || [],
+            metric: metricRelationships.brands || [],
+            url: urlRelationships.brands || [],
+            structured: structuredRelationships.brands || [],
+            embedded: embeddedRelationships.brands || [],
+            feed: catalogFeedRelationships.brands || [],
+            screenshot: screenshotResults.brands || [],
+          },
+          relationshipCompanyName,
+          { minScore: 3 }
+        );
         let principalBrandCoverage =
           businessRelationships.principals.length + businessRelationships.brands.length;
         if (principalBrandCoverage < 2) {
@@ -13176,18 +13662,37 @@ app.post('/api/generate-ppt', async (req, res) => {
           const aiRelationships = await extractRelationshipsFromContentAI(scraped.content, {
             company_name: basicInfo.company_name,
           });
-          businessRelationships.customers = uniqueRelationshipNames([
-            ...(businessRelationships.customers || []),
-            ...(aiRelationships.customers || []),
-          ]);
-          businessRelationships.principals = uniqueRelationshipNames([
-            ...(businessRelationships.principals || []),
-            ...(aiRelationships.principals || []),
-          ]);
-          businessRelationships.brands = uniqueRelationshipNames([
-            ...(businessRelationships.brands || []),
-            ...(aiRelationships.brands || []),
-          ]);
+          businessRelationships.customers = mergeRelationshipNamesByTrust(
+            {
+              section: businessRelationships.customers || [],
+              ai: aiRelationships.customers || [],
+            },
+            relationshipCompanyName,
+            { minScore: 3 }
+          );
+          businessRelationships.principals = mergeRelationshipNamesByTrust(
+            {
+              section: businessRelationships.principals || [],
+              metric: metricRelationships.principals || [],
+              structured: structuredRelationships.principals || [],
+              screenshot: screenshotResults.principals || [],
+              ai: aiRelationships.principals || [],
+            },
+            relationshipCompanyName,
+            { minScore: 3 }
+          );
+          businessRelationships.brands = mergeRelationshipNamesByTrust(
+            {
+              section: businessRelationships.brands || [],
+              metric: metricRelationships.brands || [],
+              structured: structuredRelationships.brands || [],
+              screenshot: screenshotResults.brands || [],
+              feed: catalogFeedRelationships.brands || [],
+              ai: aiRelationships.brands || [],
+            },
+            relationshipCompanyName,
+            { minScore: 3 }
+          );
           principalBrandCoverage =
             businessRelationships.principals.length + businessRelationships.brands.length;
           console.log(`  Step 5d: Coverage after AI fallback = ${principalBrandCoverage}`);
@@ -13305,6 +13810,7 @@ app.post('/api/generate-ppt', async (req, res) => {
           _brandSegments: brandSegments,
           // Branch footprint summary for Location row (e.g., "5 branches across ...")
           _branchNetworkSummary: branchNetworkSummary,
+          _branchEvidenceDetected: branchEvidenceDetected,
           // Relationship coverage quality gate (used to fail loudly in slide output)
           _relationshipCoverageStatus: relationshipCoverageStatus,
         };
@@ -13354,6 +13860,59 @@ app.post('/api/generate-ppt', async (req, res) => {
 
     results.length = 0;
     if (global.gc) global.gc();
+
+    const qualityReport =
+      companies.length > 0
+        ? validateProfileData(companies)
+        : {
+            totalCompanies: 0,
+            thinCount: 0,
+            thinPct: 0,
+            issues: [],
+            blockingCount: 0,
+            blockedCompanies: [],
+            hasBlockingIssues: false,
+          };
+
+    const coverageFailures = [];
+    if (PROFILE_REQUIRE_FULL_COVERAGE) {
+      if (errors.length > 0) {
+        errors.forEach((e) => {
+          coverageFailures.push({
+            website: ensureString(e.website),
+            error: `Extraction failed: ${ensureString(e.error) || 'unknown error'}`,
+          });
+        });
+      }
+      if (inaccessibleWebsites.length > 0) {
+        inaccessibleWebsites.forEach((c) => {
+          coverageFailures.push({
+            website: ensureString(c.website),
+            error: `Inaccessible website: ${ensureString(c._error) || 'could not scrape website content'}`,
+          });
+        });
+      }
+    }
+
+    const qualityFailures = [];
+    if (PROFILE_STRICT_QUALITY_GATE && qualityReport.blockedCompanies.length > 0) {
+      qualityReport.blockedCompanies.forEach((blocked) => {
+        qualityFailures.push({
+          website: ensureString(blocked.website) || ensureString(blocked.company),
+          error: `Quality gate failed: ${(blocked.reasons || []).join('; ')}`,
+        });
+      });
+    }
+
+    if (coverageFailures.length > 0 || qualityFailures.length > 0) {
+      return res.json({
+        success: false,
+        error: 'Blocked by strict quality gate',
+        companiesProcessed: companies.length,
+        errors: errors.length,
+        blockingIssues: [...coverageFailures, ...qualityFailures],
+      });
+    }
 
     // Generate PPTX - pass inaccessible websites to include on summary slide
     let pptxResult = null;
