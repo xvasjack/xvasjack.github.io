@@ -513,6 +513,76 @@ function extractCleanURL(text) {
   return null;
 }
 
+const COMPANY_TOKEN_STOPWORDS = new Set([
+  'and',
+  'co',
+  'com',
+  'company',
+  'corp',
+  'corporation',
+  'global',
+  'group',
+  'holding',
+  'holdings',
+  'inc',
+  'incorporated',
+  'industries',
+  'industry',
+  'international',
+  'limited',
+  'ltd',
+  'llc',
+  'of',
+  'plc',
+  'pte',
+  'sa',
+  'service',
+  'services',
+  'the',
+]);
+
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getCompanyTokens(companyName) {
+  if (!companyName) return [];
+
+  const tokens = companyName
+    .toLowerCase()
+    .split(/[\s/&(),.+-]+/)
+    .map((token) => token.replace(/[^a-z0-9]/g, ''))
+    .filter((token) => token.length >= 3)
+    .filter((token) => !/^\d+$/.test(token))
+    .filter((token) => !COMPANY_TOKEN_STOPWORDS.has(token));
+
+  return [...new Set(tokens)];
+}
+
+function countCompanyTokenMatches(text, tokens) {
+  if (!text || !tokens || tokens.length === 0) return 0;
+
+  const textLower = text.toLowerCase();
+  let matches = 0;
+
+  for (const token of tokens) {
+    const tokenRegex = new RegExp(`\\b${escapeRegex(token)}\\b`, 'i');
+    if (tokenRegex.test(textLower)) matches++;
+  }
+
+  return matches;
+}
+
+function extractDomain(url) {
+  if (!url) return null;
+
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '').toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 // ============ STEP 1: URL DISCOVERY (2-source parallel) ============
 
 // Source 1: SerpAPI (Google Search) — most reliable, deterministic
@@ -538,16 +608,14 @@ async function findWebsiteViaSerpAPI(companyName, countries) {
     if (data.organic_results) {
       for (const result of data.organic_results) {
         if (result.link && isValidCompanyWebsite(result.link)) {
-          const titleLower = (result.title || '').toLowerCase();
-          const snippetLower = (result.snippet || '').toLowerCase();
-          const companyLower = companyName.toLowerCase();
-          const companyWords = companyLower.split(/\s+/).filter((w) => w.length > 2);
+          const companyTokens = getCompanyTokens(companyName);
+          const resultText = `${result.title || ''} ${result.snippet || ''}`;
+          const matchCount = countCompanyTokenMatches(resultText, companyTokens);
 
-          const matchCount = companyWords.filter(
-            (w) => titleLower.includes(w) || snippetLower.includes(w)
-          ).length;
+          const minRequiredMatches =
+            companyTokens.length >= 4 ? 2 : companyTokens.length >= 1 ? 1 : 0;
 
-          if (matchCount >= Math.min(2, companyWords.length)) return result.link;
+          if (matchCount >= minRequiredMatches) return result.link;
         }
       }
 
@@ -1100,6 +1168,7 @@ async function buildWaterfallPPT(waterfallData, slideContent) {
 async function orchestrate(companyList, countryList, criteria, websiteMap = {}) {
   const batchSize = 15;
   const results = [];
+  const discoveredDomainOwners = new Map();
 
   for (let i = 0; i < companyList.length; i += batchSize) {
     const batch = companyList.slice(i, i + batchSize);
@@ -1130,6 +1199,30 @@ async function orchestrate(companyList, countryList, criteria, websiteMap = {}) 
               business_description: 'Could not locate official company website',
             },
           };
+        }
+
+        const domain = extractDomain(website);
+        if (!providedUrl && domain) {
+          const existingOwner = discoveredDomainOwners.get(domain);
+          if (existingOwner && existingOwner.toLowerCase() !== companyName.toLowerCase()) {
+            return {
+              company_name: companyName,
+              website: null,
+              pageText: null,
+              earlyResult: {
+                company_name: companyName,
+                website: null,
+                criteria_results: criteria.map((_, idx) => ({
+                  criterion: idx + 1,
+                  result: 'FAIL',
+                  reason: `Website domain duplicates another company (${existingOwner}: ${domain})`,
+                })),
+                business_description:
+                  'Discovered website conflicts with another company in this run',
+              },
+            };
+          }
+          discoveredDomainOwners.set(domain, companyName);
         }
 
         let pageText = await fetchWebsite(website);
