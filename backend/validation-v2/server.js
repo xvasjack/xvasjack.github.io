@@ -52,6 +52,19 @@ function setCachedUrl(companyName, url) {
   urlCache.set(key, { url, timestamp: Date.now() });
 }
 
+// ============ COMPANY NAME STOPWORDS ============
+
+const COMPANY_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'from',
+  'co', 'ltd', 'limited', 'inc', 'incorporated', 'corp', 'corporation',
+  'company', 'companies', 'group', 'holding', 'holdings',
+  'enterprise', 'enterprises', 'industry', 'industries', 'industrial',
+  'manufacturing', 'international', 'global', 'national',
+  'sdn', 'bhd', 'berhad', 'pte', 'plc', 'tbk', 'jsc', 'gmbh', 'llc', 'llp',
+  'public', 'private', 'joint', 'stock', 'venture',
+  'trading', 'trade', 'services', 'service', 'solutions', 'technology',
+]);
+
 // ============ AI TOOLS ============
 
 // Gemini 2.5 Flash with Google Search grounding — URL discovery + WAF fallback
@@ -536,12 +549,18 @@ async function findWebsiteViaSerpAPI(companyName, countries) {
     const data = await response.json();
 
     if (data.organic_results) {
+      const companyLower = companyName.toLowerCase();
+      const companyWords = companyLower
+        .split(/[\s.,()]+/)
+        .filter((w) => w.length > 2 && !COMPANY_STOPWORDS.has(w));
+
+      // If no meaningful words remain after filtering, can't match reliably
+      if (companyWords.length === 0) return null;
+
       for (const result of data.organic_results) {
         if (result.link && isValidCompanyWebsite(result.link)) {
           const titleLower = (result.title || '').toLowerCase();
           const snippetLower = (result.snippet || '').toLowerCase();
-          const companyLower = companyName.toLowerCase();
-          const companyWords = companyLower.split(/\s+/).filter((w) => w.length > 2);
 
           const matchCount = companyWords.filter(
             (w) => titleLower.includes(w) || snippetLower.includes(w)
@@ -549,10 +568,6 @@ async function findWebsiteViaSerpAPI(companyName, countries) {
 
           if (matchCount >= Math.min(2, companyWords.length)) return result.link;
         }
-      }
-
-      for (const result of data.organic_results) {
-        if (result.link && isValidCompanyWebsite(result.link)) return result.link;
       }
     }
 
@@ -1189,6 +1204,55 @@ async function orchestrate(companyList, countryList, criteria, websiteMap = {}) 
         return { company_name: companyName, website, pageText, earlyResult: null };
       })
     );
+
+    // Per-batch domain dedup: reject duplicates where same domain resolved for multiple companies
+    const domainCompanies = new Map();
+    for (const c of fetchedCompanies) {
+      if (!c.website || c.earlyResult) continue;
+      try {
+        const domain = new URL(c.website).hostname.replace(/^www\./, '');
+        if (!domainCompanies.has(domain)) domainCompanies.set(domain, []);
+        domainCompanies.get(domain).push(c);
+      } catch {
+        /* ignore invalid URLs */
+      }
+    }
+
+    for (const [domain, companies] of domainCompanies) {
+      if (companies.length < 2) continue;
+      console.log(
+        `  WARNING: ${domain} resolved for ${companies.length} companies — deduplicating`
+      );
+
+      // Score by how well company name matches the domain string
+      const scored = companies.map((c) => {
+        const words = c.company_name
+          .toLowerCase()
+          .split(/[\s.,()]+/)
+          .filter((w) => w.length > 2 && !COMPANY_STOPWORDS.has(w));
+        const score = words.filter((w) => domain.includes(w)).length;
+        return { company: c, score };
+      });
+      scored.sort((a, b) => b.score - a.score);
+
+      // Keep only the best match, reject the rest
+      for (let j = 1; j < scored.length; j++) {
+        const c = scored[j].company;
+        console.log(`  Rejecting ${c.website} for ${c.company_name} (duplicate domain)`);
+        c.website = null;
+        c.pageText = null;
+        c.earlyResult = {
+          company_name: c.company_name,
+          website: null,
+          criteria_results: criteria.map((_, idx) => ({
+            criterion: idx + 1,
+            result: 'FAIL',
+            reason: 'Same website resolved for multiple companies — likely incorrect',
+          })),
+          business_description: 'URL collision detected',
+        };
+      }
+    }
 
     // Separate early results (failures) from companies needing classification
     const earlyResults = fetchedCompanies.filter((c) => c.earlyResult).map((c) => c.earlyResult);
