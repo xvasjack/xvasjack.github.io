@@ -4875,7 +4875,7 @@ async function generatePPTX(
 
               // Add bullet character at 82% size (11pt vs 14pt text)
               result.push({
-                text: '■ ',
+                text: '• ',
                 options: { fontSize: 11 },
               });
 
