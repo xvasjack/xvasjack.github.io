@@ -95,7 +95,7 @@
       <label class="block text-xs font-medium text-slate-500 mb-1.5">Your Email</label>
       <input type="email" id="globalEmail" placeholder="your@company.com"
         class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
-      <p class="text-xs text-slate-400 mt-1.5">Not required for translation download.</p>
+      <p class="text-xs text-slate-400 mt-1.5">Required. Translated PPTX will be delivered by email.</p>
     </div>
   </aside>
 
@@ -108,7 +108,7 @@
         </span>
       </div>
       <h1 class="text-2xl font-bold text-slate-900">PPT Translation</h1>
-      <p class="text-slate-600 mt-1">Upload a PPTX and translate text only. Layout, objects, and styling remain unchanged.</p>
+      <p class="text-slate-600 mt-1">Upload a PPTX and translate text only. Layout, objects, and styling remain unchanged. Result is delivered via email.</p>
     </header>
 
     <div class="flex-1 overflow-y-auto p-8">
@@ -174,7 +174,7 @@
             </div>
 
             <button type="submit" id="submitBtn" class="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
-              Translate & Download PPTX
+              Translate & Email PPTX
             </button>
 
             <div id="successMessage" class="hidden p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg"></div>
@@ -274,18 +274,6 @@
       fileInput.value = '';
     });
 
-    function getFilenameFromDisposition(disposition) {
-      if (!disposition) return '';
-      const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
-      if (!match) return '';
-      const encoded = match[1] || match[2] || '';
-      try {
-        return decodeURIComponent(encoded.replace(/\+/g, '%20'));
-      } catch {
-        return encoded;
-      }
-    }
-
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       clearMessages();
@@ -299,6 +287,12 @@
       const sourceLanguage = document.getElementById('sourceLanguage').value;
       const includeNotes = document.getElementById('includeNotes').checked;
       const glossary = document.getElementById('glossary').value.trim();
+      const email = globalEmailInput.value.trim() || (localStorage.getItem('ycpUserEmail') || '').trim();
+
+      if (!email) {
+        showError('Please enter your email in the sidebar.');
+        return;
+      }
 
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<svg class="spinner w-5 h-5" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Translating...';
@@ -310,6 +304,7 @@
         formData.append('sourceLanguage', sourceLanguage);
         formData.append('includeNotes', includeNotes ? 'true' : 'false');
         if (glossary) formData.append('glossary', glossary);
+        formData.append('email', email);
 
         const response = await fetch(`${TRANSLATION_API_BASE}/api/ppt-translate`, {
           method: 'POST',
@@ -328,28 +323,29 @@
           throw new Error(details);
         }
 
-        const blob = await response.blob();
-        const disposition = response.headers.get('content-disposition') || '';
-        const suggestedName = getFilenameFromDisposition(disposition) || `translated-${selectedFile.name}`;
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
 
-        const changedSegments = response.headers.get('X-Translation-Changed-Segments') || '0';
-        const changedParts = response.headers.get('X-Translation-Changed-Parts') || '0';
+        const changedSegments = payload?.stats?.changedSegments || 0;
+        const changedParts = payload?.stats?.changedParts || 0;
+        const fontChangedParts = payload?.stats?.fontChangedParts || 0;
 
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = suggestedName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-
-        showSuccess(`Downloaded ${suggestedName}. Updated ${changedSegments} text segments across ${changedParts} PPT parts.`);
+        const fontMessage =
+          Number(fontChangedParts) > 0
+            ? ` Yu Gothic normalized on ${fontChangedParts} PPT parts.`
+            : '';
+        showSuccess(
+          `Request completed. ${selectedFile.name} was translated and emailed to ${email}. Updated ${changedSegments} text segments across ${changedParts} PPT parts.${fontMessage}`
+        );
       } catch (error) {
         showError(error.message || 'Translation failed.');
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Translate & Download PPTX';
+        submitBtn.textContent = 'Translate & Email PPTX';
       }
     });
   </script>

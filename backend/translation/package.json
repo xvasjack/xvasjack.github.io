@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node --expose-gc --max-old-space-size=450 server.js"
+    "start": "node --expose-gc --max-old-space-size=450 server.js",
+    "check:jp-regression": "node scripts/check-japanese-translation-regression.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
