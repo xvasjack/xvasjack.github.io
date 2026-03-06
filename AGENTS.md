@@ -48,3 +48,8 @@ These rules are mandatory for work in this repository.
 - AUTOPUSH: After I complete a requested file/code change, I must save and push it to `main` automatically.
 - Skip AUTOPUSH only if the user clearly says "do not push", "local only", or "draft only".
 - If push fails, explain the blocker in one short line and give one short next step.
+
+## 9) Plan Writing Format (Hard Rule)
+- Plans must be concise, specific, and complete in plain English.
+- For each requested change, always show: exact row text + plain meaning + exact reason.
+- Do not include generic summaries, API/interface notes, test sections, or assumptions unless explicitly requested.
