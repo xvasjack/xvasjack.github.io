@@ -3825,9 +3825,6 @@ async function generatePPTX(
         console.log('Generating Target List slide...');
         const meceData = await generateMECESegments(targetDescription, allCompaniesForSummary);
 
-        // Use master slide - lines are fixed in background
-        const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-
         // Title Case helper function
         const toTitleCase = (str) => {
           return str.replace(
@@ -3874,20 +3871,10 @@ async function generatePPTX(
           return desc;
         };
 
-        // Title: "Target List – {Target Description}" in Title Case
+        // Title: "Target List - {Target Description}" in Title Case
         // Simplify multi-country lists to region names
         const simplifiedDesc = simplifyRegion(targetDescription);
-        const formattedTitle = `Target List – ${toTitleCase(simplifiedDesc)}`;
-        targetSlide.addText(formattedTitle, {
-          x: 0.38,
-          y: 0.07,
-          w: 12.5,
-          h: 0.9,
-          fontSize: 24,
-          fontFace: 'Segoe UI',
-          color: '000000',
-          valign: 'bottom',
-        });
+        const formattedTitle = `Target List - ${toTitleCase(simplifiedDesc)}`;
 
         // Helper function to parse location (handles JSON format like {"HQ":"Singapore"})
         // Also cleans up "HQ:", "- HQ:" prefixes from location values
@@ -3901,17 +3888,13 @@ async function generatePPTX(
           // Check if location is JSON format (e.g., {"HQ":"Chatuchak, Bangkok, Thailand"})
           if (loc.includes('{') && loc.includes('}')) {
             try {
-              // Try to extract the value from JSON-like string
               const match =
                 loc.match(/"HQ"\s*:\s*"([^"]+)"/i) || loc.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
               if (match) {
                 let hqValue = match[1] || match[2] || '';
-                // Clean up any remaining "HQ:" prefix
                 hqValue = hqValue.replace(/^-?\s*HQ:\s*/i, '').trim();
                 const parts = hqValue.split(',').map((p) => p.trim());
-                // Country is always last part
                 const country = parts[parts.length - 1] || 'Other';
-                // HQ city is first part only (just the district/area, not including state)
                 const hqCity = parts[0] || '';
                 return { country, hqCity };
               }
@@ -3920,18 +3903,12 @@ async function generatePPTX(
             }
           }
 
-          // Normal parsing - extract country from location (last part after comma)
           const parts = loc.split(',').map((p) => p.trim());
           const country = parts[parts.length - 1] || 'Other';
-          // HQ city is first part only (just the district/area)
-          // If only 1 part (country only), hqCity should be empty, not the country name
           let hqCity = parts.length > 1 ? parts[0] || '' : '';
 
-          // SINGAPORE VALIDATION: If country is Singapore, validate the area
           if (country.toLowerCase() === 'singapore') {
             if (!hqCity || !isValidSingaporeArea(hqCity)) {
-              // Invalid or missing area - leave empty rather than making one up
-              // "Central" is NOT a valid Singapore area
               hqCity = '';
             }
           }
@@ -3954,33 +3931,79 @@ async function generatePPTX(
           });
         });
 
-        // Determine if single country or multi-country
         const countries = Object.keys(companyByCountry);
         const isMultiCountry = countries.length > 1;
 
         // Build table data
         const segments = meceData.segments || [];
         const companySegments = meceData.companySegments || {};
+        const MAX_SEGMENTS_PER_SLIDE = 6;
+
+        // Split wide summary table into multiple slides with max 6 service columns each.
+        const segmentChunks = [];
+        if (segments.length === 0) {
+          segmentChunks.push({ labels: [], originalIndices: [] });
+        } else {
+          for (let startIdx = 0; startIdx < segments.length; startIdx += MAX_SEGMENTS_PER_SLIDE) {
+            const labels = segments.slice(startIdx, startIdx + MAX_SEGMENTS_PER_SLIDE);
+            const originalIndices = labels.map((_, offset) => startIdx + offset);
+            segmentChunks.push({ labels, originalIndices });
+          }
+        }
+
+        if (segments.length > MAX_SEGMENTS_PER_SLIDE) {
+          console.log(
+            `Target List split: ${segments.length} service columns over ${segmentChunks.length} slides (max ${MAX_SEGMENTS_PER_SLIDE} per slide)`
+          );
+        }
 
         // Template colors (from analysis of YCP Target List Slide Template)
         const TL_COLORS = {
-          headerBg: '1524A9', // Dark blue for header row
-          countryBg: '011AB7', // Dark blue for country column (accent3)
-          companyBg: '007FFF', // Bright blue for company column (accent1)
+          headerBg: '1524A9',
+          countryBg: '011AB7',
+          companyBg: '007FFF',
           white: 'FFFFFF',
           black: '000000',
-          gray: 'BFBFBF', // Gray for dotted borders between rows
-          checkMark: '00B050', // Green for check marks
+          gray: 'BFBFBF',
+          checkMark: '00B050',
         };
 
-        // Build table rows
-        const tableRows = [];
+        const countryKeys = Object.keys(companyByCountry);
 
-        // Row 1: Merged header for products (spans all segment columns)
-        const productHeaderRow = [];
+        segmentChunks.forEach((segmentChunk, chunkIdx) => {
+          const chunkSegments = segmentChunk.labels;
+          const chunkOriginalIndices = segmentChunk.originalIndices;
+          const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-        if (isMultiCountry) {
-          // Empty cell for country column header (white background)
+          const titleSuffix =
+            segmentChunks.length > 1 ? ` (Services ${chunkIdx + 1}/${segmentChunks.length})` : '';
+          targetSlide.addText(`${formattedTitle}${titleSuffix}`, {
+            x: 0.38,
+            y: 0.07,
+            w: 12.5,
+            h: 0.9,
+            fontSize: 24,
+            fontFace: 'Segoe UI',
+            color: '000000',
+            valign: 'bottom',
+          });
+
+          const tableRows = [];
+
+          // Row 1
+          const productHeaderRow = [];
+          if (isMultiCountry) {
+            productHeaderRow.push({
+              text: '',
+              options: {
+                fill: TL_COLORS.white,
+                valign: 'middle',
+                align: 'center',
+                border: { pt: 3, color: TL_COLORS.white },
+              },
+            });
+          }
+
           productHeaderRow.push({
             text: '',
             options: {
@@ -3990,56 +4013,51 @@ async function generatePPTX(
               border: { pt: 3, color: TL_COLORS.white },
             },
           });
-        }
 
-        // Empty cell for company column header
-        productHeaderRow.push({
-          text: '',
-          options: {
-            fill: TL_COLORS.white,
-            valign: 'middle',
-            align: 'center',
-            border: { pt: 3, color: TL_COLORS.white },
-          },
-        });
-
-        // HQ column header with rowspan: 2 (spans both header rows)
-        productHeaderRow.push({
-          text: 'HQ',
-          options: {
-            rowspan: 2,
-            fill: TL_COLORS.headerBg,
-            color: TL_COLORS.white,
-            bold: false,
-            valign: 'middle',
-            align: 'center',
-            border: { pt: 3, color: TL_COLORS.white },
-          },
-        });
-
-        // Merged header for all product columns (spans all segment columns)
-        if (segments.length > 0) {
           productHeaderRow.push({
-            text: 'Products / Services',
+            text: 'HQ',
             options: {
-              colspan: segments.length,
+              rowspan: 2,
               fill: TL_COLORS.headerBg,
               color: TL_COLORS.white,
               bold: false,
-              align: 'center',
               valign: 'middle',
+              align: 'center',
               border: { pt: 3, color: TL_COLORS.white },
             },
           });
-        }
 
-        tableRows.push(productHeaderRow);
+          if (chunkSegments.length > 0) {
+            productHeaderRow.push({
+              text: 'Products / Services',
+              options: {
+                colspan: chunkSegments.length,
+                fill: TL_COLORS.headerBg,
+                color: TL_COLORS.white,
+                bold: false,
+                align: 'center',
+                valign: 'middle',
+                border: { pt: 3, color: TL_COLORS.white },
+              },
+            });
+          }
 
-        // Row 2: Segment names (sub-headers for products)
-        const headerRow = [];
+          tableRows.push(productHeaderRow);
 
-        if (isMultiCountry) {
-          // Empty cell for country column header (white background)
+          // Row 2
+          const headerRow = [];
+          if (isMultiCountry) {
+            headerRow.push({
+              text: '',
+              options: {
+                fill: TL_COLORS.white,
+                valign: 'middle',
+                align: 'center',
+                border: { pt: 3, color: TL_COLORS.white },
+              },
+            });
+          }
+
           headerRow.push({
             text: '',
             options: {
@@ -4049,57 +4067,32 @@ async function generatePPTX(
               border: { pt: 3, color: TL_COLORS.white },
             },
           });
-        }
 
-        // Empty cell for company column header
-        headerRow.push({
-          text: '',
-          options: {
-            fill: TL_COLORS.white,
-            valign: 'middle',
-            align: 'center',
-            border: { pt: 3, color: TL_COLORS.white },
-          },
-        });
-
-        // HQ column is merged from row above (rowspan: 2), so no cell here
-
-        // Segment headers (bright blue background like company names, white text)
-        segments.forEach((seg) => {
-          headerRow.push({
-            text: seg,
-            options: {
-              fill: TL_COLORS.companyBg,
-              color: TL_COLORS.white,
-              bold: false,
-              align: 'center',
-              valign: 'middle',
-              border: { pt: 3, color: TL_COLORS.white },
-            },
+          chunkSegments.forEach((seg) => {
+            headerRow.push({
+              text: seg,
+              options: {
+                fill: TL_COLORS.companyBg,
+                color: TL_COLORS.white,
+                bold: false,
+                align: 'center',
+                valign: 'middle',
+                border: { pt: 3, color: TL_COLORS.white },
+              },
+            });
           });
-        });
 
-        tableRows.push(headerRow);
+          tableRows.push(headerRow);
 
-        // Data rows grouped by country
-        const countryKeys = Object.keys(companyByCountry);
-        countryKeys.forEach((country) => {
-          const countryCompanies = companyByCountry[country];
-          countryCompanies.forEach((comp, idx) => {
-            const row = [];
-            const isFirstInCountry = idx === 0;
-            const isLastInCountry = idx === countryCompanies.length - 1;
+          // Data rows
+          countryKeys.forEach((country) => {
+            const countryCompanies = companyByCountry[country];
+            countryCompanies.forEach((comp, idx) => {
+              const row = [];
+              const isFirstInCountry = idx === 0;
+              const rowBottomBorder = { pt: 1, color: TL_COLORS.gray, type: 'dash' };
 
-            // Determine if this is the last company in the last country (for bottom border)
-            const isLastCountry = countryKeys.indexOf(country) === countryKeys.length - 1;
-            const isVeryLastRow = isLastCountry && isLastInCountry;
-
-            // Border style: dotted gray between ALL rows including last row
-            const rowBottomBorder = { pt: 1, color: TL_COLORS.gray, type: 'dash' };
-
-            if (isMultiCountry) {
-              // Country column (only show text for first company in group, use rowspan)
-              if (isFirstInCountry) {
+              if (isMultiCountry && isFirstInCountry) {
                 row.push({
                   text: country,
                   options: {
@@ -4113,120 +4106,113 @@ async function generatePPTX(
                   },
                 });
               }
-            }
 
-            // Company name with numbering (bright blue background, WHITE text, left-aligned)
-            // Keep 3pt white borders on ALL sides for company name cells
-            // Apply cleanCompanyName to ensure no suffixes (PT, Ltd) and English only
-            const rawName = comp.title || comp.company_name || '';
-            const companyName = cleanCompanyName(rawName, comp.website) || 'Unknown';
-            row.push({
-              text: `${comp.index}. ${companyName}`,
-              options: {
-                fill: TL_COLORS.companyBg,
-                color: TL_COLORS.white,
-                bold: false,
-                align: 'left',
-                valign: 'middle',
-                border: { pt: 3, color: TL_COLORS.white },
-                hyperlink: { url: comp.website || '' },
-              },
-            });
-
-            // HQ column (white background, black text)
-            const hqCity = comp.hqCity || '';
-            row.push({
-              text: hqCity,
-              options: {
-                fill: TL_COLORS.white,
-                color: TL_COLORS.black,
-                bold: false,
-                align: 'left',
-                valign: 'middle',
-                border: [
-                  { pt: 3, color: TL_COLORS.white }, // top
-                  { pt: 3, color: TL_COLORS.white }, // right
-                  rowBottomBorder, // bottom (dotted between rows)
-                  { pt: 3, color: TL_COLORS.white }, // left
-                ],
-              },
-            });
-
-            // Segment tick marks (white background, green check marks)
-            const compSegments = companySegments[String(comp.index)] || [];
-            segments.forEach((seg, segIdx) => {
-              const hasTick = compSegments[segIdx] === true;
+              const rawName = comp.title || comp.company_name || '';
+              const companyName = cleanCompanyName(rawName, comp.website) || 'Unknown';
               row.push({
-                text: hasTick ? '✓' : '',
+                text: `${comp.index}. ${companyName}`,
+                options: {
+                  fill: TL_COLORS.companyBg,
+                  color: TL_COLORS.white,
+                  bold: false,
+                  align: 'left',
+                  valign: 'middle',
+                  border: { pt: 3, color: TL_COLORS.white },
+                  hyperlink: { url: comp.website || '' },
+                },
+              });
+
+              const hqCity = comp.hqCity || '';
+              row.push({
+                text: hqCity,
                 options: {
                   fill: TL_COLORS.white,
-                  color: TL_COLORS.checkMark,
-                  align: 'center',
+                  color: TL_COLORS.black,
+                  bold: false,
+                  align: 'left',
                   valign: 'middle',
                   border: [
-                    { pt: 3, color: TL_COLORS.white }, // top
-                    { pt: 3, color: TL_COLORS.white }, // right
-                    rowBottomBorder, // bottom (dotted between rows)
-                    { pt: 3, color: TL_COLORS.white }, // left
+                    { pt: 3, color: TL_COLORS.white },
+                    { pt: 3, color: TL_COLORS.white },
+                    rowBottomBorder,
+                    { pt: 3, color: TL_COLORS.white },
                   ],
                 },
               });
-            });
 
-            tableRows.push(row);
+              const compSegments = companySegments[String(comp.index)] || [];
+              chunkSegments.forEach((seg, chunkSegIdx) => {
+                const originalSegIdx = chunkOriginalIndices[chunkSegIdx];
+                const hasTick = compSegments[originalSegIdx] === true;
+                row.push({
+                  text: hasTick ? '\u2713' : '',
+                  options: {
+                    fill: TL_COLORS.white,
+                    color: TL_COLORS.checkMark,
+                    align: 'center',
+                    valign: 'middle',
+                    border: [
+                      { pt: 3, color: TL_COLORS.white },
+                      { pt: 3, color: TL_COLORS.white },
+                      rowBottomBorder,
+                      { pt: 3, color: TL_COLORS.white },
+                    ],
+                  },
+                });
+              });
+
+              tableRows.push(row);
+            });
+          });
+
+          // Calculate column widths
+          const tableWidth = 12.6;
+          let colWidths = [];
+
+          if (isMultiCountry) {
+            const countryColWidth = 1.12;
+            const companyColWidth = 2.14;
+            const hqColWidth = 1.5;
+            const remainingWidth = tableWidth - countryColWidth - companyColWidth - hqColWidth;
+            const segmentColWidth =
+              chunkSegments.length > 0 ? remainingWidth / chunkSegments.length : 1.17;
+            colWidths = [countryColWidth, companyColWidth, hqColWidth];
+            chunkSegments.forEach(() => colWidths.push(segmentColWidth));
+          } else {
+            const companyColWidth = 2.5;
+            const hqColWidth = 1.5;
+            const remainingWidth = tableWidth - companyColWidth - hqColWidth;
+            const segmentColWidth =
+              chunkSegments.length > 0 ? remainingWidth / chunkSegments.length : 1.17;
+            colWidths = [companyColWidth, hqColWidth];
+            chunkSegments.forEach(() => colWidths.push(segmentColWidth));
+          }
+
+          targetSlide.addTable(tableRows, {
+            x: 0.37,
+            y: 1.47,
+            w: tableWidth,
+            colW: colWidths,
+            fontFace: 'Segoe UI',
+            fontSize: 14,
+            valign: 'middle',
+            rowH: 0.3,
+            margin: [0, 0.04, 0, 0.04],
+          });
+
+          targetSlide.addText('Source: Company disclosures, industry databases', {
+            x: 0.38,
+            y: 6.67,
+            w: 12.54,
+            h: 0.42,
+            fontSize: 10,
+            fontFace: 'Segoe UI',
+            color: COLORS.black,
+            valign: 'top',
           });
         });
 
-        // Calculate column widths (from template: Country=1.12", Company=2.14", HQ=1.5", Segments=~1.17" each)
-        const tableWidth = 12.6;
-        let colWidths = [];
-
-        if (isMultiCountry) {
-          const countryColWidth = 1.12;
-          const companyColWidth = 2.14;
-          const hqColWidth = 1.5;
-          const remainingWidth = tableWidth - countryColWidth - companyColWidth - hqColWidth;
-          const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
-          colWidths = [countryColWidth, companyColWidth, hqColWidth];
-          segments.forEach(() => colWidths.push(segmentColWidth));
-        } else {
-          // Single country - no country column, company column takes more space
-          const companyColWidth = 2.5;
-          const hqColWidth = 1.5;
-          const remainingWidth = tableWidth - companyColWidth - hqColWidth;
-          const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
-          colWidths = [companyColWidth, hqColWidth];
-          segments.forEach(() => colWidths.push(segmentColWidth));
-        }
-
-        // Add target list table (position from template: x=0.3663", y=1.467")
-        // Cell margins: 0.04 inch (0.1cm) left/right, 0 inch top/bottom
-        // Font size 14 per design requirements
-        targetSlide.addTable(tableRows, {
-          x: 0.37,
-          y: 1.47,
-          w: tableWidth,
-          colW: colWidths,
-          fontFace: 'Segoe UI',
-          fontSize: 14,
-          valign: 'middle',
-          rowH: 0.3,
-          margin: [0, 0.04, 0, 0.04], // [top, right, bottom, left] in inches
-        });
-
-        // Footnote (from template: x=0.3754", y=6.6723", font 10pt)
-        targetSlide.addText('Source: Company disclosures, industry databases', {
-          x: 0.38,
-          y: 6.67,
-          w: 12.54,
-          h: 0.42,
-          fontSize: 10,
-          fontFace: 'Segoe UI',
-          color: COLORS.black,
-          valign: 'top',
-        });
-
-        console.log('Target List slide generated');
+        console.log(`Target List slide generated (${segmentChunks.length} slide(s))`);
       } catch (targetListError) {
         console.error('ERROR generating Target List slide:', targetListError.message);
         console.error('Target List error stack:', targetListError.stack);
@@ -13994,3 +13980,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Profile Slides server running on port ${PORT}`);
 });
+
