@@ -161,30 +161,85 @@ function isLikelyDuplicateCoreServices(leftValue, breakdownTitle, breakdownItems
   return overlap >= Math.min(3, leftKeywords.size);
 }
 
+function isLikelyGarbageEntry(entry) {
+  const raw = ensureString(entry).trim();
+  if (!raw) return true;
+  const normalized = normalizeForComparison(raw);
+
+  const garbagePatterns = [
+    /\bwhatsapp\b/i,
+    /\bimage\b/i,
+    /\bimg\b/i,
+    /\bblog\b/i,
+    /\bdisclaimer\b/i,
+    /\bhellip\b/i,
+    /\bseo\b/i,
+    /\bjpg\b|\bjpeg\b|\bpng\b|\bwebp\b|\bsvg\b/i,
+    /\b\d{4}\s*\d{2}\s*\d{2}\b/,
+    /\b\d{1,2}\.\d{2}\.\d{2}\b/,
+    /https?:\/\//i,
+    /\bwww\./i,
+  ];
+  if (garbagePatterns.some((pattern) => pattern.test(raw))) return true;
+
+  // Entries should not look like random timestamp/file strings
+  const alphaCount = (raw.match(/[A-Za-z]/g) || []).length;
+  const digitCount = (raw.match(/\d/g) || []).length;
+  if (digitCount > alphaCount) return true;
+
+  const genericOnly = new Set([
+    'disclaimer',
+    'blogs',
+    'blog',
+    'img',
+    'images',
+    'image',
+    'none',
+    'not specified',
+    'n a',
+    'unknown',
+    'various',
+    'multiple',
+    'additional',
+    'further',
+    'more',
+    'others',
+  ]);
+  if (genericOnly.has(normalized)) return true;
+
+  if (normalized.split(' ').length > 14) return true;
+  return false;
+}
+
 function cleanRelationshipDisplayValue(value) {
   const raw = ensureString(value);
   if (!raw) return raw;
 
   const cleaned = [];
   const seen = new Set();
-  const lines = raw.split('\n').map((line) => line.trim());
-  for (const line of lines) {
-    const noBullet = line.replace(/^[\-•▪■]\s*/, '').trim();
-    const normalizedLine = noBullet.replace(
-      /^(principal partners?|key partnerships?|additional principal partners?|more principal partners?|our partners?|partners?)\s*:?\s*/i,
-      ''
-    );
-    const fixed = fixAcronymCasing(cleanCompanyPrefixesInText(normalizedLine.trim()));
-    if (!fixed) continue;
+  const entries = splitReadableEntries(raw);
+  for (const entry of entries) {
+    const normalizedLine = ensureString(entry)
+      .replace(
+        /^(principal partners?|key partnerships?|additional principal partners?|more principal partners?|our partners?|partners?)\s*:?\s*/i,
+        ''
+      )
+      .trim();
+    const fixed = fixAcronymCasing(cleanCompanyPrefixesInText(normalizedLine));
+    if (!fixed || isLikelyGarbageEntry(fixed)) continue;
     const dedupeKey = normalizeForComparison(fixed);
     if (!dedupeKey || seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
     cleaned.push(fixed);
   }
 
-  if (cleaned.length === 0) return raw;
-  if (cleaned.length === 1) return cleaned[0];
-  return cleaned.map((line) => `- ${line}`).join('\n');
+  if (cleaned.length === 0) return '';
+  const maxItems = 6;
+  const shown = cleaned.slice(0, maxItems);
+  const hidden = Math.max(0, cleaned.length - shown.length);
+  if (shown.length === 1 && hidden === 0) return shown[0];
+  if (hidden > 0) shown.push(`+${hidden} more`);
+  return shown.map((line) => `- ${line}`).join('\n');
 }
 
 function isGenericPrincipalBrandsValue(value) {
@@ -239,12 +294,23 @@ function splitReadableEntries(value) {
   const unique = [];
   const seen = new Set();
   for (const entry of entries) {
-    const dedupeKey = normalizeForComparison(entry);
+    const fixedEntry = fixAcronymCasing(cleanCompanyPrefixesInText(entry));
+    if (isLikelyGarbageEntry(fixedEntry)) continue;
+    const dedupeKey = normalizeForComparison(fixedEntry);
     if (!dedupeKey || seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
-    unique.push(fixAcronymCasing(cleanCompanyPrefixesInText(entry)));
+    unique.push(fixedEntry);
   }
   return unique;
+}
+
+function buildRowValueSignature(value) {
+  const entries = splitReadableEntries(value)
+    .map((entry) => normalizeForComparison(entry))
+    .filter(Boolean)
+    .sort();
+  if (entries.length > 0) return entries.join('|');
+  return normalizeForComparison(value);
 }
 
 function mergeReadableRowValues(valueA, valueB) {
@@ -4683,6 +4749,13 @@ async function generatePPTX(
           if (!location) return location;
           let cleaned = location;
 
+          cleaned = cleaned
+            .replace(/&hellip;|hellip|…/gi, '')
+            .replace(/\s{2,}/g, ' ')
+            .replace(/\s+,/g, ',')
+            .replace(/,\s*,/g, ', ')
+            .trim();
+
           // Handle JSON format like {"HQ":"Chatuchak, Bangkok, Thailand"} or {"HQ":"CBD, Singapore"}
           if (cleaned.includes('{') && cleaned.includes('}')) {
             try {
@@ -5062,9 +5135,48 @@ async function generatePPTX(
           /\bmalaysia(?:'s)? total semiconductor exports?\b/i,
           /\bglobal semiconductor trade\b/i,
         ];
+        const relationshipRowLabels = new Set([
+          'key partnerships',
+          'principal partners',
+          'key suppliers',
+          'suppliers',
+          'principal brands',
+          'customers',
+          'key customers',
+          'clients',
+          'key clients',
+          'insurance partner',
+        ]);
+        const lowSignalLabels = new Set([
+          'job categories',
+          'client count',
+          'support availability',
+          'compliance rate',
+        ]);
+        const lowSignalPatterns = [/^hires?\s+for\b/i];
+
+        const truncateRowValue = (label, value) => {
+          const lower = ensureString(label).toLowerCase().trim();
+          const text = ensureString(value).trim();
+          if (!text) return text;
+
+          let maxLines = 3;
+          if (lower === 'business') maxLines = 3;
+          if (relationshipRowLabels.has(lower)) maxLines = 5;
+          if (['location', 'hq'].includes(lower)) maxLines = 4;
+
+          const lines = text
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+          if (lines.length <= maxLines) return lines.join('\n');
+          const hidden = lines.length - maxLines;
+          return `${lines.slice(0, maxLines).join('\n')}\n+${hidden} more`;
+        };
 
         const finalTableData = [];
         const rowIndexByCanonical = new Map();
+        const signatureToLabel = new Map();
 
         tableData.forEach((rawRow) => {
           let label = ensureString(rawRow[0]).trim();
@@ -5074,18 +5186,31 @@ async function generatePPTX(
 
           if (!label || isEmptyValue(value)) return;
 
-          if (lower === 'key partnerships' || lower === 'principal partners') {
+          if (relationshipRowLabels.has(lower)) {
             value = cleanRelationshipDisplayValue(value);
-          } else if (lower === 'insurance partner' || lower === 'export countries') {
+            if (isEmptyValue(value)) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because it does not contain clean relationship names`
+              );
+              return;
+            }
+          } else if (lower === 'export countries') {
             value = fixAcronymCasing(cleanCompanyPrefixesInText(value));
           }
 
+          if (lowSignalLabels.has(lower) || lowSignalPatterns.some((pattern) => pattern.test(lower))) {
+            console.log(
+              `    [LeftTable Cleanup] Removed "${label}" because it is low-signal detail for client slide`
+            );
+            return;
+          }
+
           if (
-            lower === 'core services' &&
+            ['core services', 'key services', 'services'].includes(lower) &&
             isLikelyDuplicateCoreServices(value, company.breakdown_title, company.breakdown_items)
           ) {
             console.log(
-              `    [LeftTable Cleanup] Removed "Core Services" because it duplicates right-side Service Offerings`
+              `    [LeftTable Cleanup] Removed "${label}" because it duplicates right-side Service Offerings`
             );
             return;
           }
@@ -5106,6 +5231,13 @@ async function generatePPTX(
             return;
           }
 
+          if (/disclaimer/i.test(value) || /\bwhatsapp\b|\bblog\b|\bimg\b|\bhellip\b/i.test(value)) {
+            console.log(
+              `    [LeftTable Cleanup] Removed "${label}" because value contains non-client artifacts`
+            );
+            return;
+          }
+
           const canonical = canonicalLeftLabel(label);
           if (canonical === 'customers' && rowIndexByCanonical.has(canonical)) {
             const existingIndex = rowIndexByCanonical.get(canonical);
@@ -5117,6 +5249,22 @@ async function generatePPTX(
             );
             return;
           }
+
+          if (relationshipRowLabels.has(lower)) {
+            const signature = buildRowValueSignature(value);
+            if (signature && signatureToLabel.has(signature)) {
+              const existingLabel = signatureToLabel.get(signature);
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because it duplicates "${existingLabel}" content`
+              );
+              return;
+            }
+            if (signature) {
+              signatureToLabel.set(signature, label);
+            }
+          }
+
+          value = truncateRowValue(lower, value);
 
           const finalLabel =
             canonical === 'customers'
@@ -11246,6 +11394,7 @@ RULES:
 - For "Core Services": include only when it adds information not already shown in Service Offerings
 - For "Principal Brands": include only concrete brand names; skip generic values like "Portfolios", "Various", "Multiple"
 - Never use short labels like "r.o.s", "c.o.s", "pbs", "hts" - always write full labels
+- NEVER include file/path artifacts: "WhatsApp Image...", "blog img", "IMG_1234", "hellip", URLs, or image filenames
 - Return ONLY valid JSON`,
           },
           {
@@ -12098,6 +12247,7 @@ REMOVE any metric containing:
 - Remove "Core Services" ONLY if it duplicates the right-side Service Offerings content
 - Remove "Principal Brands" ONLY when value is generic (e.g., "Portfolios", "Various", "Multiple")
 - If partnership text is messy, CLEAN the wording/format instead of removing
+- REMOVE any file/artifact text: "WhatsApp Image...", "blog img", "IMG_1234", "hellip", URL/path strings
 
 ### 4. TRANSLATE TO ENGLISH
 - All output must be English (A-Z only)
