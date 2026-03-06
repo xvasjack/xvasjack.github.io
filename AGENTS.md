@@ -36,7 +36,15 @@ These rules are mandatory for work in this repository.
 - If additional issues are discovered, queue them for the next iteration instead of changing scope.
 
 ## 7) Communication Clarity (Ultra Important)
-- Always explain in high-school-level plain English.
-- Avoid jargon whenever possible.
-- If a technical term must be used, define it in one short sentence.
-- Prefer short examples/analogies over abstract wording.
+- HARD RULE: Explain everything in "like I am 5 years old" plain English unless the user asks for technical depth.
+- Assume the user is non-technical by default.
+- Do not use jargon. If a technical word is unavoidable, define it in one very short sentence right away.
+- When giving steps, write exactly what to click/type and what result to expect.
+- Replace command-heavy wording with simple meaning-first wording (example: "check what changed" before command names).
+- Response length rule: default to 1-2 short lines only.
+- No code blocks, command snippets, or technical dumps unless the user explicitly asks for them.
+
+## 8) Git Push Policy (Hard Rule)
+- AUTOPUSH: After I complete a requested file/code change, I must save and push it to `main` automatically.
+- Skip AUTOPUSH only if the user clearly says "do not push", "local only", or "draft only".
+- If push fails, explain the blocker in one short line and give one short next step.
