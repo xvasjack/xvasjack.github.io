@@ -161,6 +161,35 @@ function isLikelyDuplicateCoreServices(leftValue, breakdownTitle, breakdownItems
   return overlap >= Math.min(3, leftKeywords.size);
 }
 
+function isRelationshipArtifactText(value) {
+  const text = ensureString(value).trim();
+  if (!text) return true;
+
+  const lower = text.toLowerCase();
+
+  // Common scrape/file artifacts that should never be treated as company names.
+  if (
+    /\b(whatsapp|img|image|screenshot|photo|ticker|blog|hellip|copy)\b/.test(lower) &&
+    /\d/.test(lower)
+  ) {
+    return true;
+  }
+
+  if (/\bwhatsapp\s*image\b/i.test(lower)) return true;
+  if (/\bimg[_\-\s]?\d+\b/i.test(lower)) return true;
+  if (/\bimage[_\-\s]?\d+\b/i.test(lower)) return true;
+  if (/\bblog[-_\s]?img\b/i.test(lower)) return true;
+  if (/\bwhatsapp[-_\s]?image[-_\s]?\d{4}\b/i.test(lower)) return true;
+  if (/\b\d{4}[-_]\d{2}[-_]\d{2}\b/.test(lower)) return true;
+  if (/\b\d{2}\.\d{2}\.\d{2}\b/.test(lower)) return true;
+  if (/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?|$)/i.test(lower)) return true;
+  if (/\/wp-content\/|\/uploads\//i.test(lower)) return true;
+  if (/\bdisclaimer\b/i.test(lower)) return true;
+  if (/^\d+$/.test(lower)) return true;
+
+  return false;
+}
+
 function cleanRelationshipDisplayValue(value) {
   const raw = ensureString(value);
   if (!raw) return raw;
@@ -176,13 +205,14 @@ function cleanRelationshipDisplayValue(value) {
     );
     const fixed = fixAcronymCasing(cleanCompanyPrefixesInText(normalizedLine.trim()));
     if (!fixed) continue;
+    if (isRelationshipArtifactText(fixed)) continue;
     const dedupeKey = normalizeForComparison(fixed);
     if (!dedupeKey || seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
     cleaned.push(fixed);
   }
 
-  if (cleaned.length === 0) return raw;
+  if (cleaned.length === 0) return '';
   if (cleaned.length === 1) return cleaned[0];
   return cleaned.map((line) => `- ${line}`).join('\n');
 }
@@ -430,6 +460,8 @@ function filterGarbageNames(names, companyName = '') {
       if (!name || typeof name !== 'string') return false;
       const lower = name.toLowerCase();
       const normalized = lower.replace(/\s+/g, '');
+
+      if (isRelationshipArtifactText(name)) return false;
 
       // Too short (1-2 chars) or too long (>60 chars)
       if (name.length < 3 || name.length > 60) return false;
@@ -5080,6 +5112,31 @@ async function generatePPTX(
             value = fixAcronymCasing(cleanCompanyPrefixesInText(value));
           }
 
+          if (isRelationshipArtifactText(value)) {
+            console.log(
+              `    [LeftTable Cleanup] Removed "${label}" because value looks like scrape/image artifact: "${value}"`
+            );
+            return;
+          }
+
+          if (
+            /(customer|client|supplier|vendor|partner|principal|brand)/i.test(lower) &&
+            !['insurance partner', 'export countries'].includes(lower)
+          ) {
+            const cleanedRelationshipValue = segmentRelationshipBlobValue(
+              label,
+              value,
+              companyNameForFilter
+            );
+            if (!cleanedRelationshipValue) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because no clean company names remained after junk filtering`
+              );
+              return;
+            }
+            value = cleanedRelationshipValue;
+          }
+
           if (
             lower === 'core services' &&
             isLikelyDuplicateCoreServices(value, company.breakdown_title, company.breakdown_items)
@@ -7819,32 +7876,7 @@ function extractBusinessRelationships(rawHtml) {
       if (name) names.add(name);
     }
 
-    // Method 6: Image filenames (including lazy-loaded data-src)
-    const imgSrcPattern =
-      /<img[^>]*(?:src|data-src|data-lazy-src|data-original)=["']([^"']+)["'][^>]*>/gi;
-    while ((match = imgSrcPattern.exec(sectionHtml)) !== null) {
-      const src = match[1];
-      if (src.startsWith('data:')) continue; // Skip data URIs
-      if (/client|customer|partner|brand|principal|supplier/i.test(src)) {
-        const filename = src.split('/').pop()?.split('.')[0] || '';
-        // Enhanced preprocessing before cleanCustomerName
-        const preprocessed = filename
-          .replace(/[-_]/g, ' ')
-          .replace(
-            /logo|img|image|graphic|vector|icon|photo|picture|thumb|thumbnail|banner|\d+/gi,
-            ''
-          )
-          .replace(/\s+/g, ' ')
-          .trim();
-        // Only process if meaningful text remains (3+ chars)
-        if (preprocessed.length >= 3) {
-          const name = cleanCustomerName(preprocessed);
-          if (name) names.add(name);
-        }
-      }
-    }
-
-    // Method 7: Inline text (span, strong, em)
+    // Method 6: Inline text (span, strong, em)
     const inlinePattern = /<(?:span|strong|em|b)[^>]*>([A-Z][^<]{1,40})<\/(?:span|strong|em|b)>/g;
     while ((match = inlinePattern.exec(sectionHtml)) !== null) {
       const text = match[1].trim();
@@ -7854,14 +7886,14 @@ function extractBusinessRelationships(rawHtml) {
       }
     }
 
-    // Method 8: Anchor text (logos are often wrapped with links)
+    // Method 7: Anchor text (logos are often wrapped with links)
     const anchorPattern = /<a[^>]*>([^<]{2,50})<\/a>/gi;
     while ((match = anchorPattern.exec(sectionHtml)) !== null) {
       const name = cleanCustomerName(match[1]);
       if (name) names.add(name);
     }
 
-    // Method 9: data-* attributes used by JS logo sliders/carousels
+    // Method 8: data-* attributes used by JS logo sliders/carousels
     const dataAttrPattern =
       /<(?:img|a|div|li)[^>]*(?:data-name|data-title|data-company|data-brand)=["']([^"']+)["'][^>]*>/gi;
     while ((match = dataAttrPattern.exec(sectionHtml)) !== null) {
@@ -8162,6 +8194,10 @@ function extractRelationshipsFromPageUrls(pagesScraped = []) {
     if (/^shop by brands?$/.test(lower)) return '';
     if (/^our (brands?|partners?|customers?|clients?)$/.test(lower)) return '';
     if (!/[a-z]/i.test(lower)) return '';
+    if (isRelationshipArtifactText(lower)) return '';
+    if (/\b(whatsapp|hellip|img|image|ticker|blog|uploads?|wp[-_]content)\b/i.test(lower))
+      return '';
+    if (/^\d{4}[-_]\d{2}[-_]\d{2}[-_]\d+/.test(lower)) return '';
 
     return cleanCustomerName(candidate);
   };
@@ -10026,6 +10062,7 @@ function buildSupplierSegments(suppliers, options = {}) {
 function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = '') {
   const label = ensureString(metricLabel);
   const value = ensureString(metricValue);
+  if (!value) return '';
   const labelLower = label.toLowerCase();
   const valueLower = value.toLowerCase();
   const hasRelationshipSignal =
@@ -10072,7 +10109,7 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
     if (filteredNames.length > 0) {
       return fixAcronymCasing(filteredNames.join(', '));
     }
-    return normalizedRelationshipValue || value;
+    return '';
   }
 
   const relationshipType =
@@ -10090,7 +10127,9 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
     relationshipType,
   });
   const lines = buildSegmentDisplayLines(segmented, { maxLines: 4, maxNamesPerLine: 4 });
-  if (lines.length === 0) return value;
+  if (lines.length === 0) {
+    return filteredNames.length > 0 ? fixAcronymCasing(filteredNames.join(', ')) : '';
+  }
   return fixAcronymCasing(lines.join('\n'));
 }
 
@@ -10526,10 +10565,13 @@ function cleanCustomerName(text) {
     .replace(/<[^>]+>/g, '') // Remove HTML
     .replace(/&amp;/g, '&') // Decode HTML entity
     .replace(/&nbsp;/g, ' ')
+    .replace(/&hellip;/gi, ' ')
     .replace(/&quot;/g, '"')
     .replace(/&#\d+;/g, '') // Remove numeric HTML entities
     .replace(/\s+/g, ' ')
     .trim();
+
+  if (isRelationshipArtifactText(name)) return '';
 
   // Normalize JSON-like wrappers from feed/screenshot extraction.
   name = name
@@ -10543,6 +10585,8 @@ function cleanCustomerName(text) {
     .replace(/\s*\((?=[^)]*\d)[^)]*\)\s*$/i, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+  if (isRelationshipArtifactText(name)) return '';
 
   // Skip generic terms
   const skipTerms = [
@@ -11230,6 +11274,8 @@ RULES:
 - DO NOT include garbage metrics like: "Quality Standards", "Innovation Focus", "Customer Service", "Technical Support", "R&D Focus", "Quality Assurance", "Service Excellence" - these are meaningless fluff
 - DO NOT include vague phrases like "High standards in customer service", "Constant innovation", "Focus on quality" - these have no concrete value
 - DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all
+- NEVER output file/scrape artifacts as names: "IMG_1234", "WhatsApp Image 2023-03-27", "blog image", "ticker", "hellip", "disclaimer", ".jpg/.png" strings
+- If a customer/supplier/partner entry looks like a filename, timestamp, URL slug, or screenshot text, DROP it
 - CRITICAL - NEVER GENERATE FAKE/PLACEHOLDER DATA:
   - NEVER write alphabetical placeholders like "Distributor A, Distributor B", "Partner X, Partner Y", "Customer 1, Customer 2"
   - NEVER write "Client 1, Client 2", "Customer A, Customer B", "Supplier A, Supplier B"
