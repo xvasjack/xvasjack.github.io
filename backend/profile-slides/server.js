@@ -77,11 +77,57 @@ function ensureString(value, defaultValue = '') {
 
 // Normalize label to Title Case (e.g., "employees" -> "Employees", "export countries" -> "Export Countries")
 // This prevents lowercase labels from appearing in slides
+function removeRedundantTrailingShortform(label) {
+  const raw = ensureString(label).trim();
+  if (!raw) return raw;
+
+  const match = raw.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (!match) return raw;
+
+  const main = ensureString(match[1]).trim();
+  const shortform = ensureString(match[2])
+    .replace(/[^a-z]/gi, '')
+    .toLowerCase();
+  if (!main || !shortform) return raw;
+
+  const initials = main
+    .split(/\s+/)
+    .map((word) => word.replace(/[^a-z]/gi, '').charAt(0))
+    .join('')
+    .toLowerCase();
+
+  const knownShortforms = new Set([
+    'ros',
+    'cos',
+    'pbs',
+    'hts',
+    'eor',
+    'hr',
+    'it',
+    'hq',
+    'gdp',
+    'ess',
+    'rpo',
+    'clq',
+  ]);
+  if (initials && (initials === shortform || knownShortforms.has(shortform))) {
+    return main;
+  }
+
+  return raw;
+}
+
 function normalizeLabel(label) {
   if (!label || typeof label !== 'string') return label;
 
-  const compactLabel = label.replace(/[^a-z]/gi, '').toLowerCase();
+  const cleanedLabel = removeRedundantTrailingShortform(label);
+  const compactLabel = cleanedLabel.replace(/[^a-z]/gi, '').toLowerCase();
   const serviceLabelExpansions = {
+    hq: 'HQ',
+    gdp: 'GDP',
+    hr: 'HR',
+    it: 'IT',
+    eor: 'Employer of Record',
     ros: 'Recruitment Outsourcing Solution',
     cos: 'Comprehensive Outsourcing Solution',
     pbs: 'Payroll and Banking Solution',
@@ -91,10 +137,12 @@ function normalizeLabel(label) {
     return serviceLabelExpansions[compactLabel];
   }
 
-  return label
+  return fixAcronymCasing(
+    cleanedLabel
     .split(' ')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
+      .join(' ')
+  );
 }
 
 function normalizeForComparison(value) {
@@ -140,9 +188,21 @@ function extractMeaningfulKeywords(value) {
   return new Set(words);
 }
 
-function isLikelyDuplicateCoreServices(leftValue, breakdownTitle, breakdownItems = []) {
+function isLikelyDuplicateServiceRow(leftLabel, leftValue, breakdownTitle, breakdownItems = []) {
   const title = normalizeForComparison(breakdownTitle);
   if (!title.includes('service')) return false;
+
+  const normalizedLabel = normalizeForComparison(leftLabel);
+  const duplicateCandidateLabels = [
+    'core services',
+    'services offered',
+    'services',
+    'service offerings',
+    'transportation services',
+  ];
+  if (!duplicateCandidateLabels.some((candidate) => normalizedLabel.includes(candidate))) {
+    return false;
+  }
 
   const leftKeywords = extractMeaningfulKeywords(leftValue);
   if (leftKeywords.size === 0) return false;
@@ -158,7 +218,7 @@ function isLikelyDuplicateCoreServices(leftValue, breakdownTitle, breakdownItems
     if (rightKeywords.has(keyword)) overlap += 1;
   }
 
-  return overlap >= Math.min(3, leftKeywords.size);
+  return overlap >= Math.min(2, leftKeywords.size);
 }
 
 function isRelationshipArtifactText(value) {
@@ -187,6 +247,24 @@ function isRelationshipArtifactText(value) {
   if (/\bdisclaimer\b/i.test(lower)) return true;
   if (/^\d+$/.test(lower)) return true;
 
+  return false;
+}
+
+function hasCompanySignalInName(value) {
+  const text = ensureString(value).trim();
+  if (!text) return false;
+
+  const lower = text.toLowerCase();
+  if (
+    /\b(ltd|limited|inc|corp|corporation|group|bank|holding|holdings|venture|ventures|technology|technologies|systems|industries|company|solutions?|management|resources|services?|logistics|capital|energy|engineering|manufacturing|precision|software|telecom|medical|health|foods|motors|construction)\b/.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+  if (/[&]/.test(text)) return true;
+  if (/\b[A-Z]{2,}\b/.test(text)) return true;
+  if (text.split(/\s+/).length === 1 && text.length >= 4) return true;
   return false;
 }
 
@@ -405,6 +483,14 @@ function fixAcronymCasing(text) {
     'NTT',
     'NXP',
     'TDK', // Electronics
+    'IT',
+    'HR',
+    'HQ',
+    'GDP',
+    'EOR',
+    'ESS',
+    'RPO',
+    'CLQ',
     'ENI',
     'BP',
     'EDF',
@@ -540,6 +626,11 @@ function filterGarbageNames(names, companyName = '') {
         'youtube',
         'tiktok',
         'twitter',
+        'blog',
+        'blogs',
+        'seo',
+        'keyword',
+        'keywords',
       ];
       if (genericTerms.includes(lower.trim())) return false;
       if (
@@ -555,6 +646,36 @@ function filterGarbageNames(names, companyName = '') {
         )
       )
         return false;
+
+      if (
+        /\b(admin|administrator|executive|officer|assistant|coordinator|intern|trainee|clerk)\b/i.test(
+          lower
+        ) &&
+        !/\b(ltd|limited|inc|corp|corporation|group|bank|holding|holdings|venture|ventures|technology|technologies|systems|industries|company|llc|plc|pte|sdn|bhd|pvt)\b/i.test(
+          lower
+        )
+      ) {
+        return false;
+      }
+
+      const nonCompanyCategoryTerms = new Set([
+        'human resources',
+        'human resource',
+        'employment type',
+        'salary',
+        'location',
+        'locations',
+        'further key suppliers',
+        'full time',
+        'part time',
+        'transportation',
+        'fleet services',
+        'diverse fleet',
+        'healthcare',
+        'renewable energy',
+        'logistics',
+      ]);
+      if (nonCompanyCategoryTerms.has(lower.trim())) return false;
 
       // Product names that aren't customers (security industry specific)
       const productTerms = [
@@ -587,6 +708,9 @@ function filterGarbageNames(names, companyName = '') {
       if (/\/\d+\/|\/blog\/|\/images?\//i.test(name)) return false;
       if (/\d{4}\/\d+\/\d+/.test(name)) return false; // Date paths
       if (/\.(jpg|jpeg|png|gif|webp|svg|pdf)$/i.test(name)) return false; // File extensions
+      if (/\b([A-Za-z]{3,})\d{1,3}\b/.test(name)) {
+        name = name.replace(/\b([A-Za-z]{3,})\d{1,3}\b/g, '$1');
+      }
 
       // Descriptions (sentences)
       if (name.split(/\s+/).length > 8) return false;
@@ -604,7 +728,13 @@ function filterGarbageNames(names, companyName = '') {
 
       return true;
     })
-    .map((name) => toTitleCase(stripCompanySuffix(name))); // Strip suffixes and title case
+    .map((name) => {
+      const cleanedName = ensureString(name)
+        .replace(/\b([A-Za-z][A-Za-z&.'-]{2,})\d{1,3}\b/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return toTitleCase(stripCompanySuffix(cleanedName));
+    }); // Strip suffixes and title case
 }
 
 function mergeRelationshipNamesByTrust(sourceMap = {}, companyName = '', options = {}) {
@@ -5050,21 +5180,22 @@ async function generatePPTX(
         // Final left-table cleanup pass:
         // - Keep key decision rows
         // - Remove known macro-only rows
-        // - Remove duplicate Core Services only when it repeats right Service Offerings
+        // - Remove duplicate service rows when they repeat right Service Offerings
         // - Remove generic Principal Brands values
-        // - Merge duplicate customer/client rows into one clean row
+        // - Merge duplicate customer/client rows and partnership rows into one clean row
         const canonicalLeftLabel = (label) => {
           const lower = ensureString(label).toLowerCase().trim();
           if (['customers', 'key customers', 'clients', 'key clients'].includes(lower)) {
             return 'customers';
           }
-          if (lower === 'principal partners' || lower === 'key partnerships') return lower;
+          if (lower === 'principal partners' || lower === 'key partnerships') return 'partnerships';
           return lower;
         };
 
         const hardKeepLabels = new Set([
           'name',
           'est. year',
+          'established',
           'hq',
           'location',
           'shareholding',
@@ -5084,12 +5215,16 @@ async function generatePPTX(
 
         const macroLabelPatterns = [
           /industry contributions?/i,
+          /workforce contribution/i,
+          /\bgdp contribution\b/i,
           /semiconductor export rank/i,
           /semiconductor export contribution/i,
+          /semiconductor exports?/i,
           /global trade contribution/i,
         ];
         const macroValuePatterns = [
           /\bmalaysia gdp\b/i,
+          /\bmalaysia(?:'s)? (?:workforce|economy)\b/i,
           /\blargest in the world\b/i,
           /\bmalaysia(?:'s)? total semiconductor exports?\b/i,
           /\bglobal semiconductor trade\b/i,
@@ -5097,6 +5232,10 @@ async function generatePPTX(
 
         const finalTableData = [];
         const rowIndexByCanonical = new Map();
+        const hasExplicitHqOrLocationRow = tableData.some((row) => {
+          const lowerLabel = ensureString(row?.[0]).toLowerCase().trim();
+          return lowerLabel === 'hq' || lowerLabel === 'location';
+        });
 
         tableData.forEach((rawRow) => {
           let label = ensureString(rawRow[0]).trim();
@@ -5129,29 +5268,71 @@ async function generatePPTX(
               companyNameForFilter
             );
             if (!cleanedRelationshipValue) {
-              console.log(
-                `    [LeftTable Cleanup] Removed "${label}" because no clean company names remained after junk filtering`
-              );
-              return;
+              if (lower === 'key partnerships') {
+                const fallbackPartnershipValue = cleanRelationshipDisplayValue(value);
+                if (fallbackPartnershipValue && !isRelationshipArtifactText(fallbackPartnershipValue)) {
+                  value = fallbackPartnershipValue;
+                } else {
+                  console.log(
+                    `    [LeftTable Cleanup] Removed "${label}" because no clean partnership names remained after junk filtering`
+                  );
+                  return;
+                }
+              } else {
+                console.log(
+                  `    [LeftTable Cleanup] Removed "${label}" because no clean company names remained after junk filtering`
+                );
+                return;
+              }
             }
-            value = cleanedRelationshipValue;
+            if (cleanedRelationshipValue) value = cleanedRelationshipValue;
+          }
+
+          if (lower === 'headquarters' && hasExplicitHqOrLocationRow) {
+            console.log(
+              `    [LeftTable Cleanup] Removed "Headquarters" because HQ/Location row already exists`
+            );
+            return;
           }
 
           if (
-            lower === 'core services' &&
-            isLikelyDuplicateCoreServices(value, company.breakdown_title, company.breakdown_items)
+            isLikelyDuplicateServiceRow(label, value, company.breakdown_title, company.breakdown_items)
           ) {
             console.log(
-              `    [LeftTable Cleanup] Removed "Core Services" because it duplicates right-side Service Offerings`
+              `    [LeftTable Cleanup] Removed "${label}" because it duplicates right-side Service Offerings`
             );
             return;
           }
 
-          if (lower === 'principal brands' && isGenericPrincipalBrandsValue(value)) {
-            console.log(
-              `    [LeftTable Cleanup] Removed "Principal Brands" because value is generic: "${value}"`
+          if (lower === 'principal brands') {
+            const normalizedCompanyName = normalizeForComparison(
+              cleanCompanyName(companyNameForFilter || company.company_name || '')
             );
-            return;
+            const brandEntries = splitReadableEntries(value);
+            const filteredBrandEntries = brandEntries.filter((entry) => {
+              const normalizedEntry = normalizeForComparison(cleanCompanyName(entry));
+              if (!normalizedEntry) return false;
+              if (
+                normalizedCompanyName &&
+                (normalizedEntry === normalizedCompanyName ||
+                  normalizedEntry.includes(normalizedCompanyName) ||
+                  normalizedCompanyName.includes(normalizedEntry))
+              ) {
+                return false;
+              }
+              return true;
+            });
+
+            if (
+              filteredBrandEntries.length === 0 ||
+              isGenericPrincipalBrandsValue(filteredBrandEntries.join(', '))
+            ) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "Principal Brands" because value is generic/self-only: "${value}"`
+              );
+              return;
+            }
+            value = filteredBrandEntries.join(', ');
           }
 
           const isMacroByLabel = macroLabelPatterns.some((pattern) => pattern.test(label));
@@ -5174,15 +5355,27 @@ async function generatePPTX(
             );
             return;
           }
+          if (canonical === 'partnerships' && rowIndexByCanonical.has(canonical)) {
+            const existingIndex = rowIndexByCanonical.get(canonical);
+            const existingRow = finalTableData[existingIndex];
+            const mergedValue = mergeReadableRowValues(existingRow[1], value);
+            finalTableData[existingIndex] = [
+              'Key Partnerships',
+              mergedValue,
+              existingRow[2] || meta,
+            ];
+            console.log(
+              `    [LeftTable Cleanup] Merged duplicate partnership rows into one "Key Partnerships" row`
+            );
+            return;
+          }
 
           const finalLabel =
             canonical === 'customers'
               ? 'Customers'
-              : lower === 'key partnerships'
+              : canonical === 'partnerships'
                 ? 'Key Partnerships'
-                : lower === 'principal partners'
-                  ? 'Principal Partners'
-                  : normalizeLabel(label);
+                : normalizeLabel(label);
 
           finalTableData.push([finalLabel, value, meta]);
           rowIndexByCanonical.set(canonical, finalTableData.length - 1);
@@ -7993,7 +8186,27 @@ function extractRelationshipsFromMetrics(keyMetrics) {
     'regional',
     'various',
     'multiple',
+    'blog',
+    'blogs',
+    'seo',
+    'keyword',
+    'keywords',
+    'human resources',
+    'employment type',
+    'salary',
+    'location',
+    'locations',
+    'services',
+    'industries',
+    'healthcare',
+    'logistics',
+    'renewable energy',
   ]);
+
+  const nonCompanyRolePattern =
+    /\b(admin|administrator|executive|officer|assistant|coordinator|intern|trainee|clerk|manager|supervisor)\b/i;
+  const corporateNameHintPattern =
+    /\b(ltd|limited|inc|corp|corporation|group|bank|holding|holdings|venture|ventures|technology|technologies|systems|industries|company|llc|plc|pte|sdn|bhd|pvt)\b/i;
 
   const parseNames = (value) => {
     if (!value) return [];
@@ -8030,6 +8243,9 @@ function extractRelationshipsFromMetrics(keyMetrics) {
       if (genericTerms.has(lower)) continue;
       if (part.split(/\s+/).length > 5) continue;
       if (/^(over|more than|around|approximately)\s+\d+/i.test(lower)) continue;
+      if (nonCompanyRolePattern.test(lower) && !corporateNameHintPattern.test(lower)) continue;
+      if (/^\+?\d+\s+more$/i.test(lower)) continue;
+      if (/^\d+(\.\d+)?\s*(m|k|b|mn|bn)?$/i.test(lower)) continue;
 
       const cleaned = cleanCustomerName(part);
       if (cleaned) parsed.push(cleaned);
@@ -10106,6 +10322,9 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
   const filteredNames = filterGarbageNames(parsedNames, companyName);
 
   if (filteredNames.length < RELATIONSHIP_SEGMENT_MIN_COUNT) {
+    if (filteredNames.length === 1 && !hasCompanySignalInName(filteredNames[0])) {
+      return '';
+    }
     if (filteredNames.length > 0) {
       return fixAcronymCasing(filteredNames.join(', '));
     }
@@ -10583,6 +10802,7 @@ function cleanCustomerName(text) {
     .replace(/^'+/, '')
     .replace(/'+$/, '')
     .replace(/\s*\((?=[^)]*\d)[^)]*\)\s*$/i, '')
+    .replace(/\b([A-Za-z][A-Za-z&.'-]{2,})\d{1,3}\b/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -10626,6 +10846,11 @@ function cleanCustomerName(text) {
     'tiktok',
     'twitter',
     'sana commerce',
+    'blog',
+    'blogs',
+    'seo',
+    'keyword',
+    'keywords',
   ];
   const navigationTerms = [
     'become a customer',
@@ -10670,6 +10895,37 @@ function cleanCustomerName(text) {
     return '';
   }
   if (/\b[a-z0-9-]+\.(?:com|net|org|io|co\.nz|com\.au|co|app)\b/i.test(lowerName)) {
+    return '';
+  }
+  if (
+    /\b(admin|administrator|executive|officer|assistant|coordinator|intern|trainee|clerk)\b/i.test(
+      lowerName
+    ) &&
+    !/\b(ltd|limited|inc|corp|corporation|group|bank|holding|holdings|venture|ventures|technology|technologies|systems|industries|company| co |llc|plc|pte|sdn|bhd|pvt)\b/i.test(
+      ` ${lowerName} `
+    )
+  ) {
+    return '';
+  }
+
+  const nonCompanyCategoryTerms = new Set([
+    'human resources',
+    'human resource',
+    'employment type',
+    'salary',
+    'location',
+    'locations',
+    'further key suppliers',
+    'full time',
+    'part time',
+    'transportation',
+    'fleet services',
+    'diverse fleet',
+    'healthcare',
+    'renewable energy',
+    'logistics',
+  ]);
+  if (nonCompanyCategoryTerms.has(lowerName.trim())) {
     return '';
   }
 
@@ -10746,6 +11002,12 @@ function cleanCustomerName(text) {
 
   // Clean company name (remove suffixes)
   name = cleanCompanyName(name);
+  name = name.replace(/\b([A-Za-z][A-Za-z&.'-]{2,})\d{1,3}\b/g, '$1').trim();
+
+  const finalLower = name.toLowerCase();
+  if (nonCompanyCategoryTerms.has(finalLower.trim())) {
+    return '';
+  }
 
   return name;
 }
@@ -11276,6 +11538,15 @@ RULES:
 - DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all
 - NEVER output file/scrape artifacts as names: "IMG_1234", "WhatsApp Image 2023-03-27", "blog image", "ticker", "hellip", "disclaimer", ".jpg/.png" strings
 - If a customer/supplier/partner entry looks like a filename, timestamp, URL slug, or screenshot text, DROP it
+- NEVER output role/job text as customer/supplier/partner names:
+  - BAD: "Admin Executive", "Human Resource Senior Executive", "Employment Type: Full Time", "Salary"
+  - GOOD: real company names only
+- NEVER output SEO/blog tokens as names:
+  - BAD: "Blogs", "SEO", "Keyword"
+- If OCR adds trailing numbers to names, clean them:
+  - "Krungsri11" -> "Krungsri", "Ict1" -> "Ict"
+- Do NOT output macro/country rows as company metrics:
+  - BAD: "GDP Contribution", "Workforce Contribution", "Semiconductor Exports"
 - CRITICAL - NEVER GENERATE FAKE/PLACEHOLDER DATA:
   - NEVER write alphabetical placeholders like "Distributor A, Distributor B", "Partner X, Partner Y", "Customer 1, Customer 2"
   - NEVER write "Client 1, Client 2", "Customer A, Customer B", "Supplier A, Supplier B"
@@ -12140,10 +12411,21 @@ REMOVE any metric containing:
 - Empty values: "Not specified", "N/A", "Unknown", "Not available", "Various"
 - Vague descriptions: "Quality Standards", "Innovation Focus", "Service Excellence"
 - Marketing fluff without data: "High quality products", "Industry leading"
+- Non-company role text in relationship rows:
+  - "Admin Executive", "Human Resource Senior Executive", "Employment Type: Full Time", "Salary"
+- SEO/blog tokens in relationship rows:
+  - "Blogs", "SEO", "Keyword"
+- Macro/country rows:
+  - "Workforce Contribution", "GDP Contribution", "Semiconductor Exports"
+- Full address "Headquarters" row when HQ/location already exists as a separate row
 - KEEP (when verified): "Key Partnerships", "Principal Partners", "Insurance Partner", "Export Countries"
-- Remove "Core Services" ONLY if it duplicates the right-side Service Offerings content
+- Remove duplicate service rows ("Core Services", "Services Offered", "Services", "Transportation Services") ONLY if they duplicate right-side Service Offerings content
 - Remove "Principal Brands" ONLY when value is generic (e.g., "Portfolios", "Various", "Multiple")
 - If partnership text is messy, CLEAN the wording/format instead of removing
+- If a name has OCR number tails, clean it:
+  - "Krungsri11" -> "Krungsri", "Ict1" -> "Ict"
+- Merge duplicate partnership rows into one:
+  - "Key Partnerships" + "Principal Partners" -> one clean "Key Partnerships" row
 
 ### 4. TRANSLATE TO ENGLISH
 - All output must be English (A-Z only)
