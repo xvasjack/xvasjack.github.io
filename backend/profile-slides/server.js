@@ -122,6 +122,19 @@ function normalizeLabel(label) {
 
   const cleanedLabel = removeRedundantTrailingShortform(label);
   const compactLabel = cleanedLabel.replace(/[^a-z]/gi, '').toLowerCase();
+  const yearLabels = new Set([
+    'estyear',
+    'establishedyear',
+    'yearestablished',
+    'yearsestablished',
+    'yearsinoperation',
+    'yearsinbusiness',
+    'foundedyear',
+  ]);
+  if (yearLabels.has(compactLabel)) {
+    return 'Est. Year';
+  }
+
   const serviceLabelExpansions = {
     hq: 'HQ',
     gdp: 'GDP',
@@ -139,8 +152,8 @@ function normalizeLabel(label) {
 
   return fixAcronymCasing(
     cleanedLabel
-    .split(' ')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .split(' ')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ')
   );
 }
@@ -353,6 +366,258 @@ function splitReadableEntries(value) {
     unique.push(fixAcronymCasing(cleanCompanyPrefixesInText(entry)));
   }
   return unique;
+}
+
+function getCountryNameFromCode(code) {
+  const map = {
+    PH: 'Philippines',
+    TH: 'Thailand',
+    MY: 'Malaysia',
+    ID: 'Indonesia',
+    SG: 'Singapore',
+    VN: 'Vietnam',
+    JP: 'Japan',
+    CN: 'China',
+    KR: 'South Korea',
+    TW: 'Taiwan',
+    US: 'United States',
+    GB: 'United Kingdom',
+    AU: 'Australia',
+    IN: 'India',
+    HK: 'Hong Kong',
+  };
+  return map[String(code || '').toUpperCase()] || '';
+}
+
+function isLikelyGeographyToken(token) {
+  const text = ensureString(token).trim();
+  if (!text) return false;
+  const lower = normalizeForComparison(text);
+  if (!lower) return false;
+
+  if (
+    /\b(country|countries|region|regions|market|markets|nationwide|global|worldwide|southeast asia|south asia|east asia|middle east|north america|latin america|europe|africa|apac|asean)\b/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+
+  const countryMap = typeof COUNTRY_FLAG_MAP === 'object' ? COUNTRY_FLAG_MAP : {};
+  if (Object.prototype.hasOwnProperty.call(countryMap, lower) && lower.length > 2) return true;
+
+  return false;
+}
+
+function extractGeographyItemsFromText(value) {
+  const entries = splitReadableEntries(value);
+  const geographyItems = [];
+  const seen = new Set();
+
+  for (const entry of entries) {
+    const cleanedEntry = ensureString(entry).trim();
+    if (!cleanedEntry) continue;
+
+    const candidateBlock = cleanedEntry.includes(':')
+      ? cleanedEntry.split(':').slice(1).join(':').trim() || cleanedEntry
+      : cleanedEntry;
+
+    const rawTokens = candidateBlock
+      .split(/,|\/|;|\band\b/gi)
+      .map((part) => ensureString(part).trim())
+      .filter(Boolean);
+
+    const geoTokens = rawTokens.filter((token) => isLikelyGeographyToken(token));
+    const hasGeoLabel =
+      /\b(country|countries|region|regions|market|markets|nationwide|global reach|geographic|overseas)\b/i.test(
+        cleanedEntry.toLowerCase()
+      ) || /^source\b/i.test(cleanedEntry.toLowerCase());
+
+    const shouldTreatAsGeo =
+      hasGeoLabel ||
+      (rawTokens.length >= 2 && geoTokens.length >= Math.max(2, Math.ceil(rawTokens.length * 0.6)));
+
+    if (!shouldTreatAsGeo) continue;
+
+    const itemsToAdd = geoTokens.length > 0 ? geoTokens : rawTokens;
+    for (const token of itemsToAdd) {
+      const normalized = normalizeForComparison(token);
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      geographyItems.push(fixAcronymCasing(cleanCompanyPrefixesInText(token)));
+    }
+  }
+
+  return geographyItems;
+}
+
+function splitPartnershipAndGeographyEntries(value) {
+  const entries = splitReadableEntries(value);
+  const geographyItems = [];
+  const partnerEntries = [];
+  const geoSeen = new Set();
+  const partnerSeen = new Set();
+
+  for (const entry of entries) {
+    const cleanedEntry = ensureString(entry).trim();
+    if (!cleanedEntry) continue;
+
+    const extractedGeo = extractGeographyItemsFromText(cleanedEntry);
+    if (extractedGeo.length > 0) {
+      extractedGeo.forEach((item) => {
+        const normalized = normalizeForComparison(item);
+        if (!normalized || geoSeen.has(normalized)) return;
+        geoSeen.add(normalized);
+        geographyItems.push(item);
+      });
+      continue;
+    }
+
+    const normalizedPartner = normalizeForComparison(cleanedEntry);
+    if (!normalizedPartner || partnerSeen.has(normalizedPartner)) continue;
+    partnerSeen.add(normalizedPartner);
+    partnerEntries.push(cleanedEntry);
+  }
+
+  return { partnerEntries, geographyItems };
+}
+
+function mergeOrChooseRicherGeographyValue(existingValue, incomingValue) {
+  const existingEntries = splitReadableEntries(existingValue);
+  const incomingEntries = splitReadableEntries(incomingValue);
+  if (existingEntries.length === 0) return ensureString(incomingValue);
+  if (incomingEntries.length === 0) return ensureString(existingValue);
+
+  const existingSet = new Set(
+    existingEntries.map((entry) => normalizeForComparison(entry)).filter(Boolean)
+  );
+  const incomingSet = new Set(
+    incomingEntries.map((entry) => normalizeForComparison(entry)).filter(Boolean)
+  );
+
+  let overlapCount = 0;
+  incomingSet.forEach((item) => {
+    if (existingSet.has(item)) overlapCount += 1;
+  });
+  const minSize = Math.min(existingSet.size, incomingSet.size);
+  const hasStrongOverlap = minSize > 0 && overlapCount / minSize >= 0.7;
+
+  if (hasStrongOverlap) {
+    const richerEntries =
+      incomingEntries.length > existingEntries.length ? incomingEntries : existingEntries;
+    return formatCompactEntryList(richerEntries.join('\n'), {
+      maxEntries: 12,
+      lineModeThreshold: 5,
+    });
+  }
+
+  return mergeReadableRowValues(existingValue, incomingValue);
+}
+
+function formatCompactEntryList(value, options = {}) {
+  const entries = splitReadableEntries(value);
+  const maxEntries = Math.max(1, parseInt(String(options.maxEntries || 8), 10));
+  const lineModeThreshold = Math.max(3, parseInt(String(options.lineModeThreshold || 4), 10));
+  if (entries.length === 0) return '';
+
+  const visible = entries.slice(0, maxEntries);
+  const hiddenCount = Math.max(0, entries.length - visible.length);
+
+  if (visible.length < lineModeThreshold) {
+    const inline = visible.join(', ');
+    return hiddenCount > 0 ? `${inline}, +${hiddenCount} more` : inline;
+  }
+
+  const lines = visible.map((entry) => `- ${entry}`);
+  if (hiddenCount > 0) lines.push(`- +${hiddenCount} more`);
+  return lines.join('\n');
+}
+
+function isLikelyYearLabel(label) {
+  const normalized = normalizeForComparison(label);
+  if (!normalized) return false;
+  return (
+    normalized.includes('est year') ||
+    normalized.includes('established year') ||
+    normalized.includes('years established') ||
+    normalized.includes('years in operation') ||
+    normalized.includes('years operation') ||
+    normalized.includes('year established') ||
+    normalized.includes('founded year')
+  );
+}
+
+function extractEstablishedYearFromText(value) {
+  const text = ensureString(value);
+  if (!text) return '';
+  const match = text.match(/\b(19\d{2}|20[0-2]\d)\b/);
+  return match ? match[1] : '';
+}
+
+function normalizeYearLabelAndValue(label, value, fallbackYear = '') {
+  if (!isLikelyYearLabel(label)) {
+    return { label, value };
+  }
+
+  const directYear = extractEstablishedYearFromText(value);
+  const fallback = extractEstablishedYearFromText(fallbackYear);
+  const normalizedYear = directYear || fallback;
+  if (normalizedYear) {
+    return { label: 'Est. Year', value: normalizedYear };
+  }
+
+  return { label, value };
+}
+
+function extractLocationFromBasedText(text, fallbackCountry = '') {
+  const source = ensureString(text).replace(/\s+/g, ' ').trim();
+  if (!source) return '';
+
+  const match =
+    source.match(/\b([A-Za-z][A-Za-z\s.'-]{1,50})\s*-\s*based\b/i) ||
+    source.match(/\b([A-Za-z][A-Za-z\s.'-]{1,50})\s+based\b/i);
+  if (!match) return '';
+
+  const rawCandidate = ensureString(match[1]).split(',').pop().trim();
+  if (!rawCandidate) return '';
+
+  const tokens = rawCandidate.split(/\s+/).filter(Boolean);
+  let geoToken = '';
+  for (let size = Math.min(3, tokens.length); size >= 1; size -= 1) {
+    const candidate = tokens.slice(tokens.length - size).join(' ');
+    if (isLikelyGeographyToken(candidate)) {
+      geoToken = candidate;
+      break;
+    }
+  }
+  if (!geoToken && isLikelyGeographyToken(rawCandidate)) {
+    geoToken = rawCandidate;
+  }
+  if (!geoToken) return '';
+
+  const normalizedGeo = normalizeForComparison(geoToken);
+  const countryCode =
+    (typeof COUNTRY_FLAG_MAP === 'object' && COUNTRY_FLAG_MAP[normalizedGeo]) || '';
+  const countryName = getCountryNameFromCode(countryCode);
+  const fallback = ensureString(fallbackCountry).trim();
+
+  if (countryName) {
+    const normalizedCountry = normalizeForComparison(countryName);
+    if (normalizedGeo === normalizedCountry) {
+      // Country-only token cannot satisfy "Province/State, Country" format.
+      return '';
+    }
+    return `${fixAcronymCasing(geoToken)}, ${countryName}`;
+  }
+
+  if (fallback) {
+    const normalizedFallback = normalizeForComparison(fallback);
+    if (normalizedGeo !== normalizedFallback) {
+      return `${fixAcronymCasing(geoToken)}, ${fallback}`;
+    }
+  }
+
+  return '';
 }
 
 function mergeReadableRowValues(valueA, valueB) {
@@ -4022,18 +4287,45 @@ function detectShortforms(companyData) {
 
   const foundShortforms = [];
 
-  // First, extract inline abbreviations like "PU (Polyurethane)" from text
-  // Pattern: 2-6 uppercase/mixed case letters followed by (explanation)
-  const inlinePattern = /\b([A-Z][A-Za-z]{1,5})\s*\(([^)]+)\)/g;
+  // Pattern 1: Abbreviation first, then full form. Example: "PU (Polyurethane)".
+  // Strict rule: abbreviation must be 2-6 ALL-CAPS letters.
+  const inlinePattern = /\b([A-Z]{2,6})\s*\(([^)]+)\)/g;
+  // Pattern 2: Full form first, then abbreviation. Example: "Penang Skills Development Centre (PSDC)".
+  const trailingAbbrevPattern = /\b([A-Za-z][A-Za-z\s&/-]{4,80})\s*\(([A-Z]{2,6})\)/g;
   let match;
   const inlineAbbrevs = new Map();
+
   while ((match = inlinePattern.exec(allText)) !== null) {
     const abbrev = match[1].toUpperCase();
     const fullForm = match[2].trim();
-    // Skip common ones
-    if (!COMMON_SHORTFORMS.includes(abbrev) && !inlineAbbrevs.has(abbrev)) {
-      inlineAbbrevs.set(abbrev, fullForm);
-    }
+    const fullFormCompact = fullForm.replace(/[^A-Za-z]/g, '');
+    const fullFormAlpha = fullForm.replace(/[^A-Za-z\s]/g, '').trim();
+    if (!fullForm || fullFormCompact.length < 3) continue;
+    if (!/\s/.test(fullFormAlpha) && fullFormAlpha.length <= 8) continue;
+    // Reject fake "full form" that is itself an abbreviation.
+    if (/^[A-Za-z]{2,8}$/.test(fullFormCompact)) continue;
+    if (COMMON_SHORTFORMS.includes(abbrev) || inlineAbbrevs.has(abbrev)) continue;
+    inlineAbbrevs.set(abbrev, fullForm);
+  }
+
+  while ((match = trailingAbbrevPattern.exec(allText)) !== null) {
+    const phrase = ensureString(match[1]).replace(/\s+/g, ' ').trim();
+    const abbrev = ensureString(match[2]).toUpperCase();
+    if (!phrase || !abbrev) continue;
+
+    const words = phrase
+      .split(/\s+/)
+      .map((w) => w.replace(/[^A-Za-z]/g, ''))
+      .filter(Boolean);
+    if (words.length < 2) continue;
+
+    const initials = words
+      .map((w) => w.charAt(0).toUpperCase())
+      .join('');
+    // Keep only if abbreviation matches the phrase initials.
+    if (initials !== abbrev) continue;
+    if (COMMON_SHORTFORMS.includes(abbrev) || inlineAbbrevs.has(abbrev)) continue;
+    inlineAbbrevs.set(abbrev, phrase);
   }
 
   // Add inline abbreviations to found shortforms
@@ -4043,15 +4335,17 @@ function detectShortforms(companyData) {
 
   // Then check SHORTFORM_DEFINITIONS for any remaining abbreviations
   for (const [shortform, definition] of Object.entries(SHORTFORM_DEFINITIONS)) {
+    const normalizedShortform = ensureString(shortform).trim();
+    if (!/^[A-Z]{2,6}$/.test(normalizedShortform)) continue;
     // Skip common shortforms that don't need explanation
-    if (COMMON_SHORTFORMS.includes(shortform)) continue;
+    if (COMMON_SHORTFORMS.includes(normalizedShortform)) continue;
     // Skip if already found inline
-    if (inlineAbbrevs.has(shortform.toUpperCase())) continue;
+    if (inlineAbbrevs.has(normalizedShortform.toUpperCase())) continue;
 
     // Match shortform as whole word (with word boundaries)
-    const regex = new RegExp(`\\b${shortform}\\b`, 'i');
+    const regex = new RegExp(`\\b${normalizedShortform}\\b`, 'i');
     if (regex.test(allText)) {
-      foundShortforms.push(`${shortform} (${definition})`);
+      foundShortforms.push(`${normalizedShortform} (${definition})`);
     }
   }
 
@@ -4065,8 +4359,11 @@ function detectShortforms(companyData) {
 // "PU (Polyurethane), EVA (Ethylene Vinyl Acetate)" -> "PU, EVA"
 function stripInlineLongforms(text) {
   if (!text || typeof text !== 'string') return text;
-  // Pattern: ABBREV (Full Form) -> ABBREV
-  return text.replace(/\b([A-Z][A-Za-z]{1,5})\s*\([^)]+\)/g, '$1');
+  // Pattern 1: ABBREV (Full Form) -> ABBREV
+  // Pattern 2: Full Form (ABBREV) -> ABBREV
+  return text
+    .replace(/\b([A-Z]{2,6})\s*\([^)]+\)/g, '$1')
+    .replace(/\b([A-Za-z][A-Za-z\s&/-]{4,80})\s*\(([A-Z]{2,6})\)/g, '$2');
 }
 
 // Apply stripping to all breakdown items and key metrics
@@ -5185,11 +5482,52 @@ async function generatePPTX(
         // - Merge duplicate customer/client rows and partnership rows into one clean row
         const canonicalLeftLabel = (label) => {
           const lower = ensureString(label).toLowerCase().trim();
-          if (['customers', 'key customers', 'clients', 'key clients'].includes(lower)) {
+          if (/(^| )((key )?(customers?|clients?))$/i.test(lower)) {
             return 'customers';
           }
-          if (lower === 'principal partners' || lower === 'key partnerships') return 'partnerships';
+          if (/(key partnerships?|key partners?|principal partnerships?|principal partners?)/i.test(lower))
+            return 'partnerships';
+          if (/(key suppliers?|suppliers?|vendors?)/i.test(lower)) return 'suppliers';
+          if (
+            /(foreign worker source|export countries|source countries|countries served|global reach|country presence|geographic reach|market coverage|markets served|country coverage)/i.test(
+              lower
+            )
+          ) {
+            return 'geography';
+          }
           return lower;
+        };
+
+        const inferGeographyDisplayLabel = (label) => {
+          const lower = ensureString(label).toLowerCase().trim();
+          if (lower.includes('foreign worker source')) return 'Foreign Worker Source';
+          if (lower.includes('source countries')) return 'Source Countries';
+          if (lower.includes('export countries')) return 'Export Countries';
+          return 'Countries Served';
+        };
+
+        const chooseGeographyLabel = () => {
+          const existingLabelsLower = new Set(
+            finalTableData.map((row) => ensureString(row?.[0]).toLowerCase().trim())
+          );
+          if (existingLabelsLower.has('foreign worker source')) return 'Foreign Worker Source';
+          if (existingLabelsLower.has('export countries')) return 'Export Countries';
+          if (existingLabelsLower.has('source countries')) return 'Source Countries';
+
+          const contextText = normalizeForComparison(
+            [
+              ensureString(company.business),
+              ensureString(company.message),
+              ensureString(company.breakdown_title),
+              ...(company.breakdown_items || []).map(
+                (item) => `${ensureString(item?.label)} ${ensureString(item?.value)}`
+              ),
+            ].join(' ')
+          );
+          if (/(foreign worker|migrant|manpower|labou?r)/i.test(contextText)) {
+            return 'Foreign Worker Source';
+          }
+          return 'Export Countries';
         };
 
         const hardKeepLabels = new Set([
@@ -5202,36 +5540,34 @@ async function generatePPTX(
           'business',
           'key partnerships',
           'principal partners',
+          'principal partnerships',
           'insurance partner',
           'export countries',
+          'source countries',
           'customers',
           'key customers',
           'clients',
           'key clients',
+          'suppliers',
+          'key suppliers',
           'key metrics',
           'industries',
           'foreign worker source',
         ]);
 
         const macroLabelPatterns = [
-          /industry contributions?/i,
-          /workforce contribution/i,
-          /\bgdp contribution\b/i,
-          /semiconductor export rank/i,
-          /semiconductor export contribution/i,
-          /semiconductor exports?/i,
-          /global trade contribution/i,
+          /\b(gdp|workforce|global trade)\s+contribution\b/i,
+          /\b(country|national|macro)\s+(exports?|economy|trade)\b/i,
+          /\b(export rank|industry contribution)\b/i,
         ];
         const macroValuePatterns = [
-          /\bmalaysia gdp\b/i,
-          /\bmalaysia(?:'s)? (?:workforce|economy)\b/i,
-          /\blargest in the world\b/i,
-          /\bmalaysia(?:'s)? total semiconductor exports?\b/i,
-          /\bglobal semiconductor trade\b/i,
+          /\b(?:national|country|global)\s+(?:gdp|workforce|exports?|trade|economy)\b/i,
+          /\b(?:largest|top)\s+\d+(?:st|nd|rd|th)?\s+in\s+the\s+world\b/i,
         ];
 
         const finalTableData = [];
         const rowIndexByCanonical = new Map();
+        const extractedGeoFromPartnerships = [];
         const hasExplicitHqOrLocationRow = tableData.some((row) => {
           const lowerLabel = ensureString(row?.[0]).toLowerCase().trim();
           return lowerLabel === 'hq' || lowerLabel === 'location';
@@ -5245,7 +5581,7 @@ async function generatePPTX(
 
           if (!label || isEmptyValue(value)) return;
 
-          if (lower === 'key partnerships' || lower === 'principal partners') {
+          if (/(key partnerships?|key partners?|principal partnerships?|principal partners?)/i.test(lower)) {
             value = cleanRelationshipDisplayValue(value);
           } else if (lower === 'insurance partner' || lower === 'export countries') {
             value = fixAcronymCasing(cleanCompanyPrefixesInText(value));
@@ -5258,9 +5594,24 @@ async function generatePPTX(
             return;
           }
 
+          const normalizedYear = normalizeYearLabelAndValue(
+            label,
+            value,
+            ensureString(company.established_year)
+          );
+          label = normalizedYear.label;
+          value = normalizedYear.value;
+          const normalizedLower = ensureString(label).toLowerCase().trim();
+
           if (
-            /(customer|client|supplier|vendor|partner|principal|brand)/i.test(lower) &&
-            !['insurance partner', 'export countries'].includes(lower)
+            /(customer|client|supplier|vendor|partner|principal|brand)/i.test(normalizedLower) &&
+            ![
+              'insurance partner',
+              'export countries',
+              'source countries',
+              'foreign worker source',
+              'countries served',
+            ].includes(normalizedLower)
           ) {
             const cleanedRelationshipValue = segmentRelationshipBlobValue(
               label,
@@ -5268,7 +5619,11 @@ async function generatePPTX(
               companyNameForFilter
             );
             if (!cleanedRelationshipValue) {
-              if (lower === 'key partnerships') {
+              if (
+                /(key partnerships?|key partners?|principal partnerships?|principal partners?)/i.test(
+                  normalizedLower
+                )
+              ) {
                 const fallbackPartnershipValue = cleanRelationshipDisplayValue(value);
                 if (fallbackPartnershipValue && !isRelationshipArtifactText(fallbackPartnershipValue)) {
                   value = fallbackPartnershipValue;
@@ -5288,7 +5643,35 @@ async function generatePPTX(
             if (cleanedRelationshipValue) value = cleanedRelationshipValue;
           }
 
-          if (lower === 'headquarters' && hasExplicitHqOrLocationRow) {
+          if (
+            /(key partnerships?|key partners?|principal partnerships?|principal partners?)/i.test(
+              normalizedLower
+            )
+          ) {
+            const { partnerEntries, geographyItems } = splitPartnershipAndGeographyEntries(value);
+            if (geographyItems.length > 0) {
+              extractedGeoFromPartnerships.push(...geographyItems);
+            }
+            const compactPartners = formatCompactEntryList(partnerEntries.join('\n'), {
+              maxEntries: 8,
+              lineModeThreshold: 4,
+            });
+            if (!compactPartners) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because only geography entries remained after split`
+              );
+              return;
+            }
+            value = compactPartners;
+          } else if (/(customers?|clients?|suppliers?|vendors?|brands?)/i.test(normalizedLower)) {
+            value = formatCompactEntryList(value, {
+              maxEntries: 10,
+              lineModeThreshold: 4,
+            });
+            if (!value) return;
+          }
+
+          if (normalizedLower === 'headquarters' && hasExplicitHqOrLocationRow) {
             console.log(
               `    [LeftTable Cleanup] Removed "Headquarters" because HQ/Location row already exists`
             );
@@ -5304,7 +5687,7 @@ async function generatePPTX(
             return;
           }
 
-          if (lower === 'principal brands') {
+          if (normalizedLower === 'principal brands') {
             const normalizedCompanyName = normalizeForComparison(
               cleanCompanyName(companyNameForFilter || company.company_name || '')
             );
@@ -5337,7 +5720,7 @@ async function generatePPTX(
 
           const isMacroByLabel = macroLabelPatterns.some((pattern) => pattern.test(label));
           const isMacroByValue = macroValuePatterns.some((pattern) => pattern.test(value));
-          if (!hardKeepLabels.has(lower) && (isMacroByLabel || isMacroByValue)) {
+          if (!hardKeepLabels.has(normalizedLower) && (isMacroByLabel || isMacroByValue)) {
             console.log(
               `    [LeftTable Cleanup] Removed "${label}" because it is macro/country-level context, not company proof`
             );
@@ -5348,7 +5731,10 @@ async function generatePPTX(
           if (canonical === 'customers' && rowIndexByCanonical.has(canonical)) {
             const existingIndex = rowIndexByCanonical.get(canonical);
             const existingRow = finalTableData[existingIndex];
-            const mergedValue = mergeReadableRowValues(existingRow[1], value);
+            const mergedValue = formatCompactEntryList(mergeReadableRowValues(existingRow[1], value), {
+              maxEntries: 10,
+              lineModeThreshold: 4,
+            });
             finalTableData[existingIndex] = ['Customers', mergedValue, existingRow[2] || meta];
             console.log(
               `    [LeftTable Cleanup] Merged duplicate customer/client rows into one "Customers" row`
@@ -5358,7 +5744,13 @@ async function generatePPTX(
           if (canonical === 'partnerships' && rowIndexByCanonical.has(canonical)) {
             const existingIndex = rowIndexByCanonical.get(canonical);
             const existingRow = finalTableData[existingIndex];
-            const mergedValue = mergeReadableRowValues(existingRow[1], value);
+            const mergedValue = formatCompactEntryList(
+              mergeReadableRowValues(existingRow[1], value),
+              {
+                maxEntries: 8,
+                lineModeThreshold: 4,
+              }
+            );
             finalTableData[existingIndex] = [
               'Key Partnerships',
               mergedValue,
@@ -5369,17 +5761,80 @@ async function generatePPTX(
             );
             return;
           }
+          if (canonical === 'suppliers' && rowIndexByCanonical.has(canonical)) {
+            const existingIndex = rowIndexByCanonical.get(canonical);
+            const existingRow = finalTableData[existingIndex];
+            const mergedValue = formatCompactEntryList(
+              mergeReadableRowValues(existingRow[1], value),
+              {
+                maxEntries: 10,
+                lineModeThreshold: 4,
+              }
+            );
+            finalTableData[existingIndex] = ['Suppliers', mergedValue, existingRow[2] || meta];
+            console.log(`    [LeftTable Cleanup] Merged duplicate supplier rows into one "Suppliers" row`);
+            return;
+          }
+          if (canonical === 'geography' && rowIndexByCanonical.has(canonical)) {
+            const existingIndex = rowIndexByCanonical.get(canonical);
+            const existingRow = finalTableData[existingIndex];
+            const mergedValue = mergeOrChooseRicherGeographyValue(existingRow[1], value);
+            finalTableData[existingIndex] = [existingRow[0], mergedValue, existingRow[2] || meta];
+            console.log(
+              `    [LeftTable Cleanup] Consolidated duplicate geography rows into one "Countries Served" row`
+            );
+            return;
+          }
 
           const finalLabel =
             canonical === 'customers'
               ? 'Customers'
               : canonical === 'partnerships'
                 ? 'Key Partnerships'
+                : canonical === 'suppliers'
+                  ? 'Suppliers'
+                : canonical === 'geography'
+                  ? inferGeographyDisplayLabel(label)
                 : normalizeLabel(label);
 
           finalTableData.push([finalLabel, value, meta]);
           rowIndexByCanonical.set(canonical, finalTableData.length - 1);
         });
+
+        if (extractedGeoFromPartnerships.length > 0) {
+          const geoValueFromPartnerships = formatCompactEntryList(
+            extractedGeoFromPartnerships.join('\n'),
+            {
+              maxEntries: 12,
+              lineModeThreshold: 5,
+            }
+          );
+          if (geoValueFromPartnerships) {
+            let geoIndex = finalTableData.findIndex((row) => {
+              const lowerLabel = ensureString(row?.[0]).toLowerCase().trim();
+              return ['foreign worker source', 'export countries', 'source countries', 'countries served'].includes(
+                lowerLabel
+              );
+            });
+            if (geoIndex >= 0) {
+              const existingGeoRow = finalTableData[geoIndex];
+              finalTableData[geoIndex] = [
+                existingGeoRow[0],
+                mergeOrChooseRicherGeographyValue(existingGeoRow[1], geoValueFromPartnerships),
+                existingGeoRow[2],
+              ];
+              console.log(
+                `    [LeftTable Cleanup] Merged geography items extracted from partnerships into existing geography row`
+              );
+            } else {
+              const geoLabel = chooseGeographyLabel();
+              finalTableData.push([geoLabel, geoValueFromPartnerships, null]);
+              console.log(
+                `    [LeftTable Cleanup] Added "${geoLabel}" from geography items extracted out of partnership row`
+              );
+            }
+          }
+        }
 
         // Helper function to format cell text with bullet points
         // Manually inserts round bullet (•) at 82% size since pptxgenjs doesn't support bullet sizing
@@ -7526,6 +7981,7 @@ function extractBranchLocationSummary(content, officeCount = null) {
 
   const cleanCoverageFragment = (rawValue) => {
     return ensureString(rawValue)
+      .replace(/\b(?:situated at|located at|based at)\b/gi, '')
       .replace(/\b(?:to|for|with|which|that|where|offering|providing|serving)\b.*$/i, '')
       .replace(/\s+/g, ' ')
       .replace(/[,:;.-]+$/g, '')
@@ -7588,6 +8044,7 @@ function extractBranchLocationSummary(content, officeCount = null) {
   for (const rawToken of extractedTokens) {
     let token = ensureString(rawToken)
       .replace(/[()]/g, ' ')
+      .replace(/\b(?:situated at|located at|based at)\b/gi, '')
       .replace(/\b(?:to|for|with|which|that|where|offering|providing|serving)\b.*$/i, '')
       .replace(
         /\b(?:branch|branches|office|offices|location|locations|warehouse|warehouses|depot|depots)\b/gi,
@@ -7611,6 +8068,7 @@ function extractBranchLocationSummary(content, officeCount = null) {
       )
     )
       continue;
+    if (/\bsituated\b|\blocated\b|\bbased\b/.test(lower)) continue;
     if (/^(?:across|along|throughout|covering|include|includes)$/i.test(token)) continue;
 
     const normalizedKey = lower.replace(/\s+/g, ' ');
@@ -10292,7 +10750,7 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
     /(?:^|\n)\s*(?:[-■•▪]\s*)?(?:customer|customers|supplier|suppliers|principal|principals|partner|partners|brand|brands)\s*[a-z](?:\s*-\s*[a-z])?\s*:/i.test(
       value
     );
-  const normalizedRelationshipValue = value
+  let normalizedRelationshipValue = value
     .split('\n')
     .map((line) =>
       ensureString(line)
@@ -10305,9 +10763,28 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
     .filter(Boolean)
     .join('\n');
 
-  // If already grouped into lines, keep the original grouping.
+  // Preserve structured multi-line relationship blobs, but drop obvious non-company/noise rows.
   if (value.includes('\n') && value.includes(':') && !hasLowQualityBucketLabel) {
-    return fixAcronymCasing(value);
+    const cleanedStructuredLines = value
+      .split('\n')
+      .map((line) => ensureString(line).replace(/^[\-â– â€¢â–ª]\s*/, '').trim())
+      .filter(Boolean)
+      .filter((line) => {
+        const lower = line.toLowerCase();
+        if (
+          /\b(employment type|salary|admin(?:istrative)?|executive|job title|position|vacancy|roles?|phone|email|contact|website|url|address|disclaimer)\b/i.test(
+            lower
+          )
+        ) {
+          return false;
+        }
+        const valuePart = line.includes(':') ? line.split(':').slice(1).join(':').trim() : line;
+        if (!valuePart || isRelationshipArtifactText(valuePart)) return false;
+        return true;
+      });
+    if (cleanedStructuredLines.length > 0) {
+      normalizedRelationshipValue = cleanedStructuredLines.join('\n');
+    }
   }
 
   const extracted = extractRelationshipsFromMetrics([
@@ -12422,10 +12899,16 @@ REMOVE any metric containing:
 - Remove duplicate service rows ("Core Services", "Services Offered", "Services", "Transportation Services") ONLY if they duplicate right-side Service Offerings content
 - Remove "Principal Brands" ONLY when value is generic (e.g., "Portfolios", "Various", "Multiple")
 - If partnership text is messy, CLEAN the wording/format instead of removing
+- If one row mixes partner names and geography terms (countries/regions/markets), SPLIT into two rows:
+  - partner row (keep partner/company names)
+  - geography row ("Export Countries" or "Foreign Worker Source")
+- If geography rows overlap (e.g., "Countries Served" and "Global Reach"), keep one consolidated row with richer content
 - If a name has OCR number tails, clean it:
   - "Krungsri11" -> "Krungsri", "Ict1" -> "Ict"
 - Merge duplicate partnership rows into one:
   - "Key Partnerships" + "Principal Partners" -> one clean "Key Partnerships" row
+- Normalize year rows to canonical format:
+  - labels like "Years Established", "Years In Operation", "Since 2001" -> "Est. Year" with 4-digit year value
 
 ### 4. TRANSLATE TO ENGLISH
 - All output must be English (A-Z only)
@@ -12437,6 +12920,7 @@ REMOVE any metric containing:
 - For technical abbreviations NOT common knowledge, include full form inline
 - Example: "PU (Polyurethane)", "EVA (Ethylene Vinyl Acetate)", "ABS (Acrylonitrile Butadiene Styrene)"
 - Common abbreviations DON'T need explanation: ISO, FDA, GMP, B2B, B2C, HQ, USD, sqm, kg
+- Abbreviation validation rule: only treat 2-6 ALL-CAPS letters as abbreviations (example: "EOR", "RPO", "CLQ")
 
 ### 6. CHECK FOR REDUNDANCY
 - If "Factory Established" has same year as "Est. Year", REMOVE "Factory Established" metric
@@ -13017,6 +13501,14 @@ async function processSingleWebsite(website, index, total) {
         console.log(`  [${index + 1}] Using searched location fallback: ${finalLocation}`);
       }
     }
+    const basedLocationHint = extractLocationFromBasedText(
+      [ensureString(businessInfo.message), ensureString(businessInfo.business)].join(' '),
+      inferCountryFromWebsite(trimmedWebsite)
+    );
+    if (!finalLocation && basedLocationHint) {
+      finalLocation = basedLocationHint;
+      console.log(`  [${index + 1}] Using X-based location fallback: ${finalLocation}`);
+    }
 
     // Validate and fix HQ format
     let validatedLocation = validateAndFixHQFormat(finalLocation, trimmedWebsite);
@@ -13043,6 +13535,11 @@ async function processSingleWebsite(website, index, total) {
     if (!validatedLocation && regionalLocationHint) {
       validatedLocation = regionalLocationHint;
       console.log(`  [${index + 1}] Using regional hint after HQ validation: ${validatedLocation}`);
+    } else if (!validatedLocation && basedLocationHint) {
+      validatedLocation =
+        validateAndFixHQFormat(basedLocationHint, trimmedWebsite) ||
+        ensureString(basedLocationHint).trim();
+      console.log(`  [${index + 1}] Using X-based hint after HQ validation: ${validatedLocation}`);
     } else if (validatedLocation && regionalLocationHint) {
       const inferredCountry = inferCountryFromWebsite(trimmedWebsite);
       if (inferredCountry === 'Australia') {
@@ -14169,6 +14666,14 @@ app.post('/api/generate-ppt', async (req, res) => {
             console.log(`  Using searched location fallback: ${finalLocation}`);
           }
         }
+        const basedLocationHint = extractLocationFromBasedText(
+          [ensureString(businessInfo.message), ensureString(businessInfo.business)].join(' '),
+          inferCountryFromWebsite(website)
+        );
+        if (!finalLocation && basedLocationHint) {
+          finalLocation = basedLocationHint;
+          console.log(`  Using X-based location fallback: ${finalLocation}`);
+        }
 
         // Validate and fix HQ format
         let validatedLocation = validateAndFixHQFormat(finalLocation, website);
@@ -14195,6 +14700,10 @@ app.post('/api/generate-ppt', async (req, res) => {
         if (!validatedLocation && regionalLocationHint) {
           validatedLocation = regionalLocationHint;
           console.log(`  Using regional hint after HQ validation: ${validatedLocation}`);
+        } else if (!validatedLocation && basedLocationHint) {
+          validatedLocation =
+            validateAndFixHQFormat(basedLocationHint, website) || ensureString(basedLocationHint).trim();
+          console.log(`  Using X-based hint after HQ validation: ${validatedLocation}`);
         } else if (validatedLocation && regionalLocationHint) {
           const inferredCountry = inferCountryFromWebsite(website);
           if (inferredCountry === 'Australia') {
