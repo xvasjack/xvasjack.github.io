@@ -206,15 +206,11 @@ function isLikelyDuplicateServiceRow(leftLabel, leftValue, breakdownTitle, break
   if (!title.includes('service')) return false;
 
   const normalizedLabel = normalizeForComparison(leftLabel);
-  const duplicateCandidateLabels = [
-    'core services',
-    'services offered',
-    'services',
-    'service offerings',
-    'transport services',
-    'transportation services',
+  const duplicateLabelFamilies = [
+    /\b(core\s+services?|services?\s+offered|service\s+offerings?|service\s+lines?|solutions?)\b/i,
+    /\b(transport(?:ation)?\s+services?|transport(?:ation)?\s+management)\b/i,
   ];
-  if (!duplicateCandidateLabels.some((candidate) => normalizedLabel.includes(candidate))) {
+  if (!duplicateLabelFamilies.some((pattern) => pattern.test(normalizedLabel))) {
     return false;
   }
 
@@ -267,10 +263,11 @@ function isRelationshipArtifactText(value) {
 function hasCompanySignalInName(value) {
   const text = ensureString(value).trim();
   if (!text) return false;
+  if (isLikelyGeographyToken(text)) return false;
 
   const lower = text.toLowerCase();
   if (
-    /\b(ltd|limited|inc|corp|corporation|group|bank|holding|holdings|venture|ventures|technology|technologies|systems|industries|company|solutions?|management|resources|services?|logistics|capital|energy|engineering|manufacturing|precision|software|telecom|medical|health|foods|motors|construction)\b/.test(
+    /\b(ltd|limited|inc|corp|corporation|group|bank|holding|holdings|venture|ventures|technology|technologies|systems|industries|company|resources?|capital|energy|engineering|manufacturing|precision|software|telecom|medical|health|foods|motors|construction|agency|agencies|airline|airlines|insurance|pharma|chemical|chemicals|industrial|automotive|electronics|logistics|distribution|distributor)\b/.test(
       lower
     )
   ) {
@@ -278,8 +275,23 @@ function hasCompanySignalInName(value) {
   }
   if (/[&]/.test(text)) return true;
   if (/\b[A-Z]{2,}\b/.test(text)) return true;
+  if (/^[A-Z][A-Za-z&.'-]+(?:\s+[A-Z][A-Za-z&.'-]+){1,3}$/.test(text)) return true;
   if (text.split(/\s+/).length === 1 && text.length >= 4) return true;
   return false;
+}
+
+function hasLegalEntitySignal(value) {
+  const text = ensureString(value).trim();
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  if (
+    /\b(ltd|limited|inc|corp|corporation|group|co|company|llc|llp|plc|pte|sdn|bhd|pvt|gmbh|jsc|bank|airline|airlines|university|hospital|holdings?|ventures?|technologies?|systems?)\b/.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+  return /[&]/.test(text);
 }
 
 function cleanRelationshipDisplayValue(value) {
@@ -297,7 +309,7 @@ function cleanRelationshipDisplayValue(value) {
     );
     const fixed = fixAcronymCasing(cleanCompanyPrefixesInText(normalizedLine.trim()));
     if (!fixed) continue;
-    if (isRelationshipArtifactText(fixed)) continue;
+    if (isLikelyNonCompanyRelationshipToken(fixed)) continue;
     const dedupeKey = normalizeForComparison(fixed);
     if (!dedupeKey || seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
@@ -369,8 +381,51 @@ function splitReadableEntries(value) {
   return unique;
 }
 
-function getCountryNameFromCode(code) {
-  const map = {
+let COUNTRY_LOOKUP_CACHE = null;
+
+function buildRuntimeCountryLookup() {
+  const nameToCode = new Map();
+  const codeToName = new Map();
+  const aliasToCode = new Map();
+
+  const addCountryName = (rawName, code) => {
+    const countryCode = ensureString(code).toUpperCase().trim();
+    const normalizedName = normalizeForComparison(rawName);
+    if (!countryCode || !normalizedName) return;
+    if (!nameToCode.has(normalizedName)) {
+      nameToCode.set(normalizedName, countryCode);
+    }
+    if (normalizedName.startsWith('the ')) {
+      const withoutArticle = normalizedName.replace(/^the\s+/, '').trim();
+      if (withoutArticle) nameToCode.set(withoutArticle, countryCode);
+    }
+    if (!codeToName.has(countryCode)) {
+      codeToName.set(countryCode, fixAcronymCasing(ensureString(rawName).trim()));
+    }
+  };
+
+  // Build country names from ISO region display names at runtime (generic, no company hardcoding).
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    for (let i = 0; i < letters.length; i++) {
+      for (let j = 0; j < letters.length; j++) {
+        const code = `${letters[i]}${letters[j]}`;
+        let display = '';
+        try {
+          display = ensureString(displayNames.of(code)).trim();
+        } catch {
+          display = '';
+        }
+        if (!display || display === code || /unknown region/i.test(display)) continue;
+        addCountryName(display, code);
+      }
+    }
+  } catch {
+    // Fallback handled below via static map.
+  }
+
+  const fallbackCountryMap = {
     PH: 'Philippines',
     TH: 'Thailand',
     MY: 'Malaysia',
@@ -386,8 +441,121 @@ function getCountryNameFromCode(code) {
     AU: 'Australia',
     IN: 'India',
     HK: 'Hong Kong',
+    AE: 'United Arab Emirates',
   };
-  return map[String(code || '').toUpperCase()] || '';
+  Object.entries(fallbackCountryMap).forEach(([code, name]) => addCountryName(name, code));
+
+  const commonAliases = {
+    usa: 'US',
+    uk: 'GB',
+    uae: 'AE',
+    prc: 'CN',
+  };
+  Object.entries(commonAliases).forEach(([alias, code]) =>
+    aliasToCode.set(normalizeForComparison(alias), code)
+  );
+
+  const countryFlagMap = typeof COUNTRY_FLAG_MAP === 'object' ? COUNTRY_FLAG_MAP : {};
+  for (const [token, code] of Object.entries(countryFlagMap)) {
+    const normalizedToken = normalizeForComparison(token);
+    const normalizedCode = ensureString(code).toUpperCase().trim();
+    if (!normalizedToken || !normalizedCode) continue;
+    // Skip ambiguous two-letter aliases (e.g., "in", "my", "to"-like words).
+    if (/^[a-z]{2}$/i.test(normalizedToken)) continue;
+    aliasToCode.set(normalizedToken, normalizedCode);
+    if (!codeToName.has(normalizedCode)) {
+      const fallbackName = fixAcronymCasing(token);
+      codeToName.set(normalizedCode, fallbackName);
+    }
+  }
+
+  const countryNames = Array.from(nameToCode.keys())
+    .filter((name) => name.length >= 3)
+    .sort((a, b) => b.length - a.length)
+    .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const countryPattern =
+    countryNames.length > 0 ? new RegExp(`\\b(${countryNames.join('|')})\\b`, 'gi') : null;
+
+  return { nameToCode, codeToName, aliasToCode, countryPattern };
+}
+
+function getRuntimeCountryLookup() {
+  if (!COUNTRY_LOOKUP_CACHE) {
+    COUNTRY_LOOKUP_CACHE = buildRuntimeCountryLookup();
+  }
+  return COUNTRY_LOOKUP_CACHE;
+}
+
+function getCountryNameFromCode(code) {
+  const normalizedCode = ensureString(code).toUpperCase().trim();
+  if (!normalizedCode) return '';
+  const lookup = getRuntimeCountryLookup();
+  return lookup.codeToName.get(normalizedCode) || '';
+}
+
+function getCountryCodeFromToken(token) {
+  const rawToken = ensureString(token).trim();
+  const normalizedToken = normalizeForComparison(token);
+  if (!normalizedToken) return '';
+  const lookup = getRuntimeCountryLookup();
+
+  if (lookup.aliasToCode.has(normalizedToken)) return lookup.aliasToCode.get(normalizedToken);
+  if (lookup.nameToCode.has(normalizedToken)) return lookup.nameToCode.get(normalizedToken);
+
+  if (/^[A-Z]{2}$/.test(rawToken)) {
+    const upper = rawToken.toUpperCase();
+    if (lookup.codeToName.has(upper)) return upper;
+  }
+  return '';
+}
+
+function extractCountryMentionsFromText(text) {
+  const source = ensureString(text);
+  const normalizedSource = normalizeForComparison(source);
+  if (!normalizedSource) return [];
+
+  const lookup = getRuntimeCountryLookup();
+  const found = [];
+  const seen = new Set();
+
+  const addCountryByCode = (code) => {
+    const countryName = getCountryNameFromCode(code);
+    const normalizedCountry = normalizeForComparison(countryName);
+    if (!countryName || !normalizedCountry || seen.has(normalizedCountry)) return;
+    seen.add(normalizedCountry);
+    found.push(countryName);
+  };
+
+  if (lookup.countryPattern) {
+    lookup.countryPattern.lastIndex = 0;
+    let match;
+    while ((match = lookup.countryPattern.exec(normalizedSource)) !== null) {
+      const normalizedName = normalizeForComparison(match[1]);
+      const code = lookup.nameToCode.get(normalizedName);
+      if (code) addCountryByCode(code);
+    }
+  }
+
+  const upperTokens = source.match(/\b[A-Z]{2,3}\b/g) || [];
+  for (const token of upperTokens) {
+    const code = getCountryCodeFromToken(token);
+    if (code) addCountryByCode(code);
+  }
+
+  return found;
+}
+
+function normalizeGeographyTokenForDisplay(token) {
+  const cleaned = fixAcronymCasing(cleanCompanyPrefixesInText(ensureString(token).trim()));
+  if (!cleaned) return '';
+
+  const mentions = extractCountryMentionsFromText(cleaned);
+  if (mentions.length > 0) return mentions[0];
+
+  const code = getCountryCodeFromToken(cleaned);
+  const countryName = getCountryNameFromCode(code);
+  if (countryName) return countryName;
+  return cleaned;
 }
 
 function isLikelyGeographyToken(token) {
@@ -397,15 +565,34 @@ function isLikelyGeographyToken(token) {
   if (!lower) return false;
 
   if (
-    /\b(country|countries|region|regions|market|markets|nationwide|global|worldwide|southeast asia|south asia|east asia|middle east|north america|latin america|europe|africa|apac|asean)\b/i.test(
+    /\b(country|countries|region|regions|market|markets|nationwide|global|worldwide|southeast asia|south asia|east asia|middle east|north america|latin america|europe|africa|apac|asean|foreign worker source|source countries|country presence|geographic reach|markets served)\b/i.test(
       lower
     )
   ) {
     return true;
   }
 
-  const countryMap = typeof COUNTRY_FLAG_MAP === 'object' ? COUNTRY_FLAG_MAP : {};
-  if (Object.prototype.hasOwnProperty.call(countryMap, lower) && lower.length > 2) return true;
+  const directCode = getCountryCodeFromToken(lower);
+  if (directCode) {
+    const directCountry = normalizeForComparison(getCountryNameFromCode(directCode));
+    if (!directCountry || lower === directCountry) return true;
+    if (!hasLegalEntitySignal(text) && lower.split(' ').length <= 3) return true;
+  }
+
+  const countryMentions = extractCountryMentionsFromText(text);
+  if (countryMentions.length === 0) return false;
+  if (countryMentions.length >= 2) return true;
+
+  const normalizedMention = normalizeForComparison(countryMentions[0]);
+  if (normalizedMention && normalizedMention === lower) return true;
+
+  if (
+    /\b(across|in|from|to|within|covering|covers|presence|served|source|origin|markets?|countries?|regions?)\b/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
 
   return false;
 }
@@ -414,6 +601,14 @@ function extractGeographyItemsFromText(value) {
   const entries = splitReadableEntries(value);
   const geographyItems = [];
   const seen = new Set();
+
+  const pushGeo = (token) => {
+    const display = normalizeGeographyTokenForDisplay(token);
+    const normalized = normalizeForComparison(display);
+    if (!display || !normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    geographyItems.push(display);
+  };
 
   for (const entry of entries) {
     const cleanedEntry = ensureString(entry).trim();
@@ -428,29 +623,70 @@ function extractGeographyItemsFromText(value) {
       .map((part) => ensureString(part).trim())
       .filter(Boolean);
 
+    const tokensWithCountries = rawTokens
+      .map((token) => ({
+        token,
+        countries: extractCountryMentionsFromText(token),
+      }))
+      .filter((item) => item.countries.length > 0);
+
     const geoTokens = rawTokens.filter((token) => isLikelyGeographyToken(token));
     const hasGeoLabel =
-      /\b(country|countries|region|regions|market|markets|nationwide|global reach|geographic|overseas)\b/i.test(
+      /\b(country|countries|region|regions|market|markets|nationwide|global reach|geographic|overseas|source|foreign worker)\b/i.test(
         cleanedEntry.toLowerCase()
       ) || /^source\b/i.test(cleanedEntry.toLowerCase());
 
     const shouldTreatAsGeo =
       hasGeoLabel ||
+      tokensWithCountries.length >= 1 ||
       (rawTokens.length >= 2 && geoTokens.length >= Math.max(2, Math.ceil(rawTokens.length * 0.6))) ||
       (rawTokens.length >= 1 && geoTokens.length === rawTokens.length);
 
     if (!shouldTreatAsGeo) continue;
 
+    if (tokensWithCountries.length > 0) {
+      for (const item of tokensWithCountries) {
+        item.countries.forEach((country) => pushGeo(country));
+      }
+      continue;
+    }
+
     const itemsToAdd = geoTokens.length > 0 ? geoTokens : rawTokens;
     for (const token of itemsToAdd) {
-      const normalized = normalizeForComparison(token);
-      if (!normalized || seen.has(normalized)) continue;
-      seen.add(normalized);
-      geographyItems.push(fixAcronymCasing(cleanCompanyPrefixesInText(token)));
+      pushGeo(token);
     }
   }
 
   return geographyItems;
+}
+
+function isLikelyNonCompanyRelationshipToken(value) {
+  const text = ensureString(value).replace(/^[\-â€¢â–ªâ– ]\s*/, '').trim();
+  if (!text) return true;
+  const lower = text.toLowerCase();
+
+  if (isRelationshipArtifactText(text)) return true;
+  if (/^\+?\d+\s+more$/i.test(lower)) return true;
+  if (isLikelyGeographyToken(text)) return true;
+
+  if (
+    /\b(employment type|salary|admin(?:istrative)?|executive|job title|position|vacancy|roles?|phone|email|contact|website|url|address|disclaimer|procurement|supply chain|transportation|transport|full time|part time|location|locations)\b/i.test(
+      lower
+    ) &&
+    !hasLegalEntitySignal(text)
+  ) {
+    return true;
+  }
+
+  if (
+    /^(?:key|additional|more|further)?\s*(?:customers?|clients?|suppliers?|vendors?|partners?|principal partners?|brands?)$/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function cleanRelationshipEntityName(name) {
@@ -471,15 +707,7 @@ function cleanRelationshipEntityName(name) {
     .trim();
 
   if (!text) return '';
-  if (isRelationshipArtifactText(text)) return '';
-  if (
-    /\b(employment type|salary|admin(?:istrative)?|executive|job title|position|vacancy|roles?|phone|email|contact|website|url|address|disclaimer|procurement)\b/i.test(
-      text.toLowerCase()
-    )
-  ) {
-    return '';
-  }
-  if (isLikelyGeographyToken(text)) return '';
+  if (isLikelyNonCompanyRelationshipToken(text)) return '';
   return fixAcronymCasing(cleanCompanyPrefixesInText(text));
 }
 
@@ -551,9 +779,8 @@ function isRedundantSingleCountryGeography(value, hqOrLocationValue = '') {
   if (!geoNorm || !hqNorm) return false;
   if (geoNorm === hqNorm) return true;
 
-  const countryMap = typeof COUNTRY_FLAG_MAP === 'object' ? COUNTRY_FLAG_MAP : {};
-  const geoCode = countryMap[geoNorm] || '';
-  const hqCode = countryMap[hqNorm] || '';
+  const geoCode = getCountryCodeFromToken(geoNorm);
+  const hqCode = getCountryCodeFromToken(hqNorm);
   return !!geoCode && !!hqCode && geoCode === hqCode;
 }
 
@@ -671,8 +898,7 @@ function extractLocationFromBasedText(text, fallbackCountry = '') {
   if (!geoToken) return '';
 
   const normalizedGeo = normalizeForComparison(geoToken);
-  const countryCode =
-    (typeof COUNTRY_FLAG_MAP === 'object' && COUNTRY_FLAG_MAP[normalizedGeo]) || '';
+  const countryCode = getCountryCodeFromToken(geoToken) || getCountryCodeFromToken(normalizedGeo);
   const countryName = getCountryNameFromCode(countryCode);
   const fallback = ensureString(fallbackCountry).trim();
 
@@ -888,6 +1114,7 @@ function filterGarbageNames(names, companyName = '') {
       const normalized = lower.replace(/\s+/g, '');
 
       if (isRelationshipArtifactText(name)) return false;
+      if (isLikelyNonCompanyRelationshipToken(name)) return false;
 
       // Too short (1-2 chars) or too long (>60 chars)
       if (name.length < 3 || name.length > 60) return false;
@@ -1073,8 +1300,11 @@ function filterGarbageNames(names, companyName = '') {
         .replace(/\b([A-Za-z][A-Za-z&.'-]{2,})\d{1,3}\b/g, '$1')
         .replace(/\s+/g, ' ')
         .trim();
-      return toTitleCase(stripCompanySuffix(cleanedName));
-    }); // Strip suffixes and title case
+      const finalName = toTitleCase(stripCompanySuffix(cleanedName));
+      if (!finalName || isLikelyNonCompanyRelationshipToken(finalName)) return '';
+      return finalName;
+    })
+    .filter(Boolean); // Strip suffixes, title case, then remove residual noise
 }
 
 function mergeRelationshipNamesByTrust(sourceMap = {}, companyName = '', options = {}) {
@@ -4130,35 +4360,39 @@ const EXCHANGE_RATE_MAP = {
 // Get country code from location string - MUST match HQ country only
 function getCountryCode(location) {
   if (!location) return null;
-  const loc = location.toLowerCase();
+  const loc = ensureString(location);
+  const resolveCountryCode = (text) => {
+    const source = ensureString(text).trim();
+    if (!source) return '';
+    const parts = source
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    for (let idx = parts.length - 1; idx >= 0; idx -= 1) {
+      const code = getCountryCodeFromToken(parts[idx]);
+      if (code) return code;
+    }
+    const mentions = extractCountryMentionsFromText(source);
+    if (mentions.length > 0) {
+      const code = getCountryCodeFromToken(mentions[mentions.length - 1]);
+      if (code) return code;
+    }
+    return getCountryCodeFromToken(source);
+  };
 
   // HARD RULE: Extract HQ country FIRST - flag must match HQ, not other locations
   // Check for "HQ:" prefix and extract only HQ location
   const hqMatch = loc.match(/hq:\s*([^\n]+)/i);
   if (hqMatch) {
-    const hqLocation = hqMatch[1].trim();
-    // Get country from the end of HQ line (last comma-separated part)
-    const parts = hqLocation.split(',').map((p) => p.trim());
-    const country = parts[parts.length - 1];
-    for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
-      if (country.includes(key)) return code;
-    }
+    const code = resolveCountryCode(hqMatch[1]);
+    if (code) return code;
   }
 
   // If no HQ prefix, check if it's a simple location (City, Country format)
   // Use the LAST part which should be the country
-  const parts = loc.split(',').map((p) => p.trim());
-  if (parts.length >= 1) {
-    const lastPart = parts[parts.length - 1];
-    for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
-      if (lastPart.includes(key)) return code;
-    }
-  }
+  const directCode = resolveCountryCode(loc);
+  if (directCode) return directCode;
 
-  // Fallback: search entire string (but this shouldn't happen with proper location format)
-  for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
-    if (loc.includes(key)) return code;
-  }
   return null;
 }
 
@@ -4265,6 +4499,11 @@ function filterEmptyMetrics(keyMetrics) {
     /customer satisfaction/i,
     /commitment/i,
     /dedication/i,
+    /complaint resolution/i,
+    /response time/i,
+    /turnaround time/i,
+    /service level agreement/i,
+    /\bsla\b/i,
   ];
 
   return keyMetrics.filter((metric) => {
@@ -5290,10 +5529,18 @@ async function generatePPTX(
           tableData.push(['Est. Year', company.established_year, null]);
         }
 
+        const basedLocationFallback = extractLocationFromBasedText(
+          [ensureString(company.message), ensureString(company.business)].join(' '),
+          inferCountryFromWebsite(ensureString(company.website))
+        );
+        const effectiveLocation = !isEmptyValue(company.location)
+          ? company.location
+          : basedLocationFallback;
+
         // Add Location row (HQ + branch footprint in same row when available)
-        if (!isEmptyValue(company.location) || hasBranchCoverage) {
-          const cleanLocation = !isEmptyValue(company.location)
-            ? cleanLocationValue(company.location, locationLabel)
+        if (!isEmptyValue(effectiveLocation) || hasBranchCoverage) {
+          const cleanLocation = !isEmptyValue(effectiveLocation)
+            ? cleanLocationValue(effectiveLocation, locationLabel)
             : '';
           const locationValue = [cleanLocation, branchNetworkSummary].filter(Boolean).join('\n');
           tableData.push([locationLabel, locationValue, null]);
@@ -5346,6 +5593,13 @@ async function generatePPTX(
           'commitment',
           'dedication',
           'focus on',
+          'complaint resolution',
+          'service level agreement',
+          'sla',
+          'response time',
+          'turnaround time',
+          'issue resolution',
+          'ticket closure',
         ];
 
         // Get the right table category to exclude from left table (prevent duplication)
@@ -5667,6 +5921,7 @@ async function generatePPTX(
         tableData.forEach((rawRow) => {
           let label = ensureString(rawRow[0]).trim();
           let value = ensureString(rawRow[1]).trim();
+          const originalValue = value;
           const meta = rawRow[2] ?? null;
           const lower = label.toLowerCase();
 
@@ -5693,6 +5948,7 @@ async function generatePPTX(
           label = normalizedYear.label;
           value = normalizedYear.value;
           const normalizedLower = ensureString(label).toLowerCase().trim();
+          const rowCanonical = canonicalLeftLabel(label);
 
           if (
             /(customer|client|supplier|vendor|partner|principal|brand)/i.test(normalizedLower) &&
@@ -5715,9 +5971,15 @@ async function generatePPTX(
                   normalizedLower
                 )
               ) {
-                const fallbackPartnershipValue = cleanRelationshipDisplayValue(value);
-                if (fallbackPartnershipValue && !isRelationshipArtifactText(fallbackPartnershipValue)) {
+                const fallbackPartnershipValue = cleanRelationshipDisplayValue(originalValue);
+                const splitPreview = splitPartnershipAndGeographyEntries(originalValue);
+                if (fallbackPartnershipValue && !isLikelyNonCompanyRelationshipToken(fallbackPartnershipValue)) {
                   value = fallbackPartnershipValue;
+                } else if (
+                  (splitPreview.partnerEntries || []).length > 0 ||
+                  (splitPreview.geographyItems || []).length > 0
+                ) {
+                  value = originalValue;
                 } else {
                   console.log(
                     `    [LeftTable Cleanup] Removed "${label}" because no clean partnership names remained after junk filtering`
@@ -5739,7 +6001,22 @@ async function generatePPTX(
               normalizedLower
             )
           ) {
-            const { partnerEntries, geographyItems } = splitPartnershipAndGeographyEntries(value);
+            const splitFromOriginal = splitPartnershipAndGeographyEntries(originalValue);
+            const splitFromCurrent = splitPartnershipAndGeographyEntries(value);
+            const partnerEntries = uniqueRelationshipNames([
+              ...(splitFromCurrent.partnerEntries || []),
+              ...(splitFromOriginal.partnerEntries || []),
+            ]);
+            const geographyItems = [];
+            const geographySeen = new Set();
+            [...(splitFromCurrent.geographyItems || []), ...(splitFromOriginal.geographyItems || [])].forEach(
+              (item) => {
+                const normalized = normalizeForComparison(item);
+                if (!normalized || geographySeen.has(normalized)) return;
+                geographySeen.add(normalized);
+                geographyItems.push(item);
+              }
+            );
             if (geographyItems.length > 0) {
               extractedGeoFromPartnerships.push(...geographyItems);
             }
@@ -5760,6 +6037,20 @@ async function generatePPTX(
               lineModeThreshold: 4,
             });
             if (!value) return;
+            const extractedGeo = extractGeographyItemsFromText(originalValue);
+            if (extractedGeo.length > 0) {
+              extractedGeoFromPartnerships.push(...extractedGeo);
+            }
+          }
+
+          if (rowCanonical === 'geography') {
+            const normalizedGeographyItems = extractGeographyItemsFromText(value);
+            if (normalizedGeographyItems.length > 0) {
+              value = formatCompactEntryList(normalizedGeographyItems.join('\n'), {
+                maxEntries: 12,
+                lineModeThreshold: 5,
+              });
+            }
           }
 
           if (normalizedLower === 'headquarters' && hasExplicitHqOrLocationRow) {
@@ -5818,7 +6109,7 @@ async function generatePPTX(
             return;
           }
 
-          const canonical = canonicalLeftLabel(label);
+          const canonical = rowCanonical;
           if (canonical === 'customers' && rowIndexByCanonical.has(canonical)) {
             const existingIndex = rowIndexByCanonical.get(canonical);
             const existingRow = finalTableData[existingIndex];
@@ -8813,6 +9104,7 @@ function extractRelationshipsFromMetrics(keyMetrics) {
       if (part.split(/\s+/).length > 5) continue;
       if (/^(over|more than|around|approximately)\s+\d+/i.test(lower)) continue;
       if (nonCompanyRolePattern.test(lower) && !corporateNameHintPattern.test(lower)) continue;
+      if (isLikelyNonCompanyRelationshipToken(part)) continue;
       if (/^\+?\d+\s+more$/i.test(lower)) continue;
       if (/^\d+(\.\d+)?\s*(m|k|b|mn|bn)?$/i.test(lower)) continue;
 
@@ -10891,6 +11183,7 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
         }
         const valuePart = line.includes(':') ? line.split(':').slice(1).join(':').trim() : line;
         if (!valuePart || isRelationshipArtifactText(valuePart)) return false;
+        if (isLikelyNonCompanyRelationshipToken(valuePart)) return false;
         return true;
       });
     if (cleanedStructuredLines.length > 0) {
@@ -11401,6 +11694,7 @@ function cleanCustomerName(text) {
     .trim();
 
   if (isRelationshipArtifactText(name)) return '';
+  if (isLikelyNonCompanyRelationshipToken(name)) return '';
 
   // Skip generic terms
   const skipTerms = [
@@ -11602,6 +11896,7 @@ function cleanCustomerName(text) {
   if (nonCompanyCategoryTerms.has(finalLower.trim())) {
     return '';
   }
+  if (isLikelyNonCompanyRelationshipToken(name)) return '';
 
   return name;
 }
@@ -12128,6 +12423,7 @@ RULES:
 - Branch/office network IS useful for footprint: include branch count and branch locations when explicitly stated
 - DO NOT include: corporate vision, mission statement, company values, slogans, taglines
 - DO NOT include garbage metrics like: "Quality Standards", "Innovation Focus", "Customer Service", "Technical Support", "R&D Focus", "Quality Assurance", "Service Excellence" - these are meaningless fluff
+- DO NOT include low-value operational SLA rows like "Complaint Resolution", "Response Time", "Turnaround Time", "SLA" unless audited KPI evidence is clearly shown
 - DO NOT include vague phrases like "High standards in customer service", "Constant innovation", "Focus on quality" - these have no concrete value
 - DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all
 - NEVER output file/scrape artifacts as names: "IMG_1234", "WhatsApp Image 2023-03-27", "blog image", "ticker", "hellip", "disclaimer", ".jpg/.png" strings
@@ -13014,6 +13310,8 @@ REMOVE any metric containing:
 - Full address "Headquarters" row when HQ/location already exists as a separate row
 - KEEP (when verified): "Key Partnerships", "Principal Partners", "Insurance Partner", "Export Countries"
 - Remove duplicate service rows ("Core Services", "Services Offered", "Services", "Transportation Services") ONLY if they duplicate right-side Service Offerings content
+- Remove low-value operational SLA rows unless they carry audited strategic proof:
+  - "Complaint Resolution", "Response Time", "Turnaround Time", "SLA" style rows
 - Remove "Principal Brands" ONLY when value is generic (e.g., "Portfolios", "Various", "Multiple")
 - If partnership text is messy, CLEAN the wording/format instead of removing
 - If one row mixes partner names and geography terms (countries/regions/markets), SPLIT into two rows:
@@ -13135,6 +13433,18 @@ Return ONLY valid JSON.`;
         `    [Validator] REJECTED non-English location: "${finalLocation}" - keeping original`
       );
       finalLocation = originalLocationText; // Keep original English location
+    }
+    if (!finalLocation) {
+      const basedLocationHint = extractLocationFromBasedText(
+        [ensureString(validated.message), ensureString(validated.business), ensureString(companyData.message), ensureString(companyData.business)].join(
+          ' '
+        ),
+        inferCountryFromWebsite(websiteUrl)
+      );
+      if (basedLocationHint) {
+        finalLocation = basedLocationHint;
+        console.log(`    [Validator] Recovered HQ from X-based text: ${finalLocation}`);
+      }
     }
 
     const sourceMetrics = Array.isArray(companyData.key_metrics) ? companyData.key_metrics : [];
