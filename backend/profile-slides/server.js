@@ -211,6 +211,7 @@ function isLikelyDuplicateServiceRow(leftLabel, leftValue, breakdownTitle, break
     'services offered',
     'services',
     'service offerings',
+    'transport services',
     'transportation services',
   ];
   if (!duplicateCandidateLabels.some((candidate) => normalizedLabel.includes(candidate))) {
@@ -435,7 +436,8 @@ function extractGeographyItemsFromText(value) {
 
     const shouldTreatAsGeo =
       hasGeoLabel ||
-      (rawTokens.length >= 2 && geoTokens.length >= Math.max(2, Math.ceil(rawTokens.length * 0.6)));
+      (rawTokens.length >= 2 && geoTokens.length >= Math.max(2, Math.ceil(rawTokens.length * 0.6))) ||
+      (rawTokens.length >= 1 && geoTokens.length === rawTokens.length);
 
     if (!shouldTreatAsGeo) continue;
 
@@ -451,6 +453,36 @@ function extractGeographyItemsFromText(value) {
   return geographyItems;
 }
 
+function cleanRelationshipEntityName(name) {
+  let text = ensureString(name).replace(/^[\-•▪■]\s*/, '').trim();
+  if (!text) return '';
+
+  text = text
+    .replace(
+      /^(?:more|additional)\s+(?:key\s+)?(?:customers?|clients?|suppliers?|vendors?|principal\s+partners?|key\s+partners?|partners?|brands?)\s*:?\s*/i,
+      ''
+    )
+    .replace(
+      /^(?:key\s+)?(?:customers?|clients?|suppliers?|vendors?|principal\s+partners?|key\s+partners?|partners?|brands?)\s*:?\s*/i,
+      ''
+    )
+    .replace(/\s+/g, ' ')
+    .replace(/[,:;.\-]+$/g, '')
+    .trim();
+
+  if (!text) return '';
+  if (isRelationshipArtifactText(text)) return '';
+  if (
+    /\b(employment type|salary|admin(?:istrative)?|executive|job title|position|vacancy|roles?|phone|email|contact|website|url|address|disclaimer|procurement)\b/i.test(
+      text.toLowerCase()
+    )
+  ) {
+    return '';
+  }
+  if (isLikelyGeographyToken(text)) return '';
+  return fixAcronymCasing(cleanCompanyPrefixesInText(text));
+}
+
 function splitPartnershipAndGeographyEntries(value) {
   const entries = splitReadableEntries(value);
   const geographyItems = [];
@@ -462,24 +494,67 @@ function splitPartnershipAndGeographyEntries(value) {
     const cleanedEntry = ensureString(entry).trim();
     if (!cleanedEntry) continue;
 
-    const extractedGeo = extractGeographyItemsFromText(cleanedEntry);
-    if (extractedGeo.length > 0) {
-      extractedGeo.forEach((item) => {
-        const normalized = normalizeForComparison(item);
-        if (!normalized || geoSeen.has(normalized)) return;
-        geoSeen.add(normalized);
-        geographyItems.push(item);
-      });
-      continue;
+    const decomposedEntries = [];
+    if (cleanedEntry.includes(':')) {
+      cleanedEntry
+        .split(':')
+        .slice(1)
+        .join(':')
+        .split(/,|;|\band\b/gi)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .forEach((part) => decomposedEntries.push(part));
+    } else {
+      cleanedEntry
+        .split(/,|;|\band\b/gi)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .forEach((part) => decomposedEntries.push(part));
     }
 
-    const normalizedPartner = normalizeForComparison(cleanedEntry);
-    if (!normalizedPartner || partnerSeen.has(normalizedPartner)) continue;
-    partnerSeen.add(normalizedPartner);
-    partnerEntries.push(cleanedEntry);
+    const candidates = decomposedEntries.length > 0 ? decomposedEntries : [cleanedEntry];
+    for (const rawCandidate of candidates) {
+      const extractedGeo = extractGeographyItemsFromText(rawCandidate);
+      if (extractedGeo.length > 0) {
+        extractedGeo.forEach((item) => {
+          const normalized = normalizeForComparison(item);
+          if (!normalized || geoSeen.has(normalized)) return;
+          geoSeen.add(normalized);
+          geographyItems.push(item);
+        });
+        continue;
+      }
+
+      const candidate = cleanRelationshipEntityName(rawCandidate);
+      if (!candidate) continue;
+      const normalizedPartner = normalizeForComparison(candidate);
+      if (!normalizedPartner || partnerSeen.has(normalizedPartner)) continue;
+      partnerSeen.add(normalizedPartner);
+      partnerEntries.push(candidate);
+    }
   }
 
   return { partnerEntries, geographyItems };
+}
+
+function isRedundantSingleCountryGeography(value, hqOrLocationValue = '') {
+  const geoEntries = splitReadableEntries(value).filter(Boolean);
+  if (geoEntries.length !== 1) return false;
+
+  const hq = ensureString(hqOrLocationValue).trim();
+  if (!hq) return false;
+  const hqCountry = ensureString(hq.split(',').pop()).trim();
+  if (!hqCountry) return false;
+
+  const geoNorm = normalizeForComparison(geoEntries[0]);
+  const hqNorm = normalizeForComparison(hqCountry);
+  if (!geoNorm || !hqNorm) return false;
+  if (geoNorm === hqNorm) return true;
+
+  const countryMap = typeof COUNTRY_FLAG_MAP === 'object' ? COUNTRY_FLAG_MAP : {};
+  const geoCode = countryMap[geoNorm] || '';
+  const hqCode = countryMap[hqNorm] || '';
+  return !!geoCode && !!hqCode && geoCode === hqCode;
 }
 
 function mergeOrChooseRicherGeographyValue(existingValue, incomingValue) {
@@ -3814,6 +3889,12 @@ const COUNTRY_FLAG_MAP = {
   malaysia: 'MY',
   my: 'MY',
   'kuala lumpur': 'MY',
+  selangor: 'MY',
+  kedah: 'MY',
+  johor: 'MY',
+  penang: 'MY',
+  'pulau pinang': 'MY',
+  'petaling jaya': 'MY',
   indonesia: 'ID',
   id: 'ID',
   jakarta: 'ID',
@@ -3851,6 +3932,16 @@ const COUNTRY_FLAG_MAP = {
   in: 'IN',
   mumbai: 'IN',
   delhi: 'IN',
+  punjab: 'IN',
+  haryana: 'IN',
+  maharashtra: 'IN',
+  bangalore: 'IN',
+  bengaluru: 'IN',
+  chennai: 'IN',
+  kolkata: 'IN',
+  hyderabad: 'IN',
+  gurgaon: 'IN',
+  gurugram: 'IN',
   'hong kong': 'HK',
   hk: 'HK',
 };
@@ -5482,7 +5573,7 @@ async function generatePPTX(
         // - Merge duplicate customer/client rows and partnership rows into one clean row
         const canonicalLeftLabel = (label) => {
           const lower = ensureString(label).toLowerCase().trim();
-          if (/(^| )((key )?(customers?|clients?))$/i.test(lower)) {
+          if (/(^| )((key )?(customers?|clients?)|(customer|client) segments?)$/i.test(lower)) {
             return 'customers';
           }
           if (/(key partnerships?|key partners?|principal partnerships?|principal partners?)/i.test(lower))
@@ -5833,6 +5924,26 @@ async function generatePPTX(
                 `    [LeftTable Cleanup] Added "${geoLabel}" from geography items extracted out of partnership row`
               );
             }
+          }
+        }
+
+        // Remove geography row when it only repeats HQ country (low-value duplicate).
+        const hqOrLocationRow = finalTableData.find((row) => {
+          const lowerLabel = ensureString(row?.[0]).toLowerCase().trim();
+          return lowerLabel === 'hq' || lowerLabel === 'location';
+        });
+        const hqOrLocationValue = ensureString(hqOrLocationRow?.[1]);
+        for (let idx = finalTableData.length - 1; idx >= 0; idx -= 1) {
+          const row = finalTableData[idx];
+          const lowerLabel = ensureString(row?.[0]).toLowerCase().trim();
+          if (!['foreign worker source', 'export countries', 'source countries', 'countries served'].includes(lowerLabel)) {
+            continue;
+          }
+          if (isRedundantSingleCountryGeography(ensureString(row?.[1]), hqOrLocationValue)) {
+            console.log(
+              `    [LeftTable Cleanup] Removed "${row[0]}" because it duplicates HQ country only`
+            );
+            finalTableData.splice(idx, 1);
           }
         }
 
@@ -10747,7 +10858,7 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
   }
 
   const hasLowQualityBucketLabel =
-    /(?:^|\n)\s*(?:[-■•▪]\s*)?(?:customer|customers|supplier|suppliers|principal|principals|partner|partners|brand|brands)\s*[a-z](?:\s*-\s*[a-z])?\s*:/i.test(
+    /(?:^|\n)\s*(?:[-*]\s*)?(?:customer|customers|supplier|suppliers|principal|principals|partner|partners|brand|brands)\s*[a-z](?:\s*-\s*[a-z])?\s*:/i.test(
       value
     );
   let normalizedRelationshipValue = value
@@ -10755,7 +10866,7 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
     .map((line) =>
       ensureString(line)
         .replace(
-          /^\s*(?:[-■•▪]\s*)?(?:customer|customers|supplier|suppliers|principal|principals|partner|partners|brand|brands)\s*[a-z](?:\s*-\s*[a-z])?\s*:\s*/i,
+          /^\s*(?:[-*]\s*)?(?:customer|customers|supplier|suppliers|principal|principals|partner|partners|brand|brands)\s*[a-z](?:\s*-\s*[a-z])?\s*:\s*/i,
           ''
         )
         .trim()
@@ -10767,7 +10878,7 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
   if (value.includes('\n') && value.includes(':') && !hasLowQualityBucketLabel) {
     const cleanedStructuredLines = value
       .split('\n')
-      .map((line) => ensureString(line).replace(/^[\-â– â€¢â–ª]\s*/, '').trim())
+      .map((line) => ensureString(line).replace(/^[-*]\s*/, '').trim())
       .filter(Boolean)
       .filter((line) => {
         const lower = line.toLowerCase();
@@ -10784,8 +10895,11 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
       });
     if (cleanedStructuredLines.length > 0) {
       normalizedRelationshipValue = cleanedStructuredLines.join('\n');
+    } else {
+      normalizedRelationshipValue = '';
     }
   }
+  if (!normalizedRelationshipValue) return '';
 
   const extracted = extractRelationshipsFromMetrics([
     { label, value: normalizedRelationshipValue },
@@ -10796,14 +10910,17 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
     ...(extracted.principals || []),
     ...(extracted.brands || []),
   ]);
-  const filteredNames = filterGarbageNames(parsedNames, companyName);
+  const filteredNames = filterGarbageNames(parsedNames, companyName)
+    .map((name) => cleanRelationshipEntityName(name))
+    .filter(Boolean);
+  const uniqueFilteredNames = uniqueRelationshipNames(filteredNames);
 
-  if (filteredNames.length < RELATIONSHIP_SEGMENT_MIN_COUNT) {
-    if (filteredNames.length === 1 && !hasCompanySignalInName(filteredNames[0])) {
+  if (uniqueFilteredNames.length < RELATIONSHIP_SEGMENT_MIN_COUNT) {
+    if (uniqueFilteredNames.length === 1 && !hasCompanySignalInName(uniqueFilteredNames[0])) {
       return '';
     }
-    if (filteredNames.length > 0) {
-      return fixAcronymCasing(filteredNames.join(', '));
+    if (uniqueFilteredNames.length > 0) {
+      return fixAcronymCasing(uniqueFilteredNames.join(', '));
     }
     return '';
   }
@@ -10818,13 +10935,13 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
           : labelLower.includes('brand')
             ? 'brands'
             : 'group';
-  const segmented = buildDeterministicSegments(filteredNames, {
+  const segmented = buildDeterministicSegments(uniqueFilteredNames, {
     minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
     relationshipType,
   });
   const lines = buildSegmentDisplayLines(segmented, { maxLines: 4, maxNamesPerLine: 4 });
   if (lines.length === 0) {
-    return filteredNames.length > 0 ? fixAcronymCasing(filteredNames.join(', ')) : '';
+    return uniqueFilteredNames.length > 0 ? fixAcronymCasing(uniqueFilteredNames.join(', ')) : '';
   }
   return fixAcronymCasing(lines.join('\n'));
 }
