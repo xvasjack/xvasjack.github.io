@@ -1,0 +1,25 @@
+KreatBio Staging Website Package
+
+Folder: kreatbio-staging-site
+
+What this includes
+- Full static website redesign for staging.
+- Pages: Home, Products, KreatPure detail, KodaGeno detail, Resources, About, Contact.
+- Shared visual system in styles.css and lightweight behavior in script.js.
+
+Deploy to Hostinger staging (safe copy only)
+1) Open Hostinger hPanel.
+2) Go to Websites -> Manage (stage.kreatbio.com) -> Files -> File Manager.
+3) Open public_html for the staging site.
+4) Upload every file from this folder into staging public_html.
+5) Ensure index.html is in staging public_html root.
+6) Open stage.kreatbio.com and hard refresh.
+
+Important before live publish
+- Replace placeholder contact form handling with your actual form plugin or backend endpoint.
+- Add real downloadable documents on resources page links.
+- Keep only claims supported by your current evidence and documents.
+
+Current product naming used
+- KreatPure DNA Extraction Kit
+- KodaGeno Bioinformatics Learning Platform
