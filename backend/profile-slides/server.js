@@ -4773,6 +4773,25 @@ async function generatePPTX(
       title: 'YCP_MASTER',
       background: { color: 'FFFFFF' },
       objects: [
+        // Real Title placeholder (for PPT outline/side indexing)
+        {
+          placeholder: {
+            options: {
+              name: 'title',
+              type: 'title',
+              x: 0.38,
+              y: 0.07,
+              w: 9.5,
+              h: 0.9,
+              fontFace: 'Segoe UI',
+              fontSize: 24,
+              color: COLORS.black,
+              margin: 0,
+              valign: 'bottom',
+              align: 'left',
+            },
+          },
+        },
         // Thick header line (y: 1.02")
         {
           line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } },
@@ -5246,11 +5265,11 @@ async function generatePPTX(
         // Use master slide - lines are fixed in background and cannot be moved
         const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-        // ===== TITLE + MESSAGE (combined in one text box) =====
+        // ===== TITLE + MESSAGE in real title placeholder =====
         const titleText = company.title || company.company_name || 'Company Profile';
         const messageText = company.message || '';
 
-        // Create combined text with title (font 24) and message (font 16)
+        // Keep existing visual style: title line (24) + message line (16)
         const titleContent = messageText
           ? [
               {
@@ -5269,16 +5288,14 @@ async function generatePPTX(
             ]
           : titleText;
 
+        // Put title in true PPT title placeholder so it appears in slide index/outline
         slide.addText(titleContent, {
-          x: 0.38,
-          y: 0.07,
-          w: 9.5,
-          h: 0.9,
+          placeholder: 'title',
           fontSize: 24,
           fontFace: 'Segoe UI',
           color: COLORS.black,
           valign: 'bottom',
-          margin: [0, 0, 0, 0], // No left/right margin
+          margin: [0, 0, 0, 0],
         });
 
         // ===== FLAG (top right) =====
