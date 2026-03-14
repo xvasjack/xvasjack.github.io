@@ -1,25 +1,31 @@
-KreatBio Staging Website Package
+KreatBio public site deployment notes
 
-Folder: kreatbio-staging-site
+Files to publish:
+- styles.css
+- script.js
+- index.html
+- products.html
+- applications.html
+- kodapure-dna-kit.html
+- kodageno-platform.html
+- institutional-partnerships.html
+- resources.html
+- quality-governance.html
+- about.html
+- contact-commercial.html
+- redirect pages for legacy routes
 
-What this includes
-- Full static website redesign for staging.
-- Pages: Home, Products, KreatPure detail, KodaGeno detail, Resources, About, Contact.
-- Shared visual system in styles.css and lightweight behavior in script.js.
+Main public routes:
+- Home
+- Products
+- Applications
+- KodaPure DNA Extraction Kit
+- KodaGeno Platform
+- Institutional Partnerships
+- Technical Resources
+- Quality & Governance
+- Company
+- Contact Commercial
 
-Deploy to Hostinger staging (safe copy only)
-1) Open Hostinger hPanel.
-2) Go to Websites -> Manage (stage.kreatbio.com) -> Files -> File Manager.
-3) Open public_html for the staging site.
-4) Upload every file from this folder into staging public_html.
-5) Ensure index.html is in staging public_html root.
-6) Open stage.kreatbio.com and hard refresh.
-
-Important before live publish
-- Replace placeholder contact form handling with your actual form plugin or backend endpoint.
-- Add real downloadable documents on resources page links.
-- Keep only claims supported by your current evidence and documents.
-
-Current product naming used
-- KreatPure DNA Extraction Kit
-- KodaGeno Bioinformatics Learning Platform
+Legacy routes redirect to the new canonical pages.
+RUO language stays visible in the top strip and footer across the public site.

@@ -1,11 +1,13 @@
 (() => {
   const toggle = document.querySelector('[data-menu-toggle]');
   const menu = document.querySelector('[data-menu]');
+  const body = document.body;
 
   if (toggle && menu) {
     toggle.addEventListener('click', () => {
       const open = menu.classList.toggle('open');
       toggle.setAttribute('aria-expanded', String(open));
+      body.classList.toggle('menu-open', open);
     });
 
     document.addEventListener('click', (event) => {
@@ -19,12 +21,14 @@
 
       menu.classList.remove('open');
       toggle.setAttribute('aria-expanded', 'false');
+      body.classList.remove('menu-open');
     });
 
     menu.querySelectorAll('a').forEach((item) => {
       item.addEventListener('click', () => {
         menu.classList.remove('open');
         toggle.setAttribute('aria-expanded', 'false');
+        body.classList.remove('menu-open');
       });
     });
   }
