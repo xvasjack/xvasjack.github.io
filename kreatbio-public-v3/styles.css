@@ -2313,3 +2313,530 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
 }
+
+/* Visual rebuild v6 */
+.hero-home-v6 .hero-grid,
+.hero-products-v6 .editorial-grid,
+.hero-kodapure-v6 .product-hero-grid,
+.hero-kodageno-v6 .platform-hero-grid,
+.hero-resources-v6 .editorial-grid,
+.hero-partnerships-v6 .partnership-grid,
+.hero-contact-v6 .contact-band {
+  align-items: stretch;
+}
+
+.home-scene,
+.product-visual-grid,
+.resource-promo-grid,
+.contact-route-links,
+.koda-proof-grid,
+.koda-feature-grid,
+.learning-flow-grid,
+.guide-card-grid,
+.application-corridors-v2,
+.partner-support-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.home-scene {
+  grid-template-columns: minmax(0, 1.16fr) minmax(260px, 0.84fr);
+}
+
+.product-visual-grid {
+  grid-template-columns: 1.2fr 0.8fr;
+}
+
+.resource-promo-grid,
+.guide-card-grid,
+.partner-support-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.application-corridors-v2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.koda-proof-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.koda-feature-grid,
+.learning-flow-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.visual-stage,
+.info-card,
+.guide-card,
+.koda-proof-card,
+.feature-icon-card,
+.flow-card,
+.resource-mini-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow-sm);
+}
+
+.visual-stage {
+  overflow: hidden;
+}
+
+.visual-stage--hero,
+.visual-stage--panel,
+.visual-stage--resource,
+.visual-stage--koda {
+  position: relative;
+  min-height: 100%;
+}
+
+.visual-stage--hero {
+  background: linear-gradient(180deg, #fdfefe, #eef4f8);
+}
+
+.visual-stage--hero::before,
+.visual-stage--koda::before,
+.visual-stage--panel::before,
+.visual-stage--resource::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top right, rgba(18, 125, 161, 0.12), transparent 34%),
+    linear-gradient(135deg, rgba(16, 60, 102, 0.08), transparent 60%);
+  pointer-events: none;
+}
+
+.visual-stage--koda {
+  background: linear-gradient(180deg, #f8fbff, #eaf2ff);
+  border-color: #cadeff;
+}
+
+.visual-stage--panel {
+  background: linear-gradient(180deg, #fbfdfe, #f3f7fb);
+}
+
+.visual-stage--resource {
+  background: linear-gradient(180deg, #ffffff, #f5f8fb);
+}
+
+.visual-stage svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.scene-shell {
+  padding: 22px;
+}
+
+.scene-shell--compact {
+  padding: 18px;
+}
+
+.scene-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.scene-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(16, 60, 102, 0.1);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.scene-tag--koda {
+  color: #1d4ed8;
+  border-color: rgba(37, 99, 235, 0.16);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.scene-note {
+  margin: 12px 0 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.signal-pill-row,
+.feature-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.signal-pill,
+.feature-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #f3f7fb;
+  border: 1px solid var(--line);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.feature-badge--koda {
+  background: #eef4ff;
+  border-color: #cfe0ff;
+  color: #1e40af;
+}
+
+.feature-panel-v2,
+.resource-promo,
+.partner-support-card,
+.guide-card,
+.flow-card,
+.feature-icon-card,
+.koda-proof-card,
+.resource-mini-card {
+  padding: 22px;
+}
+
+.feature-panel-v2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.9fr);
+  gap: 24px;
+  align-items: center;
+  margin-top: 28px;
+}
+
+.feature-panel-v2.reverse {
+  grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1fr);
+}
+
+.feature-panel-v2.reverse .feature-panel-copy {
+  order: 2;
+}
+
+.feature-panel-v2.reverse .feature-panel-media {
+  order: 1;
+}
+
+.feature-panel-copy h3,
+.resource-promo h3,
+.partner-support-card h3,
+.guide-card h3,
+.flow-card h3,
+.feature-icon-card h3,
+.koda-proof-card h3,
+.resource-mini-card h3,
+.info-card h3 {
+  margin: 10px 0 10px;
+  color: var(--brand-strong);
+  font-size: 1.28rem;
+  line-height: 1.15;
+}
+
+.feature-panel-copy p,
+.resource-promo p,
+.partner-support-card p,
+.guide-card p,
+.flow-card p,
+.feature-icon-card p,
+.koda-proof-card p,
+.resource-mini-card p,
+.info-card p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.feature-panel-copy .hero-actions,
+.resource-promo .hero-actions,
+.info-card .hero-actions {
+  margin-top: 18px;
+}
+
+.feature-panel-media .visual-stage,
+.catalog-card .visual-stage,
+.resource-promo .visual-stage,
+.guide-card .visual-stage,
+.resource-mini-card .visual-stage,
+.koda-hero-media .visual-stage,
+.product-visual .visual-stage,
+.platform-visual .visual-stage,
+.partnership-visual .visual-stage {
+  min-height: 100%;
+}
+
+.koda-subbrand {
+  --koda-accent: #2563eb;
+  --koda-accent-soft: #eff6ff;
+}
+
+.koda-subbrand .eyebrow,
+.koda-subbrand .text-link,
+.koda-subbrand .btn-link,
+.koda-subbrand .resource-mini-card .route-meta,
+.koda-subbrand .guide-card .route-meta {
+  color: var(--koda-accent);
+}
+
+.koda-subbrand .visual-stage,
+.koda-subbrand .koda-proof-card,
+.koda-subbrand .feature-icon-card,
+.koda-subbrand .flow-card,
+.koda-subbrand .guide-card,
+.koda-subbrand .resource-mini-card {
+  border-color: #cadeff;
+}
+
+.koda-subbrand .visual-stage--koda,
+.koda-subbrand .guide-card,
+.koda-subbrand .resource-mini-card {
+  background: linear-gradient(180deg, #fbfdff, #edf3ff);
+}
+
+.koda-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.koda-inline-link:hover {
+  color: #1e40af;
+}
+
+.application-corridors-v2 .application-tile,
+.resource-promo,
+.partner-support-card,
+.guide-card,
+.resource-mini-card {
+  min-height: 100%;
+}
+
+.application-tile--visual {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.application-icon,
+.feature-icon,
+.guide-icon,
+.route-symbol {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #ffffff, #eef3f7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand);
+  flex-shrink: 0;
+}
+
+.feature-icon,
+.guide-icon,
+.route-symbol--koda {
+  border-color: #cadeff;
+  background: linear-gradient(180deg, #ffffff, #edf3ff);
+  color: #1d4ed8;
+}
+
+.koda-proof-card strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--brand-strong);
+  font-size: 1rem;
+}
+
+.koda-proof-card span,
+.route-meta {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.flow-card strong,
+.resource-mini-card strong,
+.guide-card strong,
+.info-card strong {
+  color: var(--brand-strong);
+}
+
+.contact-route-links {
+  margin-top: 12px;
+  grid-template-columns: auto auto;
+  justify-content: start;
+}
+
+.route-row .route-summary {
+  display: block;
+}
+
+.route-row .route-heading {
+  display: block;
+  margin: 6px 0 6px;
+  color: var(--brand-strong);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.route-row--koda {
+  border-color: #cadeff;
+  background: linear-gradient(180deg, #fbfdff, #eef4ff);
+}
+
+.route-row--koda .route-kicker,
+.route-row--koda .route-action,
+.route-row--koda .route-heading {
+  color: #1d4ed8;
+}
+
+.route-row--koda .route-heading {
+  color: #163c7a;
+}
+
+.resource-callout {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.lesson-link-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.lesson-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid #cadeff;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--brand-strong);
+  font-weight: 700;
+}
+
+.lesson-link:hover {
+  border-color: #8db5ff;
+  transform: translateY(-1px);
+}
+
+.lesson-link small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.partner-support-grid .partner-support-card {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.kodageno-hero-copy .lead-copy,
+.kodageno-hero-copy .hero-support-copy {
+  max-width: 760px;
+}
+
+.hero-support-copy {
+  margin-top: 16px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.hero-audience {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: #f7fafc;
+  border: 1px solid var(--line);
+  color: var(--text-soft);
+}
+
+.koda-subbrand .hero-audience {
+  background: #f5f9ff;
+  border-color: #cadeff;
+}
+
+.koda-resource-strip {
+  margin-top: 24px;
+}
+
+.outbound-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin-top: 18px;
+}
+
+@media (max-width: 1180px) {
+  .home-scene,
+  .product-visual-grid,
+  .feature-panel-v2,
+  .feature-panel-v2.reverse,
+  .resource-callout,
+  .resource-promo-grid,
+  .guide-card-grid,
+  .partner-support-grid,
+  .koda-proof-grid,
+  .koda-feature-grid,
+  .learning-flow-grid,
+  .application-corridors-v2 {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-panel-v2.reverse .feature-panel-copy,
+  .feature-panel-v2.reverse .feature-panel-media {
+    order: initial;
+  }
+}
+
+@media (max-width: 760px) {
+  .scene-shell,
+  .scene-shell--compact,
+  .feature-panel-v2,
+  .resource-promo,
+  .guide-card,
+  .flow-card,
+  .feature-icon-card,
+  .koda-proof-card,
+  .resource-mini-card {
+    padding: 18px;
+  }
+
+  .home-scene {
+    grid-template-columns: 1fr;
+  }
+
+  .contact-route-links {
+    grid-template-columns: 1fr;
+  }
+
+  .route-row {
+    grid-template-columns: 1fr;
+  }
+}
