@@ -298,11 +298,25 @@ function cleanRelationshipDisplayValue(value) {
   const raw = ensureString(value);
   if (!raw) return raw;
 
+  // Normalize chained prefixes into line breaks so downstream cleanup can split/dedupe.
+  const normalizedRaw = raw
+    .replace(
+      /,\s*(additional|more|further)\s+(?:principal\s+)?(?:partners?|suppliers?|customers?|clients?|brands?)\s*:/gi,
+      '\n$1 '
+    )
+    .replace(
+      /,\s*(principal\s+partners?|key\s+partnerships?|key\s+partners?)\s*:/gi,
+      '\n$1:'
+    );
+
   const cleaned = [];
   const seen = new Set();
-  const lines = raw.split('\n').map((line) => line.trim());
+  const lines = normalizedRaw
+    .split('\n')
+    .flatMap((line) => ensureString(line).split(/,(?=\s*[A-Za-z])/))
+    .map((line) => line.trim());
   for (const line of lines) {
-    const noBullet = line.replace(/^[\-•▪■]\s*/, '').trim();
+    const noBullet = line.replace(/^[\-\u2022\u25AA\u25A0]\s*/, '').trim();
     const normalizedLine = noBullet.replace(
       /^(principal partners?|key partnerships?|additional principal partners?|more principal partners?|our partners?|partners?)\s*:?\s*/i,
       ''
@@ -320,7 +334,6 @@ function cleanRelationshipDisplayValue(value) {
   if (cleaned.length === 1) return cleaned[0];
   return cleaned.map((line) => `- ${line}`).join('\n');
 }
-
 function isGenericPrincipalBrandsValue(value) {
   const normalized = normalizeForComparison(value);
   if (!normalized) return true;
@@ -661,13 +674,37 @@ function extractGeographyItemsFromText(value) {
 }
 
 function isLikelyNonCompanyRelationshipToken(value) {
-  const text = ensureString(value).replace(/^[\-â€¢â–ªâ– ]\s*/, '').trim();
+  const text = ensureString(value).replace(/^[\-\u2022\u25AA\u25A0]\s*/, '').trim();
   if (!text) return true;
   const lower = text.toLowerCase();
 
   if (isRelationshipArtifactText(text)) return true;
   if (/^\+?\d+\s+more$/i.test(lower)) return true;
   if (isLikelyGeographyToken(text)) return true;
+  if (/^(?:over|more|around|approximately|about|various|multiple|several|many|others?|etc)\s*$/i.test(lower))
+    return true;
+
+  if (
+    /\b(become a partner|company profile|testimonials?|why us|current openings?|job seekers?|check it out|click here|read more|learn more|whatsapp)\b/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(global presence|pan[-\s][a-z]+ presence|presence in \d+ countries?)\b/i.test(lower)
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(?:principal|additional|more|further|key)\s+(?:partners?|suppliers?|customers?|clients?|brands?)\s*:?$/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
 
   if (
     /\b(employment type|salary|admin(?:istrative)?|executive|job title|position|vacancy|roles?|phone|email|contact|website|url|address|disclaimer|procurement|supply chain|transportation|transport|full time|part time|location|locations)\b/i.test(
@@ -688,7 +725,6 @@ function isLikelyNonCompanyRelationshipToken(value) {
 
   return false;
 }
-
 function cleanRelationshipEntityName(name) {
   let text = ensureString(name).replace(/^[\-•▪■]\s*/, '').trim();
   if (!text) return '';
@@ -895,6 +931,17 @@ function extractLocationFromBasedText(text, fallbackCountry = '') {
   if (!geoToken && isLikelyGeographyToken(rawCandidate)) {
     geoToken = rawCandidate;
   }
+  if (
+    !geoToken &&
+    /^[A-Za-z][A-Za-z\s.'-]{1,50}$/.test(rawCandidate) &&
+    rawCandidate.split(/\s+/).length <= 3 &&
+    !/\b(provider|company|agency|firm|group|specializing|specialised|specialized|services?)\b/i.test(
+      rawCandidate
+    )
+  ) {
+    // City-like token from "X-based ..." should still be usable with fallback country.
+    geoToken = rawCandidate;
+  }
   if (!geoToken) return '';
 
   const normalizedGeo = normalizeForComparison(geoToken);
@@ -940,7 +987,18 @@ function mergeReadableRowValues(valueA, valueB) {
   }
   return unique.map((entry) => `- ${entry}`).join('\n');
 }
+function isMeaninglessStandaloneValue(value) {
+  const entries = splitReadableEntries(value);
+  if (entries.length !== 1) return false;
 
+  const text = normalizeForComparison(entries[0]).replace(/[^a-z0-9+\s]/g, ' ').trim();
+  if (!text) return true;
+  if (/\d/.test(text)) return false;
+
+  return /^(?:over|more|around|approximately|about|various|multiple|several|many|others?|etc|\+?\s*more)$/i.test(
+    text
+  );
+}
 // Capitalize first letter of each word (title case)
 function toTitleCase(name) {
   if (!name || typeof name !== 'string') return name;
@@ -5964,6 +6022,12 @@ async function generatePPTX(
           );
           label = normalizedYear.label;
           value = normalizedYear.value;
+          if (isMeaninglessStandaloneValue(value)) {
+            console.log(
+              `    [LeftTable Cleanup] Removed "${label}" because value is placeholder-only: "${value}"`
+            );
+            return;
+          }
           const normalizedLower = ensureString(label).toLowerCase().trim();
           const rowCanonical = canonicalLeftLabel(label);
 
@@ -6271,17 +6335,20 @@ async function generatePPTX(
           if (hasMultipleLines || hasBulletMarkers) {
             // Split by newline and filter out empty lines
             const lines = text.split('\n').filter((line) => line.trim());
+            const cleanedLines = lines
+              .map((line) => line.replace(/^[\u25A0\u25AA\-\u2022]\s*/, '').trim())
+              .filter(Boolean);
+            if (cleanedLines.length === 0) return '';
 
             // Build text array with manual bullet insertion at smaller font
             // 82% of 14pt = 11.5pt, use 11pt for bullet
             const result = [];
-            lines.forEach((line, index) => {
-              const cleanLine = line.replace(/^[■▪\-•]\s*/, '').trim();
-              const isLastLine = index === lines.length - 1;
+            cleanedLines.forEach((cleanLine, index) => {
+              const isLastLine = index === cleanedLines.length - 1;
 
               // Add bullet character at 82% size (11pt vs 14pt text)
               result.push({
-                text: '• ',
+                text: '\u2022 ',
                 options: { fontSize: 11 },
               });
 
@@ -8605,14 +8672,41 @@ function detectBranchEvidence(content, officeCount = null) {
   return false;
 }
 
+function cleanBranchNetworkSummary(value) {
+  const raw = ensureString(value).replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+
+  const cleaned = raw
+    .replace(/\b(?:abroad|a global presence|global presence|global reach)\b/gi, '')
+    .replace(/\b(?:we|our)\s+(?:deliver|provide|offer|speciali[sz]e(?:d|s|ing)?)\b[^,;]*/gi, '')
+    .replace(/\b(?:combining|with)\s+pan[-\s]?[a-z]+\s+(?:reach|presence)\b/gi, '')
+    .replace(/\bpan[-\s]?([a-z]+)(?:\s+(?:reach|presence))?\b/gi, '$1')
+    .replace(/\buts?\s+in\s+([A-Za-z\s]+)/gi, '$1')
+    .replace(/\but\s+of\s+([A-Za-z\s]+)/gi, '$1')
+    .replace(/\s+,/g, ',')
+    .replace(/,\s*,+/g, ', ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/[,:;.\-]+\s*$/g, '')
+    .trim();
+
+  // Drop meaningless branch summary fragments.
+  if (
+    /^(?:over|more|around|approximately|about|various|multiple|several|many)\s*$/i.test(cleaned)
+  ) {
+    return '';
+  }
+
+  return cleaned;
+}
+
 function getBranchNetworkSummaryFromCompany(company) {
-  const direct = ensureString(company?._branchNetworkSummary).trim();
+  const direct = cleanBranchNetworkSummary(company?._branchNetworkSummary);
   if (direct) return direct;
 
   const metrics = Array.isArray(company?.key_metrics) ? company.key_metrics : [];
   for (const metric of metrics) {
     const label = ensureString(metric?.label).toLowerCase();
-    const value = ensureString(metric?.value).trim();
+    const value = cleanBranchNetworkSummary(metric?.value);
     if (!value) continue;
     if (label.includes('branch network') || label.includes('branch')) return value;
     if ((label.includes('office') || label.includes('location')) && /\bbranches?\b/i.test(value))
