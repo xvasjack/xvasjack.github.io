@@ -117,10 +117,17 @@ function removeRedundantTrailingShortform(label) {
   return raw;
 }
 
+function normalizeCommonTypos(text) {
+  return ensureString(text)
+    .replace(/\bstafffing\b/gi, 'staffing')
+    .replace(/\bagentscies\b/gi, 'agencies')
+    .replace(/\bmanagemnent\b/gi, 'management');
+}
+
 function normalizeLabel(label) {
   if (!label || typeof label !== 'string') return label;
 
-  const cleanedLabel = removeRedundantTrailingShortform(label);
+  const cleanedLabel = removeRedundantTrailingShortform(normalizeCommonTypos(label));
   const compactLabel = cleanedLabel.replace(/[^a-z]/gi, '').toLowerCase();
   const yearLabels = new Set([
     'estyear',
@@ -249,6 +256,14 @@ function isRelationshipArtifactText(value) {
   if (/\bimg[_\-\s]?\d+\b/i.test(lower)) return true;
   if (/\bimage[_\-\s]?\d+\b/i.test(lower)) return true;
   if (/\bblog[-_\s]?img\b/i.test(lower)) return true;
+  if (
+    /\b(whatsapp\s*image|img[_\-\s]?\d+|image[_\-\s]?\d+|blog[-_\s]?img|ticker(?:\s*image)?)\b/i.test(
+      lower
+    ) &&
+    !hasLegalEntitySignal(text)
+  ) {
+    return true;
+  }
   if (/\bwhatsapp[-_\s]?image[-_\s]?\d{4}\b/i.test(lower)) return true;
   if (/\b\d{4}[-_]\d{2}[-_]\d{2}\b/.test(lower)) return true;
   if (/\b\d{2}\.\d{2}\.\d{2}\b/.test(lower)) return true;
@@ -316,12 +331,15 @@ function cleanRelationshipDisplayValue(value) {
     .flatMap((line) => ensureString(line).split(/,(?=\s*[A-Za-z])/))
     .map((line) => line.trim());
   for (const line of lines) {
-    const noBullet = line.replace(/^[\-\u2022\u25AA\u25A0]\s*/, '').trim();
+    const noBullet = removeTruncationTokens(stripLeadingBulletMarker(line));
+    if (!noBullet || /^\+?\d+\s+more$/i.test(noBullet)) continue;
     const normalizedLine = noBullet.replace(
       /^(principal partners?|key partnerships?|additional principal partners?|more principal partners?|our partners?|partners?)\s*:?\s*/i,
       ''
     );
-    const fixed = fixAcronymCasing(cleanCompanyPrefixesInText(normalizedLine.trim()));
+    const fixed = removeTruncationTokens(
+      fixAcronymCasing(cleanCompanyPrefixesInText(normalizedLine.trim()))
+    );
     if (!fixed) continue;
     if (isLikelyNonCompanyRelationshipToken(fixed)) continue;
     const dedupeKey = normalizeForComparison(fixed);
@@ -363,6 +381,19 @@ function isGenericPrincipalBrandsValue(value) {
   return isShortGeneric;
 }
 
+function stripLeadingBulletMarker(value) {
+  return ensureString(value).replace(/^\s*(?:[-*]|[\u2022\u25AA\u25A0\u25E6\u2043])\s*/, '');
+}
+
+function removeTruncationTokens(value) {
+  return ensureString(value)
+    .replace(/(?:^|[,\n])\s*(?:[-*]|[\u2022\u25AA\u25A0\u25E6\u2043])?\s*\+\d+\s+more\b/gi, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\n{2,}/g, '\n')
+    .replace(/[,\s]+$/g, '')
+    .trim();
+}
+
 function splitReadableEntries(value) {
   const raw = ensureString(value);
   if (!raw) return [];
@@ -371,12 +402,14 @@ function splitReadableEntries(value) {
   const lines = raw.split('\n');
   for (const line of lines) {
     const cleanLine = line.replace(/^[\-•▪■]\s*/, '').trim();
-    if (!cleanLine) continue;
-    if (cleanLine.includes(':')) {
-      entries.push(cleanLine);
+    const cleanLineNormalized = removeTruncationTokens(stripLeadingBulletMarker(cleanLine));
+    if (!cleanLineNormalized) continue;
+    if (/^\+?\d+\s+more$/i.test(cleanLineNormalized)) continue;
+    if (cleanLineNormalized.includes(':')) {
+      entries.push(cleanLineNormalized);
       continue;
     }
-    cleanLine
+    cleanLineNormalized
       .split(',')
       .map((part) => part.trim())
       .filter(Boolean)
@@ -386,10 +419,12 @@ function splitReadableEntries(value) {
   const unique = [];
   const seen = new Set();
   for (const entry of entries) {
-    const dedupeKey = normalizeForComparison(entry);
+    const normalizedEntry = removeTruncationTokens(entry);
+    if (!normalizedEntry || /^\+?\d+\s+more$/i.test(normalizedEntry)) continue;
+    const dedupeKey = normalizeForComparison(normalizedEntry);
     if (!dedupeKey || seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
-    unique.push(fixAcronymCasing(cleanCompanyPrefixesInText(entry)));
+    unique.push(fixAcronymCasing(cleanCompanyPrefixesInText(normalizedEntry)));
   }
   return unique;
 }
@@ -674,7 +709,7 @@ function extractGeographyItemsFromText(value) {
 }
 
 function isLikelyNonCompanyRelationshipToken(value) {
-  const text = ensureString(value).replace(/^[\-\u2022\u25AA\u25A0]\s*/, '').trim();
+  const text = stripLeadingBulletMarker(value).trim();
   if (!text) return true;
   const lower = text.toLowerCase();
 
@@ -698,6 +733,18 @@ function isLikelyNonCompanyRelationshipToken(value) {
     return true;
   }
 
+  if (/^(?:dr|mr|mrs|ms|prof)\.?\s+[a-z]/i.test(lower) && !hasLegalEntitySignal(text)) {
+    return true;
+  }
+
+  if (
+    /^(?:various|multiple|several|many)\s+(?:clients?|customers?|partners?|suppliers?|brands?)\b/i.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+
   if (
     /\b(?:principal|additional|more|further|key)\s+(?:partners?|suppliers?|customers?|clients?|brands?)\s*:?$/i.test(
       lower
@@ -716,6 +763,15 @@ function isLikelyNonCompanyRelationshipToken(value) {
   }
 
   if (
+    /\b(certifications?|testimonials?|why us|current openings?|job seekers?|company profile|employers?|sectors?\s+catered|services?\s+offered|permanent staffing|staffing services?)\b/i.test(
+      lower
+    ) &&
+    !hasLegalEntitySignal(text)
+  ) {
+    return true;
+  }
+
+  if (
     /^(?:key|additional|more|further)?\s*(?:customers?|clients?|suppliers?|vendors?|partners?|principal partners?|brands?)$/i.test(
       lower
     )
@@ -726,8 +782,10 @@ function isLikelyNonCompanyRelationshipToken(value) {
   return false;
 }
 function cleanRelationshipEntityName(name) {
+  name = stripLeadingBulletMarker(name);
   let text = ensureString(name).replace(/^[\-•▪■]\s*/, '').trim();
   if (!text) return '';
+  if (/^\+?\d+\s+more$/i.test(text)) return '';
 
   text = text
     .replace(
@@ -859,16 +917,12 @@ function formatCompactEntryList(value, options = {}) {
   if (entries.length === 0) return '';
 
   const visible = entries.slice(0, maxEntries);
-  const hiddenCount = Math.max(0, entries.length - visible.length);
 
   if (visible.length < lineModeThreshold) {
-    const inline = visible.join(', ');
-    return hiddenCount > 0 ? `${inline}, +${hiddenCount} more` : inline;
+    return visible.join(', ');
   }
 
-  const lines = visible.map((entry) => `- ${entry}`);
-  if (hiddenCount > 0) lines.push(`- +${hiddenCount} more`);
-  return lines.join('\n');
+  return visible.map((entry) => `- ${entry}`).join('\n');
 }
 
 function isLikelyYearLabel(label) {
@@ -1052,7 +1106,6 @@ function cleanCompanyPrefixesInText(text) {
 function fixAcronymCasing(text) {
   if (!text || typeof text !== 'string') return text;
 
-  // Known acronyms that should be ALL CAPS
   const allCapsAcronyms = [
     'BNI',
     'BRI',
@@ -1119,40 +1172,68 @@ function fixAcronymCasing(text) {
     'BP',
     'EDF',
     'RWE',
-    'EON', // Energy
+    'EON',
+    'LME',
+    'TRC',
+    'YCP',
+    'BFSI',
+    'ITES',
+    'JTKSM',
+    'FWCS',
+    'KDN',
   ];
+  const knownLower = new Set(allCapsAcronyms.map((acronym) => acronym.toLowerCase()));
+  const lowerWords = new Set([
+    'and',
+    'the',
+    'for',
+    'with',
+    'from',
+    'into',
+    'bank',
+    'city',
+    'east',
+    'west',
+    'asia',
+    'more',
+    'over',
+    'under',
+    'about',
+    'near',
+    'year',
+    'years',
+  ]);
 
-  let result = text;
+  let result = ensureString(text);
+
+  // Dotted shortforms should be uppercase (example: r.o.s -> R.O.S).
+  result = result.replace(/\b([a-z])(?:\.[a-z]){1,6}\.?\b/gi, (match) => match.toUpperCase());
+
   for (const acronym of allCapsAcronyms) {
-    // Match case-insensitive but replace with all caps
     const regex = new RegExp(`\\b${acronym}\\b`, 'gi');
     result = result.replace(regex, acronym);
   }
 
-  // Also fix any 2-4 letter words that are all letters and look like acronyms
-  // If a word is 2-4 chars and has mixed case like "Bni" or "vvf", make it ALL CAPS
+  // Uppercase short tokens when they look acronym-like.
   result = result.replace(/\b([A-Za-z]{2,4})\b/g, (match) => {
-    // If it's a known lowercase word, don't change it
-    const lowerWords = [
-      'and',
-      'the',
-      'for',
-      'with',
-      'from',
-      'into',
-      'bank',
-      'city',
-      'east',
-      'west',
-      'asia',
-    ];
-    if (lowerWords.includes(match.toLowerCase())) return match;
-    // If all consonants or has numbers, likely an acronym - make ALL CAPS
-    if (!/[aeiou]/i.test(match) || match.toUpperCase() === match) {
-      return match.toUpperCase();
-    }
+    const lower = match.toLowerCase();
+    if (lowerWords.has(lower)) return match;
+    if (knownLower.has(lower)) return match.toUpperCase();
     return match;
   });
+
+  // Keep acronym prefixes uppercase inside merged words (example: Hrcare -> HRCare).
+  const acronymPrefixes = ['HR', 'EOR', 'RPO', 'ESS', 'CLQ', 'BFSI', 'ITES', 'JTKSM', 'FWCS'];
+  for (const prefix of acronymPrefixes) {
+    const regex = new RegExp(`\\b(${prefix})([A-Za-z]{2,})\\b`, 'gi');
+    result = result.replace(regex, (match, _p, suffix) => {
+      const original = ensureString(match);
+      if (!original) return match;
+      if (original === original.toUpperCase()) return original;
+      if (!/[a-z]/.test(suffix)) return `${prefix}${suffix.toUpperCase()}`;
+      return `${prefix}${suffix.charAt(0).toUpperCase()}${suffix.slice(1).toLowerCase()}`;
+    });
+  }
 
   return result;
 }
@@ -5156,7 +5237,7 @@ async function generatePPTX(
               }
 
               const rawName = comp.title || comp.company_name || '';
-              const companyName = cleanCompanyName(rawName, comp.website) || 'Unknown';
+              const companyName = fixAcronymCasing(cleanCompanyName(rawName, comp.website) || 'Unknown');
               row.push({
                 text: `${comp.index}. ${companyName}`,
                 options: {
@@ -5324,8 +5405,8 @@ async function generatePPTX(
         const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
         // ===== TITLE + MESSAGE in real title placeholder =====
-        const titleText = company.title || company.company_name || 'Company Profile';
-        const messageText = company.message || '';
+        const titleText = fixAcronymCasing(company.title || company.company_name || 'Company Profile');
+        const messageText = fixAcronymCasing(company.message || '');
 
         // Keep existing visual style: title line (24) + message line (16)
         const titleContent = messageText
@@ -5595,7 +5676,7 @@ async function generatePPTX(
         // Use title as fallback if company_name is empty
         const companyName = company.company_name || company.title || '';
         if (!isEmptyValue(companyName)) {
-          const cleanName = removeCompanySuffix(companyName);
+          const cleanName = fixAcronymCasing(removeCompanySuffix(companyName));
           tableData.push(['Name', cleanName, company.website || null]);
         }
 
@@ -5605,7 +5686,9 @@ async function generatePPTX(
         }
 
         const basedLocationFallback = extractLocationFromBasedText(
-          [ensureString(company.message), ensureString(company.business)].join(' '),
+          [ensureString(company.title), ensureString(company.message), ensureString(company.business)].join(
+            ' '
+          ),
           inferCountryFromWebsite(ensureString(company.website))
         );
         const effectiveLocation = !isEmptyValue(company.location)
@@ -6000,6 +6083,7 @@ async function generatePPTX(
           const meta = rawRow[2] ?? null;
           const lower = label.toLowerCase();
 
+          value = removeTruncationTokens(value);
           if (!label || isEmptyValue(value)) return;
 
           if (/(key partnerships?|key partners?|principal partnerships?|principal partners?)/i.test(lower)) {
@@ -6025,6 +6109,15 @@ async function generatePPTX(
           if (isMeaninglessStandaloneValue(value)) {
             console.log(
               `    [LeftTable Cleanup] Removed "${label}" because value is placeholder-only: "${value}"`
+            );
+            return;
+          }
+          if (
+            normalizeForComparison(ensureString(label)) === normalizeForComparison(ensureString(value)) &&
+            !['shareholding'].includes(ensureString(label).toLowerCase().trim())
+          ) {
+            console.log(
+              `    [LeftTable Cleanup] Removed "${label}" because value only repeats the label`
             );
             return;
           }
@@ -6156,7 +6249,15 @@ async function generatePPTX(
             );
             const brandEntries = splitReadableEntries(value);
             const filteredBrandEntries = brandEntries.filter((entry) => {
-              const normalizedEntry = normalizeForComparison(cleanCompanyName(entry));
+              const cleanedEntry = fixAcronymCasing(cleanCompanyPrefixesInText(ensureString(entry).trim()));
+              if (!cleanedEntry) return false;
+              if (isRelationshipArtifactText(cleanedEntry)) return false;
+              if (isLikelyNonCompanyRelationshipToken(cleanedEntry)) return false;
+              if (isGenericPrincipalBrandsValue(cleanedEntry)) return false;
+              if (!hasCompanySignalInName(cleanedEntry) && cleanedEntry.split(/\s+/).length >= 4) {
+                return false;
+              }
+              const normalizedEntry = normalizeForComparison(cleanCompanyName(cleanedEntry));
               if (!normalizedEntry) return false;
               if (
                 normalizedCompanyName &&
@@ -6178,8 +6279,14 @@ async function generatePPTX(
               );
               return;
             }
-            value = filteredBrandEntries.join(', ');
+            value = formatCompactEntryList(filteredBrandEntries.join('\n'), {
+              maxEntries: 10,
+              lineModeThreshold: 4,
+            });
           }
+
+          value = fixAcronymCasing(removeTruncationTokens(value));
+          if (!value) return;
 
           const isMacroByLabel = macroLabelPatterns.some((pattern) => pattern.test(label));
           const isMacroByValue = macroValuePatterns.some((pattern) => pattern.test(value));
@@ -6323,21 +6430,28 @@ async function generatePPTX(
         // Manually inserts round bullet (•) at 82% size since pptxgenjs doesn't support bullet sizing
         const formatCellText = (text) => {
           if (!text || typeof text !== 'string') return text;
+          const normalizedText = removeTruncationTokens(text);
+          if (!normalizedText) return '';
 
           // Check if text has multiple lines or bullet markers
-          const hasMultipleLines = text.includes('\n');
+          const hasMultipleLines = normalizedText.includes('\n');
           const hasBulletMarkers =
             text.includes('■') ||
             text.includes('•') ||
             text.includes('\n-') ||
             text.startsWith('-');
 
-          if (hasMultipleLines || hasBulletMarkers) {
+          const hasBulletMarkersNormalized =
+            /[\u25A0\u25AA\u2022]/.test(normalizedText) ||
+            normalizedText.includes('\n-') ||
+            normalizedText.startsWith('-');
+
+          if (hasMultipleLines || hasBulletMarkers || hasBulletMarkersNormalized) {
             // Split by newline and filter out empty lines
-            const lines = text.split('\n').filter((line) => line.trim());
+            const lines = normalizedText.split('\n').filter((line) => line.trim());
             const cleanedLines = lines
-              .map((line) => line.replace(/^[\u25A0\u25AA\-\u2022]\s*/, '').trim())
-              .filter(Boolean);
+              .map((line) => removeTruncationTokens(stripLeadingBulletMarker(line)))
+              .filter((line) => line && !/^\+?\d+\s+more$/i.test(line));
             if (cleanedLines.length === 0) return '';
 
             // Build text array with manual bullet insertion at smaller font
@@ -6360,7 +6474,7 @@ async function generatePPTX(
             });
             return result;
           }
-          return text;
+          return fixAcronymCasing(normalizedText);
         };
 
         const rows = finalTableData.map((row) => {
@@ -6619,6 +6733,22 @@ async function generatePPTX(
             }
             console.log(`  Right side (Products/Apps): ${prioritizedItems.length} items`);
           }
+
+          // Final cleanup for right table rows: remove truncation tokens, normalize acronyms, drop duplicates.
+          const seenRightRows = new Set();
+          prioritizedItems = prioritizedItems
+            .map((item) => {
+              const cleanLabel = fixAcronymCasing(removeTruncationTokens(ensureString(item?.label)));
+              const cleanValue = fixAcronymCasing(removeTruncationTokens(ensureString(item?.value)));
+              return { label: cleanLabel, value: cleanValue };
+            })
+            .filter((item) => item.label && item.value)
+            .filter((item) => {
+              const dedupeKey = normalizeForComparison(`${item.label} ${item.value}`);
+              if (!dedupeKey || seenRightRows.has(dedupeKey)) return false;
+              seenRightRows.add(dedupeKey);
+              return true;
+            });
 
           // Limit to maxRows (based on rightLayout setting)
           if (prioritizedItems.length > maxRows) {
@@ -8628,9 +8758,8 @@ function extractBranchLocationSummary(content, officeCount = null) {
   if (specificLocations.length >= 2) {
     const visibleCities = specificLocations.slice(0, 5);
     const displayCount = coverageCount || specificLocations.length;
-    const hiddenCount = Math.max(0, displayCount - visibleCities.length);
     if (displayCount >= 2) {
-      return `${displayCount} branches across ${visibleCities.join(', ')}${hiddenCount > 0 ? `, +${hiddenCount} more` : ''}`;
+      return `${displayCount} branches across ${visibleCities.join(', ')}`;
     }
   }
 
@@ -9188,6 +9317,7 @@ function extractRelationshipsFromMetrics(keyMetrics) {
         /\b\d{1,3}(?:,\d{3})*\+?\s*(?:customers?|clients?|suppliers?|vendors?|partners?|principals?|brands?)\b/gi,
         ''
       )
+      .replace(/\+\d+\s+more\b/gi, '')
       .replace(/[;|]/g, ',');
 
     const rawParts = text.split(/,|\n|\/|\band\b/gi);
@@ -11358,8 +11488,6 @@ function buildSegmentDisplayLines(segmentMap, options = {}) {
   if (entries.length === 0) return [];
 
   const lines = [];
-  const totalNames = entries.reduce((sum, [, arr]) => sum + arr.length, 0);
-  let shownCount = 0;
 
   outer: for (let idx = 0; idx < entries.length; idx++) {
     const [label, names] = entries[idx];
@@ -11367,12 +11495,7 @@ function buildSegmentDisplayLines(segmentMap, options = {}) {
     for (const chunk of chunks) {
       if (lines.length >= maxLines) break outer;
       lines.push(`${label}: ${chunk.join(', ')}`);
-      shownCount += chunk.length;
     }
-  }
-
-  if (shownCount < totalNames && lines.length < maxLines + 1) {
-    lines.push(`+${totalNames - shownCount} more`);
   }
 
   return lines;
