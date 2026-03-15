@@ -238,6 +238,27 @@ function isLikelyDuplicateServiceRow(leftLabel, leftValue, breakdownTitle, break
   return overlap >= Math.min(2, leftKeywords.size);
 }
 
+function isLikelyDuplicateLocationMetric(metricValue, locationValue) {
+  const metricText = ensureString(metricValue);
+  const locationText = ensureString(locationValue);
+  if (!metricText || !locationText) return false;
+
+  const metricNorm = normalizeForComparison(metricText);
+  const locationNorm = normalizeForComparison(locationText);
+  if (!/\b(branch|branches|office|offices)\b/i.test(metricNorm)) return false;
+  if (!/\b(branch|branches|office|offices)\b/i.test(locationNorm)) return false;
+
+  const metricKeywords = extractMeaningfulKeywords(metricText);
+  const locationKeywords = extractMeaningfulKeywords(locationText);
+  if (metricKeywords.size === 0 || locationKeywords.size === 0) return false;
+
+  let overlap = 0;
+  for (const word of metricKeywords) {
+    if (locationKeywords.has(word)) overlap += 1;
+  }
+  return overlap >= Math.min(2, metricKeywords.size);
+}
+
 function isRelationshipArtifactText(value) {
   const text = ensureString(value).trim();
   if (!text) return true;
@@ -382,7 +403,50 @@ function isGenericPrincipalBrandsValue(value) {
 }
 
 function stripLeadingBulletMarker(value) {
-  return ensureString(value).replace(/^\s*(?:[-*]|[\u2022\u25AA\u25A0\u25E6\u2043])\s*/, '');
+  return ensureString(value).replace(
+    /^\s*(?:(?:[-*]|[\u2022\u25AA\u25A0\u25E6\u2043]|[â€¢â– â–ªâ—¦â€£])+)\s*/g,
+    ''
+  );
+}
+
+function isBulletOnlyLine(value) {
+  const text = ensureString(value).trim();
+  if (!text) return true;
+  const withoutBullets = text
+    .replace(/(?:[-*]|[\u2022\u25AA\u25A0\u25E6\u2043]|[â€¢â– â–ªâ—¦â€£])+/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+  return withoutBullets.length === 0;
+}
+
+function sanitizeLocationValue(value) {
+  const entries = splitReadableEntries(value);
+  const cleaned = [];
+  const seen = new Set();
+
+  for (const entry of entries) {
+    const text = ensureString(entry).trim();
+    if (!text) continue;
+    if (isBulletOnlyLine(text)) continue;
+    if (
+      /\b(the largest asean country|our goal is|global presence|mission|vision|about us)\b/i.test(text)
+    )
+      continue;
+    if (/^\d+\s+branches?\b/i.test(text) && !/\b(?:across|in|at)\b/i.test(text)) continue;
+
+    const hasGeoSignal = isLikelyGeographyToken(text);
+    const hasBranchSignal = /\b(branch|branches|office|offices|hq|head office)\b/i.test(text);
+    if (!hasGeoSignal && !hasBranchSignal && text.split(/\s+/).length > 3) continue;
+    if (hasCompanySignalInName(text) && !hasGeoSignal && !hasBranchSignal) continue;
+
+    const dedupeKey = normalizeForComparison(text);
+    if (!dedupeKey || seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    cleaned.push(text);
+  }
+
+  if (cleaned.length === 0) return '';
+  return formatCompactEntryList(cleaned.join('\n'), { maxEntries: 6, lineModeThreshold: 3 });
 }
 
 function removeTruncationTokens(value) {
@@ -404,6 +468,7 @@ function splitReadableEntries(value) {
     const cleanLine = line.replace(/^[\-•▪■]\s*/, '').trim();
     const cleanLineNormalized = removeTruncationTokens(stripLeadingBulletMarker(cleanLine));
     if (!cleanLineNormalized) continue;
+    if (isBulletOnlyLine(cleanLineNormalized)) continue;
     if (/^\+?\d+\s+more$/i.test(cleanLineNormalized)) continue;
     if (cleanLineNormalized.includes(':')) {
       entries.push(cleanLineNormalized);
@@ -727,6 +792,8 @@ function isLikelyNonCompanyRelationshipToken(value) {
     return true;
   }
 
+  if (/\b[a-z]+_[a-z0-9_]+\b/i.test(lower) && !hasLegalEntitySignal(text)) return true;
+
   if (
     /\b(global presence|pan[-\s][a-z]+ presence|presence in \d+ countries?)\b/i.test(lower)
   ) {
@@ -754,7 +821,7 @@ function isLikelyNonCompanyRelationshipToken(value) {
   }
 
   if (
-    /\b(employment type|salary|admin(?:istrative)?|executive|job title|position|vacancy|roles?|phone|email|contact|website|url|address|disclaimer|procurement|supply chain|transportation|transport|full time|part time|location|locations)\b/i.test(
+    /\b(employment type|salary|admin(?:istrative)?|executive|job title|position|vacancy|roles?|phone|email|contact|website|url|address|disclaimer|procurement|supply chain|transportation|transport|full time|part time|location|locations|standards?|performance|regulatory|licenses?|permits?|sds|labels?|audit|questionnaire)\b/i.test(
       lower
     ) &&
     !hasLegalEntitySignal(text)
@@ -788,6 +855,7 @@ function cleanRelationshipEntityName(name) {
   if (/^\+?\d+\s+more$/i.test(text)) return '';
 
   text = text
+    .replace(/^[A-Za-z]+\s+\d+(?:\s+\d+)*\s*:\s*/i, '')
     .replace(
       /^(?:more|additional)\s+(?:key\s+)?(?:customers?|clients?|suppliers?|vendors?|principal\s+partners?|key\s+partners?|partners?|brands?)\s*:?\s*/i,
       ''
@@ -1181,6 +1249,13 @@ function fixAcronymCasing(text) {
     'JTKSM',
     'FWCS',
     'KDN',
+    'UV',
+    'OPV',
+    'PBS',
+    'PE',
+    'SGS',
+    'NC',
+    'PU',
   ];
   const knownLower = new Set(allCapsAcronyms.map((acronym) => acronym.toLowerCase()));
   const lowerWords = new Set([
@@ -1219,6 +1294,16 @@ function fixAcronymCasing(text) {
     const lower = match.toLowerCase();
     if (lowerWords.has(lower)) return match;
     if (knownLower.has(lower)) return match.toUpperCase();
+    return match;
+  });
+
+  // Hyphenated shortforms should be uppercase when both sides are known shortforms (example: Nc-pu -> NC-PU).
+  result = result.replace(/\b([A-Za-z]{2,4})-([A-Za-z]{2,4})\b/g, (match, left, right) => {
+    const leftLower = ensureString(left).toLowerCase();
+    const rightLower = ensureString(right).toLowerCase();
+    if (knownLower.has(leftLower) && knownLower.has(rightLower)) {
+      return `${left.toUpperCase()}-${right.toUpperCase()}`;
+    }
     return match;
   });
 
@@ -6124,6 +6209,38 @@ async function generatePPTX(
           const normalizedLower = ensureString(label).toLowerCase().trim();
           const rowCanonical = canonicalLeftLabel(label);
 
+          if (/(contact information|contact details|contact numbers?|phone|fax|email)/i.test(normalizedLower)) {
+            console.log(`    [LeftTable Cleanup] Removed "${label}" because contact details are low-value`);
+            return;
+          }
+
+          if (['hq', 'location', 'headquarters'].includes(normalizedLower)) {
+            const sanitizedLocation = sanitizeLocationValue(value);
+            if (!sanitizedLocation) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because no clean location text remained`
+              );
+              return;
+            }
+            value = sanitizedLocation;
+          }
+
+          if (normalizedLower === 'key metrics') {
+            const existingLocationRow = finalTableData.find((row) => {
+              const rowLabel = ensureString(row?.[0]).toLowerCase().trim();
+              return rowLabel === 'location' || rowLabel === 'hq' || rowLabel === 'headquarters';
+            });
+            if (
+              existingLocationRow &&
+              isLikelyDuplicateLocationMetric(value, ensureString(existingLocationRow[1]))
+            ) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because branch/office info duplicates location row`
+              );
+              return;
+            }
+          }
+
           if (
             /(customer|client|supplier|vendor|partner|principal|brand)/i.test(normalizedLower) &&
             ![
@@ -6288,6 +6405,20 @@ async function generatePPTX(
           value = fixAcronymCasing(removeTruncationTokens(value));
           if (!value) return;
 
+          if (/(factory size|land area)/i.test(normalizedLower)) {
+            const duplicateSizeIndex = finalTableData.findIndex((row) => {
+              const existingLabel = ensureString(row?.[0]).toLowerCase().trim();
+              if (!/(factory size|land area)/i.test(existingLabel)) return false;
+              return normalizeForComparison(ensureString(row?.[1])) === normalizeForComparison(value);
+            });
+            if (duplicateSizeIndex >= 0) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because size/area value duplicates existing row`
+              );
+              return;
+            }
+          }
+
           const isMacroByLabel = macroLabelPatterns.some((pattern) => pattern.test(label));
           const isMacroByValue = macroValuePatterns.some((pattern) => pattern.test(value));
           if (!hardKeepLabels.has(normalizedLower) && (isMacroByLabel || isMacroByValue)) {
@@ -6451,7 +6582,9 @@ async function generatePPTX(
             const lines = normalizedText.split('\n').filter((line) => line.trim());
             const cleanedLines = lines
               .map((line) => removeTruncationTokens(stripLeadingBulletMarker(line)))
-              .filter((line) => line && !/^\+?\d+\s+more$/i.test(line));
+              .filter(
+                (line) => line && !isBulletOnlyLine(line) && !/^\+?\d+\s+more$/i.test(line)
+              );
             if (cleanedLines.length === 0) return '';
 
             // Build text array with manual bullet insertion at smaller font
@@ -6544,34 +6677,26 @@ async function generatePPTX(
         }
 
         // ===== RIGHT SECTION (table-only layout) =====
-        // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'empty'
+        // rightLayout options: 'table-4', 'table-6' (default), 'table-unlimited'
         console.log(`  Right layout setting: ${rightLayout}`);
+        // TABLE LAYOUT: Show table format - THEMATIC (one category only based on breakdown_title)
+        // Right side should focus on ONE thing: products, OR customers, OR suppliers, etc.
+        // Row limit based on rightLayout: 'table-4' = 4 rows, 'table-6' = 6 rows, 'table-unlimited' = no limit
 
-        // Skip entire right section if empty layout selected
-        if (rightLayout === 'empty') {
-          console.log('  Skipping right section (empty layout selected)');
+        // Determine max rows based on layout
+        let maxRows;
+        if (rightLayout === 'table-unlimited') {
+          maxRows = 999; // effectively no limit
+        } else if (rightLayout === 'table-4') {
+          maxRows = 4;
         } else {
-          // TABLE LAYOUT: Show table format - THEMATIC (one category only based on breakdown_title)
-          // Right side should focus on ONE thing: products, OR customers, OR suppliers, etc.
-          // Row limit based on rightLayout: 'table-6' = 6 rows, 'table-unlimited' = no limit, 'table-half' = 3 rows (half height with 財務実績 section below)
+          maxRows = 6; // default for table-6
+        }
 
-          // Determine max rows based on layout
-          let maxRows;
-          if (rightLayout === 'table-unlimited') {
-            maxRows = 999; // effectively no limit
-          } else if (rightLayout === 'table-half') {
-            maxRows = 3; // Half page = only 3 rows to leave room for section below
-          } else {
-            maxRows = 6; // default for table-6
-          }
+        const breakdownTitle = ensureString(company.breakdown_title).toLowerCase();
 
-          // Get business relationships
-          const relationships = company._businessRelationships || {};
-          const breakdownTitle = ensureString(company.breakdown_title).toLowerCase();
-          const companyNameForFilter = company.company_name || company.title || '';
-
-          // Build right-side table - THEMATIC based on breakdown_title
-          let prioritizedItems = [];
+        // Build right-side table - THEMATIC based on breakdown_title
+        let prioritizedItems = [];
 
           // Determine what category the right side should show based on breakdown_title
           if (breakdownTitle.includes('customer') || breakdownTitle.includes('client')) {
@@ -6762,9 +6887,7 @@ async function generatePPTX(
             ]);
 
             // Calculate row height to distribute evenly
-            // For table-half: use shorter height (1.8") to leave room for 財務実績 section below
-            // For other layouts: use full height (4.75")
-            const rightTableHeight = rightLayout === 'table-half' ? 1.8 : 4.75;
+            const rightTableHeight = 4.75;
             const rightRowHeight = rightTableHeight / Math.max(rightTableData.length, 1);
 
             const rightRows = rightTableData.map((row) => [
@@ -6807,30 +6930,6 @@ async function generatePPTX(
               margin: [0, 0.04, 0, 0.04],
             });
           }
-
-          // For table-half: Add 財務実績 header and line below the table (even if no items)
-          if (rightLayout === 'table-half') {
-            // 財務実績 header - same format as top right header
-            slide.addText('財務実績', {
-              x: 6.86,
-              y: 3.98,
-              w: 6.1,
-              h: 0.35,
-              fontSize: 14,
-              fontFace: 'Segoe UI',
-              color: COLORS.black,
-              align: 'center',
-            });
-            // Line below header
-            slide.addShape(pptx.shapes.LINE, {
-              x: 6.86,
-              y: 4.33,
-              w: 6.1,
-              h: 0,
-              line: { color: COLORS.dk2, width: 1.75 },
-            });
-          }
-        } // End of rightLayout !== 'empty' else block
 
         // ===== FOOTNOTE (single text box with stacked content) =====
         const footnoteLines = [];
@@ -14849,7 +14948,7 @@ async function processWebsitesInParallel(websites) {
 }
 
 // Valid layout options (whitelist to prevent XSS/injection)
-const VALID_LAYOUTS = ['table-6', 'table-unlimited', 'table-half', 'empty'];
+const VALID_LAYOUTS = ['table-4', 'table-6', 'table-unlimited'];
 
 // Main profile slides endpoint
 app.post('/api/profile-slides', async (req, res) => {

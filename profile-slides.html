@@ -58,14 +58,6 @@
     .preview-row { flex: 1; background: #6366f1; border-radius: 2px; display: flex; }
     .preview-row-label { width: 30%; background: #4338ca; border-radius: 2px 0 0 2px; }
     .preview-row-value { flex: 1; background: #fff; border-radius: 0 2px 2px 0; }
-    .preview-empty { flex: 1; background: transparent; }
-    .preview-images { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; flex: 1; }
-    .preview-images-6 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; gap: 2px; flex: 1; }
-    .preview-img { background: #94a3b8; border-radius: 3px; }
-    .preview-img-row { display: flex; gap: 3px; flex: 1; }
-    .preview-img-left { width: 40%; background: #94a3b8; border-radius: 3px; }
-    .preview-img-label { flex: 1; background: #e2e8f0; border-radius: 3px; }
-    .preview-right-half { flex: 1; display: flex; flex-direction: column; gap: 2px; padding-bottom: 18px; }
   </style>
 </head>
 <body class="font-sans bg-slate-100 text-slate-900 h-screen flex overflow-hidden">
@@ -194,6 +186,23 @@
                 <div class="border-2 border-slate-200 rounded-xl p-5 bg-slate-50">
                   <p class="text-sm font-semibold text-slate-700 mb-4">Right Side Layout</p>
                   <div class="grid grid-cols-2 gap-3">
+                    <!-- Table 4 -->
+                    <label class="layout-option cursor-pointer">
+                      <input type="radio" name="rightLayout" value="table-4" class="sr-only">
+                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
+                        <div class="preview-slide">
+                          <div class="preview-left"></div>
+                          <div class="preview-right">
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          </div>
+                        </div>
+                        <p class="text-sm font-medium text-center text-slate-700">Table (4 Rows)</p>
+                      </div>
+                    </label>
+
                     <!-- Table 6 -->
                     <label class="layout-option cursor-pointer">
                       <input type="radio" name="rightLayout" value="table-6" checked class="sr-only">
@@ -231,93 +240,6 @@
                           </div>
                         </div>
                         <p class="text-sm font-medium text-center text-slate-700">Table (No Limit Rows)</p>
-                      </div>
-                    </label>
-
-                    <!-- Table Half -->
-                    <label class="layout-option cursor-pointer">
-                      <input type="radio" name="rightLayout" value="table-half" class="sr-only">
-                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
-                        <div class="preview-slide">
-                          <div class="preview-left"></div>
-                          <div class="preview-right-half">
-                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                          </div>
-                        </div>
-                        <p class="text-sm font-medium text-center text-slate-700">Table (Half Page)</p>
-                      </div>
-                    </label>
-
-                    <!-- Empty -->
-                    <label class="layout-option cursor-pointer">
-                      <input type="radio" name="rightLayout" value="empty" class="sr-only">
-                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
-                        <div class="preview-slide">
-                          <div class="preview-left"></div>
-                          <div class="preview-right">
-                            <div class="preview-empty"></div>
-                          </div>
-                        </div>
-                        <p class="text-sm font-medium text-center text-slate-700">Empty</p>
-                      </div>
-                    </label>
-
-                    <!-- Images 4 -->
-                    <label class="layout-option cursor-pointer">
-                      <input type="radio" name="rightLayout" value="images" class="sr-only">
-                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
-                        <div class="preview-slide">
-                          <div class="preview-left"></div>
-                          <div class="preview-right">
-                            <div class="preview-images">
-                              <div class="preview-img"></div>
-                              <div class="preview-img"></div>
-                              <div class="preview-img"></div>
-                              <div class="preview-img"></div>
-                            </div>
-                          </div>
-                        </div>
-                        <p class="text-sm font-medium text-center text-slate-700">Images (4)</p>
-                      </div>
-                    </label>
-
-                    <!-- Images 6 -->
-                    <label class="layout-option cursor-pointer">
-                      <input type="radio" name="rightLayout" value="images-6" class="sr-only">
-                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
-                        <div class="preview-slide">
-                          <div class="preview-left"></div>
-                          <div class="preview-right">
-                            <div class="preview-images-6">
-                              <div class="preview-img"></div>
-                              <div class="preview-img"></div>
-                              <div class="preview-img"></div>
-                              <div class="preview-img"></div>
-                              <div class="preview-img"></div>
-                              <div class="preview-img"></div>
-                            </div>
-                          </div>
-                        </div>
-                        <p class="text-sm font-medium text-center text-slate-700">Images (6)</p>
-                      </div>
-                    </label>
-
-                    <!-- Images Labeled -->
-                    <label class="layout-option cursor-pointer col-span-2">
-                      <input type="radio" name="rightLayout" value="images-labeled" class="sr-only">
-                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
-                        <div class="preview-slide">
-                          <div class="preview-left"></div>
-                          <div class="preview-right">
-                            <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
-                            <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
-                            <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
-                            <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
-                          </div>
-                        </div>
-                        <p class="text-sm font-medium text-center text-slate-700">Img + Label</p>
                       </div>
                     </label>
                   </div>
@@ -422,3 +344,4 @@
   </script>
 </body>
 </html>
+
