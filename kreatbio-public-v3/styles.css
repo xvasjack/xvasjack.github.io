@@ -568,12 +568,21 @@ section {
   padding: 18px;
 }
 
+.visual-panel--product {
+  padding: 22px;
+  background: linear-gradient(180deg, #ffffff, #eef4f8);
+}
+
 .product-rack {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 18px;
   min-height: 320px;
+}
+
+.product-rack--compact {
+  min-height: 0;
 }
 
 .kit-carton {
@@ -771,6 +780,14 @@ section {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.mini-metrics--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mini-metrics--compact .metric-chip strong {
+  font-size: 22px;
 }
 
 .metrics-band {
@@ -3536,6 +3553,19 @@ body {
   backdrop-filter: blur(4px);
 }
 
+.photo-frame__chips--static {
+  position: static;
+  inset: auto;
+  z-index: auto;
+}
+
+.photo-frame__chips--static .signal-pill {
+  color: var(--brand-strong);
+  background: rgba(16, 60, 102, 0.06);
+  border-color: rgba(16, 60, 102, 0.18);
+  backdrop-filter: none;
+}
+
 .photo-frame__caption {
   position: absolute;
   left: 18px;
@@ -4104,6 +4134,14 @@ main > section + .section-compact {
 
 .section-intro {
   margin-bottom: 40px;
+}
+
+.section-intro--slim {
+  margin-bottom: 24px;
+}
+
+.section-intro--slim h2 {
+  font-size: clamp(1.5rem, 2.3vw, 2rem);
 }
 
 .section-intro h2,
