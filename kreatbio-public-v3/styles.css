@@ -3213,6 +3213,61 @@ tr:last-child td {
   background: linear-gradient(180deg, #f8fbff, #eef4ff);
 }
 
+.report-visual {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #d9e5ff;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f8fbff, #eef4ff);
+}
+
+.report-visual__header,
+.report-visual__row,
+.report-visual__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-visual__header {
+  margin-bottom: 12px;
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-visual__row {
+  margin-top: 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.report-visual__row strong,
+.report-visual__footer span {
+  font-size: 12px;
+}
+
+.report-visual__bar {
+  margin-top: 6px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(29, 78, 216, 0.12);
+  overflow: hidden;
+}
+
+.report-visual__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1d4ed8, #4f8cff);
+}
+
+.report-visual__footer {
+  margin-top: 12px;
+  color: var(--text-muted);
+}
+
 .status-callout {
   margin-top: 22px;
 }
@@ -4225,6 +4280,11 @@ body {
 .resource-highlight .koda-inline-link {
   margin-top: auto;
   padding-top: 16px;
+}
+
+.resource-highlight .support-copy--compact {
+  margin-top: 6px;
+  font-size: 12px;
 }
 
 .doc-thumb {
