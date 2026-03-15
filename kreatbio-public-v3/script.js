@@ -9,6 +9,11 @@
   const qaScroll = params.get("scroll");
   const qaMenu = params.get("menu") === "1";
 
+  if (qaReveal) {
+    document.documentElement.classList.add("qa-reveal");
+    document.body.classList.add("qa-reveal");
+  }
+
   const closeMenu = () => {
     if (!toggle || !menu) {
       return;

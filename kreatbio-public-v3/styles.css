@@ -3299,29 +3299,8 @@ tr:last-child td {
   box-shadow: var(--shadow-sm);
 }
 
-.kodageno-hero-copy .lead-copy,
-.kodageno-hero-copy .hero-support-copy {
+.kodageno-hero-copy .lead-copy {
   max-width: 760px;
-}
-
-.hero-support-copy {
-  margin-top: 16px;
-  color: var(--text);
-  font-weight: 700;
-}
-
-.hero-audience {
-  margin-top: 18px;
-  padding: 16px 18px;
-  border-radius: 18px;
-  background: #f7fafc;
-  border: 1px solid var(--line);
-  color: var(--text-soft);
-}
-
-.koda-subbrand .hero-audience {
-  background: #f5f9ff;
-  border-color: #cadeff;
 }
 
 .koda-resource-strip {
@@ -4058,6 +4037,444 @@ body {
 
   .home-scene {
     grid-template-columns: 1fr;
+  }
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+ul,
+ol {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+section {
+  padding: 72px 0;
+}
+
+.section-compact {
+  padding: 48px 0;
+}
+
+.hero {
+  padding: 72px 0 64px;
+}
+
+main > section + section {
+  padding-top: 48px;
+}
+
+main > section + .section-compact {
+  padding-top: 32px;
+}
+
+.ruo-bar,
+.site-header {
+  margin: 0;
+}
+
+.ruo-bar {
+  border-bottom: 1px solid var(--line);
+}
+
+.eyebrow {
+  margin-bottom: 8px;
+}
+
+.hero-copy h1,
+.product-copy h1,
+.platform-copy h1,
+.resources-copy h1,
+.partnership-copy h1,
+.company-copy h1,
+.contact-copy h1 {
+  margin-bottom: 12px;
+}
+
+.section-intro {
+  margin-bottom: 40px;
+}
+
+.section-intro h2,
+.resource-section-head h2 {
+  margin-bottom: 8px;
+}
+
+.resource-section-head {
+  margin-bottom: 28px;
+}
+
+.hero-actions {
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.hero-subnav-group {
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 12px;
+}
+
+.page-home .hero + section {
+  padding-top: 48px;
+}
+
+.feature-panel-v2,
+.content-with-rail,
+.resource-layout,
+.resource-topbar,
+.resource-highlight-grid,
+.application-corridors-v2,
+.partner-segments,
+.lane-grid,
+.koda-proof-grid,
+.koda-feature-grid,
+.learning-flow-grid {
+  gap: 24px;
+}
+
+.feature-panel-v2 {
+  margin-top: 24px;
+}
+
+.feature-panel-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.feature-panel-copy h3 {
+  margin: 0;
+}
+
+.feature-panel-copy > p {
+  margin-top: 16px;
+}
+
+.feature-badges,
+.signal-pill-row {
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.feature-panel-copy .hero-actions,
+.feature-panel-copy .outbound-link-row,
+.kodageno-hero-copy .outbound-link-row {
+  margin-top: 24px;
+}
+
+.scene-shell--compact {
+  gap: 14px;
+}
+
+.flow-strip {
+  gap: 8px;
+}
+
+.scene-note {
+  margin: 0;
+}
+
+.outbound-link-row {
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.application-tile,
+.resource-highlight,
+.partner-segment,
+.koda-proof-card,
+.feature-icon-card,
+.flow-card,
+.guide-card,
+.lane-panel {
+  min-height: 100%;
+}
+
+.resource-topbar {
+  align-items: stretch;
+  padding-bottom: 40px;
+  margin-bottom: 40px;
+  border-bottom: 1px solid var(--line);
+}
+
+.resource-highlight {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.resource-highlight__body {
+  flex: 1;
+}
+
+.resource-highlight__body > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resource-highlight .route-meta,
+.doc-class,
+.lesson-link span,
+.lesson-link small {
+  margin: 0;
+}
+
+.resource-section {
+  padding: 24px 28px;
+}
+
+.doc-row {
+  gap: 24px;
+  padding: 20px 0;
+  align-items: stretch;
+}
+
+.doc-row__main > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.doc-action {
+  margin-top: auto;
+  align-self: end;
+}
+
+.table-scroll {
+  margin-top: 18px;
+}
+
+.main-content {
+  gap: 24px;
+}
+
+#workflow + .table-panel {
+  margin-top: 16px;
+}
+
+.downstream-grid--components {
+  margin-top: 20px;
+}
+
+.downstream-grid--applications {
+  margin-top: 8px;
+  padding-top: 32px;
+  border-top: 1px solid rgba(16, 60, 102, 0.12);
+}
+
+.rail-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.rail-links a {
+  width: auto;
+}
+
+.side-rail .doc-list {
+  gap: 8px;
+}
+
+.workflow-premium {
+  gap: 24px;
+}
+
+.workflow-step-card {
+  padding: 24px 20px 20px;
+}
+
+.koda-proof-card,
+.feature-icon-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 24px;
+}
+
+.koda-proof-card span,
+.koda-proof-card strong {
+  margin-bottom: 0;
+}
+
+.lane-grid {
+  column-gap: 48px;
+  row-gap: 24px;
+}
+
+.lane-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lane-panel .lane-badges,
+.lane-panel .feature-list,
+.lane-panel .outbound-link-row {
+  margin-top: 0;
+}
+
+.lesson-link-list {
+  gap: 16px;
+  margin-top: 0;
+}
+
+.lesson-link {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.lesson-link span,
+.lesson-link small {
+  display: block;
+}
+
+.program-line-panel .eyebrow {
+  margin-bottom: 12px;
+}
+
+.program-steps {
+  gap: 0;
+  margin-top: 0;
+}
+
+.program-step {
+  padding: 0 16px;
+}
+
+.program-step__node {
+  margin-bottom: 8px;
+}
+
+.program-step h3 {
+  margin: 0 0 8px;
+}
+
+.program-step p {
+  margin: 0;
+}
+
+#commercial-terms {
+  padding-top: 56px;
+}
+
+.agreement-band {
+  padding: 36px 48px;
+}
+
+.footer-grid {
+  gap: 24px;
+  align-items: start;
+}
+
+.support-copy--offset,
+.feature-list--stacked,
+.summary-list--stacked,
+.lead-copy--stacked {
+  margin-top: 16px;
+}
+
+.browser-frame__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.browser-frame__dot:first-child {
+  background: #93c5fd;
+}
+
+.browser-frame__dot:nth-child(2) {
+  background: #60a5fa;
+}
+
+.browser-frame__dot:nth-child(3) {
+  background: #2563eb;
+}
+
+.qa-reveal .reveal,
+.qa-reveal .reveal.is-in {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
+
+@media (max-width: 920px) {
+  .hero {
+    padding: 56px 0 48px;
+  }
+
+  .resource-topbar {
+    padding-bottom: 32px;
+    margin-bottom: 32px;
+  }
+
+  .program-steps {
+    gap: 18px;
+  }
+}
+
+@media (max-width: 760px) {
+  section {
+    padding: 48px 0;
+  }
+
+  .section-compact {
+    padding: 32px 0;
+  }
+
+  .hero {
+    padding: 48px 0;
+  }
+
+  main > section + section {
+    padding-top: 32px;
+  }
+
+  .hero-actions {
+    margin-top: 24px;
+  }
+
+  .content-with-rail,
+  .resource-layout,
+  .resource-topbar,
+  .resource-highlight-grid,
+  .application-corridors-v2,
+  .partner-segments,
+  .lane-grid,
+  .koda-proof-grid,
+  .koda-feature-grid,
+  .learning-flow-grid {
+    gap: 16px;
+  }
+
+  .resource-topbar {
+    padding-bottom: 24px;
+    margin-bottom: 24px;
+  }
+
+  .agreement-band {
+    padding: 28px 24px;
+  }
+
+  .doc-action {
+    align-self: start;
   }
 }
 
