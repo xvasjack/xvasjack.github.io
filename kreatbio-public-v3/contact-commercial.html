@@ -12,9 +12,10 @@
     <meta property="og:description" content="Contact KreatBio for quote requests, technical documents, KodaGeno deployment discussions, and partnership reviews." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://xvasjack.github.io/kreatbio-public-v3/contact-commercial.html" />
-    <meta property="og:image" content="https://xvasjack.github.io/kreatbio-public-v3/media/og-kreatbio.png" />
-    <meta property="og:image:alt" content="KreatBio contact preview." />
+    <meta property="og:image" content="https://xvasjack.github.io/kreatbio-public-v3/media/og-contact.png" />
+    <meta property="og:image:alt" content="KreatBio contact preview for quotes, documents, and partnership review." />
     <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://xvasjack.github.io/kreatbio-public-v3/contact-commercial.html" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="page-contact">
@@ -75,7 +76,7 @@
           <aside class="contact-panel reveal">
             <span class="eyebrow">Response time</span>
             <h3>We respond within 2 business days.</h3>
-            <p>Use one form for technical documents, quote requests, KodaGeno access, and partnership discussions. Requests are triaged by type after submission.</p>
+            <p>Requests are triaged by type after submission. Quote and document requests are reviewed first, then the reply points you to the next step: file delivery, quote follow-up, or a program discussion.</p>
             <ul class="summary-list summary-list--stacked">
               <li>KodaPure technical sheet, public SDS access, and CoA by lot number</li>
               <li>KodaGeno institution and learner access</li>
@@ -101,7 +102,7 @@
             <div class="form-grid form-grid--two">
               <label>
                 <span>Requester type</span>
-                <select name="requester_type" required>
+                <select name="requester_type" data-requester-type required>
                   <option value="">Select one</option>
                   <option>Research lab</option>
                   <option>Academic program</option>
@@ -126,7 +127,7 @@
             <div class="form-grid form-grid--two">
               <label>
                 <span>Request type</span>
-                <select name="request_type" required>
+                <select name="request_type" data-request-type required>
                   <option value="">Select one</option>
                   <option>Technical sheet</option>
                   <option>CoA by lot number</option>
@@ -147,9 +148,10 @@
                 <span>Name</span>
                 <input type="text" name="name" required />
               </label>
-              <label>
+              <label class="form-field" data-institution-field>
                 <span>Institution</span>
-                <input type="text" name="institution" required />
+                <input type="text" name="institution" data-institution-input required />
+                <small class="field-help">Required for labs, academic programs, and training institutions.</small>
               </label>
             </div>
 
@@ -164,6 +166,12 @@
               </label>
             </div>
 
+            <label class="form-field field-hidden" data-lot-field>
+              <span>Lot number</span>
+              <input type="text" name="lot_number" data-lot-input />
+              <small class="field-help">Add the lot number when you are requesting a CoA so the file can be matched to the right batch.</small>
+            </label>
+
             <label>
               <span>Message</span>
               <textarea name="message" maxlength="500" rows="6" placeholder="Tell us what you need, what sample type or program format you are reviewing, and any deadline you are working against."></textarea>
@@ -175,7 +183,24 @@
             </div>
           </form>
 
-          <div class="contact-side-stack">
+          <div class="contact-side-stack contact-process">
+            <div class="process-grid reveal">
+              <article class="process-card">
+                <span>Step 1</span>
+                <strong>Form is sorted by request type.</strong>
+                <p>Technical sheet, CoA, quote, pricing, and partnership requests do not go through the exact same reply path.</p>
+              </article>
+              <article class="process-card">
+                <span>Step 2</span>
+                <strong>Reply includes the next practical action.</strong>
+                <p>That can be file delivery, quote follow-up, clarification questions, or a program review discussion.</p>
+              </article>
+              <article class="process-card">
+                <span>Step 3</span>
+                <strong>Time-sensitive requests should say so in the message.</strong>
+                <p>If a lot number, shipping deadline, or curriculum start date matters, include it in the first form so the reply can be specific.</p>
+              </article>
+            </div>
             <article class="guide-card reveal">
               <span class="route-meta">KodaPure</span>
               <h3>Need the product details first?</h3>
@@ -220,7 +245,7 @@
         </span>
       </a>
       <p class="lead-copy footer-intro">
-        KreatBio develops molecular preparation systems and sequencing analysis training for research and academic environments.
+        Research-use product line: KodaPure DNA extraction and KodaGeno sequencing analysis training.
       </p>
     </div>
     <div>

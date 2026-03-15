@@ -102,6 +102,41 @@
     node.textContent = new Date().getFullYear();
   });
 
+  const requesterType = document.querySelector("[data-requester-type]");
+  const requestType = document.querySelector("[data-request-type]");
+  const institutionField = document.querySelector("[data-institution-field]");
+  const institutionInput = document.querySelector("[data-institution-input]");
+  const lotField = document.querySelector("[data-lot-field]");
+  const lotInput = document.querySelector("[data-lot-input]");
+
+  const syncFormFields = () => {
+    if (requesterType && institutionField && institutionInput) {
+      const requesterValue = requesterType.value.trim().toLowerCase();
+      const institutionOptional = ["individual learner", "press", "other"].includes(requesterValue);
+      institutionField.classList.toggle("field-hidden", institutionOptional);
+      institutionInput.required = !institutionOptional;
+      if (institutionOptional) {
+        institutionInput.value = "";
+      }
+    }
+
+    if (requestType && lotField && lotInput) {
+      const requestValue = requestType.value.trim().toLowerCase();
+      const needLot = requestValue === "coa by lot number";
+      lotField.classList.toggle("field-hidden", !needLot);
+      lotInput.required = needLot;
+      if (!needLot) {
+        lotInput.value = "";
+      }
+    }
+  };
+
+  if (requesterType || requestType) {
+    syncFormFields();
+    requesterType?.addEventListener("change", syncFormFields);
+    requestType?.addEventListener("change", syncFormFields);
+  }
+
   if (qaScroll) {
     window.setTimeout(() => {
       const target = document.getElementById(qaScroll);

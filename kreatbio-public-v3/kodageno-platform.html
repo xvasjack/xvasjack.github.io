@@ -12,9 +12,10 @@
     <meta property="og:description" content="Review KodaGeno for guided sequencing analysis training, live lesson preview, learner personas, and institutional deployment." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://xvasjack.github.io/kreatbio-public-v3/kodageno-platform.html" />
-    <meta property="og:image" content="https://xvasjack.github.io/kreatbio-public-v3/media/og-kreatbio.png" />
-    <meta property="og:image:alt" content="KreatBio preview for KodaGeno sequencing analysis training." />
+    <meta property="og:image" content="https://xvasjack.github.io/kreatbio-public-v3/media/og-kodageno.png" />
+    <meta property="og:image:alt" content="KodaGeno page preview for sequencing analysis training." />
     <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://xvasjack.github.io/kreatbio-public-v3/kodageno-platform.html" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -95,6 +96,12 @@
               <a class="koda-inline-link" href="https://kodageno.com/" target="_blank" rel="noreferrer">Visit KodaGeno</a>
               <a class="koda-inline-link" href="https://kodageno.com/lessons" target="_blank" rel="noreferrer">Open Lessons</a>
             </div>
+            <div class="jump-strip">
+              <a href="#scenario">Lesson example</a>
+              <a href="#institution-proof">Institution proof</a>
+              <a href="#modules">Modules</a>
+              <a href="#faq">FAQ</a>
+            </div>
           </div>
 
           <div class="platform-visual reveal">
@@ -161,12 +168,35 @@
             <h2>How one KodaGeno lesson works.</h2>
             <p>Here is a concrete example of how a learner moves through one lesson.</p>
           </div>
-          <article class="guide-card reveal">
+          <article class="scenario-card reveal" id="scenario">
             <span class="route-meta">Lesson excerpt</span>
             <h3>Bacterial WGS quality control and trimming.</h3>
-            <p>
-              You receive a FASTQ file from a bacterial WGS run. FastQC reports a mean quality score of Q28 with a noticeable quality drop after position 140. KodaGeno asks what to do next: proceed directly to assembly, trim with a conservative profile, trim aggressively and risk losing depth, or discard the run. After the learner chooses, the platform explains why the trimming profile fits the read length and coverage depth, shows the updated FastQC output, and moves to the next step in the workflow.
-            </p>
+            <div class="scenario-layout">
+              <div class="scenario-visual">
+                <img src="media/kodageno-lesson-choice.svg" alt="Illustrated KodaGeno lesson screen with a scenario prompt, answer options, and guided feedback." loading="lazy" />
+              </div>
+              <div>
+                <p>You receive a FASTQ file from a bacterial WGS run. FastQC reports a mean quality score of Q28 with a quality drop after position 140. KodaGeno asks the learner what to do next before assembly.</p>
+                <div class="scenario-choice-list">
+                  <div class="scenario-choice">
+                    <span class="scenario-choice__dot" aria-hidden="true"></span>
+                    <div><strong>Proceed directly to assembly</strong><br />Skip trimming and accept the low-quality tail.</div>
+                  </div>
+                  <div class="scenario-choice scenario-choice--selected">
+                    <span class="scenario-choice__dot" aria-hidden="true"></span>
+                    <div><strong>Trim with a conservative quality profile</strong><br />Clean the tail while preserving enough read length for downstream assembly.</div>
+                  </div>
+                  <div class="scenario-choice">
+                    <span class="scenario-choice__dot" aria-hidden="true"></span>
+                    <div><strong>Trim aggressively</strong><br />Risk losing too much depth before the next step.</div>
+                  </div>
+                </div>
+                <div class="scenario-feedback">
+                  <strong>Guided feedback</strong>
+                  KodaGeno explains why the conservative trimming profile fits the read length and coverage depth, then shows the updated FastQC output before the lesson moves on to assembly.
+                </div>
+              </div>
+            </div>
           </article>
         </div>
       </section>
@@ -209,16 +239,16 @@
           <article class="lane-panel reveal">
             <span class="eyebrow">For institutions</span>
             <h3>Deploy KodaGeno as a cohort-based training program.</h3>
-            <p>Universities, academies, and training organizations can use KodaGeno for guided bioinformatics practice with cohort setup, learner routing, instructor oversight, and partner-branded delivery.</p>
+            <p>Universities, academies, and training organizations can use KodaGeno for guided bioinformatics practice with cohort setup, instructor access, progress tracking, launch support, and recurring reports.</p>
             <div class="lane-badges">
               <span>Cohort setup</span>
-              <span>Instructor oversight</span>
-              <span>Partner-brand delivery</span>
+              <span>Instructor access</span>
+              <span>Reporting cycle</span>
             </div>
             <ul class="feature-list">
               <li>Use instructor-facing delivery for semester courses, bootcamps, or internal training programs.</li>
               <li>Track learner progress by module, lesson completion, and scenario step.</li>
-              <li>Discuss branded rollout, seat planning, and reporting as part of institutional review.</li>
+              <li>Plan seat setup, launch timing, progress reviews, and renewal discussions as part of institutional rollout.</li>
             </ul>
           </article>
 
@@ -240,6 +270,36 @@
       </section>
 
       <section class="koda-subbrand">
+        <div class="container">
+          <div class="section-intro reveal">
+            <span class="eyebrow">Institution proof</span>
+            <h2>What a department is actually reviewing on the admin side.</h2>
+            <p>The learner interface is only half of the buying decision. Institutional buyers also need to see seat setup, progress review, and what reporting looks like in practice.</p>
+          </div>
+          <div class="institution-proof-grid" id="institution-proof">
+            <article class="institution-proof-card reveal">
+              <span>Admin dashboard</span>
+              <strong>Seat setup, module completion, and cohort progress in one view.</strong>
+              <p>Use this as the preview block for instructor-side reporting, launch status, and term-level progress checks.</p>
+            </article>
+            <article class="institution-proof-card reveal">
+              <span>Launch checklist</span>
+              <strong>Seat list, instructor access, learner invitation, and first report timing.</strong>
+              <p>Institution rollout should feel like a program handoff, not a generic log-in email.</p>
+            </article>
+            <article class="institution-proof-card reveal">
+              <span>Reporting cycle</span>
+              <strong>Launch, progress review, instructor follow-up, and renewal checkpoints.</strong>
+              <p>Buyers need to know when reports are issued and what milestones are reviewed during the term.</p>
+            </article>
+            <article class="institution-proof-card reveal">
+              <img src="media/kodageno-dashboard.svg" alt="Illustrated KodaGeno admin dashboard with cohort completion bars, launch checklist, and reporting cycle." loading="lazy" />
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="koda-subbrand" id="modules">
         <div class="container">
           <div class="section-intro reveal">
             <span class="eyebrow">Module list</span>
@@ -317,7 +377,7 @@
               </article>
               <article class="faq-item reveal">
                 <h4>What does instructor oversight mean in practice?</h4>
-                <p>Institution discussions cover cohort setup, learner routing, lesson progression, and review of completion status during program delivery.</p>
+                <p>Institution discussions cover cohort setup, learner invitation, lesson progression, and review of completion status during program delivery.</p>
               </article>
               <article class="faq-item reveal">
                 <h4>Do learners need prior command-line experience?</h4>
@@ -372,7 +432,7 @@
         </span>
       </a>
       <p class="lead-copy footer-intro">
-        KreatBio develops molecular preparation systems and sequencing analysis training for research and academic environments.
+        Research-use product line: KodaPure DNA extraction and KodaGeno sequencing analysis training.
       </p>
     </div>
     <div>
