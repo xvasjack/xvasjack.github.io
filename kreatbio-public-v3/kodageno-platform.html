@@ -101,39 +101,20 @@
                   <span class="scene-tag scene-tag--koda">KodaGeno lesson preview</span>
                   <span class="scene-tag scene-tag--koda">Scenario, terminal, interpretation</span>
                 </div>
-                <svg class="svg-canvas" viewBox="0 0 720 440" aria-label="KodaGeno hero preview">
-                  <rect x="28" y="28" width="664" height="384" rx="28" fill="#ffffff" stroke="#cadeff" stroke-width="2" />
-                  <rect x="52" y="52" width="616" height="34" rx="17" fill="#e6efff" />
-                  <circle cx="78" cy="69" r="6" fill="#93c5fd" />
-                  <circle cx="100" cy="69" r="6" fill="#60a5fa" />
-                  <circle cx="122" cy="69" r="6" fill="#2563eb" />
-                  <rect x="64" y="108" width="164" height="264" rx="20" fill="#0f172a" />
-                  <text x="84" y="134" font-size="12" font-weight="800" fill="#93c5fd">Module 1</text>
-                  <text x="84" y="152" font-size="12" fill="#ffffff">QC with FastQC</text>
-                  <text x="84" y="178" font-size="12" font-weight="800" fill="#93c5fd">Module 2</text>
-                  <text x="84" y="196" font-size="12" fill="#ffffff">Trimming with Trimmomatic</text>
-                  <text x="84" y="222" font-size="12" font-weight="800" fill="#93c5fd">Module 3</text>
-                  <text x="84" y="240" font-size="12" fill="#ffffff">Assembly with SPAdes</text>
-                  <text x="84" y="266" font-size="12" font-weight="800" fill="#93c5fd">Module 4</text>
-                  <text x="84" y="284" font-size="12" fill="#ffffff">Assembly QA with QUAST</text>
-                  <text x="84" y="310" font-size="12" font-weight="800" fill="#93c5fd">Module 5</text>
-                  <text x="84" y="328" font-size="12" fill="#ffffff">Results interpretation</text>
-                  <rect x="252" y="108" width="410" height="118" rx="22" fill="#eef4ff" stroke="#cadeff" />
-                  <text x="276" y="142" font-size="18" font-weight="800" fill="#1d4ed8">Scenario</text>
-                  <text x="276" y="166" font-size="13" font-weight="600" fill="#475569">FASTQ QC shows a mean quality score of Q28 with a quality drop after position 140.</text>
-                  <text x="276" y="188" font-size="13" fill="#475569">Choose the next step, run it, and review the updated output before continuing.</text>
-                  <rect x="252" y="244" width="122" height="66" rx="16" fill="#ffffff" stroke="#dbe7f5" />
-                  <text x="270" y="270" font-size="12" font-weight="800" fill="#1d4ed8">Guided decisions</text>
-                  <text x="270" y="288" font-size="11" fill="#475569">Pick the trim profile</text>
-                  <rect x="390" y="244" width="154" height="66" rx="16" fill="#020617" stroke="#1e293b" />
-                  <text x="410" y="270" font-size="12" font-weight="800" fill="#93c5fd">Run analysis</text>
-                  <text x="410" y="288" font-size="11" fill="#ffffff">$ trimmomatic PE ...</text>
-                  <rect x="560" y="244" width="102" height="66" rx="16" fill="#ffffff" stroke="#dbe7f5" />
-                  <text x="576" y="270" font-size="12" font-weight="800" fill="#1d4ed8">Interpret outputs</text>
-                  <text x="576" y="288" font-size="10.5" fill="#475569">Why this fits</text>
-                  <rect x="252" y="332" width="410" height="24" rx="12" fill="#eff6ff" stroke="#bfdbfe" />
-                  <text x="272" y="348" font-size="11" font-weight="700" fill="#1d4ed8">Scenario  ->  Guided decisions  ->  Run analysis  ->  Interpret outputs</text>
-                </svg>
+                <div class="browser-frame browser-frame--koda browser-frame--dense">
+                  <div class="browser-frame__bar">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <img src="media/kodageno-lessons.png" alt="KodaGeno lesson library showing tutorials, WGS bacteria, amplicon bacteria, and RNA-seq modules." />
+                </div>
+                <div class="flow-strip flow-strip--koda">
+                  <span>Scenario</span>
+                  <span>Guided decisions</span>
+                  <span>Run analysis</span>
+                  <span>Interpret outputs</span>
+                </div>
                 <div class="visual-chip-row">
                   <span class="signal-pill">WGS scenarios</span>
                   <span class="signal-pill">Amplicon scenarios</span>
