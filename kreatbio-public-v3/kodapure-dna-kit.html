@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -78,7 +78,7 @@
             <span class="eyebrow">KodaPure DNA Extraction Kit</span>
             <h1>Magnetic-bead DNA extraction for tissue, blood, and cultured cell workflows.</h1>
             <p class="lead-copy">
-              KodaPure is designed for research teams screening a magnetic-bead kit for everyday sample preparation. The page below covers representative sample inputs, expected yield and purity ranges, workflow timing, document access, and downstream compatibility.
+              KodaPure supports routine research DNA extraction from tissue, whole blood, buffy coat, and cultured cells with a tube-based magnetic-bead workflow built for day-to-day bench handling and downstream QC review.
             </p>
             <div class="hero-actions">
               <a class="btn btn-primary" href="contact-commercial.html#contact-form">Request Technical Sheet</a>
@@ -195,6 +195,123 @@
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            <div class="table-panel reveal" id="ordering">
+              <span class="eyebrow">Ordering</span>
+              <h3>Catalog references and quote planning for KodaPure.</h3>
+              <p class="support-copy">Use these references when you need a quote or internal procurement review. Final stock codes, lot-specific documents, and shipment timing are confirmed at quotation stage.</p>
+              <div class="order-grid">
+                <article class="order-card">
+                  <span class="route-meta">Catalog reference</span>
+                  <h4>KB-KP-050</h4>
+                  <ul class="doc-list order-list">
+                    <li>50-prep research pack</li>
+                    <li>Tube-based magnetic-bead workflow</li>
+                    <li>Fits pilot evaluation and first-lab review</li>
+                  </ul>
+                </article>
+                <article class="order-card">
+                  <span class="route-meta">Catalog reference</span>
+                  <h4>KB-KP-250</h4>
+                  <ul class="doc-list order-list">
+                    <li>250-prep laboratory pack</li>
+                    <li>For repeat bench use and multi-operator review</li>
+                    <li>Best fit for academic cores and research groups</li>
+                  </ul>
+                </article>
+              </div>
+              <div class="spec-strip spec-strip--ordering">
+                <article class="spec-cell">
+                  <span>Storage</span>
+                  <strong>Room-temperature buffers with selected reagents at 4 degrees C until the final technical sheet is issued.</strong>
+                </article>
+                <article class="spec-cell">
+                  <span>Pricing signal</span>
+                  <strong>Academic and research procurement terms are available on request, including volume planning for multi-kit orders.</strong>
+                </article>
+                <article class="spec-cell">
+                  <span>Shipping</span>
+                  <strong>Destination coverage, lead time, and cold-pack needs are confirmed before a quote is released.</strong>
+                </article>
+                <article class="spec-cell">
+                  <span>Documents</span>
+                  <strong>Public SDS handling copy is available now. CoA remains request-based by lot number.</strong>
+                </article>
+              </div>
+              <form
+                class="contact-form quote-form"
+                action="https://formsubmit.co/commercial@kreatbio.com"
+                method="POST"
+              >
+                <input type="hidden" name="_subject" value="KodaPure quote request" />
+                <input type="hidden" name="_captcha" value="false" />
+                <input type="hidden" name="_template" value="table" />
+                <input type="hidden" name="_next" value="https://xvasjack.github.io/kreatbio-public-v3/contact-request-sent.html" />
+                <input type="hidden" name="product_interest" value="KodaPure" />
+                <input type="hidden" name="request_type" value="Quote request" />
+
+                <div class="quote-form-head">
+                  <span class="eyebrow">Request a quote</span>
+                  <h4>Start a structured KodaPure purchasing discussion.</h4>
+                  <p>Use this form if you need institutional pricing, pack-size review, shipping confirmation, or document handling before procurement.</p>
+                </div>
+
+                <div class="form-grid form-grid--two">
+                  <label>
+                    <span>Name</span>
+                    <input type="text" name="name" required />
+                  </label>
+                  <label>
+                    <span>Email</span>
+                    <input type="email" name="email" required />
+                  </label>
+                </div>
+
+                <div class="form-grid form-grid--two">
+                  <label>
+                    <span>Institution name</span>
+                    <input type="text" name="institution" required />
+                  </label>
+                  <label>
+                    <span>Country</span>
+                    <input type="text" name="country" required />
+                  </label>
+                </div>
+
+                <div class="form-grid form-grid--two">
+                  <label>
+                    <span>Application type</span>
+                    <select name="application_type" required>
+                      <option value="">Select one</option>
+                      <option>Tissue workflow</option>
+                      <option>Whole blood or buffy coat</option>
+                      <option>Cultured cells</option>
+                      <option>Mixed sample review</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Order quantity</span>
+                    <select name="order_quantity" required>
+                      <option value="">Select one</option>
+                      <option>1 x 50-prep kit</option>
+                      <option>2-4 x 50-prep kits</option>
+                      <option>1 x 250-prep kit</option>
+                      <option>More than 250 preps</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label>
+                  <span>Message</span>
+                  <textarea name="message" maxlength="500" rows="5" placeholder="Tell us which sample type you are reviewing, whether you need pricing for pilot or routine use, and any document deadline."></textarea>
+                </label>
+
+                <div class="form-footer">
+                  <p>Quotes and document follow-up are returned within 2 business days.</p>
+                  <button class="btn btn-primary" type="submit">Request a quote</button>
+                </div>
+              </form>
             </div>
 
             <div class="table-panel reveal" id="workflow">
@@ -336,14 +453,45 @@
               </article>
               <article class="downstream-card reveal">
                 <h3>Shipping and market availability</h3>
-                <p>KodaPure is offered for research use. Shipping lead time, destination coverage, and final document handling are confirmed during quotation and order review.</p>
+                <p>KodaPure is offered for research use. Shipping lead time, destination coverage, customs handling, and cold-pack needs are confirmed by destination during quotation and order review.</p>
               </article>
             </div>
 
             <div class="table-panel reveal">
-              <span class="eyebrow">Validation and citations</span>
-              <h3>Validation data is handled during technical review.</h3>
-              <p class="support-copy">Application notes, pilot data, and publication citations can be shared when available for public release. Lot-linked documents and additional validation materials are reviewed through the commercial and technical process.</p>
+              <span class="eyebrow">Pilot evaluation</span>
+              <h3>KodaPure is open for early research and academic evaluation.</h3>
+              <p class="support-copy">If your team is comparing magnetic-bead workflows, use the quote form or technical sheet request to review sample fit, downstream readout, and procurement handling. Public citations and application notes will be added as they are cleared for release.</p>
+            </div>
+
+            <div class="table-panel reveal" id="faq">
+              <span class="eyebrow">FAQ</span>
+              <h3>Questions buyers usually ask before a KodaPure trial or quote.</h3>
+              <div class="faq-list">
+                <article class="faq-item">
+                  <h4>Does KodaPure support FFPE tissue?</h4>
+                  <p>FFPE should be reviewed case by case during technical evaluation. The current public workflow is positioned around fresh or frozen tissue, whole blood, buffy coat, and cultured cells.</p>
+                </article>
+                <article class="faq-item">
+                  <h4>What inputs are covered in the public review range?</h4>
+                  <p>Representative public ranges cover tissue up to 25 mg, whole blood up to 200 uL, buffy coat, and cultured cells up to 5 x 10^6.</p>
+                </article>
+                <article class="faq-item">
+                  <h4>Can the workflow be scaled for higher-throughput screening?</h4>
+                  <p>The public workflow is a manual tube-based method. Higher-throughput planning should be reviewed during procurement so sample volume, staffing, and document needs are clear up front.</p>
+                </article>
+                <article class="faq-item">
+                  <h4>Can KodaPure DNA be used for bisulfite or methylation workflows?</h4>
+                  <p>Methylation and other specialized downstream workflows should be reviewed after sample QC because fragment quality and cleanup targets matter.</p>
+                </article>
+                <article class="faq-item">
+                  <h4>Which files can I open immediately?</h4>
+                  <p>The quick protocol and public SDS handling copy are direct downloads. The technical sheet and lot-specific CoA are handled through the request form.</p>
+                </article>
+                <article class="faq-item">
+                  <h4>How do I start a quote?</h4>
+                  <p>Use the KodaPure quote form on this page with your institution name, sample type, and order quantity. KreatBio replies within 2 business days.</p>
+                </article>
+              </div>
             </div>
           </div>
 
@@ -352,12 +500,12 @@
               <div class="rail-card" style="box-shadow: var(--shadow-md);">
                 <span class="eyebrow">Product documents</span>
                 <h3>Documentation rail</h3>
-                <p>Protocol, quick protocol PDF, technical sheet request, SDS request, and CoA request stay visible for scientific review and procurement screening.</p>
+                <p>Protocol, quick protocol PDF, technical sheet request, public SDS copy, and lot-linked CoA request stay visible for scientific review and procurement screening.</p>
                 <div class="rail-links">
                   <a href="documents/kodapure-quick-protocol.pdf">Quick Protocol PDF</a>
                   <a href="contact-commercial.html#contact-form">Technical Sheet Request</a>
-                  <a href="contact-commercial.html#contact-form">SDS Request</a>
-                  <a href="contact-commercial.html#contact-form">CoA Request</a>
+                  <a href="documents/kodapure-sds.pdf">SDS PDF</a>
+                  <a href="contact-commercial.html#contact-form">CoA Request by Lot</a>
                 </div>
               </div>
               <div class="rail-card">
@@ -378,7 +526,7 @@
           <div>
             <span class="eyebrow">Contact</span>
             <h2>Need to review KodaPure for lab fit, documents, or purchasing discussion?</h2>
-            <p>Start with the technical sheet if you are screening the kit, or move straight into a procurement conversation if you are comparing suppliers.</p>
+            <p>Start with the technical sheet if you are screening the kit, or use the quote form on this page if you are ready to review pack size, pricing, or shipping.</p>
           </div>
           <div class="hero-actions">
             <a class="btn btn-primary" href="contact-commercial.html#contact-form">Request Technical Sheet</a>
@@ -433,8 +581,8 @@
       <ul class="footer-links">
         <li><a href="resources.html">Technical Resources</a></li>
         <li><a href="documents/kreatbio-technical-pack.pdf">Technical Pack</a></li>
-        <li><a href="contact-commercial.html#contact-form">Technical Sheet Request</a></li>
-        <li><a href="contact-commercial.html#contact-form">SDS / CoA Request</a></li>
+        <li><a href="documents/kodapure-sds.pdf">KodaPure SDS</a></li>
+        <li><a href="contact-commercial.html#contact-form">Technical Sheet / CoA Request</a></li>
       </ul>
     </div>
   </div>
@@ -447,5 +595,6 @@
     <script src="script.js"></script>
   </body>
 </html>
+
 
 
