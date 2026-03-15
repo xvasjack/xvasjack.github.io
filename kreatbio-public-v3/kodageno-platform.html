@@ -30,13 +30,36 @@
     <header class="site-header">
       <div class="container header-inner">
         <a class="brand" href="index.html">
-          <span class="brand-badge">KB</span>
+          <span class="brand-badge" aria-hidden="true">
+  <svg class="brand-mark" viewBox="0 0 32 32" role="presentation">
+    <path class="brand-mark__stem" d="M10 5.5V26.5" />
+    <path class="brand-mark__k-top" d="M10.5 16L21 6.5" />
+    <path class="brand-mark__k-bottom" d="M10.5 16L21.5 25.5" />
+    <path class="brand-mark__b-top" d="M10.5 7.5C18.6 7.5 21.5 10.1 21.5 13.2C21.5 16.1 18.5 18.5 10.5 18.5" />
+    <path class="brand-mark__b-bottom" d="M10.5 18.5C18.8 18.5 22 21 22 24.1C22 26.3 19.4 26.5 12.8 26.5" />
+    <circle class="brand-mark__node" cx="22.2" cy="13.2" r="1.8" />
+    <circle class="brand-mark__node" cx="22.2" cy="24.1" r="1.8" />
+  </svg>
+</span>
           <span class="brand-lockup">
             <span class="brand-name">KreatBio</span>
             <span class="brand-line">Applied Molecular and Learning Systems</span>
           </span>
         </a>
-        <button class="menu-toggle" data-menu-toggle aria-expanded="false" aria-label="Toggle menu">Menu</button>
+        <button class="menu-toggle" data-menu-toggle aria-expanded="false" aria-label="Toggle menu">
+  <span class="menu-toggle-icon" aria-hidden="true">
+    <svg class="menu-icon menu-icon--open" viewBox="0 0 20 16" role="presentation">
+      <path d="M2 2H18" />
+      <path d="M2 8H18" />
+      <path d="M2 14H18" />
+    </svg>
+    <svg class="menu-icon menu-icon--close" viewBox="0 0 20 20" role="presentation">
+      <path d="M4 4L16 16" />
+      <path d="M16 4L4 16" />
+    </svg>
+  </span>
+  <span class="menu-toggle-label">Menu</span>
+</button>
         <nav class="nav-menu" data-menu>
           <a class="nav-link active" href="products.html">Products</a>
           <a class="nav-link" href="institutional-partnerships.html">Partnerships</a>
@@ -78,34 +101,44 @@
                   <span class="scene-tag scene-tag--koda">KodaGeno lesson preview</span>
                   <span class="scene-tag scene-tag--koda">Scenario, terminal, interpretation</span>
                 </div>
-                <svg class="svg-canvas" viewBox="0 0 700 420" aria-label="KodaGeno hero preview">
-                  <rect x="34" y="34" width="632" height="352" rx="28" fill="#ffffff" stroke="#cadeff" stroke-width="2" />
-                  <rect x="56" y="58" width="590" height="32" rx="16" fill="#e6efff" />
-                  <circle cx="82" cy="74" r="6" fill="#93c5fd" />
-                  <circle cx="104" cy="74" r="6" fill="#60a5fa" />
-                  <circle cx="126" cy="74" r="6" fill="#2563eb" />
-                  <rect x="70" y="112" width="148" height="236" rx="20" fill="#0f172a" />
-                  <text x="90" y="136" font-size="12" font-weight="800" fill="#93c5fd">Module 1</text>
-                  <text x="90" y="154" font-size="12" fill="#ffffff">QC with FastQC</text>
-                  <text x="90" y="182" font-size="12" font-weight="800" fill="#93c5fd">Module 2</text>
-                  <text x="90" y="200" font-size="12" fill="#ffffff">Trimming</text>
-                  <text x="90" y="228" font-size="12" font-weight="800" fill="#93c5fd">Module 3</text>
-                  <text x="90" y="246" font-size="12" fill="#ffffff">Assembly</text>
-                  <text x="90" y="274" font-size="12" font-weight="800" fill="#93c5fd">Module 4</text>
-                  <text x="90" y="292" font-size="12" fill="#ffffff">Interpretation</text>
-                  <rect x="242" y="112" width="380" height="118" rx="22" fill="#eef4ff" stroke="#cadeff" />
-                  <rect x="242" y="248" width="238" height="80" rx="22" fill="#0f172a" />
-                  <rect x="498" y="248" width="124" height="80" rx="22" fill="#ffffff" stroke="#dbe7f5" />
-                  <text x="266" y="146" font-size="18" font-weight="800" fill="#1d4ed8">Scenario</text>
-                  <text x="266" y="170" font-size="14" font-weight="600" fill="#475569">FASTQ QC shows a quality drop after read position 140.</text>
-                  <text x="266" y="196" font-size="13" fill="#475569">Choose the next step, run it, and review the updated output.</text>
-                  <rect x="266" y="258" width="190" height="56" rx="14" fill="#020617" stroke="#1e293b" />
-                  <text x="280" y="280" font-size="12" fill="#93c5fd">$ trimmomatic PE ... TRAILING:15</text>
-                  <text x="280" y="300" font-size="12" fill="#ffffff">MINLEN:36</text>
-                  <text x="518" y="272" font-size="12" font-weight="800" fill="#1d4ed8">Interpretation</text>
-                  <text x="518" y="294" font-size="11" fill="#475569">Why this trim profile fits</text>
-                  <text x="518" y="310" font-size="11" fill="#475569">the read length and depth</text>
+                <svg class="svg-canvas" viewBox="0 0 720 440" aria-label="KodaGeno hero preview">
+                  <rect x="28" y="28" width="664" height="384" rx="28" fill="#ffffff" stroke="#cadeff" stroke-width="2" />
+                  <rect x="52" y="52" width="616" height="34" rx="17" fill="#e6efff" />
+                  <circle cx="78" cy="69" r="6" fill="#93c5fd" />
+                  <circle cx="100" cy="69" r="6" fill="#60a5fa" />
+                  <circle cx="122" cy="69" r="6" fill="#2563eb" />
+                  <rect x="64" y="108" width="164" height="264" rx="20" fill="#0f172a" />
+                  <text x="84" y="134" font-size="12" font-weight="800" fill="#93c5fd">Module 1</text>
+                  <text x="84" y="152" font-size="12" fill="#ffffff">QC with FastQC</text>
+                  <text x="84" y="178" font-size="12" font-weight="800" fill="#93c5fd">Module 2</text>
+                  <text x="84" y="196" font-size="12" fill="#ffffff">Trimming with Trimmomatic</text>
+                  <text x="84" y="222" font-size="12" font-weight="800" fill="#93c5fd">Module 3</text>
+                  <text x="84" y="240" font-size="12" fill="#ffffff">Assembly with SPAdes</text>
+                  <text x="84" y="266" font-size="12" font-weight="800" fill="#93c5fd">Module 4</text>
+                  <text x="84" y="284" font-size="12" fill="#ffffff">Assembly QA with QUAST</text>
+                  <text x="84" y="310" font-size="12" font-weight="800" fill="#93c5fd">Module 5</text>
+                  <text x="84" y="328" font-size="12" fill="#ffffff">Results interpretation</text>
+                  <rect x="252" y="108" width="410" height="118" rx="22" fill="#eef4ff" stroke="#cadeff" />
+                  <text x="276" y="142" font-size="18" font-weight="800" fill="#1d4ed8">Scenario</text>
+                  <text x="276" y="166" font-size="13" font-weight="600" fill="#475569">FASTQ QC shows a mean quality score of Q28 with a quality drop after position 140.</text>
+                  <text x="276" y="188" font-size="13" fill="#475569">Choose the next step, run it, and review the updated output before continuing.</text>
+                  <rect x="252" y="244" width="122" height="66" rx="16" fill="#ffffff" stroke="#dbe7f5" />
+                  <text x="270" y="270" font-size="12" font-weight="800" fill="#1d4ed8">Guided decisions</text>
+                  <text x="270" y="288" font-size="11" fill="#475569">Pick the trim profile</text>
+                  <rect x="390" y="244" width="154" height="66" rx="16" fill="#020617" stroke="#1e293b" />
+                  <text x="410" y="270" font-size="12" font-weight="800" fill="#93c5fd">Run analysis</text>
+                  <text x="410" y="288" font-size="11" fill="#ffffff">$ trimmomatic PE ...</text>
+                  <rect x="560" y="244" width="102" height="66" rx="16" fill="#ffffff" stroke="#dbe7f5" />
+                  <text x="576" y="270" font-size="12" font-weight="800" fill="#1d4ed8">Interpret outputs</text>
+                  <text x="576" y="288" font-size="10.5" fill="#475569">Why this fits</text>
+                  <rect x="252" y="332" width="410" height="24" rx="12" fill="#eff6ff" stroke="#bfdbfe" />
+                  <text x="272" y="348" font-size="11" font-weight="700" fill="#1d4ed8">Scenario  ->  Guided decisions  ->  Run analysis  ->  Interpret outputs</text>
                 </svg>
+                <div class="visual-chip-row">
+                  <span class="signal-pill">WGS scenarios</span>
+                  <span class="signal-pill">Amplicon scenarios</span>
+                  <span class="signal-pill">RNA-seq scenarios</span>
+                </div>
               </div>
             </article>
           </div>
@@ -163,22 +196,22 @@
           </div>
           <div class="koda-feature-grid">
             <article class="feature-icon-card reveal">
-              <span class="feature-icon">
+              <span class="feature-icon feature-icon--terminal">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.8" /><path d="M8 9l2 2-2 2M12 13h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
               </span>
               <h3>Interactive terminal</h3>
               <p>Practice commands and parameter choices in a guided environment instead of reading static screenshots.</p>
             </article>
             <article class="feature-icon-card reveal">
-              <span class="feature-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6 4h12v16H6z" stroke="currentColor" stroke-width="1.8" /><path d="M9 8h6M9 12h6M9 16h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+              <span class="feature-icon feature-icon--analysis">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6 4h12v16H6z" stroke="currentColor" stroke-width="1.8" /><path d="M9 8h6M9 12h6M9 16h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /><path d="M14.5 4v3h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
               </span>
               <h3>Narrative learning</h3>
               <p>Research scenarios explain why a step matters, not just which button or command to use.</p>
             </article>
             <article class="feature-icon-card reveal">
-              <span class="feature-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" opacity=".35" /></svg>
+              <span class="feature-icon feature-icon--analysis">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2.2" stroke="currentColor" stroke-width="1.8" /><circle cx="12" cy="6" r="2.2" stroke="currentColor" stroke-width="1.8" /><circle cx="18" cy="12" r="2.2" stroke="currentColor" stroke-width="1.8" /><circle cx="12" cy="18" r="2.2" stroke="currentColor" stroke-width="1.8" /><path d="M7.8 10.7 10.2 7.3M13.8 7.3l2.4 3.4M7.8 13.3l2.4 3.4M13.8 16.7l2.4-3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
               </span>
               <h3>Guided practice modules</h3>
               <p>Short lessons support semester delivery, bootcamps, or direct learner practice without becoming a passive video course.</p>
@@ -300,52 +333,63 @@
     </main>
 
     <footer class="site-footer">
-      <div class="container footer-grid">
-        <div>
-          <a class="brand" href="index.html">
-            <span class="brand-badge">KB</span>
-            <span class="brand-lockup">
-              <span class="brand-name">KreatBio</span>
-              <span class="brand-line">Applied Molecular and Learning Systems</span>
-            </span>
-          </a>
-          <p class="lead-copy footer-intro">
-            KreatBio develops molecular preparation systems and sequencing analysis training for research and academic environments.
-          </p>
-        </div>
-        <div>
-          <p class="footer-title">Products</p>
-          <ul class="footer-links">
-            <li><a href="products.html">Products</a></li>
-            <li><a href="kodapure-dna-kit.html">KodaPure DNA Extraction Kit</a></li>
-            <li><a href="kodageno-platform.html">KodaGeno Platform</a></li>
-          </ul>
-        </div>
-        <div>
-          <p class="footer-title">Enterprise</p>
-          <ul class="footer-links">
-            <li><a href="institutional-partnerships.html">Partnerships</a></li>
-            <li><a href="resources.html">Technical Resources</a></li>
-            <li><a href="about.html">Company</a></li>
-            <li><a href="contact-commercial.html">Contact</a></li>
-          </ul>
-        </div>
-        <div>
-          <p class="footer-title">Requests</p>
-          <ul class="footer-links">
-            <li><a href="documents/kodageno-module-overview.pdf">Program Guides</a></li>
-            <li><a href="resources.html#technical-pack">Technical Pack</a></li>
-            <li><a href="contact-commercial.html#contact-form">commercial@kreatbio.com</a></li>
-          </ul>
-        </div>
-      </div>
-      <div class="container footer-bottom">
-        <span>&copy; <span data-year></span> KreatBio. All rights reserved.</span>
-        <span>Research Use Only (RUO). Not intended for diagnostic procedures.</span>
-      </div>
-    </footer>
+  <div class="container footer-grid">
+    <div>
+      <a class="brand" href="index.html">
+        <span class="brand-badge" aria-hidden="true">
+  <svg class="brand-mark" viewBox="0 0 32 32" role="presentation">
+    <path class="brand-mark__stem" d="M10 5.5V26.5" />
+    <path class="brand-mark__k-top" d="M10.5 16L21 6.5" />
+    <path class="brand-mark__k-bottom" d="M10.5 16L21.5 25.5" />
+    <path class="brand-mark__b-top" d="M10.5 7.5C18.6 7.5 21.5 10.1 21.5 13.2C21.5 16.1 18.5 18.5 10.5 18.5" />
+    <path class="brand-mark__b-bottom" d="M10.5 18.5C18.8 18.5 22 21 22 24.1C22 26.3 19.4 26.5 12.8 26.5" />
+    <circle class="brand-mark__node" cx="22.2" cy="13.2" r="1.8" />
+    <circle class="brand-mark__node" cx="22.2" cy="24.1" r="1.8" />
+  </svg>
+</span>
+        <span class="brand-lockup">
+          <span class="brand-name">KreatBio</span>
+          <span class="brand-line">Applied Molecular and Learning Systems</span>
+        </span>
+      </a>
+      <p class="lead-copy footer-intro">
+        KreatBio develops molecular preparation systems and sequencing analysis training for research and academic environments.
+      </p>
+    </div>
+    <div>
+      <p class="footer-title">Products</p>
+      <ul class="footer-links">
+        <li><a href="products.html">Products</a></li>
+        <li><a href="kodapure-dna-kit.html">KodaPure DNA Extraction Kit</a></li>
+        <li><a href="kodageno-platform.html">KodaGeno Platform</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="footer-title">About &amp; Programs</p>
+      <ul class="footer-links">
+        <li><a href="institutional-partnerships.html">Partnerships</a></li>
+        <li><a href="about.html">Company</a></li>
+        <li><a href="contact-commercial.html">Contact</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="footer-title">Requests</p>
+      <ul class="footer-links">
+        <li><a href="resources.html">Technical Resources</a></li>
+        <li><a href="documents/kreatbio-technical-pack.pdf">Technical Pack</a></li>
+        <li><a href="contact-commercial.html#contact-form">Technical Sheet Request</a></li>
+        <li><a href="contact-commercial.html#contact-form">SDS / CoA Request</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <span>&copy; <span data-year></span> KreatBio. All rights reserved.</span>
+    <span>Research Use Only (RUO). Not intended for diagnostic procedures.</span>
+  </div>
+</footer>
 
     <script src="script.js"></script>
   </body>
 </html>
+
 
