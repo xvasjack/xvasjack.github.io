@@ -1856,9 +1856,7 @@ tr:last-child td {
 }
 
 .footer-intro {
-  margin-top: 18px;
-  max-width: 360px;
-  font-size: 15px;
+  display: none;
 }
 
 .footer-grid {
@@ -3909,7 +3907,7 @@ body {
 
 .photo-frame--product img,
 .photo-frame--panel img {
-  object-position: center top;
+  object-position: center center;
 }
 
 .photo-frame--partnership {

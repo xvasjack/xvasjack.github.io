@@ -1,0 +1,7 @@
+Pexels stock photos used in this site refresh:
+- kodapure-lab-bench.jpg -> https://www.pexels.com/photo/scientist-holding-a-pipette-8940479/
+- kodapure-tubes-flatlay.jpg -> https://www.pexels.com/photo/close-up-of-laboratory-glassware-7722530/
+- kodapure-tube-rack.jpg -> https://www.pexels.com/photo/person-holding-test-tubes-8540029/
+- kodapure-multichannel.jpg -> https://www.pexels.com/photo/scientist-holding-a-pipette-8940509/
+
+Use per Pexels license. Replace with final owned KodaPure product photography when available.
