@@ -1304,6 +1304,15 @@ section {
   padding: 26px;
   display: grid;
   gap: 18px;
+  grid-template-rows: auto auto auto auto auto 1fr auto;
+  align-content: start;
+}
+
+.catalog-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
 }
 
 .catalog-card-header {
@@ -1390,6 +1399,7 @@ section {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  align-self: end;
 }
 
 .comparison-panel {
@@ -2528,6 +2538,10 @@ tr:last-child td {
 
   .footer-bottom {
     flex-direction: column;
+  }
+
+  .catalog-meta {
+    grid-template-columns: 1fr;
   }
 }
 
