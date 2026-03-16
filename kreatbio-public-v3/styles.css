@@ -3079,18 +3079,26 @@ tr:last-child td {
 }
 
 .asset-gallery {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .asset-card {
   overflow: hidden;
 }
 
+.asset-gallery .asset-card:first-child {
+  grid-column: 1 / -1;
+}
+
 .asset-card img {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 10;
   object-fit: cover;
   background: linear-gradient(180deg, #fbfdfe, #eef4f8);
+}
+
+.asset-gallery .asset-card:first-child img {
+  aspect-ratio: 16 / 9;
 }
 
 .asset-card__body {
@@ -4402,9 +4410,9 @@ body {
 }
 
 .reveal {
-  opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.5s ease, transform 0.5s ease;
+  opacity: 1;
+  transform: none;
+  transition: none;
 }
 
 .reveal.is-in {
@@ -4946,6 +4954,27 @@ main > section + .section-compact {
   opacity: 1 !important;
   transform: none !important;
   transition: none !important;
+}
+
+.page-kodageno .hero,
+.page-partnerships .hero {
+  padding-bottom: 40px;
+}
+
+.page-contact .hero {
+  padding-bottom: 28px;
+}
+
+.page-contact main > section + section {
+  padding-top: 24px;
+}
+
+.hero-contact-v6 .contact-band {
+  align-items: start;
+}
+
+.contact-panel {
+  align-self: start;
 }
 
 @media (max-width: 920px) {

@@ -104,6 +104,8 @@
 
   const requesterType = document.querySelector("[data-requester-type]");
   const requestType = document.querySelector("[data-request-type]");
+  const productInterest = document.querySelector('select[name="product_interest"]');
+  const contactMessage = document.querySelector('textarea[name="message"]');
   const institutionField = document.querySelector("[data-institution-field]");
   const institutionInput = document.querySelector("[data-institution-input]");
   const lotField = document.querySelector("[data-lot-field]");
@@ -132,6 +134,27 @@
   };
 
   if (requesterType || requestType) {
+    const assignSelectValue = (field, value) => {
+      if (!field || !value) {
+        return;
+      }
+
+      const normalized = value.trim().toLowerCase();
+      const option = Array.from(field.options).find((item) => item.value.trim().toLowerCase() === normalized);
+
+      if (option) {
+        field.value = option.value;
+      }
+    };
+
+    assignSelectValue(requesterType, params.get("requester"));
+    assignSelectValue(productInterest, params.get("product"));
+    assignSelectValue(requestType, params.get("request"));
+
+    if (contactMessage && params.get("message")) {
+      contactMessage.value = params.get("message");
+    }
+
     syncFormFields();
     requesterType?.addEventListener("change", syncFormFields);
     requestType?.addEventListener("change", syncFormFields);
