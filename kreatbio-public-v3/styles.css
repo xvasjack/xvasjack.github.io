@@ -5500,12 +5500,21 @@ main > section + .section-compact {
   padding: 32px;
 }
 
+.hero-surface h2,
+.hero-surface p {
+  margin: 0;
+}
+
+.hero-surface .feature-list-simple {
+  margin-top: 20px;
+}
+
 .hero-visual-card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 30px;
   box-shadow: var(--shadow-md);
-  padding: 18px;
+  padding: 16px;
 }
 
 .hero-visual-card img,
@@ -5516,7 +5525,9 @@ main > section + .section-compact {
 }
 
 .hero-visual-card img {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 10;
+  max-height: 360px;
+  object-position: center top;
 }
 
 .hero-note-grid {
@@ -5687,6 +5698,8 @@ main > section + .section-compact {
 
 .product-preview__media img {
   aspect-ratio: 16 / 11;
+  max-height: 310px;
+  object-position: center;
 }
 
 .feature-list-simple {
@@ -5763,6 +5776,47 @@ main > section + .section-compact {
 
 .cta-band-simple .hero-actions {
   margin-top: 0;
+}
+
+.confirmation-card {
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 34px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(238, 243, 247, 0.94));
+  border: 1px solid var(--line);
+  border-radius: 32px;
+  box-shadow: var(--shadow-md);
+}
+
+.confirmation-card h1,
+.confirmation-card p {
+  margin: 0;
+}
+
+.confirmation-card h1 {
+  color: var(--brand-strong);
+  font-size: clamp(2.2rem, 4vw, 3.4rem);
+  letter-spacing: -0.04em;
+}
+
+.confirmation-card .hero-actions {
+  margin-top: 4px;
+}
+
+.page-home .page-hero-grid,
+.page-kodapure .page-hero-grid {
+  grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.78fr);
+}
+
+.page-kodageno .hero-visual-card {
+  padding: 14px;
+}
+
+.page-kodageno .hero-visual-card img {
+  aspect-ratio: 16 / 9;
+  max-height: 320px;
 }
 
 .step-card-simple {
@@ -5864,6 +5918,11 @@ main > section + .section-compact {
     grid-template-columns: 1fr;
   }
 
+  .page-home .page-hero-grid,
+  .page-kodapure .page-hero-grid {
+    grid-template-columns: 1fr;
+  }
+
   .info-grid-simple,
   .step-grid-simple,
   .contact-summary-grid {
@@ -5903,6 +5962,16 @@ main > section + .section-compact {
   .step-grid-simple,
   .contact-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .hero-visual-card img,
+  .product-preview__media img {
+    max-height: 230px;
+  }
+
+  .confirmation-card {
+    padding: 24px;
+    border-radius: 24px;
   }
 
   .page-anchor-strip {
