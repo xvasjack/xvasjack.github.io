@@ -2008,6 +2008,25 @@ tr:last-child td {
   display: none;
 }
 
+.footer-contact {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  max-width: 34ch;
+}
+
+.footer-contact p,
+.footer-contact a {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.footer-contact a:hover {
+  color: var(--brand);
+}
+
 .footer-grid {
   display: grid;
   grid-template-columns: 1.2fr repeat(3, minmax(0, 0.7fr));
