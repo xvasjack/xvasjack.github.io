@@ -4167,8 +4167,7 @@ body {
 }
 
 .partnership-visual {
-  display: grid;
-  gap: 18px;
+  display: block;
 }
 
 .program-line-panel {
@@ -4177,6 +4176,7 @@ body {
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+  min-height: 100%;
 }
 
 .program-steps {
