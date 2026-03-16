@@ -115,6 +115,8 @@ class DashboardStatus:
     warning_rows: int
     current_row: int | None
     current_company: str | None
+    current_step: str | None
+    current_url: str | None
     recent_errors: list[dict[str, Any]]
 
     def to_dict(self) -> dict[str, Any]:
@@ -136,6 +138,7 @@ class DashboardStatus:
             "warning_rows": self.warning_rows,
             "current_row": self.current_row,
             "current_company": self.current_company,
+            "current_step": self.current_step,
+            "current_url": self.current_url,
             "recent_errors": self.recent_errors,
         }
-

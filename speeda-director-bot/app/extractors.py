@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+from urllib.parse import urljoin
 
 from playwright.sync_api import Browser, BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
@@ -20,6 +21,40 @@ STATUS_MARKERS = {
     "ui_changed": "[UI_CHANGED]",
 }
 
+FORBIDDEN_URL_TERMS = (
+    "billing",
+    "subscription",
+    "upgrade",
+    "pricing",
+    "payment",
+    "checkout",
+    "invoice",
+    "credit-card",
+    "creditcard",
+    "plan",
+    "plans",
+)
+
+FORBIDDEN_TEXT_TERMS = (
+    "upgrade your plan",
+    "subscription",
+    "billing",
+    "payment method",
+    "credit card",
+    "buy now",
+    "start trial",
+    "free trial",
+    "\u8ab2\u91d1",  # 課金
+    "\u8acb\u6c42",  # 請求
+    "\u652f\u6255\u3044",  # 支払い
+    "\u30d7\u30e9\u30f3",  # プラン
+)
+
+ALLOWED_COMPANY_PATH_TERMS = (
+    "/company/companyinformation/cid/",
+    "/company/companyinformation/",
+)
+
 
 @dataclass(frozen=True)
 class DirectorEntry:
@@ -33,6 +68,12 @@ class ExtractResult:
     directors: list[DirectorEntry]
     source_url: str | None
     error_reason: str | None
+
+
+@dataclass(frozen=True)
+class CompanySearchHit:
+    href: str
+    card_text: str
 
 
 def format_director_info(directors: Iterable[DirectorEntry]) -> str:
@@ -161,6 +202,9 @@ class SpeedaExtractor:
         try:
             self.page.goto(self.base_url, wait_until="domcontentloaded", timeout=45000)
             self._pace_wait(0.8)
+            safety_violation = self._get_safety_violation()
+            if safety_violation:
+                return ExtractResult("blocked", [], self.page.url, safety_violation)
             if self._is_blocked_page():
                 return ExtractResult("blocked", [], self.page.url, "Blocked or anti-bot page detected.")
             if self._is_auth_page():
@@ -180,6 +224,9 @@ class SpeedaExtractor:
         country: str | None,
     ) -> ExtractResult:
         try:
+            safety_violation = self._get_safety_violation()
+            if safety_violation:
+                return ExtractResult("blocked", [], self.page.url, safety_violation)
             if self._is_auth_page():
                 return ExtractResult("auth_required", [], self.page.url, "Session is not authenticated.")
 
@@ -215,6 +262,9 @@ class SpeedaExtractor:
                 try:
                     self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     self._pace_wait()
+                    safety_violation = self._get_safety_violation()
+                    if safety_violation:
+                        return ExtractResult("blocked", [], self.page.url, safety_violation)
                     if self._is_auth_page():
                         return ExtractResult("auth_required", [], self.page.url, "Login is required.")
                     if self._is_blocked_page():
@@ -226,6 +276,9 @@ class SpeedaExtractor:
 
         # Fallback to search.
         self.page.goto(self.base_url, wait_until="domcontentloaded", timeout=40000)
+        safety_violation = self._get_safety_violation()
+        if safety_violation:
+            return ExtractResult("blocked", [], self.page.url, safety_violation)
         if self._is_auth_page():
             return ExtractResult("auth_required", [], self.page.url, "Login is required.")
         if self._is_blocked_page():
@@ -239,6 +292,9 @@ class SpeedaExtractor:
         search_input.press("Enter")
         self._pace_wait(1.2)
 
+        safety_violation = self._get_safety_violation()
+        if safety_violation:
+            return ExtractResult("blocked", [], self.page.url, safety_violation)
         if self._is_blocked_page():
             return ExtractResult("blocked", [], self.page.url, "Blocked or anti-bot page detected.")
         if self._is_auth_page():
@@ -252,19 +308,19 @@ class SpeedaExtractor:
         if country:
             lowered = country.lower()
             for link in links:
-                card_text = link.inner_text(timeout=2000).lower()
-                if lowered in card_text:
+                if lowered in link.card_text.lower():
                     picked = link
                     break
         if picked is None:
-            if len(links) > 1:
-                # We still click first but return ambiguous if page title mismatch later.
-                picked = links[0]
-            else:
-                picked = links[0]
-        picked.click()
+            picked = links[0]
+
+        # Navigate directly to a safe company URL instead of clicking arbitrary page elements.
+        self.page.goto(picked.href, wait_until="domcontentloaded", timeout=30000)
         self._pace_wait(1.0)
 
+        safety_violation = self._get_safety_violation()
+        if safety_violation:
+            return ExtractResult("blocked", [], self.page.url, safety_violation)
         if self._is_auth_page():
             return ExtractResult("auth_required", [], self.page.url, "Session expired after opening result.")
         if self._is_blocked_page():
@@ -288,23 +344,47 @@ class SpeedaExtractor:
                 return locator
         return None
 
-    def _find_company_links(self):
+    def _find_company_links(self) -> list[CompanySearchHit]:
         selectors = [
             "a[href*='/company/companyinformation/cid/']",
-            "a[href*='/company/']",
-            "a:has-text('Company')",
+            "a[href*='/company/companyinformation/']",
         ]
-        links = []
+        links: list[CompanySearchHit] = []
+        seen_hrefs: set[str] = set()
         for selector in selectors:
             locator = self.page.locator(selector)
             count = min(locator.count(), 5)
             for idx in range(count):
                 candidate = locator.nth(idx)
-                if candidate.is_visible():
-                    links.append(candidate)
+                if not candidate.is_visible():
+                    continue
+                href = candidate.get_attribute("href")
+                if not href:
+                    continue
+                href = href.strip()
+                href_lower = href.lower()
+                if not self._is_safe_company_href(href_lower):
+                    continue
+                absolute_href = self.page.url if href.startswith("#") else urljoin(self.page.url, href)
+                absolute_lower = absolute_href.lower()
+                if not self._is_safe_company_href(absolute_lower):
+                    continue
+                if absolute_lower in seen_hrefs:
+                    continue
+                seen_hrefs.add(absolute_lower)
+                try:
+                    card_text = candidate.inner_text(timeout=1500).strip()
+                except Exception:
+                    card_text = ""
+                links.append(CompanySearchHit(href=absolute_href, card_text=card_text))
             if links:
                 break
         return links
+
+    def _is_safe_company_href(self, href_lower: str) -> bool:
+        if any(term in href_lower for term in FORBIDDEN_URL_TERMS):
+            return False
+        return any(path_term in href_lower for path_term in ALLOWED_COMPANY_PATH_TERMS)
 
     def _looks_like_company_page(self) -> bool:
         try:
@@ -315,6 +395,19 @@ class SpeedaExtractor:
             return "company" in title or "speeda" in title
         except Exception:
             return False
+
+    def _get_safety_violation(self) -> str | None:
+        try:
+            url_lower = (self.page.url or "").lower()
+            if any(term in url_lower for term in FORBIDDEN_URL_TERMS):
+                return f"Safety stop: suspicious billing/plan URL detected ({self.page.url})."
+            body = self.page.locator("body").inner_text(timeout=1200).lower()
+            body_preview = body[:3000]
+            if any(term in body_preview for term in FORBIDDEN_TEXT_TERMS):
+                return "Safety stop: suspicious billing/subscription text detected on page."
+            return None
+        except Exception:
+            return None
 
     def _collect_executive_text(self) -> str:
         section_selectors = [
@@ -390,4 +483,3 @@ class SpeedaExtractor:
     def _pace_wait(self, multiplier: float = 1.0) -> None:
         base = 0.8 if self.pace_profile == "conservative" else 0.35
         time.sleep(base * multiplier)
-

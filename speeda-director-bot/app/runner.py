@@ -51,6 +51,8 @@ class SpeedaRunController:
         self._config: RunConfig | None = None
         self._recent_errors: list[dict] = []
         self._counters = RuntimeCounters()
+        self._current_step: str | None = None
+        self._current_url: str | None = None
 
     def get_status(self) -> DashboardStatus:
         with self._lock:
@@ -81,6 +83,8 @@ class SpeedaRunController:
                 warning_rows=self._counters.warning_rows,
                 current_row=self._counters.current_row,
                 current_company=self._counters.current_company,
+                current_step=self._current_step,
+                current_url=self._current_url,
                 recent_errors=list(self._recent_errors),
             )
 
@@ -97,6 +101,8 @@ class SpeedaRunController:
             self._reset_runtime_state()
             self._status = "running"
             self._message = "Starting run."
+            self._current_step = "Preparing run"
+            self._current_url = None
             self._started_at = utc_now()
             self._ended_at = None
             self._run_id = f"run_{utc_now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
@@ -144,6 +150,8 @@ class SpeedaRunController:
             self._reset_runtime_state()
             self._status = "running"
             self._message = f"Retrying {len(failed_rows)} failed rows from {latest_id}."
+            self._current_step = "Preparing retry run"
+            self._current_url = None
             self._started_at = utc_now()
             self._ended_at = None
             self._run_id = f"retry_{utc_now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
@@ -203,6 +211,7 @@ class SpeedaRunController:
     def login_check(self, config: RunConfig) -> tuple[bool, str]:
         auth_path = DEFAULT_AUTH_STATE_PATH
         auth_path.parent.mkdir(parents=True, exist_ok=True)
+        self._set_activity("Checking login", None)
         try:
             with SpeedaExtractor(
                 base_url=config.base_url,
@@ -317,9 +326,15 @@ class SpeedaRunController:
                     self._set_current_row(company_row)
 
                     if company_row.existing_director_info and not config.force_retry:
+                        self._set_activity("Skipping existing row", None, f"Skipping row {company_row.row_number}; value already exists.")
                         self._record_skip(run_id, company_row)
                         continue
 
+                    self._set_activity(
+                        "Extracting directors",
+                        None,
+                        f"Reading row {company_row.row_number}: {company_row.company_name}",
+                    )
                     result, attempts_used = self._extract_with_retries(extractor, company_row, config.max_retries)
                     final_status = result.status
                     output_value: str | None = None
@@ -334,6 +349,11 @@ class SpeedaRunController:
                         if result.status == "blocked":
                             blocked_hits += 1
 
+                    self._set_activity(
+                        "Writing workbook",
+                        result.source_url,
+                        f"Saving row {company_row.row_number} with status {final_status}.",
+                    )
                     adapter.write_director_info(company_row.row_number, output_value)
                     adapter.save()
 
@@ -459,10 +479,19 @@ class SpeedaRunController:
             warning_rows=counters.warning_rows,
         )
 
+    def _set_activity(self, step: str, url: str | None, message: str | None = None) -> None:
+        with self._lock:
+            self._current_step = step
+            if url:
+                self._current_url = url
+            if message:
+                self._message = message
+
     def _mark_run_completed(self, run_id: str, message: str) -> None:
         with self._lock:
             self._status = "completed"
             self._message = message
+            self._current_step = "Completed"
             self._ended_at = utc_now()
         self.store.update_run(run_id, status="completed", message=message, ended=True)
 
@@ -470,6 +499,7 @@ class SpeedaRunController:
         with self._lock:
             self._status = "failed"
             self._message = message
+            self._current_step = "Failed"
             self._ended_at = utc_now()
         self.store.update_run(run_id, status="failed", message=message, ended=True)
 
@@ -477,6 +507,7 @@ class SpeedaRunController:
         with self._lock:
             self._status = "stopped"
             self._message = message
+            self._current_step = "Stopped"
             self._ended_at = utc_now()
         self.store.update_run(run_id, status="stopped", message=message, ended=True)
 
@@ -490,6 +521,8 @@ class SpeedaRunController:
         self._run_log_csv = None
         self._recent_errors = []
         self._counters = RuntimeCounters()
+        self._current_step = None
+        self._current_url = None
         self._started_at = None
         self._ended_at = None
         self._message = ""

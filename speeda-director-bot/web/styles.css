@@ -1,11 +1,10 @@
 :root {
-  --bg: #f4f4ee;
-  --ink: #222524;
-  --muted: #58605e;
+  --bg: #f2f5f4;
   --panel: #ffffff;
-  --edge: #d5dbd8;
-  --primary: #005f56;
-  --danger: #ac2f28;
+  --edge: #d9e0de;
+  --ink: #1e2423;
+  --muted: #596463;
+  --brand: #00695c;
 }
 
 * {
@@ -15,33 +14,28 @@
 body {
   margin: 0;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  background: radial-gradient(circle at top left, #e7efe9 0%, var(--bg) 60%);
+  background: linear-gradient(135deg, #eef5f2 0%, #f6f7f6 100%);
   color: var(--ink);
 }
 
 .page {
-  max-width: 1200px;
+  max-width: 980px;
   margin: 0 auto;
-  padding: 18px;
+  padding: 14px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .panel {
   background: var(--panel);
   border: 1px solid var(--edge);
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
-.hero h1 {
+h1 {
   margin: 0;
   font-size: 28px;
-}
-
-.hero p {
-  margin: 8px 0 0 0;
-  color: var(--muted);
 }
 
 h2 {
@@ -49,39 +43,9 @@ h2 {
   font-size: 18px;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 10px;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
+p {
+  margin: 8px 0 0 0;
   color: var(--muted);
-}
-
-label.checkbox {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  padding-top: 24px;
-}
-
-input,
-select,
-button {
-  font: inherit;
-}
-
-input,
-select {
-  border: 1px solid var(--edge);
-  border-radius: 8px;
-  padding: 8px 9px;
-  background: #fff;
 }
 
 .buttons {
@@ -93,57 +57,66 @@ select {
 button {
   border: none;
   border-radius: 8px;
-  padding: 9px 12px;
-  background: var(--primary);
+  padding: 10px 12px;
+  background: var(--brand);
   color: #fff;
-  cursor: pointer;
   font-weight: 600;
+  cursor: pointer;
 }
 
 button:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.06);
 }
 
-.export {
+.export-row {
+  margin-top: 10px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
   align-items: center;
 }
 
-.export input {
-  flex: 1 1 420px;
+.export-row input {
+  flex: 1 1 440px;
 }
 
-.export a {
-  color: var(--primary);
-  font-weight: 600;
+a {
+  color: var(--brand);
   text-decoration: none;
+  font-weight: 600;
+}
+
+input,
+select {
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  padding: 8px 9px;
+  font: inherit;
+  background: #fff;
 }
 
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 8px;
   font-size: 14px;
 }
 
 .progress-wrap {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .progress-bar {
   height: 14px;
-  background: #e6ece9;
   border-radius: 8px;
   overflow: hidden;
+  background: #e1ebe8;
 }
 
 #progress_fill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, #1e8e80, #005f56);
+  background: linear-gradient(90deg, #1ea08f, #00695c);
 }
 
 .progress-meta {
@@ -164,25 +137,51 @@ th,
 td {
   text-align: left;
   padding: 8px;
-  border-bottom: 1px solid #e7ece9;
+  border-bottom: 1px solid #e6ecea;
   font-size: 13px;
 }
 
-#event_log {
+pre {
   margin: 0;
   background: #101312;
-  color: #d3f0db;
-  padding: 10px;
+  color: #cef0d8;
   border-radius: 10px;
-  min-height: 160px;
-  max-height: 280px;
+  padding: 10px;
+  max-height: 220px;
   overflow: auto;
   white-space: pre-wrap;
 }
 
-@media (max-width: 700px) {
+.advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding-top: 20px;
+}
+
+@media (max-width: 680px) {
   .page {
-    padding: 10px;
+    padding: 8px;
   }
 }
 

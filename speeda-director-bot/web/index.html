@@ -10,11 +10,72 @@
     <main class="page">
       <section class="panel hero">
         <h1>Speeda Director Bot</h1>
-        <p>Extract director name + age into column V with safe pause/resume and run logs.</p>
+        <p>Simple mode: big buttons, live progress, and no AI extraction.</p>
       </section>
 
-      <section class="panel config">
-        <h2>Run Configuration</h2>
+      <section class="panel simple-controls">
+        <h2>Main Buttons</h2>
+        <div class="buttons">
+          <button id="btn_login_check">1) Login Check</button>
+          <button id="btn_start_test">2) Start 30-Row Test</button>
+          <button id="btn_start_full">3) Start Full Run</button>
+          <button id="btn_pause">Pause</button>
+          <button id="btn_resume">Resume</button>
+          <button id="btn_stop">Stop</button>
+          <button id="btn_retry">Retry Failed</button>
+          <button id="btn_export">Export</button>
+        </div>
+        <div class="export-row">
+          <a id="download_log" href="/api/download_log" target="_blank" rel="noopener">Download Run Log</a>
+          <input id="destination_path" type="text" placeholder="Optional export path (leave blank for auto path)" />
+        </div>
+      </section>
+
+      <section class="panel status">
+        <h2>Live Status</h2>
+        <div class="status-grid">
+          <div><strong>Run:</strong> <span id="run_id">-</span></div>
+          <div><strong>Status:</strong> <span id="status">idle</span></div>
+          <div><strong>Now doing:</strong> <span id="current_step">-</span></div>
+          <div><strong>Row:</strong> <span id="current_row">-</span></div>
+          <div><strong>Company:</strong> <span id="current_company">-</span></div>
+          <div><strong>Current page:</strong> <span id="current_url">-</span></div>
+          <div><strong>Message:</strong> <span id="message">-</span></div>
+          <div><strong>Elapsed:</strong> <span id="elapsed_seconds">0</span>s</div>
+          <div><strong>ETA:</strong> <span id="eta_seconds">-</span></div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar"><div id="progress_fill"></div></div>
+          <div class="progress-meta">
+            <span id="progress_text">0 / 0</span>
+            <span id="progress_success">Success: 0</span>
+            <span id="progress_failed">Failed: 0</span>
+            <span id="progress_skipped">Skipped: 0</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel errors">
+        <h2>Recent Errors</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Row</th>
+              <th>Company</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="error_rows"></tbody>
+        </table>
+      </section>
+
+      <section class="panel log">
+        <h2>Event Log</h2>
+        <pre id="event_log"></pre>
+      </section>
+
+      <details class="panel advanced">
+        <summary>Advanced Settings (optional)</summary>
         <div class="grid">
           <label>
             Workbook path
@@ -53,73 +114,14 @@
           </label>
           <label class="checkbox">
             <input id="force_retry" type="checkbox" />
-            Force retry even when V has value
+            Force retry even if V already has value
           </label>
           <label class="checkbox">
             <input id="headless" type="checkbox" />
             Headless browser
           </label>
         </div>
-      </section>
-
-      <section class="panel actions">
-        <h2>Controls</h2>
-        <div class="buttons">
-          <button id="btn_login_check">Login Check</button>
-          <button id="btn_start">Start</button>
-          <button id="btn_pause">Pause</button>
-          <button id="btn_resume">Resume</button>
-          <button id="btn_stop">Stop</button>
-          <button id="btn_retry">Retry Failed</button>
-        </div>
-        <div class="export">
-          <input id="destination_path" type="text" placeholder="Optional export destination path" />
-          <button id="btn_export">Export</button>
-          <a id="download_log" href="/api/download_log" target="_blank" rel="noopener">Download Run Log</a>
-        </div>
-      </section>
-
-      <section class="panel status">
-        <h2>Status</h2>
-        <div class="status-grid">
-          <div><strong>Run ID:</strong> <span id="run_id">-</span></div>
-          <div><strong>Status:</strong> <span id="status">idle</span></div>
-          <div><strong>Message:</strong> <span id="message">-</span></div>
-          <div><strong>Current row:</strong> <span id="current_row">-</span></div>
-          <div><strong>Current company:</strong> <span id="current_company">-</span></div>
-          <div><strong>Elapsed:</strong> <span id="elapsed_seconds">0</span>s</div>
-          <div><strong>ETA:</strong> <span id="eta_seconds">-</span></div>
-        </div>
-        <div class="progress-wrap">
-          <div class="progress-bar"><div id="progress_fill"></div></div>
-          <div class="progress-meta">
-            <span id="progress_text">0 / 0</span>
-            <span id="progress_success">Success: 0</span>
-            <span id="progress_failed">Failed: 0</span>
-            <span id="progress_skipped">Skipped: 0</span>
-            <span id="progress_warning">Warnings: 0</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel errors">
-        <h2>Recent Errors</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Row</th>
-              <th>Company</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="error_rows"></tbody>
-        </table>
-      </section>
-
-      <section class="panel log">
-        <h2>Event Log</h2>
-        <pre id="event_log"></pre>
-      </section>
+      </details>
     </main>
 
     <script src="/app.js"></script>

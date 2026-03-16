@@ -21,7 +21,7 @@ function addLog(message, isError = false) {
   const box = byId("event_log");
   const prefix = new Date().toLocaleTimeString();
   const line = `[${prefix}] ${message}`;
-  box.textContent = `${line}\n${box.textContent}`.slice(0, 12000);
+  box.textContent = `${line}\n${box.textContent}`.slice(0, 14000);
   if (isError) {
     console.error(message);
   } else {
@@ -42,6 +42,20 @@ function readConfig() {
     base_url: byId("base_url").value,
     headless: byId("headless").checked,
   };
+}
+
+function buildConfig(mode) {
+  const cfg = readConfig();
+  if (mode === "test") {
+    cfg.start_row = 11;
+    cfg.end_row = 40;
+    cfg.force_retry = false;
+  }
+  if (mode === "full") {
+    cfg.start_row = 11;
+    cfg.end_row = 8673;
+  }
+  return cfg;
 }
 
 async function postJson(url, body) {
@@ -66,9 +80,11 @@ function renderErrors(errors) {
 function renderStatus(status) {
   byId("run_id").textContent = status.run_id || "-";
   byId("status").textContent = status.status || "-";
-  byId("message").textContent = status.message || "-";
+  byId("current_step").textContent = status.current_step || "-";
   byId("current_row").textContent = status.current_row ?? "-";
   byId("current_company").textContent = status.current_company || "-";
+  byId("current_url").textContent = status.current_url || "-";
+  byId("message").textContent = status.message || "-";
   byId("elapsed_seconds").textContent = Math.round(status.elapsed_seconds || 0);
   byId("eta_seconds").textContent =
     status.eta_seconds == null ? "-" : `${Math.round(status.eta_seconds)}s`;
@@ -81,7 +97,6 @@ function renderStatus(status) {
   byId("progress_success").textContent = `Success: ${status.success_rows || 0}`;
   byId("progress_failed").textContent = `Failed: ${status.failed_rows || 0}`;
   byId("progress_skipped").textContent = `Skipped: ${status.skipped_rows || 0}`;
-  byId("progress_warning").textContent = `Warnings: ${status.warning_rows || 0}`;
 
   renderErrors(status.recent_errors || []);
 }
@@ -128,11 +143,16 @@ function initActions() {
     await doAction("Login Check", "/api/login_check", {
       base_url: cfg.base_url,
       headless: cfg.headless,
+      pace_profile: cfg.pace_profile,
     });
   });
 
-  byId("btn_start").addEventListener("click", async () => {
-    await doAction("Start", "/api/start_run", readConfig());
+  byId("btn_start_test").addEventListener("click", async () => {
+    await doAction("Start 30-Row Test", "/api/start_run", buildConfig("test"));
+  });
+
+  byId("btn_start_full").addEventListener("click", async () => {
+    await doAction("Start Full Run", "/api/start_run", buildConfig("full"));
   });
 
   byId("btn_pause").addEventListener("click", async () => {
@@ -169,5 +189,5 @@ function startPolling() {
 initDefaults();
 initActions();
 startPolling();
-addLog("Dashboard ready.");
+addLog("Simple dashboard ready. AI used for extraction: none.");
 
