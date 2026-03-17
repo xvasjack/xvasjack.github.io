@@ -68,20 +68,15 @@
           <div class="contact-direct-intro reveal">
             <span class="eyebrow">Contact</span>
             <h1>Contact KreatBio.</h1>
-            <p class="lead-copy">For KodaPure quotes and documents, or KodaGeno program inquiries.</p>
-            <p class="contact-inline-meta">
-              <span>Avenue Crest, Kuala Lumpur</span>
-              <span>Reply within 2 business days</span>
-              <a href="mailto:adriana.kreatbio@gmail.com">adriana.kreatbio@gmail.com</a>
-            </p>
+            <p class="lead-copy">For KodaPure quotes and technical requests, or KodaGeno institutional partnership inquiries.</p>
           </div>
         </div>
       </section>
 
       <section>
-        <div class="container contact-form-layout contact-form-layout--single">
+        <div class="container contact-form-layout">
           <form
-            class="contact-form contact-form--direct reveal"
+            class="contact-form contact-form--compact reveal"
             id="contact-form"
             action="https://formsubmit.co/adriana.kreatbio@gmail.com"
             method="POST"
@@ -92,58 +87,72 @@
             <input type="hidden" name="_next" value="https://xvasjack.github.io/kreatbio-public-v3/contact-request-sent.html" />
             <input class="honeypot-field" type="text" name="_company" tabindex="-1" autocomplete="off" aria-hidden="true" />
 
-            <label>
-              <span>Name</span>
-              <input type="text" name="name" required />
-            </label>
+            <div class="form-grid form-grid--two">
+              <label>
+                <span>Name</span>
+                <input type="text" name="name" required />
+              </label>
 
-            <label>
-              <span>Email</span>
-              <input type="email" name="email" required />
-            </label>
+              <label>
+                <span>Email</span>
+                <input type="email" name="email" required />
+              </label>
 
-            <label class="form-field" data-institution-field>
-              <span>Organization / university</span>
-              <input type="text" name="institution" data-institution-input />
-            </label>
+              <label class="form-field" data-institution-field>
+                <span>Organization / university</span>
+                <input type="text" name="institution" data-institution-input />
+              </label>
 
-            <label>
-              <span>Product</span>
-              <select name="product_interest" required>
-                <option value="">Select one</option>
-                <option>KodaPure</option>
-                <option>KodaGeno</option>
-                <option>Both</option>
-              </select>
-            </label>
+              <label>
+                <span>Product</span>
+                <select name="product_interest" required>
+                  <option value="">Select one</option>
+                  <option>KodaPure</option>
+                  <option>KodaGeno</option>
+                  <option>Both</option>
+                </select>
+              </label>
 
-            <label>
-              <span>Request type</span>
-              <select name="request_type" data-request-type required>
-                <option value="">Select one</option>
-                <option>Technical sheet</option>
-                <option value="CoA by lot number">CoA</option>
-                <option value="Quote request">Quote</option>
-                <option value="Program inquiry">Program inquiry</option>
-                <option>General question</option>
-              </select>
-            </label>
+              <label>
+                <span>Request type</span>
+                <select name="request_type" data-request-type required>
+                  <option value="">Select one</option>
+                  <option>Technical sheet</option>
+                  <option value="CoA by lot number">CoA</option>
+                  <option value="Quote request">Quote</option>
+                  <option value="Program inquiry">Program inquiry</option>
+                  <option>General question</option>
+                </select>
+              </label>
 
-            <label class="form-field field-hidden" data-lot-field>
-              <span>Lot number</span>
-              <input type="text" name="lot_number" data-lot-input placeholder="e.g. KB-KP-050-2401" />
-              <small class="field-help">Add the lot number when you are requesting a CoA.</small>
-            </label>
+              <label class="form-field field-hidden form-span-full" data-lot-field>
+                <span>Lot number</span>
+                <input type="text" name="lot_number" data-lot-input placeholder="e.g. KB-KP-050-2401" />
+                <small class="field-help">Add the lot number when you are requesting a CoA.</small>
+              </label>
 
-            <label>
-              <span>Message</span>
-              <textarea name="message" maxlength="500" rows="6" placeholder="Tell us what you need and any deadline you are working against."></textarea>
-            </label>
+              <label class="form-span-full">
+                <span>Message</span>
+                <textarea name="message" maxlength="500" rows="5" placeholder="Tell us what you need and any deadline you are working against."></textarea>
+              </label>
+            </div>
 
             <div class="form-footer">
               <button class="btn btn-primary" type="submit">Send request</button>
             </div>
           </form>
+
+          <aside class="contact-side-stack reveal">
+            <article class="route-card contact-side-card">
+              <span class="route-card__label">Response</span>
+              <h3>Reply within 12 hours.</h3>
+              <p>Use this form for quotes, technical sheet requests, lot-linked CoA requests, and KodaGeno partnership inquiries.</p>
+              <div class="contact-side-meta">
+                <span>Avenue Crest, Kuala Lumpur</span>
+                <a href="mailto:adriana.kreatbio@gmail.com">adriana.kreatbio@gmail.com</a>
+              </div>
+            </article>
+          </aside>
         </div>
       </section>
     </main>
@@ -195,8 +204,8 @@
         <div>
           <p class="footer-title">Contact</p>
           <ul class="footer-links">
-            <li><a href="kodapure-dna-kit.html#request-files">KodaPure technical sheet or CoA</a></li>
-            <li><a href="contact-commercial.html?product=KodaGeno&request=Program%20inquiry#contact-form">Program inquiry</a></li>
+            <li><a href="contact-commercial.html?product=KodaPure&request=Technical%20sheet#contact-form">KodaPure technical request</a></li>
+            <li><a href="contact-commercial.html?product=KodaGeno&request=Program%20inquiry#contact-form">Institutional partnership</a></li>
             <li><a href="#contact-form">Contact KreatBio</a></li>
           </ul>
         </div>

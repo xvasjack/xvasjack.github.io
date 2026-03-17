@@ -2353,6 +2353,22 @@ tr:last-child td {
   justify-content: center;
 }
 
+.contact-form--compact .form-grid {
+  margin-bottom: 0;
+}
+
+.contact-form--compact label + label {
+  margin-top: 0;
+}
+
+.contact-form--compact > .form-footer {
+  margin-top: 18px;
+}
+
+.form-span-full {
+  grid-column: 1 / -1;
+}
+
 .contact-form {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -2444,6 +2460,11 @@ tr:last-child td {
   margin-inline: auto;
 }
 
+.page-contact .contact-direct-intro {
+  max-width: 620px;
+  margin-inline: 0;
+}
+
 .contact-direct-intro h1,
 .contact-direct-intro p {
   margin: 0;
@@ -2465,6 +2486,27 @@ tr:last-child td {
 
 .contact-form--direct .form-footer {
   justify-content: flex-start;
+}
+
+.contact-side-card {
+  position: sticky;
+  top: 112px;
+}
+
+.contact-side-meta {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.contact-side-meta span,
+.contact-side-meta a {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.contact-side-meta a {
+  font-weight: 700;
 }
 
 .contact-side-stack {
@@ -3683,6 +3725,10 @@ tr:last-child td {
 
 .field-hidden {
   display: none;
+}
+
+.contact-form .field-hidden {
+  display: none !important;
 }
 
 .chooser-note {
@@ -5555,6 +5601,18 @@ main > section + .section-compact {
   margin-top: 20px;
 }
 
+.hero-surface--about p + p {
+  margin-top: 14px;
+}
+
+.about-surface-meta {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  color: var(--text-soft);
+  font-size: 15px;
+}
+
 .hero-visual-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -5860,9 +5918,15 @@ main > section + .section-compact {
   padding: 14px;
 }
 
+.page-kodageno .page-hero-grid {
+  grid-template-columns: 1fr;
+}
+
 .page-kodageno .hero-visual-card img {
-  aspect-ratio: 16 / 9;
-  max-height: 320px;
+  aspect-ratio: auto;
+  max-height: none;
+  object-fit: contain;
+  object-position: center top;
 }
 
 .step-card-simple {
