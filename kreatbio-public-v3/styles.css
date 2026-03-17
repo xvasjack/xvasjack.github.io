@@ -5676,6 +5676,10 @@ main > section + .section-compact {
   margin-top: 24px;
 }
 
+.page-anchor-strip--tight {
+  margin-top: 16px;
+}
+
 .page-anchor-strip a {
   display: inline-flex;
   align-items: center;
@@ -5721,6 +5725,10 @@ main > section + .section-compact {
 
 .step-grid-simple {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.step-grid-simple--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .contact-summary-grid {
@@ -5775,6 +5783,80 @@ main > section + .section-compact {
 .route-card__list li + li,
 .feature-list-simple li + li {
   margin-top: 10px;
+}
+
+.availability-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.availability-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 60, 102, 0.12);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.sample-table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: var(--shadow-sm);
+}
+
+.sample-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+}
+
+.sample-table th,
+.sample-table td {
+  padding: 18px 20px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.sample-table thead th {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: rgba(238, 243, 247, 0.88);
+}
+
+.sample-table tbody th {
+  color: var(--brand-strong);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.sample-table tbody td {
+  color: var(--text-soft);
+  font-size: 15px;
+}
+
+.sample-table tbody tr:last-child th,
+.sample-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.section-note {
+  margin: 18px 0 0;
+  color: var(--text-soft);
+  font-size: 15px;
 }
 
 .product-preview {
@@ -5884,6 +5966,7 @@ main > section + .section-compact {
 
 .confirmation-card {
   max-width: 760px;
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -5914,12 +5997,24 @@ main > section + .section-compact {
   grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.78fr);
 }
 
+.page-home .hero {
+  padding-bottom: 56px;
+}
+
+.page-home #choose-product {
+  padding-top: 40px;
+}
+
 .page-kodageno .hero-visual-card {
   padding: 14px;
 }
 
 .page-kodageno .page-hero-grid {
   grid-template-columns: 1fr;
+}
+
+.page-kodageno .hero-visual-card picture {
+  display: block;
 }
 
 .page-kodageno .hero-visual-card img {
@@ -6033,6 +6128,10 @@ main > section + .section-compact {
     grid-template-columns: 1fr;
   }
 
+  .step-grid-simple--three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .info-grid-simple,
   .step-grid-simple,
   .contact-summary-grid {
@@ -6079,6 +6178,10 @@ main > section + .section-compact {
     max-height: 230px;
   }
 
+  .page-kodageno .hero-visual-card img {
+    max-height: 340px;
+  }
+
   .confirmation-card {
     padding: 24px;
     border-radius: 24px;
@@ -6097,5 +6200,15 @@ main > section + .section-compact {
   .report-board-simple__row {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .step-grid-simple--three,
+  .info-grid-simple,
+  .contact-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sample-table {
+    min-width: 560px;
   }
 }
