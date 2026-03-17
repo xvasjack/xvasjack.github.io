@@ -2108,6 +2108,13 @@ tr:last-child td {
   color: var(--brand);
 }
 
+.footer-disclaimer {
+  max-width: 280px;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .footer-grid {
   display: grid;
   grid-template-columns: 1.2fr repeat(3, minmax(0, 0.7fr));
