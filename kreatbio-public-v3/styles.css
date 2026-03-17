@@ -2341,6 +2341,11 @@ tr:last-child td {
   align-items: start;
 }
 
+.contact-form-layout--single {
+  grid-template-columns: minmax(0, 760px);
+  justify-content: center;
+}
+
 .contact-form {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -2358,6 +2363,10 @@ tr:last-child td {
   color: var(--brand-strong);
   font-size: 13px;
   font-weight: 700;
+}
+
+.contact-form--direct label + label {
+  margin-top: 18px;
 }
 
 .form-grid {
@@ -2419,6 +2428,36 @@ tr:last-child td {
   margin: 0;
   color: var(--text-soft);
   font-size: 14px;
+}
+
+.contact-direct-intro {
+  display: grid;
+  gap: 14px;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.contact-direct-intro h1,
+.contact-direct-intro p {
+  margin: 0;
+}
+
+.contact-inline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  color: var(--text-soft);
+  font-size: 15px;
+}
+
+.contact-inline-meta a {
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.contact-form--direct .form-footer {
+  justify-content: flex-start;
 }
 
 .contact-side-stack {

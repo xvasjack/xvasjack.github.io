@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Contact KreatBio | KodaPure and KodaGeno</title>
+    <title>Contact KreatBio</title>
     <meta
       name="description"
-      content="Contact KreatBio for KodaPure quotes and technical files, or for KodaGeno program inquiries and product questions."
+      content="Contact KreatBio for quotes, technical documents, CoA files, or program inquiries."
     />
-    <meta property="og:title" content="Contact KreatBio | KodaPure and KodaGeno" />
-    <meta property="og:description" content="Use the contact form for KodaPure requests or KodaGeno program and university questions." />
+    <meta property="og:title" content="Contact KreatBio" />
+    <meta property="og:description" content="Contact KreatBio for quotes, technical documents, CoA files, or program inquiries." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://xvasjack.github.io/kreatbio-public-v3/contact-commercial.html" />
     <meta property="og:image" content="https://xvasjack.github.io/kreatbio-public-v3/media/og-contact.png" />
@@ -57,37 +57,31 @@
           <a class="nav-link" href="index.html">Home</a>
           <a class="nav-link" href="kodapure-dna-kit.html">KodaPure</a>
           <a class="nav-link" href="kodageno-platform.html">KodaGeno</a>
-          <a class="nav-link" href="about.html">About</a>
           <a class="nav-link active" href="contact-commercial.html">Contact</a>
-          <a class="btn btn-primary nav-cta" href="#contact-form">Get in touch</a>
         </nav>
       </div>
     </header>
 
     <main>
-      <section class="hero hero-contact-v6">
-        <div class="container page-hero-grid">
-          <div class="contact-copy reveal">
+      <section class="hero">
+        <div class="container">
+          <div class="contact-direct-intro reveal">
             <span class="eyebrow">Contact</span>
-            <h1>Ask about KodaPure or KodaGeno.</h1>
-            <p class="lead-copy">
-              Ask for KodaPure quotes, technical documents, and CoA files, or contact KreatBio about KodaGeno programs, universities, and general product questions.
+            <h1>Contact KreatBio.</h1>
+            <p class="lead-copy">For KodaPure quotes and documents, or KodaGeno program inquiries.</p>
+            <p class="contact-inline-meta">
+              <span>Avenue Crest, Kuala Lumpur</span>
+              <span>Reply within 12 hours</span>
+              <a href="mailto:adriana.kreatbio@gmail.com">adriana.kreatbio@gmail.com</a>
             </p>
           </div>
-
-          <aside class="contact-panel reveal">
-            <span class="eyebrow">Contact details</span>
-            <h3>Response time: within 12 hours.</h3>
-            <p class="support-copy support-copy--offset">Avenue Crest, Kuala Lumpur</p>
-            <a class="text-link" href="mailto:adriana.kreatbio@gmail.com">adriana.kreatbio@gmail.com</a>
-          </aside>
         </div>
       </section>
 
       <section>
-        <div class="container contact-form-layout">
+        <div class="container contact-form-layout contact-form-layout--single">
           <form
-            class="contact-form reveal"
+            class="contact-form contact-form--direct reveal"
             id="contact-form"
             action="https://formsubmit.co/adriana.kreatbio@gmail.com"
             method="POST"
@@ -98,71 +92,42 @@
             <input type="hidden" name="_next" value="https://xvasjack.github.io/kreatbio-public-v3/contact-request-sent.html" />
             <input class="honeypot-field" type="text" name="_company" tabindex="-1" autocomplete="off" aria-hidden="true" />
 
-            <div class="form-grid form-grid--two">
-              <label>
-                <span>Name</span>
-                <input type="text" name="name" required />
-              </label>
-              <label>
-                <span>Email</span>
-                <input type="email" name="email" required />
-              </label>
-            </div>
+            <label>
+              <span>Name</span>
+              <input type="text" name="name" required />
+            </label>
 
-            <div class="form-grid form-grid--two">
-              <label>
-                <span>Requester type</span>
-                <select name="requester_type" data-requester-type required>
-                  <option value="">Select one</option>
-                  <option>Research lab</option>
-                  <option>Academic program</option>
-                  <option>Training organization</option>
-                  <option>Individual learner</option>
-                  <option>Distributor</option>
-                  <option>Other</option>
-                </select>
-              </label>
-              <label>
-                <span>Product of interest</span>
-                <select name="product_interest" required>
-                  <option value="">Select one</option>
-                  <option>KodaPure</option>
-                  <option>KodaGeno</option>
-                  <option>Both</option>
-                </select>
-              </label>
-            </div>
+            <label>
+              <span>Email</span>
+              <input type="email" name="email" required />
+            </label>
 
-            <div class="form-grid form-grid--two">
-              <label>
-                <span>Request type</span>
-                <select name="request_type" data-request-type required>
-                  <option value="">Select one</option>
-                  <option>Technical sheet</option>
-                  <option>CoA by lot number</option>
-                  <option>Quote request</option>
-                  <option>Pricing</option>
-                  <option value="Program inquiry">Program / university inquiry</option>
-                  <option>General question</option>
-                </select>
-              </label>
-              <label class="form-field" data-institution-field>
-                <span>Institution</span>
-                <input type="text" name="institution" data-institution-input required />
-                <small class="field-help">Required for labs, academic programs, and training organizations.</small>
-              </label>
-            </div>
+            <label class="form-field" data-institution-field>
+              <span>Organization / university</span>
+              <input type="text" name="institution" data-institution-input />
+            </label>
 
-            <div class="form-grid form-grid--two">
-              <label>
-                <span>Country</span>
-                <input type="text" name="country" required />
-              </label>
-              <label>
-                <span>Optional phone</span>
-                <input type="text" name="phone" />
-              </label>
-            </div>
+            <label>
+              <span>Product</span>
+              <select name="product_interest" required>
+                <option value="">Select one</option>
+                <option>KodaPure</option>
+                <option>KodaGeno</option>
+                <option>Both</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Request type</span>
+              <select name="request_type" data-request-type required>
+                <option value="">Select one</option>
+                <option>Technical sheet</option>
+                <option value="CoA by lot number">CoA</option>
+                <option value="Quote request">Quote</option>
+                <option value="Program inquiry">Program inquiry</option>
+                <option>General question</option>
+              </select>
+            </label>
 
             <label class="form-field field-hidden" data-lot-field>
               <span>Lot number</span>
@@ -176,31 +141,9 @@
             </label>
 
             <div class="form-footer">
-              <p>Expected response time: within 12 hours.</p>
               <button class="btn btn-primary" type="submit">Send request</button>
             </div>
           </form>
-
-          <div class="contact-side-stack">
-            <article class="guide-card reveal">
-              <span class="route-meta">KodaPure</span>
-              <h3>KodaPure quotes and technical documents</h3>
-              <p>Ask about quotes, technical sheets, CoA files, or the KodaPure quick protocol and SDS.</p>
-              <a class="text-link" href="kodapure-dna-kit.html#downloads">See KodaPure documents</a>
-            </article>
-            <article class="guide-card reveal">
-              <span class="route-meta">KodaGeno</span>
-              <h3>Programs &amp; universities inquiries</h3>
-              <p>Ask about class or program delivery, instructor access, launch timing, and reporting for KodaGeno.</p>
-              <a class="text-link" href="kodageno-platform.html#team-setup">See KodaGeno details</a>
-            </article>
-            <article class="guide-card reveal koda-subbrand">
-              <span class="route-meta">Live lessons</span>
-              <h3>See how KodaGeno works</h3>
-              <p>The live KodaGeno lesson library is open if you want to see the training style first.</p>
-              <a class="koda-inline-link" href="https://kodageno.com/lessons" target="_blank" rel="noreferrer">Open live lessons</a>
-            </article>
-          </div>
         </div>
       </section>
     </main>
@@ -237,7 +180,6 @@
             <li><a href="index.html">Home</a></li>
             <li><a href="kodapure-dna-kit.html">KodaPure</a></li>
             <li><a href="kodageno-platform.html">KodaGeno</a></li>
-            <li><a href="about.html">About</a></li>
             <li><a href="contact-commercial.html">Contact</a></li>
           </ul>
         </div>
