@@ -2093,7 +2093,7 @@ tr:last-child td {
   display: grid;
   gap: 6px;
   margin-top: 16px;
-  max-width: 40ch;
+  max-width: 54ch;
 }
 
 .footer-contact p,
@@ -2117,7 +2117,7 @@ tr:last-child td {
 
 .footer-grid {
   display: grid;
-  grid-template-columns: 1.2fr repeat(3, minmax(0, 0.7fr));
+  grid-template-columns: minmax(260px, 1.25fr) repeat(auto-fit, minmax(150px, 0.8fr));
   gap: 28px;
   padding-bottom: 28px;
 }
@@ -5918,6 +5918,11 @@ main > section + .section-compact {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.download-card-simple .btn {
+  margin-top: auto;
+  align-self: flex-start;
 }
 
 .download-card-simple .text-link,
