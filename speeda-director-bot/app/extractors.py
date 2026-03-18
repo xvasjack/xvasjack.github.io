@@ -170,6 +170,7 @@ def _extract_age(line: str) -> int | None:
         r"(?i)\bage[:\s]*([2-9]\d)\b",
         r"\(([2-9]\d)\)",
         r"\b([2-9]\d)\s*(?:years? old|yrs|yo|歳)\b",
+        r"^\s*([2-9]\d)\s*$",
     ]
     for p in patterns:
         m = re.search(p, line)
@@ -326,6 +327,12 @@ class SpeedaExtractor:
                     debug_text=self._safe_body_text(),
                     debug_html=self._safe_page_html(),
                 )
+
+            # Some company pages only render the Name/Age table after switching
+            # into the officer info view, so try structured parsing again here.
+            table_directors = self._extract_directors_from_tables()
+            if table_directors:
+                return ExtractResult("success", table_directors, self.page.url, None)
             directors = parse_directors_from_text(section_text)
             if not directors:
                 return ExtractResult(
