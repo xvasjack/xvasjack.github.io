@@ -240,15 +240,17 @@ class SpeedaRunController:
         working_path = Path(working)
         if not working_path.exists():
             return False, "Working workbook file does not exist."
+        downloads_dir = Path.home() / "Downloads"
         if destination_path:
             dst = Path(destination_path)
+            csv_path = (run_dir or working_path.parent) / "run_log.csv"
         else:
             source_name = Path(self._source_workbook_path or "result.xlsx").stem
-            dst = working_path.parent / f"{source_name}_director_output.xlsx"
+            dst = downloads_dir / f"{source_name}_director_output.xlsx"
+            csv_path = downloads_dir / f"{source_name}_director_output_log.csv"
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(working_path, dst)
 
-        csv_path = (run_dir or working_path.parent) / "run_log.csv"
         self.store.export_run_csv(run_id, csv_path)
         return True, f"Exported workbook to {dst}. Run log: {csv_path}."
 
