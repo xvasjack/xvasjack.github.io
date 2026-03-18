@@ -47,13 +47,103 @@ const SLIDE_XML_RE = /^ppt\/slides\/slide\d+\.xml$/i;
 const CHART_XML_RE = /^ppt\/charts\/chart\d+\.xml$/i;
 const NOTES_XML_RE = /^ppt\/notesSlides\/notesSlide\d+\.xml$/i;
 
-const DEFAULT_MODEL = process.env.TRANSLATION_MODEL || 'gpt-5.1';
+const DEFAULT_MODEL = 'gpt-5.4-mini';
 const MAX_BATCH_ITEMS = Number(process.env.TRANSLATION_BATCH_ITEMS || 35);
 const MAX_BATCH_CHARS = Number(process.env.TRANSLATION_BATCH_CHARS || 9000);
 const MAX_TRANSLATION_RETRIES = Number(process.env.TRANSLATION_RETRIES || 3);
 const RETRY_BASE_DELAY_MS = Number(process.env.TRANSLATION_RETRY_BASE_MS || 10000);
 const MAX_TRANSLATABLE_SEGMENTS = Number(process.env.TRANSLATION_MAX_SEGMENTS || 10000);
 const JAPANESE_FONT_FAMILY = process.env.TRANSLATION_JA_FONT || 'Yu Gothic';
+const JAPANESE_PREFERRED_LABEL_RULES = [
+  {
+    aliases: ['name', 'company name'],
+    replacement: '会社名',
+    prompt: 'Name / Company Name -> 会社名',
+  },
+  {
+    aliases: ['hq', 'headquarters', 'hq / headquarters', 'hq/headquarters'],
+    replacement: '本社所在地',
+    prompt: 'HQ / Headquarters -> 本社所在地',
+  },
+  {
+    aliases: ['location'],
+    replacement: '拠点',
+    prompt: 'Location -> 拠点 (use 所在地 when the label clearly refers to address or headquarters location)',
+  },
+  {
+    aliases: [
+      'established year',
+      'est. year',
+      'est year',
+      'es. year',
+      'es year',
+      'established year / est. year',
+      'established year/est. year',
+    ],
+    replacement: '設立年',
+    prompt: 'Established Year / Est. Year -> 設立年',
+  },
+  {
+    aliases: ['shareholding', 'ownership', 'shareholding / ownership', 'shareholding/ownership'],
+    replacement: '株主構成',
+    prompt: 'Shareholding / Ownership -> 株主構成',
+  },
+  {
+    aliases: ['business', 'business overview', 'operations', 'description'],
+    replacement: '事業内容',
+    prompt: 'Business / Business Overview / Operations / Description -> 事業内容',
+  },
+  {
+    aliases: ['revenue', 'sales', 'revenue / sales', 'revenue/sales'],
+    replacement: '売上',
+    prompt: 'Revenue / Sales -> 売上',
+  },
+  {
+    aliases: ['est. revenue', 'est revenue'],
+    replacement: '推定売上',
+    prompt: 'Est. Revenue -> 推定売上',
+  },
+  {
+    aliases: ['operating scale'],
+    replacement: '運営規模',
+    prompt: 'Operating Scale -> 運営規模',
+  },
+  {
+    aliases: ['key metrics'],
+    replacement: '主要指標',
+    prompt: 'Key Metrics -> 主要指標',
+  },
+  {
+    aliases: ['headcount'],
+    replacement: '従業員数',
+    prompt: 'Headcount -> 従業員数',
+  },
+  {
+    aliases: ['key clients', 'clients'],
+    replacement: '主な顧客',
+    prompt: 'Key Clients / Clients -> 主な顧客',
+  },
+  {
+    aliases: ['brand positioning'],
+    replacement: 'ブランドポジショニング',
+    prompt: 'Brand Positioning -> ブランドポジショニング',
+  },
+  {
+    aliases: ['services', 'products / services', 'products/services'],
+    replacement: '提供サービス',
+    prompt: 'Services / Products / Services -> 提供サービス',
+  },
+  {
+    aliases: ['programs', 'programme', 'programmes', 'programs / programme', 'programs/programme'],
+    replacement: 'プログラム',
+    prompt: 'Programs / Programme -> プログラム (adjust only when the surrounding meaning clearly requires a different Japanese label)',
+  },
+];
+const JAPANESE_PREFERRED_LABEL_MAP = new Map(
+  JAPANESE_PREFERRED_LABEL_RULES.flatMap((rule) =>
+    rule.aliases.map((alias) => [alias, rule.replacement])
+  )
+);
 const JAPANESE_UNRESOLVED_GENERIC_RE = /\b(banking|transportation|financial services)\b/i;
 const JAPANESE_GENERIC_TERM_OVERRIDES = [
   {
@@ -273,6 +363,33 @@ function normalizeLooseText(value) {
   return String(value || '')
     .trim()
     .replace(/\s+/g, ' ');
+}
+
+function splitTrailingLabelPunctuation(value) {
+  const text = String(value || '');
+  const match = text.match(/^(.*?)(\s*[:：]\s*)$/u);
+  if (!match) {
+    return { base: text, suffix: '' };
+  }
+  return { base: match[1], suffix: match[2] };
+}
+
+function normalizeLabelKey(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[／]/g, '/')
+    .replace(/\s*\/\s*/g, ' / ')
+    .replace(/\s+/g, ' ');
+}
+
+function getJapanesePreferredLabelFromSource(value) {
+  const { base, suffix } = splitTrailingLabelPunctuation(value);
+  const replacement = JAPANESE_PREFERRED_LABEL_MAP.get(normalizeLabelKey(base));
+  if (!replacement) {
+    return null;
+  }
+  return `${replacement}${suffix}`;
 }
 
 function applyJapaneseTerminologyOverrides(value) {
@@ -550,7 +667,7 @@ function buildSystemPrompt(targetLanguage, sourceLanguage, glossary, options = {
       ? '\nStrict retry mode:\n- Do not leave generic English business terms untranslated (e.g., Banking, Transportation, Financial Services).\n- Keep English only for brand names, legal entity names, product names, acronyms, URLs/emails, or placeholders.'
       : '';
   const japaneseSection = isJapaneseLanguage(targetLanguage)
-    ? '\nJapanese-specific rules:\n- Translate "HQ" as "本社所在地" (do not use "本社" as the standalone label).\n- For establishment year labels such as "Es. Year", use a year suffix like "1995年".\n- Keep terminology concise and business-appropriate.'
+    ? `\nJapanese-specific rules:\n- Use these exact label translations whenever the source text is a standalone field/section label:\n${JAPANESE_PREFERRED_LABEL_RULES.map((rule) => `- ${rule.prompt}`).join('\n')}\n- Do not use "本社" as the standalone label for HQ.\n- For establishment year labels such as "Es. Year", use a year suffix like "1995年".\n- Keep terminology concise and business-appropriate.`
     : '';
 
   return [
@@ -666,6 +783,12 @@ function applyTranslationsToXml(xml, segments, translationMap, options) {
     let translatedCore = translationMap.has(segment.core)
       ? translationMap.get(segment.core)
       : segment.core;
+    const preferredJapaneseLabel = isJapaneseLanguage(targetLanguage)
+      ? getJapanesePreferredLabelFromSource(segment.core)
+      : null;
+    if (preferredJapaneseLabel) {
+      translatedCore = preferredJapaneseLabel;
+    }
     translatedCore = applyLanguageConventions(translatedCore, targetLanguage);
 
     const mergedDecoded = `${segment.leading}${translatedCore}${segment.trailing}`;
