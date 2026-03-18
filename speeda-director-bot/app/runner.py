@@ -16,6 +16,16 @@ from .models import DashboardStatus, RunConfig
 from .storage import StateStore
 from .workbook import CompanyRow, WorkbookAdapter
 
+RETRY_MARKERS = {
+    marker_for_status("not_found"),
+    marker_for_status("ambiguous"),
+    marker_for_status("blocked"),
+    marker_for_status("auth_required"),
+    marker_for_status("parse_fail"),
+    marker_for_status("network_fail"),
+    marker_for_status("ui_changed"),
+}
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -95,6 +105,7 @@ class SpeedaRunController:
             return False, f"Workbook not found: {workbook_path}", None
         if config.start_row > config.end_row:
             return False, "start_row cannot be greater than end_row.", None
+        source_override = self._resolve_source_override(config)
 
         with self._lock:
             if self._status in ("running", "paused", "stopping"):
@@ -102,6 +113,8 @@ class SpeedaRunController:
             self._reset_runtime_state()
             self._status = "running"
             self._message = "Starting run."
+            if source_override:
+                self._message = "Starting run from last saved progress."
             self._current_step = "Preparing run"
             self._current_url = None
             self._started_at = utc_now()
@@ -119,7 +132,7 @@ class SpeedaRunController:
                 "run_id": run_id,
                 "config": config,
                 "row_filter": None,
-                "source_override": None,
+                "source_override": source_override,
             },
             daemon=True,
         )
@@ -341,7 +354,7 @@ class SpeedaRunController:
 
                     self._set_current_row(company_row)
 
-                    if company_row.existing_director_info and not config.force_retry:
+                    if self._should_skip_existing(company_row, config.force_retry):
                         self._set_activity("Skipping existing row", None, f"Skipping row {company_row.row_number}; value already exists.")
                         self._record_skip(run_id, company_row)
                         continue
@@ -494,6 +507,38 @@ class SpeedaRunController:
             self._counters.done_rows += 1
             self._counters.skipped_rows += 1
         self._persist_checkpoint(run_id, row.row_number)
+
+    def _resolve_source_override(self, config: RunConfig) -> Path | None:
+        latest_id = self.store.get_latest_run_id()
+        if not latest_id:
+            return None
+        latest_run = self.store.get_run(latest_id)
+        if not latest_run:
+            return None
+        latest_working = latest_run.get("working_workbook_path")
+        if not latest_working:
+            return None
+        latest_working_path = Path(latest_working)
+        if not latest_working_path.exists():
+            return None
+        latest_config = latest_run.get("config")
+        if not isinstance(latest_config, dict):
+            return None
+        if str(latest_run.get("source_workbook_path")) != config.workbook_path:
+            return None
+        if str(latest_config.get("sheet_name")) != config.sheet_name:
+            return None
+        if str(latest_config.get("target_column", "")).upper() != config.target_column.upper():
+            return None
+        return latest_working_path
+
+    def _should_skip_existing(self, row: CompanyRow, force_retry: bool) -> bool:
+        if force_retry:
+            return False
+        value = (row.existing_director_info or "").strip()
+        if not value:
+            return False
+        return value not in RETRY_MARKERS
 
     def _set_current_row(self, row: CompanyRow) -> None:
         with self._lock:
