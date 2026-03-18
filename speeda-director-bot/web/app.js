@@ -47,7 +47,7 @@ function readConfig() {
 function buildConfig(mode) {
   const cfg = readConfig();
   if (mode === "test") {
-    cfg.start_row = 11;
+    cfg.start_row = 12;
     cfg.end_row = 40;
     cfg.force_retry = false;
   }
@@ -190,4 +190,3 @@ initDefaults();
 initActions();
 startPolling();
 addLog("Simple dashboard ready. AI used for extraction: none.");
-

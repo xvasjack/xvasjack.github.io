@@ -119,6 +119,13 @@ def parse_directors_from_text(raw_text: str) -> list[DirectorEntry]:
     return candidates
 
 
+def normalize_company_name(value: str) -> str:
+    value = value.lower().strip()
+    value = re.sub(r"[^a-z0-9]+", " ", value)
+    value = re.sub(r"\s+", " ", value)
+    return value.strip()
+
+
 def _extract_age(line: str) -> int | None:
     patterns = [
         r"(?i)\bage[:\s]*([2-9]\d)\b",
@@ -285,6 +292,7 @@ class SpeedaExtractor:
         speeda_id: str | None,
         country: str | None,
     ) -> ExtractResult | None:
+        expected_name = normalize_company_name(company_name)
         if speeda_id:
             direct_urls = [
                 f"{self.base_url}company/companyinformation/cid/{speeda_id}",
@@ -301,65 +309,15 @@ class SpeedaExtractor:
                         return ExtractResult("auth_required", [], self.page.url, "Login is required.")
                     if self._is_blocked_page():
                         return ExtractResult("blocked", [], self.page.url, "Blocked or anti-bot page detected.")
-                    if self._looks_like_company_page():
+                    if self._looks_like_company_page() and self._page_matches_company(expected_name):
                         return None
                 except PlaywrightTimeoutError:
                     continue
 
-        # Fallback to search.
-        self.page.goto(self.base_url, wait_until="domcontentloaded", timeout=40000)
-        safety_violation = self._get_safety_violation()
-        if safety_violation:
-            return ExtractResult("blocked", [], self.page.url, safety_violation)
-        if self._is_auth_page():
-            return ExtractResult("auth_required", [], self.page.url, "Login is required.")
-        if self._is_blocked_page():
-            return ExtractResult("blocked", [], self.page.url, "Blocked or anti-bot page detected.")
+            return ExtractResult("ambiguous", [], self.page.url, "Direct company page did not match the expected company.")
 
-        search_input = self._find_search_input()
-        if search_input is None:
-            return ExtractResult("ui_changed", [], self.page.url, "Search box not found.")
-        search_input.click()
-        search_input.fill(company_name)
-        search_input.press("Enter")
-        self._pace_wait(1.2)
-
-        safety_violation = self._get_safety_violation()
-        if safety_violation:
-            return ExtractResult("blocked", [], self.page.url, safety_violation)
-        if self._is_blocked_page():
-            return ExtractResult("blocked", [], self.page.url, "Blocked or anti-bot page detected.")
-        if self._is_auth_page():
-            return ExtractResult("auth_required", [], self.page.url, "Session expired during search.")
-
-        links = self._find_company_links()
-        if not links:
-            return ExtractResult("not_found", [], self.page.url, "No company result links found.")
-
-        picked = None
-        if country:
-            lowered = country.lower()
-            for link in links:
-                if lowered in link.card_text.lower():
-                    picked = link
-                    break
-        if picked is None:
-            picked = links[0]
-
-        # Navigate directly to a safe company URL instead of clicking arbitrary page elements.
-        self.page.goto(picked.href, wait_until="domcontentloaded", timeout=30000)
-        self._pace_wait(1.0)
-
-        safety_violation = self._get_safety_violation()
-        if safety_violation:
-            return ExtractResult("blocked", [], self.page.url, safety_violation)
-        if self._is_auth_page():
-            return ExtractResult("auth_required", [], self.page.url, "Session expired after opening result.")
-        if self._is_blocked_page():
-            return ExtractResult("blocked", [], self.page.url, "Blocked or anti-bot page detected.")
-        if not self._looks_like_company_page():
-            return ExtractResult("ambiguous", [], self.page.url, "Could not confirm selected result is company profile.")
-        return None
+        # Safe mode: do not guess through search when the Speeda ID is missing.
+        return ExtractResult("ambiguous", [], self.page.url, "Speeda ID is missing for this row. Safe auto-search is disabled.")
 
     def _find_search_input(self):
         selectors = [
@@ -427,6 +385,14 @@ class SpeedaExtractor:
             return "company" in title or "speeda" in title
         except Exception:
             return False
+
+    def _page_matches_company(self, expected_name: str) -> bool:
+        try:
+            body = self.page.locator("body").inner_text(timeout=1500)
+        except Exception:
+            return False
+        normalized_body = normalize_company_name(body[:4000])
+        return expected_name in normalized_body
 
     def _get_safety_violation(self) -> str | None:
         try:
