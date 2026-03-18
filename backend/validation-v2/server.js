@@ -9,7 +9,7 @@ const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
 const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
-const { withRetry } = require('./shared/ai-models');
+const { withRetry, extractJSON } = require('./shared/ai-models');
 
 setupGlobalErrorHandlers();
 
@@ -21,11 +21,20 @@ app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-const requiredEnvVars = ['GEMINI_API_KEY', 'SERPAPI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
+const requiredEnvVars = [
+  'GEMINI_API_KEY',
+  'OPENAI_API_KEY',
+  'SERPAPI_API_KEY',
+  'SENDGRID_API_KEY',
+  'SENDER_EMAIL',
+];
 const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
+
+const OPENAI_VALIDATION_MODEL = process.env.OPENAI_VALIDATION_MODEL || 'gpt-5-mini';
+const OPENAI_VALIDATION_REASONING = process.env.OPENAI_VALIDATION_REASONING || 'low';
 
 // ============ URL CACHE ============
 
@@ -148,6 +157,91 @@ async function callGeminiFlash(prompt) {
     return result;
   } catch (error) {
     console.error('Gemini 2.5 Flash error:', error.message);
+    return '';
+  }
+}
+
+function openAIModelSupportsReasoning(model) {
+  return /^gpt-5/i.test(model) || /^o[134]/i.test(model);
+}
+
+function extractOpenAIText(data) {
+  if (!data) return '';
+  if (typeof data.output_text === 'string' && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  const texts = [];
+  const outputs = Array.isArray(data.output) ? data.output : [];
+  for (const item of outputs) {
+    if (!Array.isArray(item?.content)) continue;
+    for (const contentPart of item.content) {
+      if (typeof contentPart?.text === 'string' && contentPart.text.trim()) {
+        texts.push(contentPart.text.trim());
+      }
+    }
+  }
+
+  return texts.join('\n').trim();
+}
+
+async function callOpenAIResponse(prompt, options = {}) {
+  const {
+    model = OPENAI_VALIDATION_MODEL,
+    timeout = 60000,
+    useWebSearch = false,
+    maxOutputTokens = 2000,
+  } = options;
+
+  if (!process.env.OPENAI_API_KEY) {
+    console.error('OPENAI_API_KEY is missing');
+    return '';
+  }
+
+  try {
+    const requestBody = {
+      model,
+      input: prompt,
+      max_output_tokens: maxOutputTokens,
+    };
+
+    if (openAIModelSupportsReasoning(model)) {
+      requestBody.reasoning = { effort: OPENAI_VALIDATION_REASONING };
+    }
+
+    if (useWebSearch) {
+      requestBody.tools = [{ type: 'web_search' }];
+      requestBody.tool_choice = 'auto';
+    }
+
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      timeout,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`OpenAI Responses API HTTP error ${response.status}:`, errorText.substring(0, 300));
+      return '';
+    }
+
+    const data = await response.json();
+    const usage = data.usage || {};
+    recordTokens(model, usage.input_tokens || 0, usage.output_tokens || 0);
+
+    if (data.error) {
+      console.error('OpenAI Responses API error:', data.error.message);
+      return '';
+    }
+
+    return extractOpenAIText(data);
+  } catch (error) {
+    console.error('OpenAI Responses API error:', error.message);
     return '';
   }
 }
@@ -728,6 +822,88 @@ async function findCompanyWebsite(companyName, countries) {
   return null;
 }
 
+async function findWebsiteViaOpenAI(companyName, countries) {
+  const countryStr = countries && countries.length > 0 ? countries.join(', ') : '';
+  const locationHint = countryStr ? ` located in ${countryStr}` : '';
+
+  try {
+    const text = await callOpenAIResponse(
+      `Find the official corporate homepage URL for "${companyName}"${locationHint}.
+       I need the MAIN company homepage URL only, such as https://www.company.com.
+       Do NOT return PDFs, investor pages, news articles, social profiles, or directory listings.
+       If you cannot find the official homepage, return ONLY NOT_FOUND.
+       Otherwise, return ONLY the direct homepage URL.`,
+      { useWebSearch: true, maxOutputTokens: 300 }
+    );
+
+    if (!text || /NOT_FOUND/i.test(text)) return null;
+    return extractCleanURL(text);
+  } catch (e) {
+    console.error(`OpenAI web search error for ${companyName}:`, e.message);
+    return null;
+  }
+}
+
+async function findCompanyWebsiteOpenAI(companyName, countries) {
+  console.log(`  Finding website for: ${companyName}`);
+
+  const cached = getCachedUrl(companyName);
+  if (cached) {
+    console.log(`    Cache hit: ${cached}`);
+    return cached;
+  }
+
+  const [serpResult, openAIResult] = await Promise.all([
+    findWebsiteViaSerpAPI(companyName, countries),
+    findWebsiteViaOpenAI(companyName, countries),
+  ]);
+
+  console.log(`    SerpAPI: ${serpResult || 'not found'}`);
+  console.log(`    OpenAI:  ${openAIResult || 'not found'}`);
+
+  if (serpResult && openAIResult) {
+    try {
+      const serpDomain = new URL(serpResult).hostname.replace(/^www\./, '');
+      const openAIDomain = new URL(openAIResult).hostname.replace(/^www\./, '');
+
+      if (serpDomain === openAIDomain) {
+        console.log(`    Consensus: both agree on ${serpDomain} - high confidence`);
+        setCachedUrl(companyName, serpResult);
+        return serpResult;
+      }
+
+      console.log(
+        `    Disagreement: SerpAPI=${serpDomain}, OpenAI=${openAIDomain} - using SerpAPI (more deterministic)`
+      );
+      setCachedUrl(companyName, serpResult);
+      return serpResult;
+    } catch (e) {
+      const result = serpResult || openAIResult;
+      if (result) setCachedUrl(companyName, result);
+      return result;
+    }
+  }
+
+  const singleResult = serpResult || openAIResult;
+  if (singleResult) {
+    const source = serpResult ? 'SerpAPI' : 'OpenAI';
+    console.log(`    Only ${source} found ${singleResult} - verifying...`);
+
+    const verification = await verifyWebsite(singleResult);
+    if (verification.valid) {
+      console.log(`    Verified: ${singleResult} exists`);
+      setCachedUrl(companyName, singleResult);
+      return singleResult;
+    }
+
+    console.log(`    Rejected: ${singleResult} - ${verification.reason}`);
+    return null;
+  }
+
+  console.log(`    No website found for ${companyName}`);
+  return null;
+}
+
 // ============ STEP 4: MULTI-CRITERIA CLASSIFICATION ============
 
 async function classifyMultiCriteria(company, criteria, pageText) {
@@ -886,6 +1062,158 @@ OUTPUT: Return valid JSON only, an array with one entry per company:
   return allResults;
 }
 
+async function classifyMultiCriteriaOpenAI(company, criteria, pageText) {
+  const isAIResearch = pageText.startsWith('[AI Research');
+  const criteriaList = criteria.map((c, i) => `${i + 1}. ${c}`).join('\n');
+
+  const prompt = `You are a company validator. For each criterion below, determine PASS or FAIL based ONLY on the provided content.
+
+CRITERIA:
+${criteriaList}
+
+COMPANY: ${company.company_name}
+WEBSITE: ${company.website}
+
+${isAIResearch ? 'COMPANY INFORMATION (from AI research - website was protected):' : 'WEBSITE CONTENT (successfully fetched from the live website):'}
+${pageText.substring(0, 10000)}
+
+RULES:
+1. Evaluate EACH criterion independently.
+2. Base determination ONLY on the content provided.
+3. If content is unclear or insufficient for a criterion, return FAIL.
+4. Be accurate. Do not guess or assume.
+5. Never say the website is inaccessible if content was provided.
+
+Return valid JSON only with this shape:
+{
+  "criteria_results": [
+    {"criterion": 1, "result": "PASS", "reason": "brief explanation"},
+    {"criterion": 2, "result": "FAIL", "reason": "brief explanation"}
+  ],
+  "business_description": "what this company does"
+}`;
+
+  const retryResult = await withRetry(
+    async () => {
+      const result = await callOpenAIResponse(prompt, { maxOutputTokens: 1500 });
+      const parsed = extractJSON(result);
+      if (!parsed || !Array.isArray(parsed.criteria_results)) {
+        throw new Error('Missing criteria_results array');
+      }
+
+      return {
+        criteria_results: parsed.criteria_results.map((r) => ({
+          criterion: r.criterion,
+          result: (r.result || 'FAIL').toUpperCase() === 'PASS' ? 'PASS' : 'FAIL',
+          reason: r.reason || '',
+        })),
+        business_description: parsed.business_description || '',
+      };
+    },
+    2,
+    1000,
+    `OpenAI classify ${company.company_name}`
+  );
+
+  if (retryResult) return retryResult;
+
+  return {
+    criteria_results: criteria.map((_, i) => ({
+      criterion: i + 1,
+      result: 'FAIL',
+      reason: 'Classification failed',
+    })),
+    business_description: 'Error during classification',
+  };
+}
+
+async function classifyMultiCriteriaBatchOpenAI(companies, criteria) {
+  const CLASSIFY_BATCH_SIZE = 3;
+  const allResults = new Map();
+
+  for (let i = 0; i < companies.length; i += CLASSIFY_BATCH_SIZE) {
+    const chunk = companies.slice(i, i + CLASSIFY_BATCH_SIZE);
+    const criteriaList = criteria.map((c, idx) => `${idx + 1}. ${c}`).join('\n');
+
+    const companySections = chunk
+      .map((c, idx) => {
+        const isAIResearch = c.pageText.startsWith('[AI Research');
+        const trimmedContent = c.pageText.substring(0, 3000);
+        return `=== COMPANY ${idx + 1}: ${c.company_name} (${c.website}) ===
+${isAIResearch ? 'COMPANY INFORMATION (from AI research):' : 'WEBSITE CONTENT:'}
+${trimmedContent}`;
+      })
+      .join('\n\n');
+
+    const prompt = `You are a company validator. For each company below, evaluate ALL criteria and determine PASS or FAIL based ONLY on the provided content.
+
+CRITERIA:
+${criteriaList}
+
+${companySections}
+
+RULES:
+1. Evaluate EACH criterion independently for EACH company.
+2. Base determination ONLY on the content provided.
+3. If content is unclear or insufficient for a criterion, return FAIL.
+4. Be accurate. Do not guess or assume.
+
+Return valid JSON only with this shape:
+{
+  "results": [
+    {
+      "company_index": 1,
+      "criteria_results": [
+        {"criterion": 1, "result": "PASS", "reason": "brief explanation"},
+        {"criterion": 2, "result": "FAIL", "reason": "brief explanation"}
+      ],
+      "business_description": "what this company does"
+    }
+  ]
+}`;
+
+    const batchResult = await withRetry(
+      async () => {
+        const result = await callOpenAIResponse(prompt, { maxOutputTokens: 2500 });
+        const parsed = extractJSON(result);
+        if (!parsed || !Array.isArray(parsed.results)) {
+          throw new Error('Response is missing results array');
+        }
+        return parsed.results;
+      },
+      2,
+      1000,
+      `OpenAI batch classify ${chunk.length} companies`
+    );
+
+    for (let j = 0; j < chunk.length; j++) {
+      const companyEntry = batchResult?.find((r) => r.company_index === j + 1);
+      if (companyEntry && companyEntry.criteria_results) {
+        allResults.set(chunk[j].company_name, {
+          criteria_results: companyEntry.criteria_results.map((r) => ({
+            criterion: r.criterion,
+            result: (r.result || 'FAIL').toUpperCase() === 'PASS' ? 'PASS' : 'FAIL',
+            reason: r.reason || '',
+          })),
+          business_description: companyEntry.business_description || '',
+        });
+      } else {
+        console.log(
+          `  OpenAI batch miss for ${chunk[j].company_name}, classifying individually...`
+        );
+        const individual = await classifyMultiCriteriaOpenAI(
+          { company_name: chunk[j].company_name, website: chunk[j].website },
+          criteria,
+          chunk[j].pageText
+        );
+        allResults.set(chunk[j].company_name, individual);
+      }
+    }
+  }
+
+  return allResults;
+}
+
 // ============ WAF FALLBACK: GEMINI RESEARCH ============
 
 async function callGeminiResearch(companyName, website) {
@@ -897,6 +1225,17 @@ async function callGeminiResearch(companyName, website) {
      If you cannot find information, say "UNABLE_TO_RESEARCH".`
   );
   return text;
+}
+
+async function callOpenAIResearch(companyName, website) {
+  return callOpenAIResponse(
+    `Research "${companyName}" (website: ${website}).
+     What does this company do? What industry are they in? What products or services do they offer?
+     What is their location, size, and any notable details about their operations?
+     Provide a detailed description of their business activities.
+     If you cannot find information, say "UNABLE_TO_RESEARCH".`,
+    { useWebSearch: true, maxOutputTokens: 1200 }
+  );
 }
 
 // ============ EXCEL BUILDER ============
@@ -1014,6 +1353,54 @@ The callouts array must have exactly ${criteria.length} entries, one per criteri
   if (result) return result;
 
   // Hardcoded fallback
+  return {
+    title: 'Target Candidate Screening',
+    subtitle: `${counts[0]} companies screened against ${criteria.length} criteria`,
+    chartHeader: 'Screening Results',
+    callouts: criteria.map((c) => `Did not meet: ${c}`),
+  };
+}
+
+async function generateWaterfallContentOpenAI(criteria, counts, countries) {
+  const countryStr = countries && countries.length > 0 ? countries.join(', ') : 'various countries';
+  const criteriaDesc = criteria
+    .map((c, i) => `${i + 1}. ${c} (${counts[i + 1]} passed)`)
+    .join('\n');
+
+  const prompt = `Generate JSON for a waterfall chart slide about screening companies.
+
+Context:
+- ${counts[0]} companies were screened in ${countryStr}
+- Criteria applied sequentially:
+${criteriaDesc}
+- ${counts[counts.length - 1]} companies passed all criteria
+
+Return ONLY valid JSON:
+{
+  "title": "short title under 15 words describing this screening",
+  "subtitle": "summary sentence under 30 words",
+  "chartHeader": "short chart label under 10 words",
+  "callouts": ["for each criterion, explain why companies were removed (inverse of criterion)"]
+}
+
+The callouts array must have exactly ${criteria.length} entries, one per criterion.`;
+
+  const result = await withRetry(
+    async () => {
+      const text = await callOpenAIResponse(prompt, { maxOutputTokens: 900 });
+      const parsed = extractJSON(text);
+      if (!parsed || !parsed.title || !Array.isArray(parsed.callouts)) {
+        throw new Error('Missing required waterfall fields');
+      }
+      return parsed;
+    },
+    2,
+    1000,
+    'OpenAI generate waterfall content'
+  );
+
+  if (result) return result;
+
   return {
     title: 'Target Candidate Screening',
     subtitle: `${counts[0]} companies screened against ${criteria.length} criteria`,
@@ -1329,6 +1716,165 @@ async function orchestrate(companyList, countryList, criteria, websiteMap = {}) 
   return results;
 }
 
+async function orchestrateOpenAI(companyList, countryList, criteria, websiteMap = {}) {
+  const batchSize = 15;
+  const results = [];
+  const discoveredDomainOwners = new Map();
+
+  for (let i = 0; i < companyList.length; i += batchSize) {
+    const batch = companyList.slice(i, i + batchSize);
+    console.log(
+      `\nOpenAI batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)} (${batch.length} companies)`
+    );
+
+    const fetchedCompanies = await Promise.all(
+      batch.map(async (companyName) => {
+        const providedUrl = websiteMap[companyName];
+        const website = providedUrl || (await findCompanyWebsiteOpenAI(companyName, countryList));
+        if (providedUrl) console.log(`  Using provided website for ${companyName}: ${providedUrl}`);
+
+        if (!website) {
+          return {
+            company_name: companyName,
+            website: null,
+            pageText: null,
+            earlyResult: {
+              company_name: companyName,
+              website: null,
+              criteria_results: criteria.map((_, idx) => ({
+                criterion: idx + 1,
+                result: 'FAIL',
+                reason: 'Official website not found',
+              })),
+              business_description: 'Could not locate official company website',
+            },
+          };
+        }
+
+        const domain = extractDomain(website);
+        if (!providedUrl && domain) {
+          const existingOwner = discoveredDomainOwners.get(domain);
+          if (existingOwner && existingOwner.toLowerCase() !== companyName.toLowerCase()) {
+            return {
+              company_name: companyName,
+              website: null,
+              pageText: null,
+              earlyResult: {
+                company_name: companyName,
+                website: null,
+                criteria_results: criteria.map((_, idx) => ({
+                  criterion: idx + 1,
+                  result: 'FAIL',
+                  reason: `Website domain duplicates another company (${existingOwner}: ${domain})`,
+                })),
+                business_description:
+                  'Discovered website conflicts with another company in this run',
+              },
+            };
+          }
+          discoveredDomainOwners.set(domain, companyName);
+        }
+
+        let pageText = await fetchWebsite(website);
+        console.log(
+          `  OpenAI fetched pageText for ${companyName}: type=${typeof pageText}, length=${pageText?.length || 0}`
+        );
+
+        if (pageText === '__WAF_PROTECTED__' || !pageText || pageText.length < 100) {
+          console.log(`  ${companyName}: Website blocked/inaccessible, using OpenAI web research...`);
+          try {
+            const aiResearch = await callOpenAIResearch(companyName, website);
+            if (
+              aiResearch &&
+              !aiResearch.includes('UNABLE_TO_RESEARCH') &&
+              aiResearch.length > 50
+            ) {
+              console.log(`  ${companyName}: Got OpenAI research (${aiResearch.length} chars)`);
+              pageText = `[AI Research for ${companyName}]\n${aiResearch}`;
+            } else {
+              return {
+                company_name: companyName,
+                website,
+                pageText: null,
+                earlyResult: {
+                  company_name: companyName,
+                  website,
+                  criteria_results: criteria.map((_, idx) => ({
+                    criterion: idx + 1,
+                    result: 'FAIL',
+                    reason: 'Website protected by WAF/Cloudflare, could not research',
+                  })),
+                  business_description: 'Website blocked by security measures, unable to validate',
+                },
+              };
+            }
+          } catch (e) {
+            console.error(`  ${companyName}: OpenAI research failed:`, e.message);
+            return {
+              company_name: companyName,
+              website,
+              pageText: null,
+              earlyResult: {
+                company_name: companyName,
+                website,
+                criteria_results: criteria.map((_, idx) => ({
+                  criterion: idx + 1,
+                  result: 'FAIL',
+                  reason: 'Website protected, research failed',
+                })),
+                business_description: 'Website blocked by security measures, unable to validate',
+              },
+            };
+          }
+        }
+
+        return { company_name: companyName, website, pageText, earlyResult: null };
+      })
+    );
+
+    const earlyResults = fetchedCompanies.filter((c) => c.earlyResult).map((c) => c.earlyResult);
+    const toClassify = fetchedCompanies.filter((c) => !c.earlyResult && c.pageText);
+
+    let classifiedMap = new Map();
+    if (toClassify.length > 0) {
+      console.log(`  OpenAI batch classifying ${toClassify.length} companies...`);
+      classifiedMap = await classifyMultiCriteriaBatchOpenAI(toClassify, criteria);
+    }
+
+    const batchResults = [
+      ...earlyResults,
+      ...toClassify.map((c) => {
+        const classification = classifiedMap.get(c.company_name) || {
+          criteria_results: criteria.map((_, idx) => ({
+            criterion: idx + 1,
+            result: 'FAIL',
+            reason: 'Classification failed',
+          })),
+          business_description: 'Error during classification',
+        };
+        console.log(
+          `  ${c.company_name}: OpenAI classified ${classification.criteria_results.length} criteria`
+        );
+        return {
+          company_name: c.company_name,
+          website: c.website,
+          criteria_results: classification.criteria_results,
+          business_description: classification.business_description,
+        };
+      }),
+    ];
+
+    results.push(...batchResults);
+    console.log(`OpenAI completed: ${results.length}/${companyList.length}`);
+
+    if (i + batchSize < companyList.length) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+
+  return results;
+}
+
 // ============ VALIDATION ENDPOINT ============
 
 app.post('/api/validation', async (req, res) => {
@@ -1457,6 +2003,136 @@ app.post('/api/validation', async (req, res) => {
         await sendEmail(Email, 'Validation V2 - Error', `<p>Error: ${error.message}</p>`);
       } catch (e) {
         console.error('Failed to send error email:', e);
+      }
+    }
+  });
+});
+
+app.post('/api/validation-v2-new', async (req, res) => {
+  const { Companies, Countries, Criteria, Email, Websites, IncludeWaterfall } = req.body;
+
+  if (!Companies || !Criteria || !Array.isArray(Criteria) || Criteria.length === 0 || !Email) {
+    return res.status(400).json({ error: 'Companies, Criteria (array), and Email are required' });
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'OPENAI_API_KEY is not configured for Validation V2 (New)' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`NEW VALIDATION V2 (NEW) REQUEST: ${new Date().toISOString()}`);
+  console.log(`Criteria: ${Criteria.length} items`);
+  Criteria.forEach((c, i) => console.log(`  ${i + 1}. ${c}`));
+  console.log(`Countries: ${Countries}`);
+  const websiteMap = Websites && typeof Websites === 'object' ? Websites : {};
+  console.log(`Provided websites: ${Object.keys(websiteMap).length}`);
+  console.log(`Email: ${Email}`);
+  console.log('='.repeat(50));
+
+  res.json({
+    success: true,
+    message: 'Validation V2 (New) request received. Results will be emailed within 3 minutes.',
+  });
+
+  const tracker = createTracker('validation-v2-new', Email, {
+    Criteria,
+    Countries,
+  });
+
+  trackingContext.run(tracker, async () => {
+    try {
+      const totalStart = Date.now();
+
+      const companyList = parseCompanyList(Companies);
+      const countryList = parseCountries(Countries);
+
+      console.log(`Parsed ${companyList.length} companies and ${countryList.length} countries`);
+
+      if (companyList.length === 0) {
+        await sendEmail(
+          Email,
+          'Validation V2 (New) - No Companies',
+          '<p>No valid company names were found in your input.</p>'
+        );
+        return;
+      }
+
+      const results = await orchestrateOpenAI(companyList, countryList, Criteria, websiteMap);
+
+      const excelBase64 = buildMultiCriteriaExcel(results, Criteria);
+
+      let pptBase64 = null;
+      if (IncludeWaterfall) {
+        try {
+          const waterfallData = computeWaterfallData(results, Criteria);
+          const slideContent = await generateWaterfallContentOpenAI(
+            Criteria,
+            waterfallData.counts,
+            countryList
+          );
+          pptBase64 = await buildWaterfallPPT(waterfallData, slideContent);
+          console.log('Validation V2 (New) waterfall PPT generated');
+        } catch (err) {
+          console.error('Validation V2 (New) waterfall PPT failed:', err.message);
+        }
+      }
+
+      const criteriaSummary = Criteria.map((c, i) => {
+        const passCount = results.filter((r) =>
+          r.criteria_results?.find((cr) => cr.criterion === i + 1 && cr.result === 'PASS')
+        ).length;
+        return `Criterion ${i + 1}: ${passCount}/${results.length} passed`;
+      }).join('<br>');
+
+      const emailBody = `
+        <h2>Validation V2 (New) Complete</h2>
+        <p><strong>Criteria:</strong></p>
+        <ol>${Criteria.map((c) => `<li>${c}</li>`).join('')}</ol>
+        <p><strong>Countries:</strong> ${countryList.join(', ') || 'None specified'}</p>
+        <p><strong>Summary:</strong></p>
+        <p>${criteriaSummary}</p>
+        <br>
+        <p>Please see the attached Excel file for detailed results.</p>
+      `;
+
+      const attachments = [
+        {
+          content: excelBase64,
+          name: `validation-v2-new-${new Date().toISOString().split('T')[0]}.xlsx`,
+        },
+      ];
+      if (pptBase64) {
+        attachments.push({
+          content: pptBase64,
+          name: `waterfall-v2-new-${new Date().toISOString().split('T')[0]}.pptx`,
+        });
+      }
+
+      await sendEmail(
+        Email,
+        `Validation V2 (New): ${results.length} companies evaluated against ${Criteria.length} criteria`,
+        emailBody,
+        attachments
+      );
+
+      const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+      console.log(`\n${'='.repeat(50)}`);
+      console.log(`VALIDATION V2 (NEW) COMPLETE! Email sent to ${Email}`);
+      console.log(`Total companies: ${results.length}`);
+      console.log(`Total time: ${totalTime} minutes`);
+      console.log('='.repeat(50));
+
+      await tracker.finish({
+        companiesProcessed: results.length,
+        criteriaCount: Criteria.length,
+      });
+    } catch (error) {
+      console.error('Validation V2 (New) error:', error);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+      try {
+        await sendEmail(Email, 'Validation V2 (New) - Error', `<p>Error: ${error.message}</p>`);
+      } catch (e) {
+        console.error('Failed to send Validation V2 (New) error email:', e);
       }
     }
   });

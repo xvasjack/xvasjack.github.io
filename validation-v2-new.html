@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Validation - V2 (Gemini 3 Flash)</title>
+  <title>Validation V2 (New)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -88,11 +88,11 @@
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           Validation
         </a>
-        <a href="validation-v2.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium bg-indigo-50 text-indigo-700 rounded-lg">
+        <a href="validation-v2.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           Validation - V2 (Gemini 3 Flash)
         </a>
-        <a href="validation-v2-new.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+        <a href="validation-v2-new.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium bg-indigo-50 text-indigo-700 rounded-lg">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           Validation V2 (New)
         </a>
@@ -115,8 +115,8 @@
           Multi-Criteria
         </span>
       </div>
-      <h1 class="text-2xl font-bold text-slate-900">Validation - V2 (Gemini 3 Flash)</h1>
-      <p class="text-slate-600 mt-1">Upload a company list and validate against multiple criteria (PASS/FAIL per criterion) using Google Gemini 3 Flash.</p>
+      <h1 class="text-2xl font-bold text-slate-900">Validation V2 (New)</h1>
+      <p class="text-slate-600 mt-1">Upload a company list and validate against multiple criteria (PASS/FAIL per criterion) with OpenAI GPT-5 mini.</p>
     </header>
 
     <div class="flex-1 overflow-y-auto p-8">
@@ -443,7 +443,7 @@
     }
 
     // TODO: Replace with Railway deployment URL
-    const BACKEND_URL = 'https://xvasjackgithubio-production-b1d3.up.railway.app/api/validation';
+    const BACKEND_URL = 'https://xvasjackgithubio-production-b1d3.up.railway.app/api/validation-v2-new';
 
     document.getElementById('validationForm').addEventListener('submit', async function(e) {
       e.preventDefault();

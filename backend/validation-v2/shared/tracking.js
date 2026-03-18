@@ -30,6 +30,12 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 // Cost estimates per model (USD per 1K tokens)
 const MODEL_COSTS = {
   // OpenAI
+  'gpt-5.4': { input: 0.0025, output: 0.015 },
+  'gpt-5.4-mini': { input: 0.00075, output: 0.0045 },
+  'gpt-5': { input: 0.00125, output: 0.01 },
+  'gpt-5-mini': { input: 0.00025, output: 0.002 },
+  'gpt-4.1': { input: 0.002, output: 0.008 },
+  'gpt-4.1-mini': { input: 0.0004, output: 0.0016 },
   'gpt-5.1': { input: 0.00125, output: 0.01 },
   'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
   'gpt-5-search-api': { input: 0.00125, output: 0.01 },
