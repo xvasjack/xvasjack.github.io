@@ -5921,18 +5921,11 @@ async function generatePPTX(
           const principalSegments =
             company._principalSegments && Object.keys(company._principalSegments).length > 0
               ? company._principalSegments
-              : buildPrincipalSegments(cleanedPrincipals, {
-                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-                });
-          const principalSegmentLines = buildSegmentDisplayLines(principalSegments, {
+              : null;
+          const principalsList = buildRelationshipDisplayText(principalSegments, cleanedPrincipals, {
             maxLines: 4,
             maxNamesPerLine: 4,
           });
-          const principalsList = fixAcronymCasing(
-            principalSegmentLines.length > 0
-              ? principalSegmentLines.join('\n')
-              : cleanedPrincipals.slice(0, 10).join(', ')
-          );
           if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
             tableData.push(['Principal Partners', principalsList, null]);
             existingLabels.add('principal partners');
@@ -5951,18 +5944,11 @@ async function generatePPTX(
           const supplierSegments =
             company._supplierSegments && Object.keys(company._supplierSegments).length > 0
               ? company._supplierSegments
-              : buildSupplierSegments(cleanedSuppliers, {
-                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-                });
-          const supplierSegmentLines = buildSegmentDisplayLines(supplierSegments, {
+              : null;
+          const suppliersList = buildRelationshipDisplayText(supplierSegments, cleanedSuppliers, {
             maxLines: 4,
             maxNamesPerLine: 4,
           });
-          const suppliersList = fixAcronymCasing(
-            supplierSegmentLines.length > 0
-              ? supplierSegmentLines.join('\n')
-              : cleanedSuppliers.slice(0, 10).join(', ')
-          );
           tableData.push(['Key Suppliers', suppliersList, null]);
           existingLabels.add('key suppliers');
           console.log(`    Added Key Suppliers: ${suppliersList.substring(0, 80)}...`);
@@ -5982,19 +5968,11 @@ async function generatePPTX(
           const brandSegments =
             company._brandSegments && Object.keys(company._brandSegments).length > 0
               ? company._brandSegments
-              : buildDeterministicSegments(brandsToShow, {
-                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-                  relationshipType: 'brands',
-                });
-          const brandSegmentLines = buildSegmentDisplayLines(brandSegments, {
+              : null;
+          const brandsList = buildRelationshipDisplayText(brandSegments, brandsToShow, {
             maxLines: 4,
             maxNamesPerLine: 4,
           });
-          const brandsList = fixAcronymCasing(
-            brandSegmentLines.length > 0
-              ? brandSegmentLines.join('\n')
-              : brandsToShow.slice(0, 10).join(', ')
-          );
           tableData.push(['Principal Brands', brandsList, null]);
           existingLabels.add('principal brands');
           console.log(`    Added Principal Brands: ${brandsList}`);
@@ -6032,29 +6010,14 @@ async function generatePPTX(
               companyNameForFilter
             );
             if (cleanedCustomers.length > 0) {
-              let customersList;
-              const aiSegmentLines = buildSegmentDisplayLines(company._customerSegments, {
-                maxLines: 4,
-                maxNamesPerLine: 4,
-              });
-              if (aiSegmentLines.length > 0) {
-                customersList = aiSegmentLines.join('\n');
-              } else {
-                const deterministicSegments = buildDeterministicSegments(cleanedCustomers, {
-                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-                  relationshipType: 'customers',
-                });
-                const fallbackSegmentLines = buildSegmentDisplayLines(deterministicSegments, {
+              const customersList = buildRelationshipDisplayText(
+                company._customerSegments,
+                cleanedCustomers,
+                {
                   maxLines: 4,
                   maxNamesPerLine: 4,
-                });
-                customersList =
-                  fallbackSegmentLines.length > 0
-                    ? fallbackSegmentLines.join('\n')
-                    : cleanedCustomers.slice(0, 10).join(', ');
-              }
-              // Apply acronym fixing (VVF, BNI, PLN should be ALL CAPS)
-              customersList = fixAcronymCasing(customersList);
+                }
+              );
               tableData.push(['Customers', customersList, null]);
               existingLabels.add('customers');
               console.log(`    Added Customers: ${customersList.substring(0, 80)}...`);
@@ -6090,6 +6053,7 @@ async function generatePPTX(
           const lower = ensureString(label).toLowerCase().trim();
           if (lower.includes('foreign worker source')) return 'Foreign Worker Source';
           if (lower.includes('source countries')) return 'Source Countries';
+          if (lower.includes('project countries')) return 'Project Countries';
           if (lower.includes('export countries')) return 'Export Countries';
           return 'Countries Served';
         };
@@ -6101,12 +6065,14 @@ async function generatePPTX(
           if (existingLabelsLower.has('foreign worker source')) return 'Foreign Worker Source';
           if (existingLabelsLower.has('export countries')) return 'Export Countries';
           if (existingLabelsLower.has('source countries')) return 'Source Countries';
+          if (existingLabelsLower.has('project countries')) return 'Project Countries';
 
           const contextText = normalizeForComparison(
             [
               ensureString(company.business),
               ensureString(company.message),
               ensureString(company.breakdown_title),
+              ensureString(company.business_type),
               ...(company.breakdown_items || []).map(
                 (item) => `${ensureString(item?.label)} ${ensureString(item?.value)}`
               ),
@@ -6115,7 +6081,27 @@ async function generatePPTX(
           if (/(foreign worker|migrant|manpower|labou?r)/i.test(contextText)) {
             return 'Foreign Worker Source';
           }
-          return 'Export Countries';
+          if (
+            ensureString(company.business_type).toLowerCase() === 'project' ||
+            /\b(project|projects|installation|site work|siteworks|epc|contract works?)\b/i.test(
+              contextText
+            )
+          ) {
+            return 'Project Countries';
+          }
+          if (
+            /\bexport|exports|exporter|exporting\b/i.test(contextText) ||
+            (['consumer', 'industrial'].includes(ensureString(company.business_type).toLowerCase()) &&
+              /\b(manufactur|factory|plant|trading|distributor|wholesale|products?|equipment|components?|goods)\b/i.test(
+                contextText
+              ) &&
+              !/\b(service|services|outsourc|consult|managed|maintenance|support|training|staffing|recruit)\b/i.test(
+                contextText
+              ))
+          ) {
+            return 'Export Countries';
+          }
+          return 'Countries Served';
         };
 
         const hardKeepLabels = new Set([
@@ -6131,6 +6117,7 @@ async function generatePPTX(
           'principal partnerships',
           'insurance partner',
           'export countries',
+          'project countries',
           'source countries',
           'customers',
           'key customers',
@@ -6173,7 +6160,11 @@ async function generatePPTX(
 
           if (/(key partnerships?|key partners?|principal partnerships?|principal partners?)/i.test(lower)) {
             value = cleanRelationshipDisplayValue(value);
-          } else if (lower === 'insurance partner' || lower === 'export countries') {
+          } else if (
+            ['insurance partner', 'export countries', 'project countries', 'source countries', 'countries served', 'foreign worker source'].includes(
+              lower
+            )
+          ) {
             value = fixAcronymCasing(cleanCompanyPrefixesInText(value));
           }
 
@@ -6246,6 +6237,7 @@ async function generatePPTX(
             ![
               'insurance partner',
               'export countries',
+              'project countries',
               'source countries',
               'foreign worker source',
               'countries served',
@@ -6513,9 +6505,13 @@ async function generatePPTX(
           if (geoValueFromPartnerships) {
             let geoIndex = finalTableData.findIndex((row) => {
               const lowerLabel = ensureString(row?.[0]).toLowerCase().trim();
-              return ['foreign worker source', 'export countries', 'source countries', 'countries served'].includes(
-                lowerLabel
-              );
+              return [
+                'foreign worker source',
+                'export countries',
+                'project countries',
+                'source countries',
+                'countries served',
+              ].includes(lowerLabel);
             });
             if (geoIndex >= 0) {
               const existingGeoRow = finalTableData[geoIndex];
@@ -6546,7 +6542,15 @@ async function generatePPTX(
         for (let idx = finalTableData.length - 1; idx >= 0; idx -= 1) {
           const row = finalTableData[idx];
           const lowerLabel = ensureString(row?.[0]).toLowerCase().trim();
-          if (!['foreign worker source', 'export countries', 'source countries', 'countries served'].includes(lowerLabel)) {
+          if (
+            ![
+              'foreign worker source',
+              'export countries',
+              'project countries',
+              'source countries',
+              'countries served',
+            ].includes(lowerLabel)
+          ) {
             continue;
           }
           if (isRedundantSingleCountryGeography(ensureString(row?.[1]), hqOrLocationValue)) {
@@ -6718,20 +6722,16 @@ async function generatePPTX(
                   `  Right side (Customers segmented): ${cleanedCustomers.length} items after filtering`
                 );
               } else {
-                const deterministicSegments = buildDeterministicSegments(cleanedCustomers, {
-                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-                  relationshipType: 'customers',
-                });
-                const fallbackSegmentLines = buildSegmentDisplayLines(deterministicSegments, {
+                const fallbackCustomerLines = buildFlatRelationshipLines(cleanedCustomers, {
                   maxLines: maxRows,
                   maxNamesPerLine: 4,
                 });
-                if (fallbackSegmentLines.length > 0) {
-                  fallbackSegmentLines.slice(0, maxRows).forEach((line) => {
+                if (fallbackCustomerLines.length > 0) {
+                  fallbackCustomerLines.slice(0, maxRows).forEach((line) => {
                     prioritizedItems.push({ label: 'Customer', value: fixAcronymCasing(line) });
                   });
                   console.log(
-                    `  Right side (Customers segmented fallback): ${cleanedCustomers.length} items after filtering`
+                    `  Right side (Customers flat fallback): ${cleanedCustomers.length} items after filtering`
                   );
                 } else {
                   cleanedCustomers.slice(0, maxRows).forEach((customer) => {
@@ -6793,23 +6793,16 @@ async function generatePPTX(
                   `  Right side (Brands segmented): ${cleanedBrands.length} items after filtering`
                 );
               } else {
-                const deterministicBrandSegments = buildDeterministicSegments(cleanedBrands, {
-                  minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-                  relationshipType: 'brands',
+                const fallbackBrandSegmentLines = buildFlatRelationshipLines(cleanedBrands, {
+                  maxLines: maxRows,
+                  maxNamesPerLine: 4,
                 });
-                const fallbackBrandSegmentLines = buildSegmentDisplayLines(
-                  deterministicBrandSegments,
-                  {
-                    maxLines: maxRows,
-                    maxNamesPerLine: 4,
-                  }
-                );
                 if (fallbackBrandSegmentLines.length > 0) {
                   fallbackBrandSegmentLines.slice(0, maxRows).forEach((line) => {
                     prioritizedItems.push({ label: 'Brand', value: fixAcronymCasing(line) });
                   });
                   console.log(
-                    `  Right side (Brands segmented fallback): ${cleanedBrands.length} items after filtering`
+                    `  Right side (Brands flat fallback): ${cleanedBrands.length} items after filtering`
                   );
                 } else {
                   cleanedBrands.slice(0, maxRows).forEach((brand) => {
@@ -11115,6 +11108,233 @@ function chunkArray(items, chunkSize) {
   return chunks;
 }
 
+function buildFlatRelationshipLines(names, options = {}) {
+  const cleaned = uniqueRelationshipNames(names || []);
+  const maxLines = Math.max(1, parseInt(String(options.maxLines || '4'), 10));
+  const maxNamesPerLine = Math.max(1, parseInt(String(options.maxNamesPerLine || '4'), 10));
+  if (cleaned.length === 0) return [];
+
+  return chunkArray(cleaned.slice(0, maxLines * maxNamesPerLine), maxNamesPerLine)
+    .slice(0, maxLines)
+    .map((group) => fixAcronymCasing(group.join(', ')))
+    .filter(Boolean);
+}
+
+function buildRelationshipDisplayText(segmentMap, names, options = {}) {
+  const segmentLines = buildSegmentDisplayLines(segmentMap, options);
+  if (segmentLines.length > 0) {
+    return fixAcronymCasing(segmentLines.join('\n'));
+  }
+
+  const flatLines = buildFlatRelationshipLines(names, options);
+  if (flatLines.length > 0) {
+    return fixAcronymCasing(flatLines.join('\n'));
+  }
+
+  return fixAcronymCasing(uniqueRelationshipNames(names || []).slice(0, 10).join(', '));
+}
+
+async function lookupCustomerBusinessesBySearch(customers, context = {}) {
+  const cleaned = uniqueRelationshipNames(customers || []);
+  if (cleaned.length < 3) return [];
+
+  const sourceLookup = new Map(cleaned.map((name) => [cleanCustomerName(name).toLowerCase(), name]));
+  const results = new Map();
+  const chunks = chunkArray(cleaned.slice(0, 20), 8);
+  const companyName = ensureString(context.companyName).trim();
+  const website = ensureString(context.website).trim();
+  const contextLine = [companyName, website].filter(Boolean).join(' | ');
+
+  for (const group of chunks) {
+    try {
+      const response = await withRetry(
+        () =>
+          openai.chat.completions.create({
+            model: 'gpt-5-search-api',
+            messages: [
+              {
+                role: 'user',
+                content: `Search what each company below actually does.
+
+${contextLine ? `Main company context: ${contextLine}\n` : ''}Company names: ${group.join(', ')}
+
+Return ONLY valid JSON:
+{
+  "results": [
+    {
+      "name": "Exact company name from the list",
+      "business": "very short plain-English description",
+      "category": "1-2 word business bucket"
+    }
+  ]
+}
+
+Rules:
+- Use public web search results to identify what each company does.
+- Use only the exact names from the list above.
+- "category" must be a short business bucket like Education, Property, Healthcare, Government, Industrial, Retail, Technology, Logistics, Finance.
+- If a name is ambiguous or you are not confident, omit it.
+- Do not invent companies or categories.
+- Return JSON only.`,
+              },
+            ],
+            temperature: 0.1,
+          }),
+        2,
+        2000
+      );
+
+      if (response.usage) {
+        recordTokens(
+          'gpt-5-search-api',
+          response.usage.prompt_tokens || 0,
+          response.usage.completion_tokens || 0
+        );
+      }
+
+      const responseText = response.choices[0]?.message?.content || '{}';
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) continue;
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const entries = Array.isArray(parsed.results) ? parsed.results : [];
+      for (const entry of entries) {
+        const cleanedName = cleanCustomerName(ensureString(entry?.name));
+        const sourceName = sourceLookup.get(cleanedName.toLowerCase());
+        if (!sourceName) continue;
+
+        const business = ensureString(entry?.business).replace(/\s+/g, ' ').trim();
+        const category = ensureString(entry?.category)
+          .replace(/[_-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (
+          !business ||
+          !category ||
+          /^(other|others|customer|customers|company|companies|business|businesses)$/i.test(
+            category
+          )
+        ) {
+          continue;
+        }
+
+        results.set(sourceName.toLowerCase(), {
+          name: sourceName,
+          business,
+          category: normalizeLabel(category),
+        });
+      }
+    } catch (err) {
+      console.log(`    Customer business lookup failed: ${err.message}`);
+    }
+  }
+
+  return Array.from(results.values());
+}
+
+async function groupCustomersByBusinessResearch(customerResearch, customers) {
+  const cleaned = uniqueRelationshipNames(customers || []);
+  if (!Array.isArray(customerResearch) || customerResearch.length < 3) return null;
+  if (customerResearch.length !== cleaned.length) return null;
+
+  try {
+    const researchLines = customerResearch
+      .map(
+        (entry) =>
+          `- ${entry.name} | category: ${ensureString(entry.category)} | business: ${ensureString(entry.business)}`
+      )
+      .join('\n');
+
+    const response = await withRetry(
+      () =>
+        openai.chat.completions.create({
+          model: 'gpt-5.1',
+          messages: [
+            {
+              role: 'user',
+              content: `Group these researched customer companies into clean business buckets for one slide.
+
+Researched customers:
+${researchLines}
+
+Return ONLY valid JSON:
+{
+  "mode": "grouped",
+  "groups": {
+    "Education": ["Name 1"],
+    "Property": ["Name 2"]
+  }
+}
+
+OR:
+{
+  "mode": "flat"
+}
+
+Rules:
+- Group by what the companies actually do, based on the researched business info above.
+- Use short labels only (1-2 words max).
+- Maximum 5 groups.
+- Use only the exact names shown above.
+- Every name must appear once only.
+- If the research is too weak or too mixed to group cleanly, return {"mode":"flat"}.
+- Return JSON only.`,
+            },
+          ],
+          temperature: 0.1,
+        }),
+      2,
+      2000
+    );
+
+    if (response.usage) {
+      recordTokens(
+        'gpt-5.1',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
+    }
+
+    const responseText = response.choices[0]?.message?.content || '{}';
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (ensureString(parsed?.mode).toLowerCase() === 'flat') {
+      return null;
+    }
+
+    const groups = parsed?.groups;
+    if (!groups || typeof groups !== 'object') return null;
+
+    const sourceLookup = new Map(cleaned.map((name) => [name.toLowerCase(), name]));
+    const used = new Set();
+    const filteredMap = {};
+    for (const [rawLabel, rawNames] of Object.entries(groups).slice(0, 8)) {
+      if (!Array.isArray(rawNames)) continue;
+      const kept = [];
+      for (const rawName of rawNames) {
+        const cleanedName = cleanCustomerName(ensureString(rawName));
+        const source = sourceLookup.get(cleanedName.toLowerCase());
+        if (!source) continue;
+        const key = source.toLowerCase();
+        if (used.has(key)) continue;
+        used.add(key);
+        kept.push(source);
+      }
+      if (kept.length > 0) filteredMap[rawLabel] = kept;
+    }
+
+    if (used.size !== cleaned.length) return null;
+
+    const normalized = normalizeMeaningfulSegmentMap(filteredMap, 'customers');
+    return Object.keys(normalized).length >= 2 ? normalized : null;
+  } catch (err) {
+    console.log(`    Customer research grouping failed: ${err.message}`);
+    return null;
+  }
+}
+
 function inferSegmentTheme(names, relationshipType = 'group') {
   const list = Array.isArray(names) ? names.map((name) => ensureString(name).toLowerCase()) : [];
   if (list.length === 0) return '';
@@ -11284,7 +11504,7 @@ async function segmentRelationshipNamesByAI(names, relationshipType, openai, opt
     : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(names || []);
   if (cleaned.length < minCount) return null;
-  if (!openai) return buildDeterministicSegments(cleaned, { minCount, relationshipType });
+  if (!openai) return null;
 
   try {
     const relationship = ensureString(relationshipType).toLowerCase() || 'relationships';
@@ -11328,12 +11548,12 @@ Rules:
     const responseText = response.choices[0]?.message?.content || '{}';
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return buildDeterministicSegments(cleaned, { minCount, relationshipType });
+      return null;
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
     if (!parsed || typeof parsed !== 'object') {
-      return buildDeterministicSegments(cleaned, { minCount, relationshipType });
+      return null;
     }
 
     // Keep only original names to avoid model hallucination.
@@ -11358,13 +11578,8 @@ Rules:
       }
     }
 
-    // Add any missing names to a fallback bucket so all extracted names remain visible.
     const missing = cleaned.filter((name) => !used.has(name.toLowerCase()));
-    if (missing.length > 0) {
-      filteredMap[
-        buildFallbackSegmentLabel(missing, relationship, Object.keys(filteredMap).length)
-      ] = missing;
-    }
+    if (missing.length > 0) return null;
 
     const normalized = normalizeMeaningfulSegmentMap(filteredMap, relationship);
     if (Object.keys(normalized).length > 0) return normalized;
@@ -11372,7 +11587,7 @@ Rules:
     console.log(`    ${toTitleCase(relationshipType)} segmentation failed: ${err.message}`);
   }
 
-  return buildDeterministicSegments(cleaned, { minCount, relationshipType });
+  return null;
 }
 
 function buildDeterministicSegments(names, options = {}) {
@@ -11427,14 +11642,16 @@ async function buildCustomerSegments(customers, openai, options = {}) {
   if (cleaned.length < minCount) return null;
 
   if (openai) {
-    const aiSegments = await segmentRelationshipNamesByAI(cleaned, 'customers', openai, {
-      minCount,
-    });
-    const normalizedAi = normalizeMeaningfulSegmentMap(aiSegments, 'customers');
-    if (Object.keys(normalizedAi).length > 0) return normalizedAi;
+    const researchedCustomers = await lookupCustomerBusinessesBySearch(cleaned, options);
+    const researchedSegments = await groupCustomersByBusinessResearch(
+      researchedCustomers,
+      cleaned
+    );
+    const normalizedResearch = normalizeMeaningfulSegmentMap(researchedSegments, 'customers');
+    if (Object.keys(normalizedResearch).length > 0) return normalizedResearch;
   }
 
-  return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'customers' });
+  return null;
 }
 
 function buildBrandSegments(brands, options = {}) {
@@ -11447,7 +11664,7 @@ function buildBrandSegments(brands, options = {}) {
     : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(brands || []);
   if (cleaned.length < minCount) return null;
-  return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'brands' });
+  return null;
 }
 
 function buildPrincipalSegments(principals, options = {}) {
@@ -11460,7 +11677,7 @@ function buildPrincipalSegments(principals, options = {}) {
     : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(principals || []);
   if (cleaned.length < minCount) return null;
-  return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'principals' });
+  return null;
 }
 
 function buildSupplierSegments(suppliers, options = {}) {
@@ -11473,7 +11690,7 @@ function buildSupplierSegments(suppliers, options = {}) {
     : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(suppliers || []);
   if (cleaned.length < minCount) return null;
-  return buildDeterministicSegments(cleaned, { minCount, relationshipType: 'suppliers' });
+  return null;
 }
 
 function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = '') {
@@ -11568,11 +11785,10 @@ function segmentRelationshipBlobValue(metricLabel, metricValue, companyName = ''
           : labelLower.includes('brand')
             ? 'brands'
             : 'group';
-  const segmented = buildDeterministicSegments(uniqueFilteredNames, {
-    minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
-    relationshipType,
+  const lines = buildFlatRelationshipLines(uniqueFilteredNames, {
+    maxLines: 4,
+    maxNamesPerLine: 4,
   });
-  const lines = buildSegmentDisplayLines(segmented, { maxLines: 4, maxNamesPerLine: 4 });
   if (lines.length === 0) {
     return uniqueFilteredNames.length > 0 ? fixAcronymCasing(uniqueFilteredNames.join(', ')) : '';
   }
@@ -14503,6 +14719,8 @@ async function processSingleWebsite(website, index, total) {
     );
     const customerSegments = await buildCustomerSegments(cleanedCustomersForSegments, openai, {
       minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+      companyName: basicInfo.company_name,
+      website: scraped.url,
     });
     const supplierSegments = await segmentRelationshipNamesByAI(
       cleanedSuppliersForSegments,
@@ -15665,6 +15883,8 @@ app.post('/api/generate-ppt', async (req, res) => {
         );
         const customerSegments = await buildCustomerSegments(cleanedCustomersForSegments, openai, {
           minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+          companyName: basicInfo.company_name,
+          website: scraped.url,
         });
         const supplierSegments = await segmentRelationshipNamesByAI(
           cleanedSuppliersForSegments,
