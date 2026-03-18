@@ -136,6 +136,7 @@ function normalizeLabel(label) {
     'yearsestablished',
     'yearsinoperation',
     'yearsinbusiness',
+    'founded',
     'foundedyear',
   ]);
   if (yearLabels.has(compactLabel)) {
@@ -459,6 +460,18 @@ function removeTruncationTokens(value) {
     .trim();
 }
 
+function normalizeRelationshipEntryCasing(entry) {
+  const source = fixAcronymCasing(cleanCompanyPrefixesInText(ensureString(entry).trim()));
+  if (!source) return '';
+
+  const bare = source.replace(/[^A-Za-z]/g, '');
+  if (bare.length >= 2 && bare.length <= 4 && /^[A-Za-z]+$/.test(bare)) {
+    return bare.toUpperCase();
+  }
+
+  return source;
+}
+
 function splitReadableEntries(value) {
   const raw = ensureString(value);
   if (!raw) return [];
@@ -490,9 +503,84 @@ function splitReadableEntries(value) {
     const dedupeKey = normalizeForComparison(normalizedEntry);
     if (!dedupeKey || seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
-    unique.push(fixAcronymCasing(cleanCompanyPrefixesInText(normalizedEntry)));
+    const cleanedEntry = normalizeRelationshipEntryCasing(normalizedEntry);
+    if (!cleanedEntry) continue;
+    unique.push(cleanedEntry);
   }
   return unique;
+}
+
+function splitScrapedContentByPage(content) {
+  const source = ensureString(content);
+  if (!source) return [];
+
+  const sections = [];
+  const headerRegex = /\n\n===\s+(.+?)\s+PAGE ===\n/g;
+  let lastIndex = 0;
+  let currentPath = '/';
+  let match;
+
+  while ((match = headerRegex.exec(source)) !== null) {
+    const chunk = source.slice(lastIndex, match.index).trim();
+    if (chunk) {
+      sections.push({ path: currentPath, text: chunk });
+    }
+    currentPath = ensureString(match[1]).trim() || '/';
+    lastIndex = headerRegex.lastIndex;
+  }
+
+  const tail = source.slice(lastIndex).trim();
+  if (tail) {
+    sections.push({ path: currentPath, text: tail });
+  }
+
+  if (sections.length === 0 && source.trim()) {
+    sections.push({ path: '/', text: source.trim() });
+  }
+
+  return sections;
+}
+
+function classifyRelationshipPageContext(pagePath) {
+  const lower = ensureString(pagePath).toLowerCase();
+  if (
+    /(testimonial|testimonials|author|team|staff|leadership|management|people|review|reviews|contact|career|job|jobs)/i.test(
+      lower
+    )
+  ) {
+    return 'negative_person';
+  }
+  if (/(client|customer|trusted|project|portfolio|reference|case|experience)/i.test(lower)) {
+    return 'customer_heavy';
+  }
+  if (/(partner|principal|supplier|vendor|brand|dealer|distributor)/i.test(lower)) {
+    return 'relationship_heavy';
+  }
+  return 'neutral';
+}
+
+function buildRelationshipContentForAI(scrapedContent, options = {}) {
+  const source = ensureString(scrapedContent);
+  if (!source) return '';
+
+  const focus = ensureString(options.focus || 'all').toLowerCase();
+  const sections = splitScrapedContentByPage(source);
+  if (sections.length === 0) return source;
+
+  const nonNegative = sections.filter(
+    (section) => classifyRelationshipPageContext(section.path) !== 'negative_person'
+  );
+
+  if (focus === 'customers') {
+    const prioritized = nonNegative.filter((section) => {
+      const context = classifyRelationshipPageContext(section.path);
+      return context === 'customer_heavy' || section.path === '/';
+    });
+    const selected = prioritized.length > 0 ? prioritized : nonNegative;
+    return selected.map((section) => `=== ${section.path} PAGE ===\n${section.text}`).join('\n\n');
+  }
+
+  return nonNegative.map((section) => `=== ${section.path} PAGE ===\n${section.text}`).join('\n\n');
 }
 
 let COUNTRY_LOOKUP_CACHE = null;
@@ -1022,6 +1110,7 @@ function isLikelyYearLabel(label) {
   const normalized = normalizeForComparison(label);
   if (!normalized) return false;
   return (
+    normalized === 'founded' ||
     normalized.includes('est year') ||
     normalized.includes('established year') ||
     normalized.includes('years established') ||
@@ -1113,6 +1202,57 @@ function extractLocationFromBasedText(text, fallbackCountry = '') {
   }
 
   return '';
+}
+
+function preferRicherLocationValue(primaryLocation, fallbackLocation = '') {
+  const primary = ensureString(primaryLocation).trim();
+  const fallback = ensureString(fallbackLocation).trim();
+  if (!primary) return fallback;
+  if (!fallback) return primary;
+
+  const primaryParts = primary.split(',').map((part) => part.trim()).filter(Boolean);
+  const fallbackParts = fallback.split(',').map((part) => part.trim()).filter(Boolean);
+  const primaryIsCountryOnly = primaryParts.length === 1 && !!getCountryCodeFromToken(primaryParts[0]);
+  const fallbackIsRicher = fallbackParts.length >= 2;
+
+  return primaryIsCountryOnly && fallbackIsRicher ? fallback : primary;
+}
+
+function chooseRightSectionTitle(company) {
+  const explicitTitle = ensureString(company?.breakdown_title).trim();
+  const explicitLower = explicitTitle.toLowerCase();
+  if (explicitTitle && explicitLower !== 'products and applications') {
+    return fixAcronymCasing(explicitTitle);
+  }
+
+  const contextText = [
+    ensureString(company?.business),
+    ensureString(company?.message),
+    ensureString(company?.title),
+    ensureString(company?.business_type),
+    ...(Array.isArray(company?.breakdown_items)
+      ? company.breakdown_items.map((item) => `${ensureString(item?.label)} ${ensureString(item?.value)}`)
+      : []),
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  if (
+    /\b(project|projects|retrofit|installation|commissioning|reference|case study|portfolio)\b/.test(
+      contextText
+    )
+  ) {
+    return 'Past Projects';
+  }
+  if (
+    /\b(hvac|acmv|mep|facility|maintenance|service|services|repair|operation|outsourcing|solutions?)\b/.test(
+      contextText
+    )
+  ) {
+    return /\b(capabilit|solutions?)\b/.test(contextText) ? 'Capabilities' : 'Service Offerings';
+  }
+
+  return 'Products and Applications';
 }
 
 function mergeReadableRowValues(valueA, valueB) {
@@ -1630,6 +1770,27 @@ function mergeRelationshipNamesByTrust(sourceMap = {}, companyName = '', options
     .map((entry) => entry.name);
 
   return uniqueRelationshipNames(kept);
+}
+
+function mergeTrustedCustomerNames(sourceMap = {}, companyName = '') {
+  return mergeRelationshipNamesByTrust(sourceMap, companyName, {
+    minScore: 2,
+    weights: {
+      section: 4,
+      metric: 4,
+      structured: 3,
+      url: 3,
+      screenshot: 4,
+      feed: 2,
+      embedded: 2,
+      ai: 2,
+      focused_ai: 3,
+    },
+  });
+}
+
+function hasThinCustomerCoverage(names) {
+  return uniqueRelationshipNames(names || []).length < 5;
 }
 
 // ===== TOKEN ESTIMATION =====
@@ -5663,7 +5824,7 @@ async function generatePPTX(
         });
 
         // Right: Dynamic title based on breakdown_title - positioned at 6.86" x 1.37"
-        const rightSectionTitle = company.breakdown_title || 'Products and Applications';
+        const rightSectionTitle = chooseRightSectionTitle(company);
         slide.addText(rightSectionTitle, {
           x: 6.86,
           y: 1.37,
@@ -5842,9 +6003,7 @@ async function generatePPTX(
           ),
           inferCountryFromWebsite(ensureString(company.website))
         );
-        const effectiveLocation = !isEmptyValue(company.location)
-          ? company.location
-          : basedLocationFallback;
+        const effectiveLocation = preferRicherLocationValue(company.location, basedLocationFallback);
 
         // Add Location row (HQ + branch footprint in same row when available)
         if (!isEmptyValue(effectiveLocation) || hasBranchCoverage) {
@@ -6095,6 +6254,9 @@ async function generatePPTX(
         // - Merge duplicate customer/client rows and partnership rows into one clean row
         const canonicalLeftLabel = (label) => {
           const lower = ensureString(label).toLowerCase().trim();
+          if (lower === 'est. year' || lower === 'founded' || isLikelyYearLabel(lower)) {
+            return 'established_year';
+          }
           if (/(^| )((key )?(customers?|clients?)|(customer|client) segments?)$/i.test(lower)) {
             return 'customers';
           }
@@ -6518,6 +6680,18 @@ async function generatePPTX(
           }
 
           const canonical = rowCanonical;
+          if (canonical === 'established_year' && rowIndexByCanonical.has(canonical)) {
+            const existingIndex = rowIndexByCanonical.get(canonical);
+            const existingRow = finalTableData[existingIndex];
+            if (
+              normalizeForComparison(ensureString(existingRow?.[1])) === normalizeForComparison(value)
+            ) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because Est. Year already exists with the same value`
+              );
+              return;
+            }
+          }
           if (canonical === 'customers' && rowIndexByCanonical.has(canonical)) {
             const existingIndex = rowIndexByCanonical.get(canonical);
             const existingRow = finalTableData[existingIndex];
@@ -6711,15 +6885,23 @@ async function generatePPTX(
           return fixAcronymCasing(normalizedText);
         };
 
-        const rows = finalTableData.map((row) => {
+        const rows = finalTableData.reduce((acc, row) => {
           // Check if third element is an options object (for highlighting) or a URL string
           const thirdElement = row[2];
           const isHighlighted =
             thirdElement && typeof thirdElement === 'object' && thirdElement.highlight;
           const isHyperlink = typeof thirdElement === 'string' && thirdElement.length > 0;
+          const formattedValue = formatCellText(row[1]);
+          const hasVisibleValue =
+            (typeof formattedValue === 'string' && formattedValue.trim().length > 0) ||
+            (Array.isArray(formattedValue) && formattedValue.length > 0);
+          if (!hasVisibleValue) {
+            console.log(`    [LeftTable Cleanup] Removed "${row[0]}" because no visible text remained`);
+            return acc;
+          }
 
           const valueCell = {
-            text: formatCellText(row[1]),
+            text: formattedValue,
             options: {
               // Yellow highlight for Shareholding row, white otherwise
               fill: { color: isHighlighted ? 'FFFF00' : COLORS.white },
@@ -6740,7 +6922,7 @@ async function generatePPTX(
             valueCell.options.color = '0563C1'; // Blue hyperlink color
           }
 
-          return [
+          acc.push([
             {
               text: row[0],
               options: {
@@ -6751,8 +6933,9 @@ async function generatePPTX(
               },
             },
             valueCell,
-          ];
-        });
+          ]);
+          return acc;
+        }, []);
 
         const tableStartY = 1.85;
         const rowHeight = 0.35;
@@ -10325,7 +10508,9 @@ async function extractRelationshipsFromContentAI(scrapedContent, options = {}) {
 
   const companyName = ensureString(options.company_name);
   const companyNormalized = companyName.toLowerCase().replace(/\s+/g, '');
-  const normalizedSource = normalizeTextForComparison(content);
+  const focus = ensureString(options.focus || 'all').toLowerCase();
+  const aiContent = buildRelationshipContentForAI(content, { focus }) || content;
+  const normalizedSource = normalizeTextForComparison(aiContent);
 
   try {
     const response = await withRetry(
@@ -10347,6 +10532,8 @@ Return ONLY JSON with this shape:
 Rules:
 - Extract only names explicitly present in the text input.
 - Focus on external names: principal partners, brands carried/distributed, key customers.
+- Ignore names from author, testimonial, team, staff, leadership, review, and contact pages.
+- Ignore individual person names unless the text clearly shows they are company or organization names.
 - Do not invent names.
 - Do not return generic phrases, menu labels, or action text.
 - Keep each list concise and clean.`,
@@ -10356,7 +10543,7 @@ Rules:
               content: `Company name to exclude: ${companyName || '(unknown)'}
 
 Website text:
-${content.substring(0, 60000)}`,
+${aiContent.substring(0, 60000)}`,
             },
           ],
           response_format: { type: 'json_object' },
@@ -10405,12 +10592,12 @@ ${content.substring(0, 60000)}`,
       return uniqueRelationshipNames(verified);
     };
 
-    const result = {
-      customers: verifyNames(parsed.customers),
-      suppliers: [],
-      principals: verifyNames(parsed.principals),
-      brands: verifyNames(parsed.brands),
-    };
+      const result = {
+        customers: focus === 'customers' ? verifyNames(parsed.customers) : verifyNames(parsed.customers),
+        suppliers: [],
+        principals: verifyNames(parsed.principals),
+        brands: verifyNames(parsed.brands),
+      };
 
     console.log(
       `    Relationship AI fallback: ${result.principals.length} principals, ${result.customers.length} customers, ${result.brands.length} brands`
@@ -10420,6 +10607,14 @@ ${content.substring(0, 60000)}`,
     console.log(`    Relationship AI fallback error: ${error.message}`);
     return emptyResult;
   }
+}
+
+async function recoverFocusedCustomerNames(scrapedContent, companyName = '') {
+  const focusedResult = await extractRelationshipsFromContentAI(scrapedContent, {
+    company_name: companyName,
+    focus: 'customers',
+  });
+  return Array.isArray(focusedResult?.customers) ? focusedResult.customers : [];
 }
 
 // If product/application rows are empty, use relationship data as fallback for right-side content.
@@ -10865,7 +11060,9 @@ async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], option
   if (!baseUrl) return { customers: [], brands: [], principals: [] };
   const deepMode = options.deepMode !== false;
 
-  const queue = buildScreenshotPageQueue(baseUrl, pagesScraped);
+  const queue = buildScreenshotPageQueue(baseUrl, pagesScraped).filter(
+    (url) => classifyRelationshipPageContext(url) !== 'negative_person'
+  );
   if (queue.length === 0) return { customers: [], brands: [], principals: [] };
   console.log(`    Screenshot queue: ${queue.length} page(s)`);
   const queueKeys = new Set(queue.map((url) => normalizeUrlForDedup(url)));
@@ -10942,6 +11139,7 @@ async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], option
     const extraPages = pagesScraped
       .map((url) => ensureString(url).trim())
       .filter(Boolean)
+      .filter((url) => classifyRelationshipPageContext(url) !== 'negative_person')
       .filter((url) => !triedPages.has(normalizeUrlForDedup(url)))
       .sort((a, b) => {
         const scoreDiff = scoreScreenshotPage(a) - scoreScreenshotPage(b);
@@ -11035,7 +11233,15 @@ function isBlockedScrapeError(errorMessage) {
 
 async function extractBasicInfoFromScreenshot(websiteUrl, options = {}) {
   if (!websiteUrl || !process.env.SCREENSHOT_API_KEY) {
-    return { company_name: '', established_year: '', location: '' };
+    return {
+      company_name: '',
+      established_year: '',
+      location: '',
+      business: '',
+      title: '',
+      breakdown_title: '',
+      breakdown_items: [],
+    };
   }
 
   const screenshotApiKey = process.env.SCREENSHOT_API_KEY;
@@ -11070,13 +11276,29 @@ async function extractBasicInfoFromScreenshot(websiteUrl, options = {}) {
 
     if (!response.ok) {
       console.log(`    Screenshot fallback: API returned ${response.status}`);
-      return { company_name: '', established_year: '', location: '' };
+      return {
+        company_name: '',
+        established_year: '',
+        location: '',
+        business: '',
+        title: '',
+        breakdown_title: '',
+        breakdown_items: [],
+      };
     }
 
     const imageBuffer = await readResponseBuffer(response);
     if (!imageBuffer || imageBuffer.length < 10000) {
       console.log('    Screenshot fallback: image too small');
-      return { company_name: '', established_year: '', location: '' };
+      return {
+        company_name: '',
+        established_year: '',
+        location: '',
+        business: '',
+        title: '',
+        breakdown_title: '',
+        breakdown_items: [],
+      };
     }
 
     const base64Image = imageBuffer.toString('base64');
@@ -11098,13 +11320,19 @@ async function extractBasicInfoFromScreenshot(websiteUrl, options = {}) {
                   },
                   {
                     type: 'text',
-                    text: `Extract company basic info from this full-page website screenshot.
+                    text: `Extract company profile info from this full-page website screenshot.
 
 Return ONLY valid JSON:
 {
   "company_name": "...",
   "established_year": "YYYY or empty",
-  "location": "State/Province, Country"
+  "location": "State/Province, Country",
+  "business": "short plain-English business description or empty",
+  "title": "short slide title or empty",
+  "breakdown_title": "right-side table title or empty",
+  "breakdown_items": [
+    { "label": "Service", "value": "Visible service/product/project item" }
+  ]
 }
 
 Rules:
@@ -11113,6 +11341,9 @@ Rules:
 - location must be HQ-style and concise (state/province + country).
 - For Singapore use "Area, Singapore" only when area is visible.
 - For Australia, prefer full state name + "Australia" if state abbreviation is visible.
+- Keep business/title short and factual.
+- breakdown_items should contain only visible services, products, or project categories.
+- Maximum 6 breakdown_items.
 - Return JSON only, no explanation.`,
                   },
                 ],
@@ -11137,7 +11368,15 @@ Rules:
     }
 
     const content = visionResponse.choices[0]?.message?.content || '{}';
-    let parsed = { company_name: '', established_year: '', location: '' };
+    let parsed = {
+      company_name: '',
+      established_year: '',
+      location: '',
+      business: '',
+      title: '',
+      breakdown_title: '',
+      breakdown_items: [],
+    };
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
@@ -11149,45 +11388,104 @@ Rules:
       company_name: ensureString(parsed.company_name),
       established_year: ensureString(parsed.established_year),
       location: ensureString(parsed.location),
+      business: ensureString(parsed.business),
+      title: ensureString(parsed.title),
+      breakdown_title: ensureString(parsed.breakdown_title),
+      breakdown_items: Array.isArray(parsed.breakdown_items)
+        ? parsed.breakdown_items
+            .map((item) => ({
+              label: ensureString(item?.label),
+              value: ensureString(item?.value),
+            }))
+            .filter((item) => item.label && item.value)
+            .slice(0, 6)
+        : [],
     };
   } catch (error) {
     console.log(`    Screenshot fallback: error - ${error.message}`);
-    return { company_name: '', established_year: '', location: '' };
+    return {
+      company_name: '',
+      established_year: '',
+      location: '',
+      business: '',
+      title: '',
+      breakdown_title: '',
+      breakdown_items: [],
+    };
   }
 }
 
-function buildScreenshotFallbackCompanyData(websiteUrl, scrapeError, basicInfo = {}) {
+function hasUsableScreenshotRescue(profileInfo = {}, relationships = {}) {
+  const business = ensureString(profileInfo.business).trim();
+  const location = ensureString(profileInfo.location).trim();
+  const companyName = ensureString(profileInfo.company_name).trim();
+  const establishedYear = ensureString(profileInfo.established_year).trim();
+  const breakdownCount = Array.isArray(profileInfo.breakdown_items) ? profileInfo.breakdown_items.length : 0;
+  const relationshipCount =
+    uniqueRelationshipNames([
+      ...(relationships.customers || []),
+      ...(relationships.principals || []),
+      ...(relationships.brands || []),
+    ]).length || 0;
+
+  return (
+    !!companyName &&
+    !!business &&
+    (!!location || !!establishedYear) &&
+    (breakdownCount >= 2 || relationshipCount >= 3)
+  );
+}
+
+function buildScreenshotFallbackCompanyData(
+  websiteUrl,
+  scrapeError,
+  basicInfo = {},
+  relationships = { customers: [], suppliers: [], principals: [], brands: [] }
+) {
   const extractedName = cleanCompanyName(ensureString(basicInfo.company_name), websiteUrl);
   const fallbackName = extractedName || extractCompanyNameFromUrl(websiteUrl);
   const rawLocation = ensureString(basicInfo.location);
   const normalizedLocation = validateAndFixHQFormat(rawLocation, websiteUrl) || rawLocation;
+  const rawBreakdown = {
+    breakdown_title: ensureString(basicInfo.breakdown_title),
+    breakdown_items: Array.isArray(basicInfo.breakdown_items) ? basicInfo.breakdown_items : [],
+  };
+  const fallbackBreakdown = applyRelationshipFallbackToBreakdown(rawBreakdown, relationships);
 
   return {
     website: websiteUrl,
     company_name: fallbackName,
-    title: fallbackName,
+    title: ensureString(basicInfo.title) || fallbackName,
     established_year: ensureString(basicInfo.established_year),
     location: normalizedLocation,
-    business: 'Website blocks direct text scraping; profile uses screenshot-based extraction.',
+    business:
+      ensureString(basicInfo.business) ||
+      'Website blocks direct text scraping; profile uses screenshot-based extraction.',
     message: '',
     footnote: '',
     key_metrics: [],
-    business_type: 'industrial',
-    breakdown_title: 'Products and Applications',
-    breakdown_items: [],
+    business_type: detectBusinessType(ensureString(basicInfo.business), '') || 'industrial',
+    breakdown_title:
+      ensureString(fallbackBreakdown.breakdown_title) || ensureString(basicInfo.breakdown_title),
+    breakdown_items: Array.isArray(fallbackBreakdown.breakdown_items)
+      ? fallbackBreakdown.breakdown_items
+      : [],
     projects: [],
     products: [],
     metrics: '',
     _logo: null,
-    _businessRelationships: { customers: [], suppliers: [], principals: [], brands: [] },
+    _businessRelationships: relationships,
     _customerSegments: null,
     _supplierSegments: null,
     _principalSegments: null,
     _brandSegments: null,
     _branchNetworkSummary: '',
     _branchEvidenceDetected: false,
-    _relationshipCoverageStatus: 'needs_manual_review',
-    _partialExtraction: true,
+    _relationshipCoverageStatus:
+      (relationships.principals || []).length + (relationships.brands || []).length > 0
+        ? 'ok'
+        : 'needs_manual_review',
+    _partialExtraction: !hasUsableScreenshotRescue(basicInfo, relationships),
     _screenshotFallbackUsed: true,
     _sourceError: `Failed to scrape: ${ensureString(scrapeError)}`,
   };
@@ -11275,9 +11573,29 @@ function buildFlatRelationshipLines(names, options = {}) {
 }
 
 function buildRelationshipDisplayText(segmentMap, names, options = {}) {
-  const segmentLines = buildSegmentDisplayLines(segmentMap, options);
+  const normalizedSegments = normalizeSegmentMap(segmentMap);
+  const segmentLines = buildSegmentDisplayLines(normalizedSegments, options);
   if (segmentLines.length > 0) {
-    return fixAcronymCasing(segmentLines.join('\n'));
+    const covered = new Set();
+    Object.values(normalizedSegments).forEach((segmentNames) => {
+      uniqueRelationshipNames(segmentNames || []).forEach((name) =>
+        covered.add(normalizeForComparison(name))
+      );
+    });
+
+    const remainingNames = uniqueRelationshipNames(names || []).filter(
+      (name) => !covered.has(normalizeForComparison(name))
+    );
+    const maxLines = Math.max(1, parseInt(String(options.maxLines || '4'), 10));
+    const remainingLineBudget = Math.max(0, maxLines - segmentLines.length);
+    const overflowLines =
+      remainingLineBudget > 0
+        ? buildFlatRelationshipLines(remainingNames, {
+            maxLines: remainingLineBudget,
+            maxNamesPerLine: options.maxNamesPerLine,
+          })
+        : [];
+    return fixAcronymCasing([...segmentLines, ...overflowLines].join('\n'));
   }
 
   const flatLines = buildFlatRelationshipLines(names, options);
@@ -11294,7 +11612,7 @@ async function lookupCustomerBusinessesBySearch(customers, context = {}) {
 
   const sourceLookup = new Map(cleaned.map((name) => [cleanCustomerName(name).toLowerCase(), name]));
   const results = new Map();
-  const chunks = chunkArray(cleaned.slice(0, 20), 8);
+  const chunks = chunkArray(cleaned.slice(0, 40), 8);
   const companyName = ensureString(context.companyName).trim();
   const website = ensureString(context.website).trim();
   const contextLine = [companyName, website].filter(Boolean).join(' | ');
@@ -11388,7 +11706,6 @@ Rules:
 async function groupCustomersByBusinessResearch(customerResearch, customers) {
   const cleaned = uniqueRelationshipNames(customers || []);
   if (!Array.isArray(customerResearch) || customerResearch.length < 3) return null;
-  if (customerResearch.length !== cleaned.length) return null;
 
   try {
     const researchLines = customerResearch
@@ -11429,12 +11746,11 @@ Rules:
 - Use short labels only (1-2 words max).
 - Maximum 5 groups.
 - Use only the exact names shown above.
-- Every name must appear once only.
+- Use only the names you are confident about. It is OK to leave some names ungrouped.
 - If the research is too weak or too mixed to group cleanly, return {"mode":"flat"}.
 - Return JSON only.`,
             },
           ],
-          temperature: 0.1,
         }),
       2,
       2000
@@ -11478,10 +11794,8 @@ Rules:
       if (kept.length > 0) filteredMap[rawLabel] = kept;
     }
 
-    if (used.size !== cleaned.length) return null;
-
     const normalized = normalizeMeaningfulSegmentMap(filteredMap, 'customers');
-    return Object.keys(normalized).length >= 2 ? normalized : null;
+    return used.size >= 3 && Object.keys(normalized).length >= 2 ? normalized : null;
   } catch (err) {
     console.log(`    Customer research grouping failed: ${err.message}`);
     return null;
@@ -11593,11 +11907,7 @@ function buildFallbackSegmentLabel(names, relationshipType = 'group', index = 0)
   if (thematicLabel) return thematicLabel;
 
   if (index === 0) return baseLabel;
-  if (index === 1) return `Additional ${baseLabel}`;
-  if (index === 2) return `More ${baseLabel}`;
-  const extraPrefixes = ['Further', 'Extended', 'Regional', 'Focused'];
-  const prefix = extraPrefixes[(index - 3) % extraPrefixes.length];
-  return `${prefix} ${baseLabel}`;
+  return `Other ${baseLabel}`;
 }
 
 function normalizeSegmentLabel(label, names, relationshipType = 'group', index = 0) {
@@ -13921,11 +14231,11 @@ Generate M&A strategies for each region WITHOUT mentioning specific company name
 }
 
 // AI Review Agent: Validate extraction against source content and fix issues
-// Uses GPT-4o for accurate validation - compares extracted data against source
+// Uses GPT-5.1 for accurate validation - compares extracted data against source
 // Returns { data, issuesFound, missedItems } for iterative extraction
 async function reviewAndCleanData(companyData, scrapedContent, markers = null) {
   try {
-    console.log('  Step 6: Running AI validator (GPT-4o) - comparing extraction vs source...');
+    console.log('  Step 6: Running AI validator (GPT-5.1) - comparing extraction vs source...');
 
     // Use markers if available (structured snippets), otherwise use raw content
     let sourceSection;
@@ -14269,16 +14579,16 @@ async function processSingleWebsite(website, index, total) {
           `  [${index + 1}] Step 1b: Blocked by website, attempting screenshot fallback for company/location...`
         );
         const screenshotBasicInfo = await extractBasicInfoFromScreenshot(trimmedWebsite);
-        if (
-          screenshotBasicInfo.company_name ||
-          screenshotBasicInfo.location ||
-          screenshotBasicInfo.established_year
-        ) {
-          console.log(`  [${index + 1}] Screenshot fallback succeeded (name/location recovered)`);
+        const screenshotRelationships = await extractPartnersFromScreenshots(trimmedWebsite, [], {
+          deepMode: true,
+        });
+        if (hasUsableScreenshotRescue(screenshotBasicInfo, screenshotRelationships)) {
+          console.log(`  [${index + 1}] Screenshot fallback recovered enough data for rescue slide`);
           return buildScreenshotFallbackCompanyData(
             trimmedWebsite,
             scraped.error,
-            screenshotBasicInfo
+            screenshotBasicInfo,
+            screenshotRelationships
           );
         }
         console.log(`  [${index + 1}] Screenshot fallback did not recover enough data`);
@@ -14726,7 +15036,7 @@ async function processSingleWebsite(website, index, total) {
       );
     }
     const relationshipCompanyName = basicInfo.company_name || businessInfo.title || '';
-    businessRelationships.customers = mergeRelationshipNamesByTrust(
+    businessRelationships.customers = mergeTrustedCustomerNames(
       {
         section: businessRelationships.customers || [],
         metric: metricRelationships.customers || [],
@@ -14736,8 +15046,7 @@ async function processSingleWebsite(website, index, total) {
         feed: catalogFeedRelationships.customers || [],
         screenshot: screenshotResults.customers || [],
       },
-      relationshipCompanyName,
-      { minScore: 3 }
+      relationshipCompanyName
     );
     businessRelationships.suppliers = mergeRelationshipNamesByTrust(
       {
@@ -14778,6 +15087,22 @@ async function processSingleWebsite(website, index, total) {
     );
     let principalBrandCoverage =
       businessRelationships.principals.length + businessRelationships.brands.length;
+    if (hasThinCustomerCoverage(businessRelationships.customers)) {
+      console.log(
+        `  [${index + 1}] Step 6e: Customer coverage thin (${businessRelationships.customers.length}), running focused customer recall...`
+      );
+      const focusedCustomers = await recoverFocusedCustomerNames(
+        scraped.content,
+        basicInfo.company_name
+      );
+      businessRelationships.customers = mergeTrustedCustomerNames(
+        {
+          section: businessRelationships.customers || [],
+          focused_ai: focusedCustomers || [],
+        },
+        relationshipCompanyName
+      );
+    }
     if (principalBrandCoverage < 1) {
       console.log(
         `  [${index + 1}] Step 6e: Relationship coverage low (${principalBrandCoverage}), running AI text fallback...`
@@ -14785,14 +15110,6 @@ async function processSingleWebsite(website, index, total) {
       const aiRelationships = await extractRelationshipsFromContentAI(scraped.content, {
         company_name: basicInfo.company_name,
       });
-      businessRelationships.customers = mergeRelationshipNamesByTrust(
-        {
-          section: businessRelationships.customers || [],
-          ai: aiRelationships.customers || [],
-        },
-        relationshipCompanyName,
-        { minScore: 3 }
-      );
       businessRelationships.principals = mergeRelationshipNamesByTrust(
         {
           section: businessRelationships.principals || [],
@@ -15107,6 +15424,15 @@ function collectLowQualitySegmentLabels(segmentMap, relationshipType = 'group') 
   return Array.from(new Set(issues));
 }
 
+function hasRelationshipDrivenRightSideContent(company) {
+  const relationships = company?._businessRelationships || {};
+  return (
+    uniqueRelationshipNames(relationships.customers || []).length > 0 ||
+    uniqueRelationshipNames(relationships.principals || []).length > 0 ||
+    uniqueRelationshipNames(relationships.brands || []).length > 0
+  );
+}
+
 // Quality gate: validate profile data before PPT generation.
 // Returns blocking issues so bad/low-confidence outputs do not get sent.
 function validateProfileData(companies) {
@@ -15133,7 +15459,9 @@ function validateProfileData(companies) {
     }
 
     const breakdownItems = Array.isArray(company.breakdown_items) ? company.breakdown_items : [];
-    if (breakdownItems.length === 0) {
+    const hasRightSideContent =
+      breakdownItems.length > 0 || hasRelationshipDrivenRightSideContent(company);
+    if (!hasRightSideContent) {
       warningIssues.push('no breakdown');
       blockingIssues.push('missing products/applications breakdown');
     }
@@ -15210,7 +15538,7 @@ function validateProfileData(companies) {
       blockingIssues.push(`low-quality segment labels (${lowQualitySegmentLabels.join(', ')})`);
     }
 
-    if (company._screenshotFallbackUsed) {
+    if (company._screenshotFallbackUsed && !hasUsableScreenshotRescue(company, relationships)) {
       blockingIssues.push('screenshot-only fallback used');
     }
 
@@ -15630,14 +15958,18 @@ app.post('/api/generate-ppt', async (req, res) => {
               '  Step 1b: Blocked by website, attempting screenshot fallback for company/location...'
             );
             const screenshotBasicInfo = await extractBasicInfoFromScreenshot(website);
-            if (
-              screenshotBasicInfo.company_name ||
-              screenshotBasicInfo.location ||
-              screenshotBasicInfo.established_year
-            ) {
-              console.log('  Screenshot fallback succeeded (name/location recovered)');
+            const screenshotRelationships = await extractPartnersFromScreenshots(website, [], {
+              deepMode: true,
+            });
+            if (hasUsableScreenshotRescue(screenshotBasicInfo, screenshotRelationships)) {
+              console.log('  Screenshot fallback recovered enough data for rescue slide');
               results.push(
-                buildScreenshotFallbackCompanyData(website, scraped.error, screenshotBasicInfo)
+                buildScreenshotFallbackCompanyData(
+                  website,
+                  scraped.error,
+                  screenshotBasicInfo,
+                  screenshotRelationships
+                )
               );
               continue;
             }
@@ -15959,7 +16291,7 @@ app.post('/api/generate-ppt', async (req, res) => {
           );
         }
         const relationshipCompanyName = basicInfo.company_name || businessInfo.title || '';
-        businessRelationships.customers = mergeRelationshipNamesByTrust(
+        businessRelationships.customers = mergeTrustedCustomerNames(
           {
             section: businessRelationships.customers || [],
             metric: metricRelationships.customers || [],
@@ -15969,8 +16301,7 @@ app.post('/api/generate-ppt', async (req, res) => {
             feed: catalogFeedRelationships.customers || [],
             screenshot: screenshotResults.customers || [],
           },
-          relationshipCompanyName,
-          { minScore: 3 }
+          relationshipCompanyName
         );
         businessRelationships.suppliers = mergeRelationshipNamesByTrust(
           {
@@ -16011,6 +16342,22 @@ app.post('/api/generate-ppt', async (req, res) => {
         );
         let principalBrandCoverage =
           businessRelationships.principals.length + businessRelationships.brands.length;
+        if (hasThinCustomerCoverage(businessRelationships.customers)) {
+          console.log(
+            `  Step 5d: Customer coverage thin (${businessRelationships.customers.length}), running focused customer recall...`
+          );
+          const focusedCustomers = await recoverFocusedCustomerNames(
+            scraped.content,
+            basicInfo.company_name
+          );
+          businessRelationships.customers = mergeTrustedCustomerNames(
+            {
+              section: businessRelationships.customers || [],
+              focused_ai: focusedCustomers || [],
+            },
+            relationshipCompanyName
+          );
+        }
         if (principalBrandCoverage < 1) {
           console.log(
             `  Step 5d: Relationship coverage low (${principalBrandCoverage}), running AI text fallback...`
@@ -16018,14 +16365,6 @@ app.post('/api/generate-ppt', async (req, res) => {
           const aiRelationships = await extractRelationshipsFromContentAI(scraped.content, {
             company_name: basicInfo.company_name,
           });
-          businessRelationships.customers = mergeRelationshipNamesByTrust(
-            {
-              section: businessRelationships.customers || [],
-              ai: aiRelationships.customers || [],
-            },
-            relationshipCompanyName,
-            { minScore: 3 }
-          );
           businessRelationships.principals = mergeRelationshipNamesByTrust(
             {
               section: businessRelationships.principals || [],
