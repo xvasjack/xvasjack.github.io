@@ -235,6 +235,19 @@ class SpeedaRunController:
             run_id = self._run_id
             working = self._working_workbook_path
             run_dir = self._run_dir
+            source_workbook_path = self._source_workbook_path
+        if not run_id or not working:
+            latest_run_id = self.store.get_latest_run_id()
+            if latest_run_id:
+                latest_run = self.store.get_run(latest_run_id)
+            else:
+                latest_run = None
+            if latest_run:
+                run_id = latest_run_id
+                working = latest_run.get("working_workbook_path")
+                source_workbook_path = latest_run.get("source_workbook_path")
+                if working:
+                    run_dir = Path(working).parent
         if not run_id or not working:
             return False, "No run output is available."
         working_path = Path(working)
@@ -245,7 +258,7 @@ class SpeedaRunController:
             dst = Path(destination_path)
             csv_path = (run_dir or working_path.parent) / "run_log.csv"
         else:
-            source_name = Path(self._source_workbook_path or "result.xlsx").stem
+            source_name = Path(source_workbook_path or "result.xlsx").stem
             dst = downloads_dir / f"{source_name}_director_output.xlsx"
             csv_path = downloads_dir / f"{source_name}_director_output_log.csv"
         dst.parent.mkdir(parents=True, exist_ok=True)
