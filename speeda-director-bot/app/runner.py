@@ -370,6 +370,13 @@ class SpeedaRunController:
                         config.max_retries,
                         config.pace_profile,
                     )
+                    if result.status == "auth_required":
+                        result, attempts_used = self._reauthenticate_and_retry(
+                            extractor,
+                            company_row,
+                            config,
+                            attempts_used,
+                        )
                     final_status = result.status
                     output_value: str | None = None
                     debug_path = self._write_debug_artifacts(run_dir, company_row.row_number, final_status, result)
@@ -468,6 +475,35 @@ class SpeedaRunController:
         if last_result:
             return last_result, attempts
         return ExtractResult("parse_fail", [], None, "No extraction result returned."), attempts
+
+    def _reauthenticate_and_retry(
+        self,
+        extractor: SpeedaExtractor,
+        row: CompanyRow,
+        config: RunConfig,
+        attempts_used: int,
+    ) -> tuple[ExtractResult, int]:
+        self._set_activity(
+            "Login needed",
+            extractor.page.url,
+            "Speeda asked for login again. Sign in in the opened browser window.",
+        )
+        login_result = extractor.login_check()
+        if login_result.status != "success":
+            return login_result, attempts_used
+
+        self._set_activity(
+            "Login restored",
+            extractor.page.url,
+            f"Login restored. Retrying row {row.row_number}.",
+        )
+        retry_result, retry_attempts = self._extract_with_retries(
+            extractor,
+            row,
+            config.max_retries,
+            config.pace_profile,
+        )
+        return retry_result, attempts_used + retry_attempts
 
     def _pause_between_companies(self, pace_profile: str) -> None:
         delays = {
