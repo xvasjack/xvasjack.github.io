@@ -171,11 +171,15 @@ class SpeedaExtractor:
 
     def __enter__(self) -> "SpeedaExtractor":
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=self.headless)
+        launch_args = ["--start-maximized"] if not self.headless else None
+        self._browser = self._playwright.chromium.launch(headless=self.headless, args=launch_args)
         if self.storage_state_path.exists():
-            self._context = self._browser.new_context(storage_state=str(self.storage_state_path))
+            self._context = self._browser.new_context(
+                storage_state=str(self.storage_state_path),
+                viewport={"width": 1440, "height": 900},
+            )
         else:
-            self._context = self._browser.new_context()
+            self._context = self._browser.new_context(viewport={"width": 1440, "height": 900})
         self._page = self._context.new_page()
         return self
 
@@ -201,6 +205,8 @@ class SpeedaExtractor:
     def login_check(self) -> ExtractResult:
         try:
             self.page.goto(self.base_url, wait_until="domcontentloaded", timeout=45000)
+            if not self.headless:
+                self.page.bring_to_front()
             self._pace_wait(0.8)
             safety_violation = self._get_safety_violation()
             if safety_violation:
@@ -208,13 +214,39 @@ class SpeedaExtractor:
             if self._is_blocked_page():
                 return ExtractResult("blocked", [], self.page.url, "Blocked or anti-bot page detected.")
             if self._is_auth_page():
-                return ExtractResult("auth_required", [], self.page.url, "Login is required.")
+                if self.headless:
+                    return ExtractResult("auth_required", [], self.page.url, "Login is required.")
+                return self._wait_for_manual_login(timeout_seconds=300)
             self._context.storage_state(path=str(self.storage_state_path))
             return ExtractResult("success", [], self.page.url, None)
         except PlaywrightTimeoutError:
             return ExtractResult("network_fail", [], None, "Timeout during login check.")
         except Exception as exc:
             return ExtractResult("network_fail", [], None, f"Login check failed: {exc}")
+
+    def _wait_for_manual_login(self, timeout_seconds: int) -> ExtractResult:
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            try:
+                self.page.bring_to_front()
+            except Exception:
+                pass
+            time.sleep(2.0)
+            safety_violation = self._get_safety_violation()
+            if safety_violation:
+                return ExtractResult("blocked", [], self.page.url, safety_violation)
+            if self._is_blocked_page():
+                return ExtractResult("blocked", [], self.page.url, "Blocked or anti-bot page detected.")
+            if self._is_auth_page():
+                continue
+            self._context.storage_state(path=str(self.storage_state_path))
+            return ExtractResult("success", [], self.page.url, None)
+        return ExtractResult(
+            "auth_required",
+            [],
+            self.page.url,
+            "Login window stayed open, but sign-in was not completed within 5 minutes.",
+        )
 
     def extract_company(
         self,
