@@ -312,6 +312,10 @@ class SpeedaExtractor:
             if open_result is not None:
                 return open_result
 
+            table_directors = self._extract_directors_from_tables()
+            if table_directors:
+                return ExtractResult("success", table_directors, self.page.url, None)
+
             section_text = self._collect_executive_text()
             if not section_text:
                 return ExtractResult(
@@ -459,6 +463,88 @@ class SpeedaExtractor:
             return None
         except Exception:
             return None
+
+    def _extract_directors_from_tables(self) -> list[DirectorEntry]:
+        table_locator = self.page.locator("table")
+        table_count = min(table_locator.count(), 10)
+        for table_index in range(table_count):
+            table = table_locator.nth(table_index)
+            try:
+                table_text = table.inner_text(timeout=1500)
+            except Exception:
+                continue
+            lowered = table_text.lower()
+            if "name" not in lowered or "age" not in lowered:
+                continue
+
+            directors = self._parse_director_table(table)
+            if directors:
+                return directors
+        return []
+
+    def _parse_director_table(self, table) -> list[DirectorEntry]:
+        row_locator = table.locator("tr")
+        row_count = row_locator.count()
+        if row_count < 2:
+            return []
+
+        header_cells = row_locator.nth(0).locator("th, td")
+        headers = []
+        for idx in range(header_cells.count()):
+            try:
+                header_text = header_cells.nth(idx).inner_text(timeout=1000).strip().lower()
+            except Exception:
+                header_text = ""
+            headers.append(header_text)
+
+        name_idx = self._find_header_index(headers, ("name",))
+        age_idx = self._find_header_index(headers, ("age",))
+        role_idx = self._find_header_index(headers, ("role", "position"))
+        if name_idx is None or age_idx is None:
+            return []
+
+        directors: list[DirectorEntry] = []
+        seen_names: set[str] = set()
+
+        for row_index in range(1, row_count):
+            cell_locator = row_locator.nth(row_index).locator("th, td")
+            cell_count = cell_locator.count()
+            if cell_count <= max(name_idx, age_idx):
+                continue
+
+            cells = []
+            for cell_index in range(cell_count):
+                try:
+                    cell_text = cell_locator.nth(cell_index).inner_text(timeout=1000).strip()
+                except Exception:
+                    cell_text = ""
+                cells.append(cell_text)
+
+            name = cells[name_idx].strip()
+            if not name or name.lower() == "detail":
+                continue
+            if not _looks_like_person_name(name):
+                continue
+
+            if role_idx is not None and role_idx < len(cells):
+                role_text = cells[role_idx].strip().lower()
+                if role_text and not re.search(r"(director|executive|officer|chief|\u5f79\u54e1|\u53d6\u7de0\u5f79)", role_text):
+                    continue
+
+            age = _extract_age(cells[age_idx]) or _extract_age(" ".join(cells))
+            normalized_name = normalize_company_name(name)
+            if normalized_name in seen_names:
+                continue
+            seen_names.add(normalized_name)
+            directors.append(DirectorEntry(name=name, age=age))
+
+        return directors
+
+    def _find_header_index(self, headers: list[str], candidates: tuple[str, ...]) -> int | None:
+        for idx, header in enumerate(headers):
+            if any(candidate in header for candidate in candidates):
+                return idx
+        return None
 
     def _safe_body_text(self) -> str | None:
         try:
