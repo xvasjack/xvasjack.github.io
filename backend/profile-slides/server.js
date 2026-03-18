@@ -439,7 +439,14 @@ function sanitizeLocationValue(value) {
     const hasGeoSignal = isLikelyGeographyToken(text);
     const hasBranchSignal = /\b(branch|branches|office|offices|hq|head office)\b/i.test(text);
     if (!hasGeoSignal && !hasBranchSignal && text.split(/\s+/).length > 3) continue;
-    if (hasCompanySignalInName(text) && !hasGeoSignal && !hasBranchSignal) continue;
+    if (
+      !hasGeoSignal &&
+      !hasBranchSignal &&
+      (hasLegalEntitySignal(text) ||
+        /\b(group|engineering|industries|systems|technologies|solutions|holdings?)\b/i.test(text))
+    ) {
+      continue;
+    }
 
     const dedupeKey = normalizeForComparison(text);
     if (!dedupeKey || seen.has(dedupeKey)) continue;
@@ -1216,6 +1223,135 @@ function preferRicherLocationValue(primaryLocation, fallbackLocation = '') {
   const fallbackIsRicher = fallbackParts.length >= 2;
 
   return primaryIsCountryOnly && fallbackIsRicher ? fallback : primary;
+}
+
+function buildCompanyAcronym(name) {
+  const tokens = cleanCompanyName(ensureString(name))
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (tokens.length < 2 || tokens.length > 5) return '';
+  const acronym = tokens.map((token) => token.charAt(0).toUpperCase()).join('');
+  return acronym.length >= 2 && acronym.length <= 6 ? acronym : '';
+}
+
+function isCertificationOrBadgeName(value) {
+  const text = ensureString(value).trim();
+  if (!text) return false;
+  return /\b(bizsafe|sac|sgsafe|sg clean|green mark|halal|iso\s*\d|iso9001|iso14001|ohsas|accredit(?:ed|ation)|certif(?:ied|ication)|ce\s*mark(?:ing)?|ce\s*certified)\b/i.test(
+    text
+  );
+}
+
+function filterPrincipalBrandNames(names, companyName = '') {
+  const filtered = filterGarbageNames(names || [], companyName);
+  const companyAcronym = buildCompanyAcronym(companyName);
+  const normalizedAcronym = normalizeForComparison(companyAcronym);
+
+  return filtered.filter((name) => {
+    const normalizedName = normalizeForComparison(name);
+    if (!normalizedName) return false;
+    if (isCertificationOrBadgeName(name)) return false;
+    if (normalizedAcronym && normalizedName === normalizedAcronym) return false;
+    return true;
+  });
+}
+
+function chooseScreenshotRescueTitle(companyName, extractedTitle, websiteUrl = '') {
+  const fallbackName = fixAcronymCasing(
+    cleanCompanyName(ensureString(companyName), websiteUrl) || ensureString(companyName)
+  );
+  const candidateTitle = ensureString(extractedTitle).trim();
+  if (!candidateTitle) return fallbackName;
+
+  const cleanedTitle = fixAcronymCasing(
+    cleanCompanyName(candidateTitle, websiteUrl) || candidateTitle
+  );
+  const normalizedTitle = normalizeForComparison(cleanedTitle);
+  const normalizedCompanyName = normalizeForComparison(fallbackName);
+
+  if (
+    normalizedTitle &&
+    normalizedCompanyName &&
+    (normalizedTitle.includes(normalizedCompanyName) ||
+      normalizedCompanyName.includes(normalizedTitle))
+  ) {
+    return cleanedTitle;
+  }
+
+  return fallbackName;
+}
+
+function isMeaningfulBreakdownItem(item) {
+  const label = ensureString(item?.label).trim();
+  const value = ensureString(item?.value).trim();
+  if (!label || !value) return false;
+  if (isRelationshipArtifactText(label) || isRelationshipArtifactText(value)) return false;
+  if (isMeaninglessStandaloneValue(value)) return false;
+  if (normalizeForComparison(label) === normalizeForComparison(value)) return false;
+  return true;
+}
+
+function getMeaningfulBreakdownItems(items = []) {
+  if (!Array.isArray(items)) return [];
+  return items.filter((item) => isMeaningfulBreakdownItem(item));
+}
+
+function downgradeLocationToCountry(location, websiteUrl = '') {
+  const parts = ensureString(location)
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const countryPart = parts[parts.length - 1];
+  if (countryPart && getCountryCodeFromToken(countryPart)) {
+    return fixAcronymCasing(countryPart);
+  }
+  return ensureString(inferCountryFromWebsite(websiteUrl));
+}
+
+function hasLocationEvidenceInSource(location, sourceText = '', extraHints = []) {
+  const text = normalizeTextForComparison(
+    [ensureString(sourceText), ...(extraHints || []).map((hint) => ensureString(hint))]
+      .filter(Boolean)
+      .join(' ')
+  );
+  if (!text) return false;
+
+  const parts = ensureString(location)
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length <= 1) return true;
+
+  const locationTokens = parts
+    .slice(0, -1)
+    .map((part) => ensureString(part).replace(/\d+/g, '').trim())
+    .filter((part) => part.length >= 3);
+
+  if (locationTokens.length === 0) return true;
+  return locationTokens.some((token) => text.includes(normalizeTextForComparison(token)));
+}
+
+function finalizeLocationWithEvidence(location, options = {}) {
+  const richerHint = preferRicherLocationValue(
+    ensureString(options.richerHint),
+    ensureString(options.secondaryHint)
+  );
+  let finalLocation = preferRicherLocationValue(location, richerHint);
+  const locationSource = ensureString(options.locationSource).toLowerCase();
+
+  if (locationSource === 'search' && finalLocation) {
+    const confirmed = hasLocationEvidenceInSource(
+      finalLocation,
+      options.sourceText,
+      options.evidenceHints || []
+    );
+    if (!confirmed) {
+      finalLocation = downgradeLocationToCountry(finalLocation, options.websiteUrl);
+    }
+  }
+
+  return finalLocation;
 }
 
 function chooseRightSectionTitle(company) {
@@ -5535,7 +5671,7 @@ async function generatePPTX(
                 });
               }
 
-              const rawName = comp.title || comp.company_name || '';
+              const rawName = comp.company_name || comp.title || '';
               const companyName = fixAcronymCasing(cleanCompanyName(rawName, comp.website) || 'Unknown');
               row.push({
                 text: `${comp.index}. ${companyName}`,
@@ -5846,7 +5982,7 @@ async function generatePPTX(
         // ===== LEFT TABLE (会社概要資料) =====
         // Determine if single location (for HQ label)
         const locationText = ensureString(company.location);
-        const branchNetworkSummary = getBranchNetworkSummaryFromCompany(company);
+        const branchNetworkSummary = cleanBranchNetworkSummary(getBranchNetworkSummaryFromCompany(company));
         const hasBranchCoverage = !!branchNetworkSummary;
         const locationLines = locationText.split('\n').filter((line) => line.trim());
         const isSingleLocation =
@@ -6004,13 +6140,14 @@ async function generatePPTX(
           inferCountryFromWebsite(ensureString(company.website))
         );
         const effectiveLocation = preferRicherLocationValue(company.location, basedLocationFallback);
+        const cleanedBranchSummary = cleanBranchNetworkSummary(branchNetworkSummary);
 
         // Add Location row (HQ + branch footprint in same row when available)
         if (!isEmptyValue(effectiveLocation) || hasBranchCoverage) {
           const cleanLocation = !isEmptyValue(effectiveLocation)
             ? cleanLocationValue(effectiveLocation, locationLabel)
             : '';
-          const locationValue = [cleanLocation, branchNetworkSummary].filter(Boolean).join('\n');
+          const locationValue = [cleanLocation, cleanedBranchSummary].filter(Boolean).join('\n');
           tableData.push([locationLabel, locationValue, null]);
         }
 
@@ -6128,7 +6265,7 @@ async function generatePPTX(
         const relationships = company._businessRelationships || {};
         const relationshipCoverageStatus = ensureString(company._relationshipCoverageStatus);
 
-        const cleanedPrincipals = filterGarbageNames(
+        const cleanedPrincipals = filterPrincipalBrandNames(
           relationships.principals || [],
           companyNameForFilter
         );
@@ -6136,7 +6273,10 @@ async function generatePPTX(
           relationships.suppliers || [],
           companyNameForFilter
         );
-        const cleanedBrands = filterGarbageNames(relationships.brands || [], companyNameForFilter);
+        const cleanedBrands = filterPrincipalBrandNames(
+          relationships.brands || [],
+          companyNameForFilter
+        );
 
         if (cleanedPrincipals.length > 0) {
           const principalSegments =
@@ -7029,7 +7169,7 @@ async function generatePPTX(
             breakdownTitle.includes('partner')
           ) {
             // Show suppliers/principals only - filter garbage data first
-            const cleanedPrincipals = filterGarbageNames(
+            const cleanedPrincipals = filterPrincipalBrandNames(
               relationships.principals || [],
               companyNameForFilter
             );
@@ -7056,7 +7196,7 @@ async function generatePPTX(
             }
           } else if (breakdownTitle.includes('brand')) {
             // Show brands only - filter garbage data first
-            const cleanedBrands = filterGarbageNames(
+            const cleanedBrands = filterPrincipalBrandNames(
               relationships.brands || [],
               companyNameForFilter
             );
@@ -7096,15 +7236,11 @@ async function generatePPTX(
             }
           } else {
             // Default: Products/Applications/Services - use breakdown_items
-            let validBreakdownItems = (company.breakdown_items || [])
+            let validBreakdownItems = getMeaningfulBreakdownItems(company.breakdown_items || [])
               .map((item) => ({
                 label: normalizeLabel(ensureString(item?.label)),
                 value: ensureString(item?.value),
-              }))
-              .filter(
-                (item) =>
-                  item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value)
-              );
+              }));
 
             // Truncate values to max 3 lines
             validBreakdownItems = validBreakdownItems.map((item) => {
@@ -7118,7 +7254,7 @@ async function generatePPTX(
 
             prioritizedItems = validBreakdownItems;
             if (prioritizedItems.length === 0) {
-              const fallbackBrands = filterGarbageNames(
+              const fallbackBrands = filterPrincipalBrandNames(
                 [...(relationships.brands || []), ...(relationships.principals || [])],
                 companyNameForFilter
               );
@@ -7140,7 +7276,12 @@ async function generatePPTX(
               const cleanValue = fixAcronymCasing(removeTruncationTokens(ensureString(item?.value)));
               return { label: cleanLabel, value: cleanValue };
             })
-            .filter((item) => item.label && item.value)
+            .filter(
+              (item) =>
+                item.label &&
+                item.value &&
+                normalizeForComparison(item.label) !== normalizeForComparison(item.value)
+            )
             .filter((item) => {
               const dedupeKey = normalizeForComparison(`${item.label} ${item.value}`);
               if (!dedupeKey || seenRightRows.has(dedupeKey)) return false;
@@ -10618,15 +10759,11 @@ async function recoverFocusedCustomerNames(scrapedContent, companyName = '') {
 }
 
 // If product/application rows are empty, use relationship data as fallback for right-side content.
-function applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelationships) {
+function applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelationships, companyName = '') {
   const base =
     productsBreakdown && typeof productsBreakdown === 'object' ? { ...productsBreakdown } : {};
-  const breakdownItems = Array.isArray(base.breakdown_items) ? base.breakdown_items : [];
-  const hasBreakdownRows = breakdownItems.some((item) => {
-    const label = ensureString(item?.label).trim();
-    const value = ensureString(item?.value).trim();
-    return label && value;
-  });
+  const breakdownItems = getMeaningfulBreakdownItems(base.breakdown_items || []);
+  const hasBreakdownRows = breakdownItems.length > 0;
 
   if (hasBreakdownRows) {
     return {
@@ -10638,8 +10775,8 @@ function applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelatio
 
   const relationships = businessRelationships || {};
   const principalBrands = uniqueRelationshipNames([
-    ...(relationships.brands || []),
-    ...(relationships.principals || []),
+    ...filterPrincipalBrandNames(relationships.brands || [], companyName),
+    ...filterPrincipalBrandNames(relationships.principals || [], companyName),
   ]);
   if (principalBrands.length > 0) {
     return {
@@ -11420,19 +11557,18 @@ function hasUsableScreenshotRescue(profileInfo = {}, relationships = {}) {
   const location = ensureString(profileInfo.location).trim();
   const companyName = ensureString(profileInfo.company_name).trim();
   const establishedYear = ensureString(profileInfo.established_year).trim();
-  const breakdownCount = Array.isArray(profileInfo.breakdown_items) ? profileInfo.breakdown_items.length : 0;
-  const relationshipCount =
-    uniqueRelationshipNames([
-      ...(relationships.customers || []),
-      ...(relationships.principals || []),
-      ...(relationships.brands || []),
-    ]).length || 0;
+  const breakdownCount = getMeaningfulBreakdownItems(profileInfo.breakdown_items || []).length;
+  const customerCount = uniqueRelationshipNames(relationships.customers || []).length;
+  const principalBrandCount = uniqueRelationshipNames([
+    ...filterPrincipalBrandNames(relationships.principals || [], companyName),
+    ...filterPrincipalBrandNames(relationships.brands || [], companyName),
+  ]).length;
 
   return (
     !!companyName &&
     !!business &&
     (!!location || !!establishedYear) &&
-    (breakdownCount >= 2 || relationshipCount >= 3)
+    (breakdownCount >= 2 || customerCount >= 2 || principalBrandCount >= 3)
   );
 }
 
@@ -11448,14 +11584,19 @@ function buildScreenshotFallbackCompanyData(
   const normalizedLocation = validateAndFixHQFormat(rawLocation, websiteUrl) || rawLocation;
   const rawBreakdown = {
     breakdown_title: ensureString(basicInfo.breakdown_title),
-    breakdown_items: Array.isArray(basicInfo.breakdown_items) ? basicInfo.breakdown_items : [],
+    breakdown_items: getMeaningfulBreakdownItems(basicInfo.breakdown_items || []),
   };
-  const fallbackBreakdown = applyRelationshipFallbackToBreakdown(rawBreakdown, relationships);
+  const fallbackBreakdown = applyRelationshipFallbackToBreakdown(
+    rawBreakdown,
+    relationships,
+    fallbackName
+  );
+  const rescueTitle = chooseScreenshotRescueTitle(fallbackName, basicInfo.title, websiteUrl);
 
   return {
     website: websiteUrl,
     company_name: fallbackName,
-    title: ensureString(basicInfo.title) || fallbackName,
+    title: rescueTitle,
     established_year: ensureString(basicInfo.established_year),
     location: normalizedLocation,
     business:
@@ -14926,17 +15067,21 @@ async function processSingleWebsite(website, index, total) {
 
     // Determine location priority: website extraction -> structured data -> web search fallback.
     let finalLocation = ensureString(basicInfo.location);
+    let locationSource = finalLocation ? 'website' : '';
     if (!finalLocation && structuredAddress?.formatted) {
       finalLocation = structuredAddress.formatted;
+      locationSource = 'jsonld';
       console.log(`  [${index + 1}] Using JSON-LD address as fallback: ${finalLocation}`);
     }
     if (!finalLocation && regionalLocationHint) {
       finalLocation = regionalLocationHint;
+      locationSource = 'regional';
       console.log(`  [${index + 1}] Using regional hint fallback: ${finalLocation}`);
     }
     if (!finalLocation) {
       finalLocation = ensureString(searchedInfo.location);
       if (finalLocation) {
+        locationSource = 'search';
         console.log(`  [${index + 1}] Using searched location fallback: ${finalLocation}`);
       }
     }
@@ -14946,6 +15091,7 @@ async function processSingleWebsite(website, index, total) {
     );
     if (!finalLocation && basedLocationHint) {
       finalLocation = basedLocationHint;
+      locationSource = 'based';
       console.log(`  [${index + 1}] Using X-based location fallback: ${finalLocation}`);
     }
 
@@ -15086,7 +15232,10 @@ async function processSingleWebsite(website, index, total) {
       { minScore: 3 }
     );
     let principalBrandCoverage =
-      businessRelationships.principals.length + businessRelationships.brands.length;
+      filterPrincipalBrandNames(businessRelationships.principals || [], relationshipCompanyName)
+        .length +
+      filterPrincipalBrandNames(businessRelationships.brands || [], relationshipCompanyName)
+        .length;
     if (hasThinCustomerCoverage(businessRelationships.customers)) {
       console.log(
         `  [${index + 1}] Step 6e: Customer coverage thin (${businessRelationships.customers.length}), running focused customer recall...`
@@ -15134,7 +15283,10 @@ async function processSingleWebsite(website, index, total) {
         { minScore: 3 }
       );
       principalBrandCoverage =
-        businessRelationships.principals.length + businessRelationships.brands.length;
+        filterPrincipalBrandNames(businessRelationships.principals || [], relationshipCompanyName)
+          .length +
+        filterPrincipalBrandNames(businessRelationships.brands || [], relationshipCompanyName)
+          .length;
       console.log(
         `  [${index + 1}] Step 6e: Coverage after AI fallback = ${principalBrandCoverage}`
       );
@@ -15148,7 +15300,8 @@ async function processSingleWebsite(website, index, total) {
 
     let finalBreakdown = applyRelationshipFallbackToBreakdown(
       productsBreakdown,
-      businessRelationships
+      businessRelationships,
+      relationshipCompanyName
     );
     if (
       (!Array.isArray(finalBreakdown.breakdown_items) ||
@@ -15179,11 +15332,11 @@ async function processSingleWebsite(website, index, total) {
       businessRelationships.suppliers || [],
       segmentNameFilter
     );
-    const cleanedPrincipalsForSegments = filterGarbageNames(
+    const cleanedPrincipalsForSegments = filterPrincipalBrandNames(
       businessRelationships.principals || [],
       segmentNameFilter
     );
-    const cleanedBrandsForSegments = filterGarbageNames(
+    const cleanedBrandsForSegments = filterPrincipalBrandNames(
       businessRelationships.brands || [],
       segmentNameFilter
     );
@@ -15255,6 +15408,10 @@ async function processSingleWebsite(website, index, total) {
       _branchEvidenceDetected: branchEvidenceDetected,
       // Relationship coverage quality gate (used to fail loudly in slide output)
       _relationshipCoverageStatus: relationshipCoverageStatus,
+      _locationSource: locationSource,
+      _basedLocationHint: basedLocationHint,
+      _regionalLocationHint: regionalLocationHint,
+      _structuredLocationHint: structuredAddress?.formatted || '',
     };
 
     // Log metrics count before review
@@ -15338,6 +15495,26 @@ async function processSingleWebsite(website, index, total) {
       companyData.business || businessInfo.business,
       markerResult?.markers
     );
+
+    const finalizedLocation = finalizeLocationWithEvidence(companyData.location, {
+      richerHint: companyData._basedLocationHint,
+      secondaryHint: companyData._regionalLocationHint,
+      locationSource: companyData._locationSource,
+      sourceText: scraped.content,
+      evidenceHints: [
+        companyData._basedLocationHint,
+        companyData._regionalLocationHint,
+        companyData._structuredLocationHint,
+        basicInfo.location,
+      ],
+      websiteUrl: trimmedWebsite,
+    });
+    if (finalizedLocation !== companyData.location) {
+      console.log(
+        `  [${index + 1}] Location adjusted after validation: ${companyData.location || '(empty)'} -> ${finalizedLocation || '(empty)'}`
+      );
+      companyData.location = finalizedLocation;
+    }
 
     // Step 7: Filter out empty/meaningless Key Metrics
     // Remove metrics that say "No specific X stated", "Not specified", etc.
@@ -15485,11 +15662,14 @@ function validateProfileData(companies) {
 
     const companyNameForFilter = ensureString(company.company_name || company.title);
     const relationships = company._businessRelationships || {};
-    const cleanedPrincipals = filterGarbageNames(
+    const cleanedPrincipals = filterPrincipalBrandNames(
       relationships.principals || [],
       companyNameForFilter
     );
-    const cleanedBrands = filterGarbageNames(relationships.brands || [], companyNameForFilter);
+    const cleanedBrands = filterPrincipalBrandNames(
+      relationships.brands || [],
+      companyNameForFilter
+    );
     const principalBrandCoverage = cleanedPrincipals.length + cleanedBrands.length;
 
     if (principalBrandCoverage < 1) {
@@ -16183,17 +16363,21 @@ app.post('/api/generate-ppt', async (req, res) => {
 
         // Determine location priority: website extraction -> structured data -> web search fallback.
         let finalLocation = ensureString(basicInfo.location);
+        let locationSource = finalLocation ? 'website' : '';
         if (!finalLocation && structuredAddress?.formatted) {
           finalLocation = structuredAddress.formatted;
+          locationSource = 'jsonld';
           console.log(`  Using JSON-LD address as fallback: ${finalLocation}`);
         }
         if (!finalLocation && regionalLocationHint) {
           finalLocation = regionalLocationHint;
+          locationSource = 'regional';
           console.log(`  Using regional hint fallback: ${finalLocation}`);
         }
         if (!finalLocation) {
           finalLocation = ensureString(searchedInfo.location);
           if (finalLocation) {
+            locationSource = 'search';
             console.log(`  Using searched location fallback: ${finalLocation}`);
           }
         }
@@ -16203,6 +16387,7 @@ app.post('/api/generate-ppt', async (req, res) => {
         );
         if (!finalLocation && basedLocationHint) {
           finalLocation = basedLocationHint;
+          locationSource = 'based';
           console.log(`  Using X-based location fallback: ${finalLocation}`);
         }
 
@@ -16341,7 +16526,10 @@ app.post('/api/generate-ppt', async (req, res) => {
           { minScore: 3 }
         );
         let principalBrandCoverage =
-          businessRelationships.principals.length + businessRelationships.brands.length;
+          filterPrincipalBrandNames(businessRelationships.principals || [], relationshipCompanyName)
+            .length +
+          filterPrincipalBrandNames(businessRelationships.brands || [], relationshipCompanyName)
+            .length;
         if (hasThinCustomerCoverage(businessRelationships.customers)) {
           console.log(
             `  Step 5d: Customer coverage thin (${businessRelationships.customers.length}), running focused customer recall...`
@@ -16389,7 +16577,14 @@ app.post('/api/generate-ppt', async (req, res) => {
             { minScore: 3 }
           );
           principalBrandCoverage =
-            businessRelationships.principals.length + businessRelationships.brands.length;
+            filterPrincipalBrandNames(
+              businessRelationships.principals || [],
+              relationshipCompanyName
+            ).length +
+            filterPrincipalBrandNames(
+              businessRelationships.brands || [],
+              relationshipCompanyName
+            ).length;
           console.log(`  Step 5d: Coverage after AI fallback = ${principalBrandCoverage}`);
         }
         const relationshipCoverageStatus =
@@ -16402,7 +16597,8 @@ app.post('/api/generate-ppt', async (req, res) => {
 
         let finalBreakdown = applyRelationshipFallbackToBreakdown(
           productsBreakdown,
-          businessRelationships
+          businessRelationships,
+          relationshipCompanyName
         );
         if (
           (!Array.isArray(finalBreakdown.breakdown_items) ||
@@ -16433,11 +16629,11 @@ app.post('/api/generate-ppt', async (req, res) => {
           businessRelationships.suppliers || [],
           segmentNameFilter
         );
-        const cleanedPrincipalsForSegments = filterGarbageNames(
+        const cleanedPrincipalsForSegments = filterPrincipalBrandNames(
           businessRelationships.principals || [],
           segmentNameFilter
         );
-        const cleanedBrandsForSegments = filterGarbageNames(
+        const cleanedBrandsForSegments = filterPrincipalBrandNames(
           businessRelationships.brands || [],
           segmentNameFilter
         );
@@ -16510,6 +16706,10 @@ app.post('/api/generate-ppt', async (req, res) => {
           _branchEvidenceDetected: branchEvidenceDetected,
           // Relationship coverage quality gate (used to fail loudly in slide output)
           _relationshipCoverageStatus: relationshipCoverageStatus,
+          _locationSource: locationSource,
+          _basedLocationHint: basedLocationHint,
+          _regionalLocationHint: regionalLocationHint,
+          _structuredLocationHint: structuredAddress?.formatted || '',
         };
 
         // Step 6: Run AI validator to compare extraction vs source and fix issues
@@ -16522,6 +16722,26 @@ app.post('/api/generate-ppt', async (req, res) => {
           companyData.company_name || basicInfo.company_name,
           companyData.business || businessInfo.business
         );
+
+        const finalizedLocation = finalizeLocationWithEvidence(companyData.location, {
+          richerHint: companyData._basedLocationHint,
+          secondaryHint: companyData._regionalLocationHint,
+          locationSource: companyData._locationSource,
+          sourceText: scraped.content,
+          evidenceHints: [
+            companyData._basedLocationHint,
+            companyData._regionalLocationHint,
+            companyData._structuredLocationHint,
+            basicInfo.location,
+          ],
+          websiteUrl: website,
+        });
+        if (finalizedLocation !== companyData.location) {
+          console.log(
+            `  Location adjusted after validation: ${companyData.location || '(empty)'} -> ${finalizedLocation || '(empty)'}`
+          );
+          companyData.location = finalizedLocation;
+        }
 
         // Step 7: Filter empty metrics
         const metricsBefore = companyData.key_metrics?.length || 0;
