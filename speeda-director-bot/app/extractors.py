@@ -68,6 +68,8 @@ class ExtractResult:
     directors: list[DirectorEntry]
     source_url: str | None
     error_reason: str | None
+    debug_text: str | None = None
+    debug_html: str | None = None
 
 
 @dataclass(frozen=True)
@@ -312,10 +314,24 @@ class SpeedaExtractor:
 
             section_text = self._collect_executive_text()
             if not section_text:
-                return ExtractResult("ui_changed", [], self.page.url, "Could not find executive section text.")
+                return ExtractResult(
+                    "ui_changed",
+                    [],
+                    self.page.url,
+                    "Could not find executive section text.",
+                    debug_text=self._safe_body_text(),
+                    debug_html=self._safe_page_html(),
+                )
             directors = parse_directors_from_text(section_text)
             if not directors:
-                return ExtractResult("parse_fail", [], self.page.url, "Executive section found but no parseable director data.")
+                return ExtractResult(
+                    "parse_fail",
+                    [],
+                    self.page.url,
+                    "Executive section found but no parseable director data.",
+                    debug_text=section_text,
+                    debug_html=self._safe_page_html(),
+                )
             return ExtractResult("success", directors, self.page.url, None)
         except PlaywrightTimeoutError:
             return ExtractResult("network_fail", [], self.page.url if self._page else None, "Page timeout during extraction.")
@@ -441,6 +457,18 @@ class SpeedaExtractor:
             if any(term in body_preview for term in FORBIDDEN_TEXT_TERMS):
                 return "Safety stop: suspicious billing/subscription text detected on page."
             return None
+        except Exception:
+            return None
+
+    def _safe_body_text(self) -> str | None:
+        try:
+            return self.page.locator("body").inner_text(timeout=4000)
+        except Exception:
+            return None
+
+    def _safe_page_html(self) -> str | None:
+        try:
+            return self.page.content()
         except Exception:
             return None
 

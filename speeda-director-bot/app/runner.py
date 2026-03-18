@@ -353,6 +353,12 @@ class SpeedaRunController:
                     result, attempts_used = self._extract_with_retries(extractor, company_row, config.max_retries)
                     final_status = result.status
                     output_value: str | None = None
+                    debug_path = self._write_debug_artifacts(run_dir, company_row.row_number, final_status, result)
+                    error_reason = result.error_reason
+                    if debug_path and error_reason:
+                        error_reason = f"{error_reason} Debug: {debug_path}"
+                    elif debug_path:
+                        error_reason = f"Debug: {debug_path}"
                     if result.status == "success":
                         output_value = format_director_info(result.directors)
                         auth_hits = 0
@@ -381,7 +387,7 @@ class SpeedaRunController:
                         status=final_status,
                         director_info=output_value,
                         source_url=result.source_url,
-                        error_reason=result.error_reason,
+                        error_reason=error_reason,
                         attempt_count=attempts_used,
                     )
 
@@ -493,6 +499,30 @@ class SpeedaRunController:
             skipped_rows=counters.skipped_rows,
             warning_rows=counters.warning_rows,
         )
+
+    def _write_debug_artifacts(
+        self,
+        run_dir: Path,
+        row_number: int,
+        status: str,
+        result: ExtractResult,
+    ) -> str | None:
+        if not result.debug_text and not result.debug_html:
+            return None
+        debug_dir = run_dir / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        base_name = f"row_{row_number}_{status}"
+        if result.debug_text:
+            text_path = debug_dir / f"{base_name}.txt"
+            text_path.write_text(result.debug_text, encoding="utf-8")
+        else:
+            text_path = None
+        if result.debug_html:
+            html_path = debug_dir / f"{base_name}.html"
+            html_path.write_text(result.debug_html, encoding="utf-8")
+        if text_path:
+            return str(text_path)
+        return str(debug_dir / f"{base_name}.html")
 
     def _set_activity(self, step: str, url: str | None, message: str | None = None) -> None:
         with self._lock:

@@ -48,7 +48,7 @@ function buildConfig(mode) {
   const cfg = readConfig();
   if (mode === "test") {
     cfg.start_row = 12;
-    cfg.end_row = 40;
+    cfg.end_row = 21;
     cfg.force_retry = true;
   }
   if (mode === "full") {
@@ -148,7 +148,7 @@ function initActions() {
   });
 
   byId("btn_start_test").addEventListener("click", async () => {
-    await doAction("Start 30-Row Test", "/api/start_run", buildConfig("test"));
+    await doAction("Start 10-Row Test", "/api/start_run", buildConfig("test"));
   });
 
   byId("btn_start_full").addEventListener("click", async () => {
