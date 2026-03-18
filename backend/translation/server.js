@@ -56,6 +56,11 @@ const MAX_TRANSLATABLE_SEGMENTS = Number(process.env.TRANSLATION_MAX_SEGMENTS ||
 const JAPANESE_FONT_FAMILY = process.env.TRANSLATION_JA_FONT || 'Yu Gothic';
 const JAPANESE_PREFERRED_LABEL_RULES = [
   {
+    aliases: ['source: company website', 'source : company website'],
+    replacement: '出典：会社ウェブサイト',
+    prompt: 'Source: Company website -> 出典：会社ウェブサイト',
+  },
+  {
     aliases: ['name', 'company name'],
     replacement: '会社名',
     prompt: 'Name / Company Name -> 会社名',
@@ -137,6 +142,11 @@ const JAPANESE_PREFERRED_LABEL_RULES = [
     aliases: ['programs', 'programme', 'programmes', 'programs / programme', 'programs/programme'],
     replacement: 'プログラム',
     prompt: 'Programs / Programme -> プログラム (adjust only when the surrounding meaning clearly requires a different Japanese label)',
+  },
+  {
+    aliases: ['financial information'],
+    replacement: '財務実績',
+    prompt: 'Financial Information -> 財務実績',
   },
 ];
 const JAPANESE_PREFERRED_LABEL_MAP = new Map(
@@ -676,6 +686,8 @@ function buildSystemPrompt(targetLanguage, sourceLanguage, glossary, options = {
     `Source language: ${sourceLanguage}.`,
     'Critical rules:',
     '- Preserve meaning, tone, and business intent.',
+    '- Keep company names in their original English form unless the source is already in the target language.',
+    '- Keep shareholder, investor, and owner names in their original English form unless the source is already in the target language.',
     '- Keep numbers, currency, percentages, dates, URLs, and email addresses unchanged unless target-language formatting requires it.',
     '- Preserve placeholders and tokens such as {name}, [value], %s, and <tag> exactly.',
     '- Return only JSON. No markdown, no commentary.',
