@@ -396,6 +396,17 @@ class SpeedaRunController:
                     )
                     adapter.write_director_info(company_row.row_number, output_value)
                     adapter.save()
+                    try:
+                        adapter.sync_to_source()
+                    except PermissionError:
+                        self._mark_run_failed(
+                            run_id,
+                            "Original Excel file is open. Close it, then click the same set again.",
+                        )
+                        break
+                    except Exception as exc:
+                        self._mark_run_failed(run_id, f"Could not update the original Excel file: {exc}")
+                        break
 
                     self.store.upsert_row_result(
                         run_id,
@@ -428,6 +439,7 @@ class SpeedaRunController:
         finally:
             try:
                 adapter.save()
+                adapter.sync_to_source()
             except Exception:
                 pass
             adapter.close()

@@ -92,6 +92,16 @@ class WorkbookAdapter:
             raise RuntimeError("Workbook is not loaded.")
         self._workbook.save(self.working_workbook_path)
 
+    def sync_to_source(self) -> None:
+        if not self.working_workbook_path:
+            raise RuntimeError("Working workbook path is not prepared.")
+        self.source_workbook_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = self.source_workbook_path.with_name(
+            f"{self.source_workbook_path.stem}.codex_sync{self.source_workbook_path.suffix}"
+        )
+        shutil.copy2(self.working_workbook_path, temp_path)
+        temp_path.replace(self.source_workbook_path)
+
     def close(self) -> None:
         if self._workbook:
             self._workbook.close()
@@ -104,4 +114,3 @@ class WorkbookAdapter:
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(self.working_workbook_path, destination_path)
         return destination_path
-
