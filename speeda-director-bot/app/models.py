@@ -45,16 +45,16 @@ class RunConfig:
     target_column: str = DEFAULT_TARGET_COLUMN
     force_retry: bool = False
     max_retries: int = 2
-    pace_profile: str = "conservative"
+    pace_profile: str = "stealth"
     base_url: str = DEFAULT_BASE_URL
     headless: bool = False
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any] | None) -> "RunConfig":
         payload = payload or {}
-        pace = str(payload.get("pace_profile", "conservative")).strip().lower()
-        if pace not in ("conservative", "normal"):
-            pace = "conservative"
+        pace = str(payload.get("pace_profile", "stealth")).strip().lower()
+        if pace not in ("stealth", "conservative", "normal"):
+            pace = "stealth"
         target_col = str(payload.get("target_column", DEFAULT_TARGET_COLUMN)).strip().upper()
         if not target_col:
             target_col = DEFAULT_TARGET_COLUMN

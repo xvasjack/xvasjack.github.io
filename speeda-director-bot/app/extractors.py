@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import re
 import time
 from dataclasses import dataclass
@@ -637,5 +638,11 @@ class SpeedaExtractor:
             return False
 
     def _pace_wait(self, multiplier: float = 1.0) -> None:
-        base = 0.8 if self.pace_profile == "conservative" else 0.35
-        time.sleep(base * multiplier)
+        if self.pace_profile == "stealth":
+            base = 2.2
+        elif self.pace_profile == "conservative":
+            base = 1.0
+        else:
+            base = 0.35
+        jitter = random.uniform(0.85, 1.35)
+        time.sleep(base * multiplier * jitter)

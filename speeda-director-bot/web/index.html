@@ -18,7 +18,6 @@
         <div class="buttons">
           <button id="btn_login_check">1) Login Check</button>
           <button id="btn_start_test">2) Start 10-Row Test</button>
-          <button id="btn_start_full">3) Start Full Run</button>
           <button id="btn_pause">Pause</button>
           <button id="btn_resume">Resume</button>
           <button id="btn_stop">Stop</button>
@@ -29,6 +28,12 @@
           <a id="download_log" href="/api/download_log" target="_blank" rel="noopener">Download Run Log</a>
           <input id="destination_path" type="text" placeholder="Optional export path (leave blank for auto path)" />
         </div>
+      </section>
+
+      <section class="panel set-controls">
+        <h2>Run One Set</h2>
+        <p>Click one button. Each button runs only that part of the list.</p>
+        <div id="set_buttons" class="set-buttons"></div>
       </section>
 
       <section class="panel status">
@@ -104,6 +109,7 @@
           <label>
             Pace profile
             <select id="pace_profile">
+              <option value="stealth">safer slow</option>
               <option value="conservative">conservative</option>
               <option value="normal">normal</option>
             </select>

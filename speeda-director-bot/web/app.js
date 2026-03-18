@@ -5,12 +5,13 @@ const defaults = {
   end_row: 8673,
   target_column: "V",
   max_retries: 2,
-  pace_profile: "conservative",
+  pace_profile: "stealth",
   base_url: "https://www.ub-speeda.com/",
   force_retry: false,
   headless: false,
 };
 
+const SET_COUNT = 20;
 let pollTimer = null;
 
 function byId(id) {
@@ -44,18 +45,49 @@ function readConfig() {
   };
 }
 
-function buildConfig(mode) {
+function buildConfig(mode, range = null) {
   const cfg = readConfig();
   if (mode === "test") {
     cfg.start_row = 12;
     cfg.end_row = 21;
     cfg.force_retry = true;
   }
-  if (mode === "full") {
-    cfg.start_row = 11;
-    cfg.end_row = 8673;
+  if (mode === "set" && range) {
+    cfg.start_row = range.start_row;
+    cfg.end_row = range.end_row;
+    cfg.force_retry = false;
   }
   return cfg;
+}
+
+function buildSetRanges(startRow, endRow, count) {
+  const start = Number(startRow);
+  const end = Number(endRow);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || count < 1) {
+    return [];
+  }
+
+  const total = end - start + 1;
+  const baseSize = Math.floor(total / count);
+  const extraRows = total % count;
+  const ranges = [];
+  let currentStart = start;
+
+  for (let index = 0; index < count; index += 1) {
+    const size = baseSize + (index < extraRows ? 1 : 0);
+    if (size <= 0) {
+      break;
+    }
+    const currentEnd = currentStart + size - 1;
+    ranges.push({
+      set_number: index + 1,
+      start_row: currentStart,
+      end_row: currentEnd,
+    });
+    currentStart = currentEnd + 1;
+  }
+
+  return ranges;
 }
 
 async function postJson(url, body) {
@@ -125,6 +157,25 @@ async function doAction(label, endpoint, body) {
   }
 }
 
+function renderSetButtons() {
+  const host = byId("set_buttons");
+  if (!host) return;
+
+  const ranges = buildSetRanges(byId("start_row").value, byId("end_row").value, SET_COUNT);
+  host.innerHTML = "";
+
+  for (const range of ranges) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "set-button";
+    button.textContent = `Set ${range.set_number}: rows ${range.start_row}-${range.end_row}`;
+    button.addEventListener("click", async () => {
+      await doAction(`Start Set ${range.set_number}`, "/api/start_run", buildConfig("set", range));
+    });
+    host.appendChild(button);
+  }
+}
+
 function initDefaults() {
   for (const [key, value] of Object.entries(defaults)) {
     const el = byId(key);
@@ -151,10 +202,6 @@ function initActions() {
     await doAction("Start 10-Row Test", "/api/start_run", buildConfig("test"));
   });
 
-  byId("btn_start_full").addEventListener("click", async () => {
-    await doAction("Start Full Run", "/api/start_run", buildConfig("full"));
-  });
-
   byId("btn_pause").addEventListener("click", async () => {
     await doAction("Pause", "/api/pause_run", {});
   });
@@ -176,6 +223,9 @@ function initActions() {
       destination_path: byId("destination_path").value || null,
     });
   });
+
+  byId("start_row").addEventListener("change", renderSetButtons);
+  byId("end_row").addEventListener("change", renderSetButtons);
 }
 
 function startPolling() {
@@ -188,5 +238,6 @@ function startPolling() {
 
 initDefaults();
 initActions();
+renderSetButtons();
 startPolling();
 addLog("Simple dashboard ready. AI used for extraction: none.");

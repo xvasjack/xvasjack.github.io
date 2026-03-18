@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 import shutil
 import threading
 import time
@@ -328,7 +329,7 @@ class SpeedaRunController:
                     self._mark_run_failed(run_id, "Blocked page detected during startup.")
                     return
 
-                for company_row in rows:
+                for row_index, company_row in enumerate(rows, start=1):
                     if self._stop_event.is_set():
                         self._mark_run_stopped(run_id, "Run stopped by user.")
                         break
@@ -350,7 +351,12 @@ class SpeedaRunController:
                         None,
                         f"Reading row {company_row.row_number}: {company_row.company_name}",
                     )
-                    result, attempts_used = self._extract_with_retries(extractor, company_row, config.max_retries)
+                    result, attempts_used = self._extract_with_retries(
+                        extractor,
+                        company_row,
+                        config.max_retries,
+                        config.pace_profile,
+                    )
                     final_status = result.status
                     output_value: str | None = None
                     debug_path = self._write_debug_artifacts(run_dir, company_row.row_number, final_status, result)
@@ -400,6 +406,8 @@ class SpeedaRunController:
                     if blocked_hits >= 3:
                         self._mark_run_failed(run_id, "Repeated blocked pages detected. Stopping for account safety.")
                         break
+                    if row_index < len(rows):
+                        self._pause_between_companies(config.pace_profile)
                 else:
                     self._mark_run_completed(run_id, "Run completed.")
         except Exception as exc:
@@ -418,6 +426,7 @@ class SpeedaRunController:
         extractor: SpeedaExtractor,
         row: CompanyRow,
         max_retries: int,
+        pace_profile: str,
     ) -> tuple[ExtractResult, int]:
         attempts = max_retries + 1
         last_result: ExtractResult | None = None
@@ -430,10 +439,43 @@ class SpeedaRunController:
             if last_result.status in ("success", "not_found", "ambiguous", "blocked", "auth_required"):
                 return last_result, attempt
             # parse/network/ui_changed get retries.
-            time.sleep(min(attempt, 3) * 0.8)
+            self._pause_for_retry(pace_profile, attempt)
         if last_result:
             return last_result, attempts
         return ExtractResult("parse_fail", [], None, "No extraction result returned."), attempts
+
+    def _pause_between_companies(self, pace_profile: str) -> None:
+        delays = {
+            "stealth": (3.5, 7.0),
+            "conservative": (1.8, 3.4),
+            "normal": (0.4, 1.1),
+        }
+        low, high = delays.get(pace_profile, delays["stealth"])
+        seconds = random.uniform(low, high)
+        self._set_activity("Waiting a bit", None, f"Short safety pause for {seconds:.1f}s.")
+        self._timed_pause(seconds)
+
+    def _pause_for_retry(self, pace_profile: str, attempt: int) -> None:
+        base = {
+            "stealth": 2.4,
+            "conservative": 1.2,
+            "normal": 0.6,
+        }.get(pace_profile, 2.4)
+        seconds = base * min(attempt, 3)
+        self._set_activity("Waiting before retry", None, f"Retry pause for {seconds:.1f}s.")
+        self._timed_pause(seconds)
+
+    def _timed_pause(self, seconds: float) -> None:
+        deadline = time.monotonic() + max(seconds, 0.0)
+        while time.monotonic() < deadline:
+            if self._stop_event.is_set():
+                return
+            if not self._pause_event.is_set():
+                self._pause_event.wait()
+                if self._stop_event.is_set():
+                    return
+            remaining = deadline - time.monotonic()
+            time.sleep(min(0.5, max(remaining, 0.05)))
 
     def _record_skip(self, run_id: str, row: CompanyRow) -> None:
         self.store.upsert_row_result(

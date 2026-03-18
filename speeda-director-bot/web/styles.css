@@ -54,6 +54,17 @@ p {
   gap: 8px;
 }
 
+.set-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.set-button {
+  text-align: left;
+  min-height: 52px;
+}
+
 button {
   border: none;
   border-radius: 8px;
@@ -184,4 +195,3 @@ label.checkbox {
     padding: 8px;
   }
 }
-
