@@ -467,6 +467,8 @@ class SpeedaExtractor:
             body = self.page.locator("body").inner_text(timeout=1200).lower()
             body_preview = body[:3000]
             if any(term in body_preview for term in FORBIDDEN_TEXT_TERMS):
+                if self._is_safe_company_href(url_lower):
+                    return None
                 return "Safety stop: suspicious billing/subscription text detected on page."
             return None
         except Exception:
