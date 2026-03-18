@@ -15924,7 +15924,7 @@ app.post('/api/profile-slides', async (req, res) => {
   // Return immediately - process in background
   res.json({
     success: true,
-    message: 'Request received. Results will be emailed within 5-10 minutes.',
+    message: 'Request received. Results will be emailed in about 4 minutes per slide.',
     companies: [],
     errors: [],
     total: websites.length,
