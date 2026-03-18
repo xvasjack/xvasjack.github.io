@@ -110,6 +110,8 @@ def parse_directors_from_text(raw_text: str) -> list[DirectorEntry]:
             continue
         if len(name) < 2:
             continue
+        if not _looks_like_person_name(name):
+            continue
         key = name.lower()
         if key in seen:
             continue
@@ -124,6 +126,41 @@ def normalize_company_name(value: str) -> str:
     value = re.sub(r"[^a-z0-9]+", " ", value)
     value = re.sub(r"\s+", " ", value)
     return value.strip()
+
+
+def _looks_like_person_name(name: str) -> bool:
+    lowered = name.lower().strip()
+    if not lowered:
+        return False
+    blocked_phrases = (
+        "executive",
+        "director",
+        "directors",
+        "officer",
+        "officers",
+        "board",
+        "chart",
+        "organization",
+        "key",
+        "leadership",
+        "profile",
+        "information",
+        "info",
+        "charge",
+        "management",
+        "shareholder",
+        "company",
+    )
+    if any(term in lowered for term in blocked_phrases):
+        return False
+    if any(char in name for char in ("&", "/", ":", "|", "[", "]")):
+        return False
+    if re.search(r"[\u3040-\u30ff\u3400-\u9fff]", name):
+        return len(name) <= 40
+    words = re.findall(r"[A-Za-z][A-Za-z'.-]*", name)
+    if len(words) < 2 or len(words) > 8:
+        return False
+    return True
 
 
 def _extract_age(line: str) -> int | None:

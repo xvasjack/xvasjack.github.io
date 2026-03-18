@@ -49,7 +49,7 @@ function buildConfig(mode) {
   if (mode === "test") {
     cfg.start_row = 12;
     cfg.end_row = 40;
-    cfg.force_retry = false;
+    cfg.force_retry = true;
   }
   if (mode === "full") {
     cfg.start_row = 11;
