@@ -426,8 +426,17 @@ function sanitizeLocationValue(value) {
   const cleaned = [];
   const seen = new Set();
 
+  const normalizeLocationToken = (rawValue) => {
+    const text = fixAcronymCasing(ensureString(rawValue).trim());
+    if (!text) return '';
+    if (/^[A-Z]{4,}$/.test(text) && !getCountryCodeFromToken(text)) {
+      return toTitleCase(text);
+    }
+    return text;
+  };
+
   for (const entry of entries) {
-    const text = ensureString(entry).trim();
+    const text = normalizeLocationToken(entry);
     if (!text) continue;
     if (isBulletOnlyLine(text)) continue;
     if (
@@ -455,6 +464,10 @@ function sanitizeLocationValue(value) {
   }
 
   if (cleaned.length === 0) return '';
+  const compactEntries = cleaned.filter((entry) => entry.split(/\s+/).length <= 4);
+  if (compactEntries.length === cleaned.length) {
+    return fixAcronymCasing(compactEntries.join(', '));
+  }
   return formatCompactEntryList(cleaned.join('\n'), { maxEntries: 6, lineModeThreshold: 3 });
 }
 
@@ -557,8 +570,11 @@ function classifyRelationshipPageContext(pagePath) {
   ) {
     return 'negative_person';
   }
-  if (/(client|customer|trusted|project|portfolio|reference|case|experience)/i.test(lower)) {
+  if (/(client|customer|trusted|references?)/i.test(lower)) {
     return 'customer_heavy';
+  }
+  if (/(project|portfolio|case|experience)/i.test(lower)) {
+    return 'project_heavy';
   }
   if (/(partner|principal|supplier|vendor|brand|dealer|distributor)/i.test(lower)) {
     return 'relationship_heavy';
@@ -579,11 +595,20 @@ function buildRelationshipContentForAI(scrapedContent, options = {}) {
   );
 
   if (focus === 'customers') {
-    const prioritized = nonNegative.filter((section) => {
+    const prioritizedCustomers = nonNegative.filter((section) => {
       const context = classifyRelationshipPageContext(section.path);
       return context === 'customer_heavy' || section.path === '/';
     });
-    const selected = prioritized.length > 0 ? prioritized : nonNegative;
+    const prioritizedProjects = nonNegative.filter((section) => {
+      const context = classifyRelationshipPageContext(section.path);
+      return context === 'project_heavy' || section.path === '/';
+    });
+    const selected =
+      prioritizedCustomers.length > 0
+        ? prioritizedCustomers
+        : prioritizedProjects.length > 0
+          ? prioritizedProjects
+          : nonNegative;
     return selected.map((section) => `=== ${section.path} PAGE ===\n${section.text}`).join('\n\n');
   }
 
@@ -1110,7 +1135,7 @@ function formatCompactEntryList(value, options = {}) {
     return visible.join(', ');
   }
 
-  return visible.map((entry) => `- ${entry}`).join('\n');
+  return visible.join('\n');
 }
 
 function isLikelyYearLabel(label) {
@@ -1357,38 +1382,53 @@ function finalizeLocationWithEvidence(location, options = {}) {
 function chooseRightSectionTitle(company) {
   const explicitTitle = ensureString(company?.breakdown_title).trim();
   const explicitLower = explicitTitle.toLowerCase();
-  if (explicitTitle && explicitLower !== 'products and applications') {
+  const genericTitles = new Set([
+    'products and applications',
+    'past projects',
+    'capabilities',
+    'service offerings',
+  ]);
+  if (explicitTitle && !genericTitles.has(explicitLower)) {
     return fixAcronymCasing(explicitTitle);
   }
 
+  const itemText = Array.isArray(company?.breakdown_items)
+    ? company.breakdown_items
+        .map((item) => `${ensureString(item?.label)} ${ensureString(item?.value)}`)
+        .join(' ')
+    : '';
   const contextText = [
     ensureString(company?.business),
     ensureString(company?.message),
     ensureString(company?.title),
     ensureString(company?.business_type),
-    ...(Array.isArray(company?.breakdown_items)
-      ? company.breakdown_items.map((item) => `${ensureString(item?.label)} ${ensureString(item?.value)}`)
-      : []),
+    itemText,
   ]
     .join(' ')
     .toLowerCase();
 
-  if (
-    /\b(project|projects|retrofit|installation|commissioning|reference|case study|portfolio)\b/.test(
-      contextText
-    )
-  ) {
+  const countMatches = (pattern) => {
+    const matches = contextText.match(pattern);
+    return matches ? matches.length : 0;
+  };
+
+  const projectSignals = countMatches(
+    /\b(project|projects|reference|references|case study|portfolio|completed project|key client)\b/g
+  );
+  const serviceSignals = countMatches(
+    /\b(service|services|maintenance|repair|facility|operation|managed|outsourcing|amc|commissioning|retrofit)\b/g
+  );
+  const equipmentSignals = countMatches(
+    /\b(chiller|chillers|ahu|ahus|vrf|acmv|hvac|mep|ventilation|duct|cooling tower|fan coil|air handling|packaged ac|pump|system|systems|equipment)\b/g
+  );
+
+  if (projectSignals >= 3 && projectSignals > serviceSignals + equipmentSignals) {
     return 'Past Projects';
   }
-  if (
-    /\b(hvac|acmv|mep|facility|maintenance|service|services|repair|operation|outsourcing|solutions?)\b/.test(
-      contextText
-    )
-  ) {
-    return /\b(capabilit|solutions?)\b/.test(contextText) ? 'Capabilities' : 'Service Offerings';
-  }
-
-  return 'Products and Applications';
+  if (serviceSignals > 0 && equipmentSignals > 0) return 'Services and Systems Managed';
+  if (equipmentSignals > 0) return 'Equipment Managed';
+  if (serviceSignals > 0) return 'Systems Managed';
+  return explicitTitle ? fixAcronymCasing(explicitTitle) : 'Systems Managed';
 }
 
 function mergeReadableRowValues(valueA, valueB) {
@@ -1408,7 +1448,7 @@ function mergeReadableRowValues(valueA, valueB) {
   if (!hasSegmentedItems && unique.length <= 4) {
     return unique.join(', ');
   }
-  return unique.map((entry) => `- ${entry}`).join('\n');
+  return unique.join('\n');
 }
 function isMeaninglessStandaloneValue(value) {
   const entries = splitReadableEntries(value);
@@ -4916,7 +4956,7 @@ const SHORTFORM_DEFINITIONS = {
 const EXCHANGE_RATE_MAP = {
   PH: '為替レート: PHP 100M = 3億円',
   TH: '為替レート: THB 100M = 5億円',
-  MY: '為替レート: MYR 10M = 3億円',
+  MY: '為替レート: MYR 10M = 4億円',
   ID: '為替レート: IDR 100B = 10億円',
   SG: '為替レート: SGD 1M = 1億円',
   VN: '為替レート: VND 100B = 6億円',
@@ -4968,6 +5008,11 @@ function getCountryCode(location) {
   if (directCode) return directCode;
 
   return null;
+}
+
+function getExchangeRateForLocation(location) {
+  const countryCode = getCountryCode(location);
+  return countryCode ? EXCHANGE_RATE_MAP[countryCode] || '' : '';
 }
 
 // HARD RULE: Filter out empty/meaningless Key Metrics
@@ -5991,7 +6036,7 @@ async function generatePPTX(
           !locationText.toLowerCase().includes('branch') &&
           !locationText.toLowerCase().includes('factory') &&
           !locationText.toLowerCase().includes('warehouse');
-        const locationLabel = isSingleLocation ? 'HQ' : 'Location';
+        const locationLabel = 'HQ';
 
         // Helper function to check if value is empty or placeholder text
         const isEmptyValue = (val) => {
@@ -6141,14 +6186,27 @@ async function generatePPTX(
         );
         const effectiveLocation = preferRicherLocationValue(company.location, basedLocationFallback);
         const cleanedBranchSummary = cleanBranchNetworkSummary(branchNetworkSummary);
+        const serviceCenterValue = extractServiceCenterValue(cleanedBranchSummary);
+        const headcountValue = getHeadcountValueFromCompany(company);
 
-        // Add Location row (HQ + branch footprint in same row when available)
+        // Add HQ row only. Branch/service-center coverage stays in its own row.
         if (!isEmptyValue(effectiveLocation) || hasBranchCoverage) {
           const cleanLocation = !isEmptyValue(effectiveLocation)
             ? cleanLocationValue(effectiveLocation, locationLabel)
             : '';
-          const locationValue = [cleanLocation, cleanedBranchSummary].filter(Boolean).join('\n');
-          tableData.push([locationLabel, locationValue, null]);
+          if (!isEmptyValue(cleanLocation)) {
+            tableData.push([locationLabel, cleanLocation, null]);
+          }
+          if (
+            !isEmptyValue(serviceCenterValue) &&
+            normalizeForComparison(serviceCenterValue) !== normalizeForComparison(cleanLocation)
+          ) {
+            tableData.push(['Service Centers', serviceCenterValue, null]);
+          }
+        }
+
+        if (!isEmptyValue(headcountValue)) {
+          tableData.push(['Headcount', headcountValue, null]);
         }
 
         // Add Business if available
@@ -6232,6 +6290,9 @@ async function generatePPTX(
                 (labelLower.includes('branch') ||
                   (labelLower.includes('office') && metricValueLower.includes('branch')) ||
                   (labelLower.includes('location') && metricValueLower.includes('branch')));
+              const isHeadcountDuplicate =
+                existingLabels.has('headcount') &&
+                /(employee|employees|staff|headcount|team)/i.test(labelLower);
 
               // Skip if this category is already shown on the right table
               const isInRightTable = excludeKeywords.some((kw) => labelLower.includes(kw));
@@ -6240,6 +6301,7 @@ async function generatePPTX(
               if (
                 !isExcluded &&
                 !isBranchDuplicate &&
+                !isHeadcountDuplicate &&
                 !isInRightTable &&
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
@@ -6307,7 +6369,7 @@ async function generatePPTX(
               ? company._supplierSegments
               : null;
           const suppliersList = buildRelationshipDisplayText(supplierSegments, cleanedSuppliers, {
-            maxLines: 4,
+            maxLines: 5,
             maxNamesPerLine: 4,
           });
           tableData.push(['Key Suppliers', suppliersList, null]);
@@ -6375,7 +6437,7 @@ async function generatePPTX(
                 company._customerSegments,
                 cleanedCustomers,
                 {
-                  maxLines: 4,
+                  maxLines: 5,
                   maxNamesPerLine: 4,
                 }
               );
@@ -6397,6 +6459,12 @@ async function generatePPTX(
           if (lower === 'est. year' || lower === 'founded' || isLikelyYearLabel(lower)) {
             return 'established_year';
           }
+          if (/(^| )(headcount|employees?|staff)$/i.test(lower)) {
+            return 'headcount';
+          }
+          if (/(service centers?|service centres?|branch network|branches?|offices?)/i.test(lower)) {
+            return 'service_centers';
+          }
           if (/(^| )((key )?(customers?|clients?)|(customer|client) segments?)$/i.test(lower)) {
             return 'customers';
           }
@@ -6415,6 +6483,7 @@ async function generatePPTX(
 
         const inferGeographyDisplayLabel = (label) => {
           const lower = ensureString(label).toLowerCase().trim();
+          if (lower.includes('service center') || lower.includes('branch')) return 'Service Centers';
           if (lower.includes('foreign worker source')) return 'Foreign Worker Source';
           if (lower.includes('source countries')) return 'Source Countries';
           if (lower.includes('project countries')) return 'Project Countries';
@@ -6472,8 +6541,10 @@ async function generatePPTX(
           'name',
           'est. year',
           'established',
+          'headcount',
           'hq',
           'location',
+          'service centers',
           'shareholding',
           'business',
           'key partnerships',
@@ -6578,6 +6649,17 @@ async function generatePPTX(
               return;
             }
             value = sanitizedLocation;
+          }
+
+          if (normalizedLower === 'service centers') {
+            const cleanedServiceCenters = extractServiceCenterValue(value);
+            if (!cleanedServiceCenters) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because no clean service-center text remained`
+              );
+              return;
+            }
+            value = cleanedServiceCenters;
           }
 
           if (normalizedLower === 'key metrics') {
@@ -6691,33 +6773,38 @@ async function generatePPTX(
           }
 
           if (rowCanonical === 'geography') {
-            const normalizedGeographyItems = [
+            const expectsCountryLevel = [
               'export countries',
               'project countries',
               'source countries',
               'foreign worker source',
               'countries served',
-            ].includes(normalizedLower)
+            ].includes(normalizedLower);
+            const countryLevelItems = expectsCountryLevel
               ? extractCountryLevelGeographyItemsFromText(value)
+              : [];
+            const normalizedGeographyItems = expectsCountryLevel
+              ? countryLevelItems
               : extractGeographyItemsFromText(value);
             if (normalizedGeographyItems.length > 0) {
               value = formatCompactEntryList(normalizedGeographyItems.join('\n'), {
                 maxEntries: 12,
                 lineModeThreshold: 5,
               });
-            } else if (
-              [
-                'export countries',
-                'project countries',
-                'source countries',
-                'foreign worker source',
-                'countries served',
-              ].includes(normalizedLower)
-            ) {
+            } else if (expectsCountryLevel) {
+              const localGeographyItems = extractGeographyItemsFromText(value);
+              if (localGeographyItems.length > 0) {
+                label = 'Service Centers';
+                value = formatCompactEntryList(localGeographyItems.join('\n'), {
+                  maxEntries: 8,
+                  lineModeThreshold: 4,
+                });
+              } else {
               console.log(
                 `    [LeftTable Cleanup] Removed "${label}" because no country-level geography remained after cleanup`
               );
               return;
+              }
             }
           }
 
@@ -6819,7 +6906,7 @@ async function generatePPTX(
             return;
           }
 
-          const canonical = rowCanonical;
+          const canonical = canonicalLeftLabel(label);
           if (canonical === 'established_year' && rowIndexByCanonical.has(canonical)) {
             const existingIndex = rowIndexByCanonical.get(canonical);
             const existingRow = finalTableData[existingIndex];
@@ -6831,6 +6918,16 @@ async function generatePPTX(
               );
               return;
             }
+          }
+          if (canonical === 'headcount' && rowIndexByCanonical.has(canonical)) {
+            const existingIndex = rowIndexByCanonical.get(canonical);
+            const existingRow = finalTableData[existingIndex];
+            const existingValue = ensureString(existingRow?.[1]);
+            const chosenValue =
+              existingValue.length >= ensureString(value).length ? existingValue : ensureString(value);
+            finalTableData[existingIndex] = ['Headcount', chosenValue, existingRow[2] || meta];
+            console.log(`    [LeftTable Cleanup] Kept one canonical "Headcount" row`);
+            return;
           }
           if (canonical === 'customers' && rowIndexByCanonical.has(canonical)) {
             const existingIndex = rowIndexByCanonical.get(canonical);
@@ -6879,6 +6976,22 @@ async function generatePPTX(
             console.log(`    [LeftTable Cleanup] Merged duplicate supplier rows into one "Suppliers" row`);
             return;
           }
+          if (canonical === 'service_centers' && rowIndexByCanonical.has(canonical)) {
+            const existingIndex = rowIndexByCanonical.get(canonical);
+            const existingRow = finalTableData[existingIndex];
+            const mergedValue = formatCompactEntryList(
+              mergeReadableRowValues(existingRow[1], value),
+              {
+                maxEntries: 8,
+                lineModeThreshold: 4,
+              }
+            );
+            finalTableData[existingIndex] = ['Service Centers', mergedValue, existingRow[2] || meta];
+            console.log(
+              `    [LeftTable Cleanup] Merged duplicate service-center rows into one "Service Centers" row`
+            );
+            return;
+          }
           if (canonical === 'geography' && rowIndexByCanonical.has(canonical)) {
             const existingIndex = rowIndexByCanonical.get(canonical);
             const existingRow = finalTableData[existingIndex];
@@ -6890,29 +7003,30 @@ async function generatePPTX(
             return;
           }
 
-          const finalLabel =
-            canonical === 'customers'
-              ? 'Customers'
-              : canonical === 'partnerships'
-                ? 'Key Partnerships'
-                : canonical === 'suppliers'
-                  ? 'Suppliers'
-                : canonical === 'geography'
-                  ? inferGeographyDisplayLabel(label)
-                : normalizeLabel(label);
+          let finalLabel = normalizeLabel(label);
+          if (canonical === 'headcount') finalLabel = 'Headcount';
+          else if (canonical === 'service_centers') finalLabel = 'Service Centers';
+          else if (canonical === 'customers') finalLabel = 'Customers';
+          else if (canonical === 'partnerships') finalLabel = 'Key Partnerships';
+          else if (canonical === 'suppliers') finalLabel = 'Suppliers';
+          else if (canonical === 'geography') finalLabel = inferGeographyDisplayLabel(label);
 
           finalTableData.push([finalLabel, value, meta]);
           rowIndexByCanonical.set(canonical, finalTableData.length - 1);
         });
 
         if (extractedGeoFromPartnerships.length > 0) {
-          const geoValueFromPartnerships = formatCompactEntryList(
-            extractedGeoFromPartnerships.join('\n'),
-            {
-              maxEntries: 12,
-              lineModeThreshold: 5,
-            }
+          const countryLevelPartnershipGeo = extractCountryLevelGeographyItemsFromText(
+            extractedGeoFromPartnerships.join('\n')
           );
+          const partnershipGeoItems =
+            countryLevelPartnershipGeo.length > 0
+              ? countryLevelPartnershipGeo
+              : extractGeographyItemsFromText(extractedGeoFromPartnerships.join('\n'));
+          const geoValueFromPartnerships = formatCompactEntryList(partnershipGeoItems.join('\n'), {
+            maxEntries: 12,
+            lineModeThreshold: 5,
+          });
           if (geoValueFromPartnerships) {
             let geoIndex = finalTableData.findIndex((row) => {
               const lowerLabel = ensureString(row?.[0]).toLowerCase().trim();
@@ -6922,20 +7036,28 @@ async function generatePPTX(
                 'project countries',
                 'source countries',
                 'countries served',
+                'service centers',
               ].includes(lowerLabel);
             });
             if (geoIndex >= 0) {
               const existingGeoRow = finalTableData[geoIndex];
-              finalTableData[geoIndex] = [
-                existingGeoRow[0],
-                mergeOrChooseRicherGeographyValue(existingGeoRow[1], geoValueFromPartnerships),
-                existingGeoRow[2],
-              ];
+              const mergedGeoValue =
+                ensureString(existingGeoRow[0]).toLowerCase().trim() === 'service centers'
+                  ? formatCompactEntryList(
+                      mergeReadableRowValues(existingGeoRow[1], geoValueFromPartnerships),
+                      {
+                        maxEntries: 8,
+                        lineModeThreshold: 4,
+                      }
+                    )
+                  : mergeOrChooseRicherGeographyValue(existingGeoRow[1], geoValueFromPartnerships);
+              finalTableData[geoIndex] = [existingGeoRow[0], mergedGeoValue, existingGeoRow[2]];
               console.log(
                 `    [LeftTable Cleanup] Merged geography items extracted from partnerships into existing geography row`
               );
             } else {
-              const geoLabel = chooseGeographyLabel();
+              const geoLabel =
+                countryLevelPartnershipGeo.length > 0 ? chooseGeographyLabel() : 'Service Centers';
               finalTableData.push([geoLabel, geoValueFromPartnerships, null]);
               console.log(
                 `    [LeftTable Cleanup] Added "${geoLabel}" from geography items extracted out of partnership row`
@@ -6993,7 +7115,6 @@ async function generatePPTX(
             normalizedText.startsWith('-');
 
           if (hasMultipleLines || hasBulletMarkers || hasBulletMarkersNormalized) {
-            // Split by newline and filter out empty lines
             const lines = normalizedText.split('\n').filter((line) => line.trim());
             const cleanedLines = lines
               .map((line) => removeTruncationTokens(stripLeadingBulletMarker(line)))
@@ -7001,26 +7122,7 @@ async function generatePPTX(
                 (line) => line && !isBulletOnlyLine(line) && !/^\+?\d+\s+more$/i.test(line)
               );
             if (cleanedLines.length === 0) return '';
-
-            // Build text array with manual bullet insertion at smaller font
-            // 82% of 14pt = 11.5pt, use 11pt for bullet
-            const result = [];
-            cleanedLines.forEach((cleanLine, index) => {
-              const isLastLine = index === cleanedLines.length - 1;
-
-              // Add bullet character at 82% size (11pt vs 14pt text)
-              result.push({
-                text: '\u2022 ',
-                options: { fontSize: 11 },
-              });
-
-              // Add the actual text at full size
-              result.push({
-                text: cleanLine + (isLastLine ? '' : '\n'),
-                options: { fontSize: 14 },
-              });
-            });
-            return result;
+            return fixAcronymCasing(cleanedLines.join('\n'));
           }
           return fixAcronymCasing(normalizedText);
         };
@@ -7418,12 +7520,12 @@ async function generatePPTX(
 
 // Currency exchange mapping by country
 const CURRENCY_EXCHANGE = {
-  philippines: '為替レート: PHP 100M = 3億円',
-  thailand: '為替レート: THB 100M = 5億円',
-  malaysia: '為替レート: MYR 10M = 3億円',
-  indonesia: '為替レート: IDR 10B = 1億円',
-  singapore: '為替レート: SGD 1M = 1億円',
-  vietnam: '為替レート: VND 100B = 6億円',
+  philippines: EXCHANGE_RATE_MAP.PH,
+  thailand: EXCHANGE_RATE_MAP.TH,
+  malaysia: EXCHANGE_RATE_MAP.MY,
+  indonesia: EXCHANGE_RATE_MAP.ID,
+  singapore: EXCHANGE_RATE_MAP.SG,
+  vietnam: EXCHANGE_RATE_MAP.VN,
 };
 
 // Scrape website and convert to clean text (similar to fetchWebsite but returns more content)
@@ -9405,6 +9507,57 @@ function getBranchNetworkSummaryFromCompany(company) {
     if (label.includes('branch network') || label.includes('branch')) return value;
     if ((label.includes('office') || label.includes('location')) && /\bbranches?\b/i.test(value))
       return value;
+  }
+
+  return '';
+}
+
+function extractServiceCenterValue(value) {
+  const cleaned = cleanBranchNetworkSummary(value);
+  if (!cleaned) return '';
+
+  const coverageMatch = cleaned.match(
+    /\b(?:\d{1,3}(?:,\d{3})*\s+)?(?:branches?|offices?|locations?|depots?|warehouses?)\s*(?:across|in|at)\s+(.+)$/i
+  );
+  if (coverageMatch) {
+    return fixAcronymCasing(coverageMatch[1].trim());
+  }
+
+  const stripped = cleaned.replace(
+    /^\d{1,3}(?:,\d{3})*\s+(?:branches?|offices?|locations?|depots?|warehouses?)\b\s*/i,
+    ''
+  );
+  return fixAcronymCasing(stripped || cleaned);
+}
+
+function normalizeHeadcountValue(value) {
+  const raw = ensureString(value).replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+
+  const qualifiedMatch = raw.match(
+    /\b(?:over|more than|approximately|about|around)\s+\d{1,3}(?:,\d{3})*\b/i
+  );
+  if (qualifiedMatch) {
+    const text = qualifiedMatch[0].toLowerCase();
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  const numericMatch = raw.match(/\b\d{1,3}(?:,\d{3})*\b/);
+  if (numericMatch) return numericMatch[0];
+
+  return '';
+}
+
+function getHeadcountValueFromCompany(company) {
+  const direct = normalizeHeadcountValue(company?._headcountValue);
+  if (direct) return direct;
+
+  const metrics = Array.isArray(company?.key_metrics) ? company.key_metrics : [];
+  for (const metric of metrics) {
+    const label = ensureString(metric?.label).toLowerCase();
+    if (!/(employee|employees|staff|headcount|team)/i.test(label)) continue;
+    const normalized = normalizeHeadcountValue(metric?.value);
+    if (normalized) return normalized;
   }
 
   return '';
@@ -12182,11 +12335,8 @@ Rules:
       }
     }
 
-    const missing = cleaned.filter((name) => !used.has(name.toLowerCase()));
-    if (missing.length > 0) return null;
-
     const normalized = normalizeMeaningfulSegmentMap(filteredMap, relationship);
-    if (Object.keys(normalized).length > 0) return normalized;
+    if (used.size >= 3 && Object.keys(normalized).length > 0) return normalized;
   } catch (err) {
     console.log(`    ${toTitleCase(relationshipType)} segmentation failed: ${err.message}`);
   }
@@ -12253,8 +12403,25 @@ async function buildCustomerSegments(customers, openai, options = {}) {
     );
     const normalizedResearch = normalizeMeaningfulSegmentMap(researchedSegments, 'customers');
     if (Object.keys(normalizedResearch).length > 0) return normalizedResearch;
+
+    const aiSegments = await segmentRelationshipNamesByAI(cleaned, 'customers', openai, {
+      minCount,
+    });
+    const normalizedAi = normalizeMeaningfulSegmentMap(aiSegments, 'customers');
+    if (Object.keys(normalizedAi).length > 0) return normalizedAi;
   }
 
+  const deterministicSegments = buildDeterministicSegments(cleaned, {
+    minCount,
+    chunkSize: 4,
+    relationshipType: 'customers',
+  });
+  if (
+    deterministicSegments &&
+    Object.keys(deterministicSegments).some((label) => !/^(?:Key Customers|Other Key Customers(?: \d+)?)$/i.test(label))
+  ) {
+    return deterministicSegments;
+  }
   return null;
 }
 
@@ -12294,6 +12461,17 @@ function buildSupplierSegments(suppliers, options = {}) {
     : RELATIONSHIP_SEGMENT_MIN_COUNT;
   const cleaned = uniqueRelationshipNames(suppliers || []);
   if (cleaned.length < minCount) return null;
+  const deterministicSegments = buildDeterministicSegments(cleaned, {
+    minCount,
+    chunkSize: 4,
+    relationshipType: 'suppliers',
+  });
+  if (
+    deterministicSegments &&
+    Object.keys(deterministicSegments).some((label) => !/^(?:Key Suppliers|Other Key Suppliers(?: \d+)?)$/i.test(label))
+  ) {
+    return deterministicSegments;
+  }
   return null;
 }
 
@@ -13316,9 +13494,7 @@ function validateAndFixHQFormat(location, websiteUrl) {
 async function extractBusinessInfo(scrapedContent, basicInfo) {
   // Ensure locationText is always a string (AI might return object/array)
   const locationText = typeof basicInfo.location === 'string' ? basicInfo.location : '';
-  const hqMatch = locationText.match(/HQ:\s*([^,\n]+),\s*([^\n]+)/i);
-  const hqCountry = hqMatch ? hqMatch[2].trim().toLowerCase() : '';
-  const currencyExchange = CURRENCY_EXCHANGE[hqCountry] || '';
+  const currencyExchange = getExchangeRateForLocation(locationText);
 
   try {
     const response = await withRetry(() =>
@@ -13365,7 +13541,7 @@ OUTPUT JSON:
 
 3. footnote: Two parts:
    - Notes (optional): If unusual shortforms used, write full-form like "SKU (Stock Keeping Unit)". Separate multiple with comma.
-   - Currency: ${currencyExchange || 'Leave empty if no matching currency'}
+   - Currency: ${currencyExchange || 'Leave empty if no matching currency'} exactly. Do not invent, modify, or override this text.
    Separate notes and currency with semicolon. Always end with new line: "出典: 会社ウェブサイト、SPEEDA"
 
 4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
@@ -13934,7 +14110,7 @@ ${scrapedContent.substring(0, 15000)}`,
   }
 }
 
-// AI Agent 4: Search for missing company information (est year, location, HQ)
+// AI Agent 4: Search for missing company information (HQ and headcount only)
 // Wrapped with retry for reliability
 async function searchMissingInfo(companyName, website, missingFields) {
   if (!companyName || missingFields.length === 0) {
@@ -13955,13 +14131,13 @@ async function searchMissingInfo(companyName, website, missingFields) {
             content: `Search for information about "${companyName}" (website: ${website}).
 
 I need to find:
-${missingFields.includes('established_year') ? '- When was this company founded/established? (year only)' : ''}
-${missingFields.includes('location') ? '- Where is this company headquartered? (city, country)' : ''}
+${missingFields.includes('location') ? '- Where is this company headquartered? (city/state, country)' : ''}
+${missingFields.includes('headcount') ? '- What is the employee count or headcount? Keep the exact wording if the source says "more than" or "over".' : ''}
 
 Return ONLY a JSON object with these fields (include only fields you can find with confidence):
 {
-  ${missingFields.includes('established_year') ? '"established_year": "YYYY",' : ''}
   ${missingFields.includes('location') ? '"location": "City, Country"' : ''}
+  ${missingFields.includes('headcount') ? `${missingFields.includes('location') ? ',' : ''} "headcount": "exact employee wording or number"` : ''}
 }
 
 If you cannot find reliable information for a field, omit it from the response.
@@ -13994,7 +14170,11 @@ Return ONLY valid JSON, no explanations.`,
 
     // Fallback to Perplexity if OpenAI search fails
     try {
-      const perplexityPrompt = `What is the founding year and headquarters location of ${companyName} (${website})? Reply ONLY with JSON: {"established_year": "YYYY", "location": "City, Country"}`;
+      const fallbackFields = [];
+      if (missingFields.includes('location')) fallbackFields.push('"location": "City, Country"');
+      if (missingFields.includes('headcount'))
+        fallbackFields.push('"headcount": "exact employee wording or number"');
+      const perplexityPrompt = `What is the headquarters location and employee count of ${companyName} (${website})? Reply ONLY with JSON: {${fallbackFields.join(', ')}}`;
       const perplexityResponse = await callPerplexity(perplexityPrompt);
 
       const jsonMatch = perplexityResponse.match(/\{[\s\S]*\}/);
@@ -14829,11 +15009,10 @@ async function processSingleWebsite(website, index, total) {
       business: businessInfo.business,
     });
 
-    // Step 6: Search online for missing mandatory info (established_year, location)
-    // These are mandatory fields - search online if not found on website
+    // Step 6: Search online only for HQ and headcount when website extraction is missing
     const missingFields = [];
-    if (!basicInfo.established_year) missingFields.push('established_year');
     if (!basicInfo.location) missingFields.push('location');
+    if (!regexMetrics.employee_count) missingFields.push('headcount');
 
     let searchedInfo = {};
     if (missingFields.length > 0 && basicInfo.company_name) {
@@ -15345,12 +15524,13 @@ async function processSingleWebsite(website, index, total) {
       companyName: basicInfo.company_name,
       website: scraped.url,
     });
-    const supplierSegments = await segmentRelationshipNamesByAI(
-      cleanedSuppliersForSegments,
-      'suppliers',
-      openai,
-      { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT }
-    );
+    const supplierSegments =
+      (await segmentRelationshipNamesByAI(cleanedSuppliersForSegments, 'suppliers', openai, {
+        minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+      })) ||
+      buildSupplierSegments(cleanedSuppliersForSegments, {
+        minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+      });
     const principalSegments = await segmentRelationshipNamesByAI(
       cleanedPrincipalsForSegments,
       'principals',
@@ -15374,10 +15554,19 @@ async function processSingleWebsite(website, index, total) {
 
     // Combine all extracted data (mandatory fields supplemented by web search)
     // Use ensureString() for all AI-generated fields to prevent [object Object] issues
+    const resolvedHeadcountValue = normalizeHeadcountValue(
+      regexMetrics.employee_text || regexMetrics.employee_count || searchedInfo.headcount
+    );
+    const headcountSource = regexMetrics.employee_count
+      ? 'website'
+      : searchedInfo.headcount
+        ? 'search'
+        : '';
+
     let companyData = {
       website: scraped.url,
       company_name: ensureString(basicInfo.company_name),
-      established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
+      established_year: ensureString(basicInfo.established_year),
       location: validatedLocation,
       business: ensureString(businessInfo.business),
       message: ensureString(businessInfo.message),
@@ -15409,6 +15598,8 @@ async function processSingleWebsite(website, index, total) {
       // Relationship coverage quality gate (used to fail loudly in slide output)
       _relationshipCoverageStatus: relationshipCoverageStatus,
       _locationSource: locationSource,
+      _headcountValue: resolvedHeadcountValue,
+      _headcountSource: headcountSource,
       _basedLocationHint: basedLocationHint,
       _regionalLocationHint: regionalLocationHint,
       _structuredLocationHint: structuredAddress?.formatted || '',
@@ -15798,14 +15989,19 @@ async function retryBreakdownExtractionIfEmpty(
   markers = null
 ) {
   const existingItems = Array.isArray(companyData?.breakdown_items) ? companyData.breakdown_items : [];
-  if (existingItems.length > 0) return companyData;
+  const existingMeaningfulCount = existingItems.filter((item) => isMeaningfulBreakdownItem(item)).length;
+  if (existingMeaningfulCount >= 4) return companyData;
 
-  console.log('    Breakdown empty after validation, retrying with full scraped content...');
+  console.log('    Breakdown thin after validation, retrying with full scraped content...');
   const retriedBreakdown = await extractProductsBreakdown(scrapedContent, {
     company_name: companyName,
     business,
   });
-  if (!Array.isArray(retriedBreakdown?.breakdown_items) || retriedBreakdown.breakdown_items.length === 0) {
+  const retriedItems = Array.isArray(retriedBreakdown?.breakdown_items)
+    ? retriedBreakdown.breakdown_items
+    : [];
+  const retriedMeaningfulCount = retriedItems.filter((item) => isMeaningfulBreakdownItem(item)).length;
+  if (retriedMeaningfulCount === 0) {
     console.log('    Breakdown retry found no usable rows');
     return companyData;
   }
@@ -15817,13 +16013,22 @@ async function retryBreakdownExtractionIfEmpty(
       ensureString(retriedBreakdown.breakdown_title) ||
       ensureString(companyData.breakdown_title) ||
       'Products and Applications',
-    breakdown_items: retriedBreakdown.breakdown_items,
+    breakdown_items: retriedItems,
     projects: retriedBreakdown.projects || companyData.projects || [],
     products: retriedBreakdown.products || companyData.products || [],
   };
 
   const reviewedRetry = await reviewAndCleanData(retriedData, scrapedContent, markers);
-  return reviewedRetry.data;
+  const reviewedItems = Array.isArray(reviewedRetry.data?.breakdown_items)
+    ? reviewedRetry.data.breakdown_items
+    : [];
+  const reviewedMeaningfulCount = reviewedItems.filter((item) => isMeaningfulBreakdownItem(item)).length;
+  if (reviewedMeaningfulCount > existingMeaningfulCount) {
+    return reviewedRetry.data;
+  }
+
+  console.log('    Breakdown retry did not improve the right-side rows');
+  return companyData;
 }
 
 // Process websites in parallel batches
@@ -16229,10 +16434,10 @@ app.post('/api/generate-ppt', async (req, res) => {
           business: businessInfo.business,
         });
 
-        // Step 5: Search online for missing mandatory info
+        // Step 5: Search online only for HQ and headcount when website extraction is missing
         const missingFields = [];
-        if (!basicInfo.established_year) missingFields.push('established_year');
         if (!basicInfo.location) missingFields.push('location');
+        if (!regexMetrics.employee_count) missingFields.push('headcount');
 
         let searchedInfo = {};
         if (missingFields.length > 0 && basicInfo.company_name) {
@@ -16642,12 +16847,13 @@ app.post('/api/generate-ppt', async (req, res) => {
           companyName: basicInfo.company_name,
           website: scraped.url,
         });
-        const supplierSegments = await segmentRelationshipNamesByAI(
-          cleanedSuppliersForSegments,
-          'suppliers',
-          openai,
-          { minCount: RELATIONSHIP_SEGMENT_MIN_COUNT }
-        );
+        const supplierSegments =
+          (await segmentRelationshipNamesByAI(cleanedSuppliersForSegments, 'suppliers', openai, {
+            minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+          })) ||
+          buildSupplierSegments(cleanedSuppliersForSegments, {
+            minCount: RELATIONSHIP_SEGMENT_MIN_COUNT,
+          });
         const principalSegments = await segmentRelationshipNamesByAI(
           cleanedPrincipalsForSegments,
           'principals',
@@ -16669,12 +16875,19 @@ app.post('/api/generate-ppt', async (req, res) => {
           console.log(`  Total relationships: ${relationshipCounts}`);
         }
 
+        const resolvedHeadcountValue = normalizeHeadcountValue(
+          regexMetrics.employee_text || regexMetrics.employee_count || searchedInfo.headcount
+        );
+        const headcountSource = regexMetrics.employee_count
+          ? 'website'
+          : searchedInfo.headcount
+            ? 'search'
+            : '';
+
         let companyData = {
           website: scraped.url,
           company_name: ensureString(basicInfo.company_name),
-          established_year: ensureString(
-            basicInfo.established_year || searchedInfo.established_year
-          ),
+          established_year: ensureString(basicInfo.established_year),
           location: validatedLocation,
           business: ensureString(businessInfo.business),
           message: ensureString(businessInfo.message),
@@ -16707,6 +16920,8 @@ app.post('/api/generate-ppt', async (req, res) => {
           // Relationship coverage quality gate (used to fail loudly in slide output)
           _relationshipCoverageStatus: relationshipCoverageStatus,
           _locationSource: locationSource,
+          _headcountValue: resolvedHeadcountValue,
+          _headcountSource: headcountSource,
           _basedLocationHint: basedLocationHint,
           _regionalLocationHint: regionalLocationHint,
           _structuredLocationHint: structuredAddress?.formatted || '',
