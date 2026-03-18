@@ -3852,26 +3852,32 @@ async function verifyWebsite(url) {
 
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
+const SECURITY_BLOCK_PATTERNS = [
+  'checking your browser',
+  'please wait',
+  'just a moment',
+  'ddos protection',
+  'cloudflare',
+  'security check',
+  'access denied',
+  'not acceptable',
+  'mod_security',
+  'forbidden',
+  'blocked',
+  'captcha',
+  'verify you are human',
+  'bot detection',
+  'please enable javascript',
+  'enable cookies',
+];
+
+function detectSecurityBlockPattern(content, maxLength = 5000) {
+  const normalized = ensureString(content).toLowerCase();
+  if (!normalized || normalized.length > maxLength) return '';
+  return SECURITY_BLOCK_PATTERNS.find((pattern) => normalized.includes(pattern)) || '';
+}
+
 async function fetchWebsite(url) {
-  // Security block patterns - these indicate WAF/Cloudflare/bot protection
-  const securityBlockPatterns = [
-    'checking your browser',
-    'please wait',
-    'just a moment',
-    'ddos protection',
-    'cloudflare',
-    'security check',
-    'access denied',
-    'not acceptable',
-    'mod_security',
-    'forbidden',
-    'blocked',
-    'captcha',
-    'verify you are human',
-    'bot detection',
-    'please enable javascript',
-    'enable cookies',
-  ];
 
   const tryFetch = async (targetUrl) => {
     try {
@@ -3904,15 +3910,12 @@ async function fetchWebsite(url) {
       const html = await response.text();
       const lowerHtml = html.toLowerCase();
 
-      // Check for security block patterns in content
-      for (const pattern of securityBlockPatterns) {
-        if (lowerHtml.includes(pattern) && html.length < 5000) {
-          // Only flag as security block if page is small (likely a challenge page)
-          return {
-            status: 'security_blocked',
-            reason: `Security protection detected: "${pattern}"`,
-          };
-        }
+      const securityBlockPattern = detectSecurityBlockPattern(lowerHtml, 5000);
+      if (securityBlockPattern) {
+        return {
+          status: 'security_blocked',
+          reason: `Security protection detected: "${securityBlockPattern}"`,
+        };
       }
 
       const cleanText = html
@@ -7032,6 +7035,13 @@ async function scrapeWebsite(url) {
     }
 
     const html = await response.text();
+    const htmlSecurityBlockPattern = detectSecurityBlockPattern(html, 5000);
+    if (htmlSecurityBlockPattern) {
+      return {
+        success: false,
+        error: `Security protection detected: "${htmlSecurityBlockPattern}"`,
+      };
+    }
 
     // Clean HTML to readable text (similar to n8n's markdownify)
     const cleanText = html
@@ -7049,6 +7059,14 @@ async function scrapeWebsite(url) {
       .replace(/&#39;/g, "'")
       .replace(/\s+/g, ' ')
       .trim();
+
+    const cleanTextSecurityBlockPattern = detectSecurityBlockPattern(cleanText, 1200);
+    if (cleanTextSecurityBlockPattern) {
+      return {
+        success: false,
+        error: `Security protection detected: "${cleanTextSecurityBlockPattern}"`,
+      };
+    }
 
     if (cleanText.length < 100) {
       return { success: false, error: 'Insufficient content' };
@@ -10870,12 +10888,17 @@ async function extractPartnersFromScreenshots(baseUrl, pagesScraped = [], option
 function isBlockedScrapeError(errorMessage) {
   const msg = ensureString(errorMessage).toLowerCase();
   return (
+    msg.includes('security protection detected') ||
     msg.includes('http 401') ||
     msg.includes('http 403') ||
     msg.includes('forbidden') ||
     msg.includes('access denied') ||
     msg.includes('captcha') ||
-    msg.includes('cloudflare')
+    msg.includes('cloudflare') ||
+    msg.includes('checking your browser') ||
+    msg.includes('please wait') ||
+    msg.includes('please enable javascript') ||
+    msg.includes('verify you are human')
   );
 }
 
