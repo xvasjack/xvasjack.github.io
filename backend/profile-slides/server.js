@@ -262,6 +262,7 @@ function isLikelyDuplicateLocationMetric(metricValue, locationValue) {
 function isRelationshipArtifactText(value) {
   const text = ensureString(value).trim();
   if (!text) return true;
+  if (/^(19\d{2}|20[0-2]\d)$/.test(text)) return false;
 
   const lower = text.toLowerCase();
 
@@ -773,6 +774,30 @@ function extractGeographyItemsFromText(value) {
   return geographyItems;
 }
 
+function isCountryOrRegionLevelGeographyToken(token) {
+  const text = ensureString(token).trim();
+  if (!text) return false;
+  const lower = normalizeForComparison(text);
+  if (!lower) return false;
+  if (extractCountryMentionsFromText(text).length > 0) return true;
+  if (getCountryCodeFromToken(lower)) return true;
+  return /\b(asean|apac|asia|southeast asia|south asia|east asia|middle east|north america|latin america|europe|africa|oceania|worldwide|global|international|nationwide)\b/i.test(
+    text
+  );
+}
+
+function extractCountryLevelGeographyItemsFromText(value) {
+  const seen = new Set();
+  return extractGeographyItemsFromText(value).filter((item) => {
+    const display = normalizeGeographyTokenForDisplay(item);
+    const normalized = normalizeForComparison(display);
+    if (!display || !normalized || seen.has(normalized)) return false;
+    if (!isCountryOrRegionLevelGeographyToken(display)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
 function isLikelyNonCompanyRelationshipToken(value) {
   const text = stripLeadingBulletMarker(value).trim();
   if (!text) return true;
@@ -1256,6 +1281,14 @@ function fixAcronymCasing(text) {
     'SGS',
     'NC',
     'PU',
+    'HVAC',
+    'VRF',
+    'ACMV',
+    'AHU',
+    'MEP',
+    'FAS',
+    'FF',
+    'AC',
   ];
   const knownLower = new Set(allCapsAcronyms.map((acronym) => acronym.toLowerCase()));
   const lowerWords = new Set([
@@ -1308,7 +1341,18 @@ function fixAcronymCasing(text) {
   });
 
   // Keep acronym prefixes uppercase inside merged words (example: Hrcare -> HRCare).
-  const acronymPrefixes = ['HR', 'EOR', 'RPO', 'ESS', 'CLQ', 'BFSI', 'ITES', 'JTKSM', 'FWCS'];
+  const acronymPrefixes = [
+    'HR',
+    'EOR',
+    'RPO',
+    'ESS',
+    'CLQ',
+    'BFSI',
+    'ITES',
+    'JTKSM',
+    'FWCS',
+    'KJ',
+  ];
   for (const prefix of acronymPrefixes) {
     const regex = new RegExp(`\\b(${prefix})([A-Za-z]{2,})\\b`, 'gi');
     result = result.replace(regex, (match, _p, suffix) => {
@@ -1426,6 +1470,12 @@ function filterGarbageNames(names, companyName = '') {
       if (genericTerms.includes(lower.trim())) return false;
       if (
         /\b(facebook|instagram|linkedin|youtube|tiktok|twitter|x\.com|sana commerce|woocommerce|shopify|wix|wordpress|elementor|mailchimp|klaviyo|hubspot|google analytics)\b/i.test(
+          lower
+        )
+      )
+        return false;
+      if (
+        /\b(newpages|web design|website design|digital marketing|seo agency|seo services|hosting provider|domain registrar)\b/i.test(
           lower
         )
       )
@@ -5444,6 +5494,19 @@ async function generatePPTX(
     const skippedCompanies = [];
     for (const company of companies) {
       try {
+        if (company._qualityBlocked) {
+          const skipReason =
+            Array.isArray(company._qualityBlockedReasons) && company._qualityBlockedReasons.length > 0
+              ? company._qualityBlockedReasons.join('; ')
+              : 'quality gate failed';
+          console.log(
+            `  Skipping slide for ${company.company_name || company.website} - blocked by quality gate: ${skipReason}`
+          );
+          slidesSkipped++;
+          skippedCompanies.push(company.company_name || company.website || 'unknown');
+          continue;
+        }
+
         // Skip companies with no meaningful info (only has website, no business/location/metrics)
         // Helper to check if value is a placeholder (e.g., "Not found", "N/A", etc.)
         const isPlaceholder = (val) => {
@@ -5791,10 +5854,6 @@ async function generatePPTX(
           const locationValue = [cleanLocation, branchNetworkSummary].filter(Boolean).join('\n');
           tableData.push([locationLabel, locationValue, null]);
         }
-
-        // Add Shareholding row after HQ - always present with yellow highlight
-        // Fourth element: { highlight: true } indicates yellow background for value cell
-        tableData.push(['Shareholding', 'check speeda & DBD', { highlight: true }]);
 
         // Add Business if available
         if (!isEmptyValue(company.business)) {
@@ -6161,6 +6220,14 @@ async function generatePPTX(
           value = removeTruncationTokens(value);
           if (!label || isEmptyValue(value)) return;
 
+          const normalizedYear = normalizeYearLabelAndValue(
+            label,
+            value,
+            ensureString(company.established_year)
+          );
+          label = normalizedYear.label;
+          value = normalizedYear.value;
+
           if (/(key partnerships?|key partners?|principal partnerships?|principal partners?)/i.test(lower)) {
             value = cleanRelationshipDisplayValue(value);
           } else if (
@@ -6177,14 +6244,6 @@ async function generatePPTX(
             );
             return;
           }
-
-          const normalizedYear = normalizeYearLabelAndValue(
-            label,
-            value,
-            ensureString(company.established_year)
-          );
-          label = normalizedYear.label;
-          value = normalizedYear.value;
           if (isMeaninglessStandaloneValue(value)) {
             console.log(
               `    [LeftTable Cleanup] Removed "${label}" because value is placeholder-only: "${value}"`
@@ -6330,12 +6389,33 @@ async function generatePPTX(
           }
 
           if (rowCanonical === 'geography') {
-            const normalizedGeographyItems = extractGeographyItemsFromText(value);
+            const normalizedGeographyItems = [
+              'export countries',
+              'project countries',
+              'source countries',
+              'foreign worker source',
+              'countries served',
+            ].includes(normalizedLower)
+              ? extractCountryLevelGeographyItemsFromText(value)
+              : extractGeographyItemsFromText(value);
             if (normalizedGeographyItems.length > 0) {
               value = formatCompactEntryList(normalizedGeographyItems.join('\n'), {
                 maxEntries: 12,
                 lineModeThreshold: 5,
               });
+            } else if (
+              [
+                'export countries',
+                'project countries',
+                'source countries',
+                'foreign worker source',
+                'countries served',
+              ].includes(normalizedLower)
+            ) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because no country-level geography remained after cleanup`
+              );
+              return;
             }
           }
 
@@ -6399,6 +6479,20 @@ async function generatePPTX(
 
           value = fixAcronymCasing(removeTruncationTokens(value));
           if (!value) return;
+
+          if (
+            /(branch network|branches?|offices?|locations?)/i.test(normalizedLower) &&
+            /\b(branch|branches|office|offices|location|locations)\b/i.test(value)
+          ) {
+            const cleanedBranchValue = cleanBranchNetworkSummary(value);
+            if (!cleanedBranchValue) {
+              console.log(
+                `    [LeftTable Cleanup] Removed "${label}" because branch text remained low-confidence after cleanup`
+              );
+              return;
+            }
+            value = cleanedBranchValue;
+          }
 
           if (/(factory size|land area)/i.test(normalizedLower)) {
             const duplicateSizeIndex = finalTableData.findIndex((row) => {
@@ -8928,6 +9022,43 @@ function cleanBranchNetworkSummary(value) {
     .replace(/[,:;.\-]+\s*$/g, '')
     .trim();
 
+  const countMatch = cleaned.match(
+    /\b(\d{1,3}(?:,\d{3})*)\+?\s*(branches?|offices?|locations?|depots?|warehouses?)\b/i
+  );
+  const countOnly = countMatch ? `${countMatch[1]} ${countMatch[2].toLowerCase()}` : '';
+
+  if (
+    /\b(the largest asean country|our goal is|whole west|air[-\s]?cooled|chillers?|hvac|systems?|solutions?|ideal|offering|offers?|provide|provides|maintenance|repair|installation)\b/i.test(
+      cleaned
+    )
+  ) {
+    return countOnly;
+  }
+
+  const coverageMatch = cleaned.match(
+    /\b(\d{1,3}(?:,\d{3})*)\+?\s*(branches?|offices?|locations?|depots?|warehouses?)\s*(?:across|in|at)\s+(.+)$/i
+  );
+  if (coverageMatch) {
+    const places = splitReadableEntries(coverageMatch[3]).filter((place) => {
+      const candidate = ensureString(place).trim();
+      if (!candidate) return false;
+      if (
+        /\b(whole|ideal|solution|solutions|service|services|provide|provides|maintenance|repair|installation|air[-\s]?cooled|chillers?|hvac)\b/i.test(
+          candidate
+        )
+      ) {
+        return false;
+      }
+      if (candidate.split(/\s+/).length > 4) return false;
+      return (
+        isLikelyGeographyToken(candidate) ||
+        /^[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,2}$/.test(candidate)
+      );
+    });
+    if (places.length === 0) return countOnly;
+    return `${coverageMatch[1]} ${coverageMatch[2].toLowerCase()} across ${places.slice(0, 5).join(', ')}`;
+  }
+
   // Drop meaningless branch summary fragments.
   if (
     /^(?:over|more|around|approximately|about|various|multiple|several|many)\s*$/i.test(cleaned)
@@ -11201,7 +11332,6 @@ Rules:
 - Return JSON only.`,
               },
             ],
-            temperature: 0.1,
           }),
         2,
         2000
@@ -14884,6 +15014,14 @@ async function processSingleWebsite(website, index, total) {
       companyData = finalValidation.data;
     }
 
+    companyData = await retryBreakdownExtractionIfEmpty(
+      companyData,
+      scraped.content,
+      companyData.company_name || basicInfo.company_name,
+      companyData.business || businessInfo.business,
+      markerResult?.markers
+    );
+
     // Step 7: Filter out empty/meaningless Key Metrics
     // Remove metrics that say "No specific X stated", "Not specified", etc.
     const metricsBefore = companyData.key_metrics?.length || 0;
@@ -15121,6 +15259,65 @@ function validateProfileData(companies) {
   };
 }
 
+function applyQualityBlockFlags(companies, qualityReport) {
+  const blockedByWebsite = new Map();
+  const blockedByName = new Map();
+
+  (qualityReport?.blockedCompanies || []).forEach((blocked) => {
+    const reasons = Array.isArray(blocked?.reasons) ? blocked.reasons.filter(Boolean) : [];
+    const websiteKey = normalizeUrlForDedup(ensureString(blocked?.website));
+    const nameKey = normalizeForComparison(ensureString(blocked?.company));
+    if (websiteKey) blockedByWebsite.set(websiteKey, reasons);
+    if (nameKey) blockedByName.set(nameKey, reasons);
+  });
+
+  companies.forEach((company) => {
+    const websiteKey = normalizeUrlForDedup(ensureString(company?.website));
+    const nameKey = normalizeForComparison(
+      ensureString(company?.company_name || company?.title || company?.website)
+    );
+    const reasons = blockedByWebsite.get(websiteKey) || blockedByName.get(nameKey) || [];
+    company._qualityBlocked = reasons.length > 0;
+    company._qualityBlockedReasons = reasons;
+  });
+}
+
+async function retryBreakdownExtractionIfEmpty(
+  companyData,
+  scrapedContent,
+  companyName,
+  business,
+  markers = null
+) {
+  const existingItems = Array.isArray(companyData?.breakdown_items) ? companyData.breakdown_items : [];
+  if (existingItems.length > 0) return companyData;
+
+  console.log('    Breakdown empty after validation, retrying with full scraped content...');
+  const retriedBreakdown = await extractProductsBreakdown(scrapedContent, {
+    company_name: companyName,
+    business,
+  });
+  if (!Array.isArray(retriedBreakdown?.breakdown_items) || retriedBreakdown.breakdown_items.length === 0) {
+    console.log('    Breakdown retry found no usable rows');
+    return companyData;
+  }
+
+  const retriedData = {
+    ...companyData,
+    business_type: retriedBreakdown.business_type || companyData.business_type,
+    breakdown_title:
+      ensureString(retriedBreakdown.breakdown_title) ||
+      ensureString(companyData.breakdown_title) ||
+      'Products and Applications',
+    breakdown_items: retriedBreakdown.breakdown_items,
+    projects: retriedBreakdown.projects || companyData.projects || [],
+    products: retriedBreakdown.products || companyData.products || [],
+  };
+
+  const reviewedRetry = await reviewAndCleanData(retriedData, scrapedContent, markers);
+  return reviewedRetry.data;
+}
+
 // Process websites in parallel batches
 // Reduced to 2 to avoid rate limits (each website now makes more API calls with Marker AI)
 const PARALLEL_BATCH_SIZE = 2;
@@ -15268,6 +15465,7 @@ app.post('/api/profile-slides', async (req, res) => {
               blockedCompanies: [],
               hasBlockingIssues: false,
             };
+      applyQualityBlockFlags(companies, qualityReport);
 
       const coverageFailures = [];
       if (PROFILE_REQUIRE_FULL_COVERAGE) {
@@ -15979,6 +16177,13 @@ app.post('/api/generate-ppt', async (req, res) => {
         const validatorResult = await reviewAndCleanData(companyData, scraped.content);
         companyData = validatorResult.data;
 
+        companyData = await retryBreakdownExtractionIfEmpty(
+          companyData,
+          scraped.content,
+          companyData.company_name || basicInfo.company_name,
+          companyData.business || businessInfo.business
+        );
+
         // Step 7: Filter empty metrics
         const metricsBefore = companyData.key_metrics?.length || 0;
         companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
@@ -16033,6 +16238,7 @@ app.post('/api/generate-ppt', async (req, res) => {
             blockedCompanies: [],
             hasBlockingIssues: false,
           };
+    applyQualityBlockFlags(companies, qualityReport);
 
     const coverageFailures = [];
     if (PROFILE_REQUIRE_FULL_COVERAGE) {
