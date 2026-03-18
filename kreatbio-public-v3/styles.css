@@ -5605,6 +5605,14 @@ main > section + .section-compact {
   margin-top: 14px;
 }
 
+.page-kodapure #sample-fit .section-intro,
+.page-kodapure #workflow .section-intro,
+.page-kodageno #lesson-experience .section-intro,
+.page-kodageno #who-it-is-for .section-intro,
+.page-kodageno #team-setup .section-intro {
+  max-width: 980px;
+}
+
 .about-surface-meta {
   display: grid;
   gap: 8px;
