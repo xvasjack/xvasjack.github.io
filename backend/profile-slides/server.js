@@ -1703,6 +1703,7 @@ function fixAcronymCasing(text) {
     'AIS',
     'TRUE',
     'DTAC', // Companies
+    'KJ',
     'IOI',
     'IBM',
     'HP',
