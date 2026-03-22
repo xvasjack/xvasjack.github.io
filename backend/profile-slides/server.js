@@ -1609,15 +1609,21 @@ function isMeaninglessStandaloneValue(value) {
 function toTitleCase(name) {
   if (!name || typeof name !== 'string') return name;
   return name
-    .toLowerCase()
+    .trim()
     .split(/\s+/)
-    .map((word) => {
-      // Keep acronyms uppercase (2-4 letter all-caps words)
-      if (/^[A-Z]{2,4}$/i.test(word) && word === word.toUpperCase()) {
-        return word.toUpperCase();
+    .map((word, index) => {
+      const leading = (word.match(/^[^A-Za-z0-9]*/) || [''])[0];
+      const trailing = (word.match(/[^A-Za-z0-9]*$/) || [''])[0];
+      const endIndex = trailing ? word.length - trailing.length : word.length;
+      const core = word.slice(leading.length, endIndex);
+      if (!core) return word;
+
+      // Preserve a short all-caps leading business code like "CNI", "KTCC", or "PJD".
+      if (index === 0 && /^[A-Z0-9&.'/-]{2,5}$/.test(core) && core === core.toUpperCase()) {
+        return `${leading}${core}${trailing}`;
       }
-      // Capitalize first letter
-      return word.charAt(0).toUpperCase() + word.slice(1);
+
+      return `${leading}${core.charAt(0).toUpperCase()}${core.slice(1).toLowerCase()}${trailing}`;
     })
     .join(' ');
 }
