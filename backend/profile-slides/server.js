@@ -1236,18 +1236,155 @@ function extractLocationFromBasedText(text, fallbackCountry = '') {
   return '';
 }
 
+const INDIA_STATE_NAMES = new Set(
+  [
+    'andhra pradesh',
+    'arunachal pradesh',
+    'assam',
+    'bihar',
+    'chhattisgarh',
+    'goa',
+    'gujarat',
+    'haryana',
+    'himachal pradesh',
+    'jharkhand',
+    'karnataka',
+    'kerala',
+    'madhya pradesh',
+    'maharashtra',
+    'manipur',
+    'meghalaya',
+    'mizoram',
+    'nagaland',
+    'odisha',
+    'punjab',
+    'rajasthan',
+    'sikkim',
+    'tamil nadu',
+    'telangana',
+    'tripura',
+    'uttar pradesh',
+    'uttarakhand',
+    'west bengal',
+    'delhi',
+    'new delhi',
+    'chandigarh',
+    'puducherry',
+    'pondicherry',
+    'jammu and kashmir',
+    'ladakh',
+    'andaman and nicobar islands',
+    'dadra and nagar haveli',
+    'daman and diu',
+    'lakshadweep',
+  ].map((entry) => normalizeForComparison(entry))
+);
+
+function splitLocationParts(location) {
+  return ensureString(location)
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function getLocationCountryName(location) {
+  const parts = splitLocationParts(location);
+  if (parts.length === 0) return '';
+  const lastPart = parts[parts.length - 1];
+  const directCode =
+    getCountryCodeFromToken(lastPart) || getCountryCodeFromToken(normalizeForComparison(lastPart));
+  const countryName = getCountryNameFromCode(directCode);
+  return countryName || fixAcronymCasing(lastPart);
+}
+
+function isIndiaStateToken(value) {
+  const normalized = normalizeForComparison(value);
+  return !!normalized && INDIA_STATE_NAMES.has(normalized);
+}
+
+function isIndiaStateCountryLocation(location) {
+  const parts = splitLocationParts(location);
+  if (parts.length !== 2) return false;
+  return normalizeForComparison(getLocationCountryName(location)) === 'india' && isIndiaStateToken(parts[0]);
+}
+
+function cleanIndiaCityCandidate(rawValue) {
+  const cleaned = fixAcronymCasing(
+    ensureString(rawValue).replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim()
+  );
+  if (!cleaned) return '';
+  if (isIndiaStateToken(cleaned)) return '';
+  if (
+    /\b(road|rd|street|st|avenue|ave|lane|ln|plot|survey|office|building|behind|showroom|floor|phase|sector|block|estate|park|link road|pashan|sus)\b/i.test(
+      cleaned
+    )
+  ) {
+    return '';
+  }
+  if (cleaned.split(/\s+/).length > 4) return '';
+  return cleaned;
+}
+
+function extractIndiaCityLocationHint(sourceText, fallbackLocation = '', websiteUrl = '') {
+  const country = getLocationCountryName(fallbackLocation) || inferCountryFromWebsite(websiteUrl);
+  if (normalizeForComparison(country) !== 'india') return '';
+
+  const text = ensureString(sourceText).replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+
+  const commaPinPattern =
+    /\b([A-Za-z][A-Za-z.'-]{1,30}(?:\s+[A-Za-z][A-Za-z.'-]{1,30}){0,2})\s*,\s*([A-Za-z][A-Za-z.'-]{1,30}(?:\s+[A-Za-z][A-Za-z.'-]{1,30}){0,2})\s*(?:-|,)?\s*(?:pin(?:\s*no)?\.?\s*[:\-]?\s*)?\d{6}\b/gi;
+  let match;
+  while ((match = commaPinPattern.exec(text)) !== null) {
+    const candidate = cleanIndiaCityCandidate(match[2]);
+    if (candidate) return `${candidate}, India`;
+  }
+
+  const statePattern = Array.from(INDIA_STATE_NAMES)
+    .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .sort((a, b) => b.length - a.length)
+    .join('|');
+  if (statePattern) {
+    const cityStatePattern = new RegExp(
+      `\\b([A-Za-z][A-Za-z.'-]{1,30}(?:\\s+[A-Za-z][A-Za-z.'-]{1,30}){0,2})\\s*,\\s*(${statePattern})\\b`,
+      'i'
+    );
+    const stateMatch = text.match(cityStatePattern);
+    if (stateMatch) {
+      const candidate = cleanIndiaCityCandidate(stateMatch[1]);
+      if (candidate) return `${candidate}, India`;
+    }
+  }
+
+  return '';
+}
+
 function preferRicherLocationValue(primaryLocation, fallbackLocation = '') {
   const primary = ensureString(primaryLocation).trim();
   const fallback = ensureString(fallbackLocation).trim();
   if (!primary) return fallback;
   if (!fallback) return primary;
 
-  const primaryParts = primary.split(',').map((part) => part.trim()).filter(Boolean);
-  const fallbackParts = fallback.split(',').map((part) => part.trim()).filter(Boolean);
+  const primaryParts = splitLocationParts(primary);
+  const fallbackParts = splitLocationParts(fallback);
   const primaryIsCountryOnly = primaryParts.length === 1 && !!getCountryCodeFromToken(primaryParts[0]);
   const fallbackIsRicher = fallbackParts.length >= 2;
+  const primaryCountry = normalizeForComparison(getLocationCountryName(primary));
+  const fallbackCountry = normalizeForComparison(getLocationCountryName(fallback));
+  const sameCountry = !!primaryCountry && primaryCountry === fallbackCountry;
+  const shouldPreferIndiaCityLevel =
+    sameCountry &&
+    primaryCountry === 'india' &&
+    primaryParts.length === 2 &&
+    fallbackParts.length === 2 &&
+    isIndiaStateToken(primaryParts[0]) &&
+    !isIndiaStateToken(fallbackParts[0]);
+  const shouldPreferMoreSpecificIndiaHint =
+    sameCountry && primaryCountry === 'india' && fallbackParts.length > primaryParts.length;
 
-  return primaryIsCountryOnly && fallbackIsRicher ? fallback : primary;
+  if (primaryIsCountryOnly && fallbackIsRicher) return fallback;
+  if (shouldPreferIndiaCityLevel || shouldPreferMoreSpecificIndiaHint) return fallback;
+  return primary;
 }
 
 function buildCompanyAcronym(name) {
@@ -1358,9 +1495,13 @@ function hasLocationEvidenceInSource(location, sourceText = '', extraHints = [])
 }
 
 function finalizeLocationWithEvidence(location, options = {}) {
-  const richerHint = preferRicherLocationValue(
+  const richerHintBase = preferRicherLocationValue(
     ensureString(options.richerHint),
     ensureString(options.secondaryHint)
+  );
+  const richerHint = preferRicherLocationValue(
+    richerHintBase,
+    ensureString(options.indiaCityHint)
   );
   let finalLocation = preferRicherLocationValue(location, richerHint);
   const locationSource = ensureString(options.locationSource).toLowerCase();
@@ -1372,7 +1513,9 @@ function finalizeLocationWithEvidence(location, options = {}) {
       options.evidenceHints || []
     );
     if (!confirmed) {
-      finalLocation = downgradeLocationToCountry(finalLocation, options.websiteUrl);
+      if (!isIndiaStateCountryLocation(finalLocation)) {
+        finalLocation = downgradeLocationToCountry(finalLocation, options.websiteUrl);
+      }
     }
   }
 
@@ -6184,9 +6327,12 @@ async function generatePPTX(
           ),
           inferCountryFromWebsite(ensureString(company.website))
         );
-        const effectiveLocation = preferRicherLocationValue(company.location, basedLocationFallback);
-        const cleanedBranchSummary = cleanBranchNetworkSummary(branchNetworkSummary);
-        const serviceCenterValue = extractServiceCenterValue(cleanedBranchSummary);
+        const locationFallback = preferRicherLocationValue(
+          ensureString(company._indiaCityLocationHint),
+          basedLocationFallback
+        );
+        const effectiveLocation = preferRicherLocationValue(company.location, locationFallback);
+        const serviceCenterValue = getServiceCenterValueFromCompany(company);
         const headcountValue = getHeadcountValueFromCompany(company);
 
         // Add HQ row only. Branch/service-center coverage stays in its own row.
@@ -6360,9 +6506,7 @@ async function generatePPTX(
 
         // Add Key Suppliers row and segment long supplier lists into readable grouped lines.
         if (
-          cleanedSuppliers.length > 0 &&
-          !existingLabels.has('key suppliers') &&
-          !existingLabels.has('suppliers')
+          cleanedSuppliers.length > 0
         ) {
           const supplierSegments =
             company._supplierSegments && Object.keys(company._supplierSegments).length > 0
@@ -6372,8 +6516,8 @@ async function generatePPTX(
             maxLines: 5,
             maxNamesPerLine: 4,
           });
-          tableData.push(['Key Suppliers', suppliersList, null]);
-          existingLabels.add('key suppliers');
+          tableData.push(['Suppliers', suppliersList, null]);
+          existingLabels.add('suppliers');
           console.log(`    Added Key Suppliers: ${suppliersList.substring(0, 80)}...`);
         }
 
@@ -6424,9 +6568,7 @@ async function generatePPTX(
           const isCustomersOnRight =
             rightTitle.includes('customer') || rightTitle.includes('client');
           if (
-            !isCustomersOnRight &&
-            !existingLabels.has('customers') &&
-            !existingLabels.has('key customers')
+            !isCustomersOnRight
           ) {
             const cleanedCustomers = filterGarbageNames(
               relationships.customers,
@@ -6437,7 +6579,7 @@ async function generatePPTX(
                 company._customerSegments,
                 cleanedCustomers,
                 {
-                  maxLines: 5,
+                  maxLines: 6,
                   maxNamesPerLine: 4,
                 }
               );
@@ -6611,7 +6753,10 @@ async function generatePPTX(
             value = fixAcronymCasing(cleanCompanyPrefixesInText(value));
           }
 
-          if (isRelationshipArtifactText(value)) {
+          const normalizedLower = ensureString(label).toLowerCase().trim();
+          const rowCanonical = canonicalLeftLabel(label);
+
+          if (isRelationshipArtifactText(value) && rowCanonical !== 'headcount') {
             console.log(
               `    [LeftTable Cleanup] Removed "${label}" because value looks like scrape/image artifact: "${value}"`
             );
@@ -6632,9 +6777,6 @@ async function generatePPTX(
             );
             return;
           }
-          const normalizedLower = ensureString(label).toLowerCase().trim();
-          const rowCanonical = canonicalLeftLabel(label);
-
           if (/(contact information|contact details|contact numbers?|phone|fax|email)/i.test(normalizedLower)) {
             console.log(`    [LeftTable Cleanup] Removed "${label}" because contact details are low-value`);
             return;
@@ -6766,10 +6908,6 @@ async function generatePPTX(
               lineModeThreshold: 4,
             });
             if (!value) return;
-            const extractedGeo = extractGeographyItemsFromText(originalValue);
-            if (extractedGeo.length > 0) {
-              extractedGeoFromPartnerships.push(...extractedGeo);
-            }
           }
 
           if (rowCanonical === 'geography') {
@@ -9530,6 +9668,51 @@ function extractServiceCenterValue(value) {
   return fixAcronymCasing(stripped || cleaned);
 }
 
+function hasLocalServiceCenterEntries(value) {
+  return splitReadableEntries(value).some((entry) => !isCountryOrRegionLevelGeographyToken(entry));
+}
+
+function chooseRicherServiceCenterValue(primaryValue, fallbackValue) {
+  const primary = ensureString(primaryValue).trim();
+  const fallback = ensureString(fallbackValue).trim();
+  if (!primary) return fallback;
+  if (!fallback) return primary;
+
+  const primaryHasLocal = hasLocalServiceCenterEntries(primary);
+  const fallbackHasLocal = hasLocalServiceCenterEntries(fallback);
+  if (fallbackHasLocal && !primaryHasLocal) return fallback;
+  if (primaryHasLocal && !fallbackHasLocal) return primary;
+
+  const primaryEntries = splitReadableEntries(primary);
+  const fallbackEntries = splitReadableEntries(fallback);
+  return fallbackEntries.length > primaryEntries.length ? fallback : primary;
+}
+
+function getServiceCenterValueFromCompany(company) {
+  let bestValue = extractServiceCenterValue(getBranchNetworkSummaryFromCompany(company));
+  const metrics = Array.isArray(company?.key_metrics) ? company.key_metrics : [];
+
+  for (const metric of metrics) {
+    const label = ensureString(metric?.label).toLowerCase();
+    if (!/(location|locations|branch|branches|service center|service centre|office|offices)/i.test(label)) {
+      continue;
+    }
+
+    const localGeography = extractGeographyItemsFromText(metric?.value).filter(
+      (item) => !isCountryOrRegionLevelGeographyToken(item)
+    );
+    if (localGeography.length === 0) continue;
+
+    const candidate = formatCompactEntryList(localGeography.join('\n'), {
+      maxEntries: 8,
+      lineModeThreshold: 4,
+    });
+    bestValue = chooseRicherServiceCenterValue(bestValue, candidate);
+  }
+
+  return fixAcronymCasing(bestValue);
+}
+
 function normalizeHeadcountValue(value) {
   const raw = ensureString(value).replace(/\s+/g, ' ').trim();
   if (!raw) return '';
@@ -10955,6 +11138,159 @@ function applyRelationshipFallbackToBreakdown(productsBreakdown, businessRelatio
   };
 }
 
+function prettifyBreakdownSlug(slug) {
+  let text = ensureString(slug)
+    .replace(/^cat$/i, '')
+    .replace(/^cid$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '';
+
+  const replacements = [
+    [/\bacmvr\b/gi, 'ACMVR'],
+    [/\bacmv\b/gi, 'ACMV'],
+    [/\bhvacr\b/gi, 'HVACR'],
+    [/\bhvac\b/gi, 'HVAC'],
+    [/\bvrf\b/gi, 'VRF'],
+    [/\bahu\b/gi, 'AHU'],
+    [/\bmep\b/gi, 'MEP'],
+    [/\bamc\b/gi, 'AMC'],
+    [/\bff fas\b/gi, 'Fire Fighting and Alarm Systems'],
+    [/\bfas\b/gi, 'Fire Alarm Systems'],
+    [/\benergyefficient\b/gi, 'Energy Efficient'],
+    [/\benchancement\b/gi, 'Enhancement'],
+    [/\bfightning\b/gi, 'Fighting'],
+  ];
+  replacements.forEach(([pattern, replacement]) => {
+    text = text.replace(pattern, replacement);
+  });
+
+  text = fixAcronymCasing(toTitleCase(text));
+  if (!text) return '';
+  if (/^(services?|products?|projects?|category|categories|about|contact|clients?)$/i.test(text)) {
+    return '';
+  }
+  return text;
+}
+
+function inferBreakdownValueFromLabel(label) {
+  const lower = ensureString(label).toLowerCase();
+  if (!lower) return '';
+  if (/\bmaintenance|servicing|amc|repair\b/.test(lower)) {
+    return 'Preventive maintenance, repair and service support';
+  }
+  if (/\bretrofit|retrofitting|upgrade\b/.test(lower)) {
+    return 'Retrofit, upgrade and modernization works';
+  }
+  if (/\binstallation|commissioning\b/.test(lower)) {
+    return 'System installation, testing and commissioning';
+  }
+  if (/\bfire\b/.test(lower)) {
+    return 'Fire protection systems, engineering and installation';
+  }
+  if (/\belectrical\b/.test(lower)) {
+    return 'Electrical systems engineering, fit-out and support';
+  }
+  if (/\bcooling|chiller\b/.test(lower)) {
+    return 'Industrial cooling, chiller and related system solutions';
+  }
+  if (/\bventilation|air handling|ahu|acmv|acmvr|hvac|vrf|packaged ac\b/.test(lower)) {
+    return 'HVAC, air-conditioning and ventilation system solutions';
+  }
+  if (/\bduct\b/.test(lower)) {
+    return 'Ducting fabrication, supply and installation';
+  }
+  if (/\bwater|drainage|piping\b/.test(lower)) {
+    return 'Utility piping and building-services support';
+  }
+  if (/\bsolution|system|services?\b/.test(lower)) {
+    return 'Visible service and system category on the company website';
+  }
+  return '';
+}
+
+function buildDeterministicBreakdownFromPageUrls(pageUrls = []) {
+  if (!Array.isArray(pageUrls) || pageUrls.length === 0) {
+    return { breakdown_title: '', breakdown_items: [] };
+  }
+
+  const items = [];
+  const seen = new Set();
+  const skipPathPattern =
+    /\b(about|contact|author|blog|news|event|videos?|photoalbum|portfolio|projects?|previous-projects?|latest-projects?|case-stud(?:y|ies)|certificates?|brand|clients?|customers?|partners?|mitra|klien|merek|catalog(?:ue)?|collections?|wholesale|range|products?$)\b/i;
+
+  for (const pageUrl of pageUrls) {
+    try {
+      const parsed = new URL(pageUrl.startsWith('http') ? pageUrl : `https://${pageUrl}`);
+      const parts = parsed.pathname
+        .split('/')
+        .map((part) => decodeURIComponent(part).trim())
+        .filter(Boolean);
+      if (parts.length === 0) continue;
+      if (parts.some((part) => /\b(project|portfolio|case-study|case-studies)\b/i.test(part))) {
+        continue;
+      }
+
+      const slug = parts[parts.length - 1];
+      if (!slug || skipPathPattern.test(slug)) continue;
+
+      const label = prettifyBreakdownSlug(slug);
+      const value = inferBreakdownValueFromLabel(label);
+      if (!label || !value) continue;
+
+      const dedupeKey = normalizeForComparison(label);
+      if (!dedupeKey || seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      items.push({ label, value });
+    } catch {
+      // Ignore malformed URLs
+    }
+  }
+
+  return {
+    breakdown_title: items.length > 0 ? 'Services and Systems Managed' : '',
+    breakdown_items: items.slice(0, 6),
+  };
+}
+
+function isProjectHeavyBreakdown(items = []) {
+  const meaningfulItems = getMeaningfulBreakdownItems(items);
+  if (meaningfulItems.length === 0) return false;
+
+  const projectLikeCount = meaningfulItems.filter((item) => {
+    const text = `${ensureString(item?.label)} ${ensureString(item?.value)}`.toLowerCase();
+    return /\b(project|projects|tower|mall|hotel|hospital|airport|depot|centre|center|resort|school|building|marriott|mrt|data centre|data center)\b/.test(
+      text
+    );
+  }).length;
+
+  return projectLikeCount >= Math.max(2, Math.ceil(meaningfulItems.length / 2));
+}
+
+function shouldUseServiceSystemFallback(companyData = {}, fallbackItems = []) {
+  const meaningfulFallback = getMeaningfulBreakdownItems(fallbackItems);
+  if (meaningfulFallback.length === 0) return false;
+
+  const currentItems = getMeaningfulBreakdownItems(companyData?.breakdown_items || []);
+  if (currentItems.length === 0) return true;
+
+  const contextText = [
+    ensureString(companyData?.business),
+    ensureString(companyData?.message),
+    ensureString(companyData?.title),
+    ensureString(companyData?.breakdown_title),
+  ]
+    .join(' ')
+    .toLowerCase();
+  const hasServiceSystemContext =
+    /\b(hvac|acmv|acmvr|mep|facility|maintenance|repair|retrofit|commissioning|ventilation|chiller|electrical|fire fighting|fire protection|air conditioning)\b/.test(
+      contextText
+    );
+
+  return hasServiceSystemContext && isProjectHeavyBreakdown(currentItems) && meaningfulFallback.length >= 3;
+}
+
 function normalizeUrlForDedup(rawUrl) {
   try {
     const normalized = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
@@ -11629,6 +11965,7 @@ Rules:
 - Use only clearly visible evidence in the screenshot.
 - If not visible, return empty string for that field.
 - location must be HQ-style and concise (state/province + country).
+- If only service or system headings are visible, still return them as breakdown_items with short factual values.
 - For Singapore use "Area, Singapore" only when area is visible.
 - For Australia, prefer full state name + "Australia" if state abbreviation is visible.
 - Keep business/title short and factual.
@@ -11705,22 +12042,32 @@ Rules:
   }
 }
 
-function hasUsableScreenshotRescue(profileInfo = {}, relationships = {}) {
+function hasUsableScreenshotRescue(profileInfo = {}, relationships = {}, websiteUrl = '') {
   const business = ensureString(profileInfo.business).trim();
   const location = ensureString(profileInfo.location).trim();
   const companyName = ensureString(profileInfo.company_name).trim();
   const establishedYear = ensureString(profileInfo.established_year).trim();
+  const title = ensureString(profileInfo.title).trim();
   const breakdownCount = getMeaningfulBreakdownItems(profileInfo.breakdown_items || []).length;
   const customerCount = uniqueRelationshipNames(relationships.customers || []).length;
   const principalBrandCount = uniqueRelationshipNames([
     ...filterPrincipalBrandNames(relationships.principals || [], companyName),
     ...filterPrincipalBrandNames(relationships.brands || [], companyName),
   ]).length;
+  const fallbackLocation = ensureString(inferCountryFromWebsite(websiteUrl)).trim();
+  const hasBusinessSignal =
+    !!business ||
+    breakdownCount >= 2 ||
+    customerCount >= 2 ||
+    principalBrandCount >= 3 ||
+    /\b(service|services|system|systems|engineering|maintenance|facility|acmv|hvac|mep)\b/i.test(
+      title
+    );
 
   return (
     !!companyName &&
-    !!business &&
-    (!!location || !!establishedYear) &&
+    hasBusinessSignal &&
+    (!!location || !!establishedYear || !!fallbackLocation) &&
     (breakdownCount >= 2 || customerCount >= 2 || principalBrandCount >= 3)
   );
 }
@@ -11734,7 +12081,9 @@ function buildScreenshotFallbackCompanyData(
   const extractedName = cleanCompanyName(ensureString(basicInfo.company_name), websiteUrl);
   const fallbackName = extractedName || extractCompanyNameFromUrl(websiteUrl);
   const rawLocation = ensureString(basicInfo.location);
-  const normalizedLocation = validateAndFixHQFormat(rawLocation, websiteUrl) || rawLocation;
+  const inferredCountry = ensureString(inferCountryFromWebsite(websiteUrl)).trim();
+  const normalizedLocation =
+    validateAndFixHQFormat(rawLocation, websiteUrl) || rawLocation || inferredCountry;
   const rawBreakdown = {
     breakdown_title: ensureString(basicInfo.breakdown_title),
     breakdown_items: getMeaningfulBreakdownItems(basicInfo.breakdown_items || []),
@@ -11779,7 +12128,7 @@ function buildScreenshotFallbackCompanyData(
       (relationships.principals || []).length + (relationships.brands || []).length > 0
         ? 'ok'
         : 'needs_manual_review',
-    _partialExtraction: !hasUsableScreenshotRescue(basicInfo, relationships),
+    _partialExtraction: !hasUsableScreenshotRescue(basicInfo, relationships, websiteUrl),
     _screenshotFallbackUsed: true,
     _sourceError: `Failed to scrape: ${ensureString(scrapeError)}`,
   };
@@ -13892,15 +14241,16 @@ async function extractProductsBreakdown(scrapedContent, previousData) {
             content: `You are an M&A analyst creating the RIGHT-SIDE content for a company profile slide.
 
 FIRST: Determine the BUSINESS TYPE:
-1. PROJECT-BASED: Construction, building materials, engineering, architecture, contractors
+1. PROJECT-BASED: True project developer / construction / architecture sites where the website mainly shows named projects, case studies, or portfolio references
    - Look for: "Projects", "Portfolio", "Case Studies", "Our Work"
+   - Do NOT classify HVAC / ACMV / MEP / facility-management / maintenance / retrofit contractors as project-based when the website exposes reusable service lines, system categories, or equipment pages
 
 2. CONSUMER-FACING: Consumer products, retail, F&B, cosmetics, fashion
    - Look for: Product catalogs, product families, consumer goods
 
-3. INDUSTRIAL B2B: Manufacturing, chemicals, inks, coatings, industrial supplies
-   - These companies have product lines for different applications/industries
-   - Focus on: Product categories by APPLICATION or INDUSTRY
+3. INDUSTRIAL B2B: Manufacturing, chemicals, inks, coatings, industrial supplies, HVAC / ACMV / MEP / facility-service companies
+   - These companies have product lines, service lines, equipment categories, or system categories
+   - Focus on: Product categories, service lines, equipment categories, or system categories by APPLICATION or INDUSTRY
 
 OUTPUT FORMAT based on business type:
 
@@ -13936,10 +14286,11 @@ FOR INDUSTRIAL B2B (manufacturing, chemicals):
 }
 
 CRITICAL RULES FOR INDUSTRIAL B2B TABLE:
-- Labels should be PRODUCT LINES or APPLICATION CATEGORIES (like "Flexographic Inks", "Screen Printing", "Paper & Board")
+- Labels should be PRODUCT LINES, SERVICE LINES, EQUIPMENT CATEGORIES, or APPLICATION CATEGORIES (like "Flexographic Inks", "Screen Printing", "Paper & Board", "ACMV Systems", "Fire Protection Systems")
 - NOT generic labels like "Products", "Applications", "Industries Served", "Services"
 - Look at company's actual product naming/categorization
 - 6-8 rows required (more rows = better coverage of product lines)
+- For HVAC / ACMV / MEP / facility-service companies, prefer reusable system/service categories over named projects
 - VALUE DESCRIPTIONS MUST BE SPECIFIC - NOT GENERIC:
   - BAD: "Chemicals for water treatment applications" (too vague - reader knows nothing new)
   - GOOD: "Flocculants, coagulants, pH adjusters, scale inhibitors" (specific products)
@@ -14611,6 +14962,7 @@ ${JSON.stringify(
 - Search SOURCE for actual address/location
 - Keep existing non-empty location unless source clearly contradicts it
 - FORMAT: "Province/State, Country" (e.g., "Bangkok, Thailand", "Selangor, Malaysia")
+- India only: if SOURCE explicitly shows a city-level HQ like "Pune" or "Surat", you may keep "Pune, India" or "Surat, India" instead of a broader state-only location
 - Singapore: Must have real area name - "Jurong", "Tuas", "Woodlands", "Changi", etc.
   - INVALID areas to REMOVE: "Central" (not a real place), "Singapore" alone
   - If postal code visible: 60xxxx=Jurong, 62xxxx=Tuas, 7xxxxx=Woodlands
@@ -14623,6 +14975,7 @@ For EACH metric in key_metrics:
 - If you CANNOT find the number/claim in the source content, REMOVE the metric
 - Example: If key_metrics says "300 employees" but source has no mention of 300 or employees, REMOVE IT
 - Exception: do NOT remove "Branch Network" / branch metrics if source lists 2+ service locations/cities/branches
+- If internal field "_headcountSource" is "search" and "_headcountValue" is present, do not treat that fallback headcount as invalid just because SOURCE text is silent
 - If metric has placeholder pattern (brand1, Customer A, etc.), REMOVE IT
 - If metric has "0" value (e.g., "0 Customers", "0 Projects"), REMOVE IT
 - If metric says "Not specified", "N/A", "Unknown", REMOVE IT
@@ -14779,6 +15132,16 @@ Return ONLY valid JSON.`;
         console.log(`    [Validator] Recovered HQ from X-based text: ${finalLocation}`);
       }
     }
+    const indiaCityHint = extractIndiaCityLocationHint(
+      [ensureString(sourceContent), ensureString(validated.business), ensureString(validated.message)].join(
+        ' '
+      ),
+      finalLocation || companyData.location,
+      websiteUrl
+    );
+    if (indiaCityHint) {
+      finalLocation = preferRicherLocationValue(finalLocation, indiaCityHint);
+    }
 
     const sourceMetrics = Array.isArray(companyData.key_metrics) ? companyData.key_metrics : [];
     const validatedMetrics = Array.isArray(validated.key_metrics)
@@ -14899,11 +15262,14 @@ async function processSingleWebsite(website, index, total) {
         console.log(
           `  [${index + 1}] Step 1b: Blocked by website, attempting screenshot fallback for company/location...`
         );
-        const screenshotBasicInfo = await extractBasicInfoFromScreenshot(trimmedWebsite);
+        const screenshotBasicInfo = await extractBasicInfoFromScreenshot(trimmedWebsite, {
+          width: 1800,
+          delayMs: 6500,
+        });
         const screenshotRelationships = await extractPartnersFromScreenshots(trimmedWebsite, [], {
           deepMode: true,
         });
-        if (hasUsableScreenshotRescue(screenshotBasicInfo, screenshotRelationships)) {
+        if (hasUsableScreenshotRescue(screenshotBasicInfo, screenshotRelationships, trimmedWebsite)) {
           console.log(`  [${index + 1}] Screenshot fallback recovered enough data for rescue slide`);
           return buildScreenshotFallbackCompanyData(
             trimmedWebsite,
@@ -15328,6 +15694,11 @@ async function processSingleWebsite(website, index, total) {
         }
       }
     }
+    const indiaCityLocationHint = extractIndiaCityLocationHint(
+      scraped.content,
+      validatedLocation || finalLocation || basicInfo.location,
+      trimmedWebsite
+    );
 
     // Determine business type: keyword detection can override AI's classification
     let businessType = productsBreakdown.business_type || 'industrial';
@@ -15602,6 +15973,7 @@ async function processSingleWebsite(website, index, total) {
       _headcountSource: headcountSource,
       _basedLocationHint: basedLocationHint,
       _regionalLocationHint: regionalLocationHint,
+      _indiaCityLocationHint: indiaCityLocationHint,
       _structuredLocationHint: structuredAddress?.formatted || '',
     };
 
@@ -15684,12 +16056,14 @@ async function processSingleWebsite(website, index, total) {
       scraped.content,
       companyData.company_name || basicInfo.company_name,
       companyData.business || businessInfo.business,
-      markerResult?.markers
+      markerResult?.markers,
+      scraped.pagesScraped || []
     );
 
     const finalizedLocation = finalizeLocationWithEvidence(companyData.location, {
       richerHint: companyData._basedLocationHint,
       secondaryHint: companyData._regionalLocationHint,
+      indiaCityHint: companyData._indiaCityLocationHint,
       locationSource: companyData._locationSource,
       sourceText: scraped.content,
       evidenceHints: [
@@ -15909,7 +16283,10 @@ function validateProfileData(companies) {
       blockingIssues.push(`low-quality segment labels (${lowQualitySegmentLabels.join(', ')})`);
     }
 
-    if (company._screenshotFallbackUsed && !hasUsableScreenshotRescue(company, relationships)) {
+    if (
+      company._screenshotFallbackUsed &&
+      !hasUsableScreenshotRescue(company, relationships, company.website)
+    ) {
       blockingIssues.push('screenshot-only fallback used');
     }
 
@@ -15986,10 +16363,30 @@ async function retryBreakdownExtractionIfEmpty(
   scrapedContent,
   companyName,
   business,
-  markers = null
+  markers = null,
+  pageUrls = []
 ) {
   const existingItems = Array.isArray(companyData?.breakdown_items) ? companyData.breakdown_items : [];
   const existingMeaningfulCount = existingItems.filter((item) => isMeaningfulBreakdownItem(item)).length;
+  const deterministicFallback = buildDeterministicBreakdownFromPageUrls(pageUrls);
+  if (
+    deterministicFallback.breakdown_items.length > 0 &&
+    (existingMeaningfulCount === 0 ||
+      shouldUseServiceSystemFallback(companyData, deterministicFallback.breakdown_items))
+  ) {
+    console.log(
+      `    Using deterministic service/system fallback for right table (${deterministicFallback.breakdown_items.length} items)`
+    );
+    return {
+      ...companyData,
+      breakdown_title:
+        ensureString(deterministicFallback.breakdown_title) ||
+        ensureString(companyData.breakdown_title) ||
+        'Services and Systems Managed',
+      breakdown_items: deterministicFallback.breakdown_items,
+    };
+  }
+
   if (existingMeaningfulCount >= 4) return companyData;
 
   console.log('    Breakdown thin after validation, retrying with full scraped content...');
@@ -16342,11 +16739,14 @@ app.post('/api/generate-ppt', async (req, res) => {
             console.log(
               '  Step 1b: Blocked by website, attempting screenshot fallback for company/location...'
             );
-            const screenshotBasicInfo = await extractBasicInfoFromScreenshot(website);
+            const screenshotBasicInfo = await extractBasicInfoFromScreenshot(website, {
+              width: 1800,
+              delayMs: 6500,
+            });
             const screenshotRelationships = await extractPartnersFromScreenshots(website, [], {
               deepMode: true,
             });
-            if (hasUsableScreenshotRescue(screenshotBasicInfo, screenshotRelationships)) {
+            if (hasUsableScreenshotRescue(screenshotBasicInfo, screenshotRelationships, website)) {
               console.log('  Screenshot fallback recovered enough data for rescue slide');
               results.push(
                 buildScreenshotFallbackCompanyData(
@@ -16649,6 +17049,11 @@ app.post('/api/generate-ppt', async (req, res) => {
             }
           }
         }
+        const indiaCityLocationHint = extractIndiaCityLocationHint(
+          scraped.content,
+          validatedLocation || finalLocation || basicInfo.location,
+          website
+        );
 
         // Determine business type: keyword detection can override AI's classification
         let businessType = productsBreakdown.business_type || 'industrial';
@@ -16924,6 +17329,7 @@ app.post('/api/generate-ppt', async (req, res) => {
           _headcountSource: headcountSource,
           _basedLocationHint: basedLocationHint,
           _regionalLocationHint: regionalLocationHint,
+          _indiaCityLocationHint: indiaCityLocationHint,
           _structuredLocationHint: structuredAddress?.formatted || '',
         };
 
@@ -16935,12 +17341,15 @@ app.post('/api/generate-ppt', async (req, res) => {
           companyData,
           scraped.content,
           companyData.company_name || basicInfo.company_name,
-          companyData.business || businessInfo.business
+          companyData.business || businessInfo.business,
+          null,
+          scraped.pagesScraped || []
         );
 
         const finalizedLocation = finalizeLocationWithEvidence(companyData.location, {
           richerHint: companyData._basedLocationHint,
           secondaryHint: companyData._regionalLocationHint,
+          indiaCityHint: companyData._indiaCityLocationHint,
           locationSource: companyData._locationSource,
           sourceText: scraped.content,
           evidenceHints: [
