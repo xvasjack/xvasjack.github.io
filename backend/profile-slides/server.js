@@ -5705,23 +5705,20 @@ async function generatePPTX(
         // Build table data
         const segments = meceData.segments || [];
         const companySegments = meceData.companySegments || {};
+        const segmentHeaderLabel = meceData.headerLabel || 'Products / Services';
         const MAX_SEGMENTS_PER_SLIDE = 6;
 
-        // Split wide summary table into multiple slides with max 6 service columns each.
-        const segmentChunks = [];
-        if (segments.length === 0) {
-          segmentChunks.push({ labels: [], originalIndices: [] });
-        } else {
-          for (let startIdx = 0; startIdx < segments.length; startIdx += MAX_SEGMENTS_PER_SLIDE) {
-            const labels = segments.slice(startIdx, startIdx + MAX_SEGMENTS_PER_SLIDE);
-            const originalIndices = labels.map((_, offset) => startIdx + offset);
-            segmentChunks.push({ labels, originalIndices });
-          }
-        }
+        const visibleSegments = segments.slice(0, MAX_SEGMENTS_PER_SLIDE);
+        const segmentChunks = [
+          {
+            labels: visibleSegments,
+            originalIndices: visibleSegments.map((_, index) => index),
+          },
+        ];
 
-        if (segments.length > MAX_SEGMENTS_PER_SLIDE) {
+        if (segments.length > visibleSegments.length) {
           console.log(
-            `Target List split: ${segments.length} service columns over ${segmentChunks.length} slides (max ${MAX_SEGMENTS_PER_SLIDE} per slide)`
+            `Target List compressed to ${visibleSegments.length} columns on one slide (${segments.length - visibleSegments.length} extra columns removed)`
           );
         }
 
@@ -5743,9 +5740,7 @@ async function generatePPTX(
           const chunkOriginalIndices = segmentChunk.originalIndices;
           const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-          const titleSuffix =
-            segmentChunks.length > 1 ? ` (Services ${chunkIdx + 1}/${segmentChunks.length})` : '';
-          targetSlide.addText(`${formattedTitle}${titleSuffix}`, {
+          targetSlide.addText(formattedTitle, {
             x: 0.38,
             y: 0.07,
             w: 12.5,
@@ -5797,7 +5792,7 @@ async function generatePPTX(
 
           if (chunkSegments.length > 0) {
             productHeaderRow.push({
-              text: 'Products / Services',
+              text: segmentHeaderLabel,
               options: {
                 colspan: chunkSegments.length,
                 fill: TL_COLORS.headerBg,
@@ -14658,6 +14653,245 @@ Return ONLY valid JSON.`,
   }
 }
 
+const TARGET_LIST_SERVICE_SEGMENT_DEFS = [
+  {
+    key: 'hvac',
+    label: 'HVAC',
+    priority: 100,
+    pattern:
+      /\b(hvacr?|acmv|acmvr|air[-\s]?conditioning|ventilation|chillers?|cooling towers?|air handling|ahu|ahus|vrf|fan coil|fcu|ductable ac|packaged ac|precision ac|comfort cooling|process cooling)\b/i,
+  },
+  {
+    key: 'fire',
+    label: 'Fire Protection',
+    priority: 90,
+    pattern:
+      /\b(fire fighting|fire protection|fire alarm|sprinklers?|hydrants?|gas suppression|fire safety|fire detection|fas|ff)\b/i,
+  },
+  {
+    key: 'me',
+    label: 'Mechanical & Electrical',
+    priority: 85,
+    pattern:
+      /\b(m&e|mechanical\s*(?:&|and)\s*electrical|mep|electrical|power distribution|transformers?|panels?|building automation|motor control)\b/i,
+  },
+  {
+    key: 'plumbing',
+    label: 'Plumbing',
+    priority: 80,
+    pattern:
+      /\b(plumbing|water supply|drainage|utility piping|piping|pipework|sanitary|waste ?water)\b/i,
+  },
+  {
+    key: 'fm',
+    label: 'Facility Management',
+    priority: 75,
+    pattern:
+      /\b(facility management|facilities management|total facility|integrated facility|building management|facility operations|ifm|tfm)\b/i,
+  },
+  {
+    key: 'iaq',
+    label: 'Indoor Air Quality',
+    priority: 40,
+    pattern: /\b(indoor air quality|iaq|duct cleaning|robotic duct cleaning)\b/i,
+  },
+];
+
+function buildTargetListCompanyText(companySummary = {}) {
+  return normalizeForComparison(
+    [
+      ensureString(companySummary.name),
+      ensureString(companySummary.business),
+      ensureString(companySummary.products),
+      ensureString(companySummary.message),
+      ensureString(companySummary.breakdownTitle),
+    ].join(' ')
+  );
+}
+
+function isServiceTargetListDomain(targetDescription, companySummaries = []) {
+  const domainText = normalizeForComparison(
+    [
+      ensureString(targetDescription),
+      ...companySummaries.map((companySummary) => buildTargetListCompanyText(companySummary)),
+    ].join(' ')
+  );
+  return /\b(hvac|acmv|acmvr|mechanical|mep|facility|building management|fire protection|fire fighting|plumbing|duct cleaning|indoor air quality|managed service)\b/i.test(
+    domainText
+  );
+}
+
+function buildServiceTargetListSegments(targetDescription, companySummaries = []) {
+  if (!isServiceTargetListDomain(targetDescription, companySummaries)) return null;
+
+  const companyMatches = {};
+  const coverage = Object.fromEntries(
+    TARGET_LIST_SERVICE_SEGMENT_DEFS.map((definition) => [definition.key, 0])
+  );
+
+  companySummaries.forEach((companySummary) => {
+    const text = buildTargetListCompanyText(companySummary);
+    const hits = new Set();
+
+    TARGET_LIST_SERVICE_SEGMENT_DEFS.forEach((definition) => {
+      if (definition.pattern.test(text)) hits.add(definition.key);
+    });
+
+    // MEP is a bundled offer that usually implies both M&E and plumbing scope.
+    if (/\bmep\b/i.test(text)) {
+      hits.add('me');
+      hits.add('plumbing');
+    }
+
+    companyMatches[String(companySummary.id)] = hits;
+    hits.forEach((key) => {
+      coverage[key] = (coverage[key] || 0) + 1;
+    });
+  });
+
+  const primaryKeys = ['hvac', 'fire', 'me', 'plumbing', 'fm'];
+  const secondaryKeys = ['iaq'];
+  const targetText = normalizeForComparison(targetDescription);
+
+  let selectedKeys = primaryKeys.filter((key) => coverage[key] > 0);
+
+  secondaryKeys.forEach((key) => {
+    const definition = TARGET_LIST_SERVICE_SEGMENT_DEFS.find((item) => item.key === key);
+    const explicitlyRequested =
+      definition && definition.pattern ? definition.pattern.test(targetText) : false;
+    if (coverage[key] >= 2 || explicitlyRequested) {
+      selectedKeys.push(key);
+    }
+  });
+
+  if (selectedKeys.length < 3) {
+    const remaining = TARGET_LIST_SERVICE_SEGMENT_DEFS.filter(
+      (definition) => coverage[definition.key] > 0 && !selectedKeys.includes(definition.key)
+    ).sort((left, right) => right.priority - left.priority);
+    remaining.forEach((definition) => {
+      if (selectedKeys.length < 3) selectedKeys.push(definition.key);
+    });
+  }
+
+  selectedKeys = TARGET_LIST_SERVICE_SEGMENT_DEFS.map((definition) => definition.key).filter((key) =>
+    selectedKeys.includes(key)
+  );
+  if (selectedKeys.length > 6) selectedKeys = selectedKeys.slice(0, 6);
+  if (selectedKeys.length === 0) return null;
+
+  const companySegments = {};
+  companySummaries.forEach((companySummary) => {
+    const hits = companyMatches[String(companySummary.id)] || new Set();
+    companySegments[String(companySummary.id)] = selectedKeys.map((key) => hits.has(key));
+  });
+
+  return {
+    segments: selectedKeys.map(
+      (key) => TARGET_LIST_SERVICE_SEGMENT_DEFS.find((definition) => definition.key === key)?.label || key
+    ),
+    companySegments,
+    headerLabel: 'Services / Equipment',
+  };
+}
+
+function cleanTargetListSegmentLabel(label) {
+  let cleaned = fixAcronymCasing(ensureString(label).replace(/\([^)]*\)/g, ' '));
+  cleaned = cleaned.replace(/\betc\.?\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+
+  const lower = normalizeForComparison(cleaned);
+  if (!lower) return '';
+  if (
+    /\bhvac\b/.test(lower) &&
+    /\b(installation|contracting|maintenance|service|services|amc|equipment|supply|repair)\b/.test(
+      lower
+    )
+  ) {
+    return 'HVAC';
+  }
+  if (/\b(fire fighting|fire protection)\b/.test(lower)) return 'Fire Protection';
+  if (/\b(electrical|m&e|mep)\b/.test(lower)) return 'Mechanical & Electrical';
+  if (/\b(plumbing|piping|drainage|water supply)\b/.test(lower)) return 'Plumbing';
+  if (/\b(facility|building management|fm)\b/.test(lower)) return 'Facility Management';
+  if (/\b(indoor air quality|duct cleaning|iaq)\b/.test(lower)) return 'Indoor Air Quality';
+
+  cleaned = cleaned.replace(/\s*\/\s*/g, ' ').replace(/\s*&\s*/g, ' & ').replace(/\s+/g, ' ').trim();
+  return cleaned;
+}
+
+function refineTargetListSegments(result, targetDescription, companySummaries = []) {
+  const deterministicServiceSegments = buildServiceTargetListSegments(targetDescription, companySummaries);
+  if (deterministicServiceSegments) {
+    console.log(
+      `  Target List segments normalized to ${deterministicServiceSegments.segments.length} service buckets`
+    );
+    return deterministicServiceSegments;
+  }
+
+  const rawSegments = Array.isArray(result?.segments) ? result.segments : [];
+  const rawCompanySegments =
+    result?.companySegments && typeof result.companySegments === 'object' ? result.companySegments : {};
+  if (rawSegments.length === 0) return { segments: [], companySegments: rawCompanySegments };
+
+  const mergedSegments = [];
+  const mergedCompanySegments = {};
+  const labelToIndex = new Map();
+
+  Object.keys(rawCompanySegments).forEach((companyId) => {
+    mergedCompanySegments[companyId] = [];
+  });
+
+  rawSegments.forEach((segment, index) => {
+    const cleanLabel = cleanTargetListSegmentLabel(segment);
+    if (!cleanLabel) return;
+
+    let targetIndex = labelToIndex.get(cleanLabel);
+    if (targetIndex == null) {
+      targetIndex = mergedSegments.length;
+      labelToIndex.set(cleanLabel, targetIndex);
+      mergedSegments.push(cleanLabel);
+      Object.keys(mergedCompanySegments).forEach((companyId) => {
+        mergedCompanySegments[companyId][targetIndex] = false;
+      });
+    }
+
+    Object.entries(rawCompanySegments).forEach(([companyId, ticks]) => {
+      const hasTick = Array.isArray(ticks) && ticks[index] === true;
+      mergedCompanySegments[companyId][targetIndex] =
+        mergedCompanySegments[companyId][targetIndex] === true || hasTick;
+    });
+  });
+
+  const segmentCoverage = mergedSegments.map((_, segmentIndex) =>
+    Object.values(mergedCompanySegments).filter(
+      (ticks) => Array.isArray(ticks) && ticks[segmentIndex] === true
+    ).length
+  );
+
+  let orderedIndices = mergedSegments.map((_, index) => index);
+  if (mergedSegments.length > 6) {
+    orderedIndices = orderedIndices
+      .sort((left, right) => segmentCoverage[right] - segmentCoverage[left] || left - right)
+      .slice(0, 6)
+      .sort((left, right) => left - right);
+    console.log(
+      `  Target List segments reduced from ${mergedSegments.length} to ${orderedIndices.length} for one-slide output`
+    );
+  }
+
+  const segments = orderedIndices.map((index) => mergedSegments[index]);
+  const companySegments = {};
+  Object.entries(mergedCompanySegments).forEach(([companyId, ticks]) => {
+    companySegments[companyId] = orderedIndices.map((index) => ticks[index] === true);
+  });
+
+  return {
+    segments,
+    companySegments,
+    headerLabel: result?.headerLabel || 'Products / Services',
+  };
+}
+
 // AI Agent 6: Generate MECE segments for target list slide
 async function generateMECESegments(targetDescription, companies) {
   if (!targetDescription || companies.length === 0) {
@@ -14683,6 +14917,8 @@ async function generateMECESegments(targetDescription, companies) {
         business: c.business || '',
         products: products,
         location: c.location || '',
+        message: c.message || '',
+        breakdownTitle: c.breakdown_title || '',
       };
     });
 
@@ -14715,6 +14951,10 @@ CRITICAL:
 - ALL segments must be PARALLEL (same category type)
 - EVERY company MUST have at least one segment ticked
 - If a company has no ticks, either the segmentation is wrong OR the company doesn't belong in this list
+- Choose BETWEEN 3 AND 6 segments total, never more
+- Prefer broad, decision-useful buckets over narrow sub-variants
+- Avoid slash-heavy or mash-up labels like "Electrical / M&E / MEP Systems"
+- For HVAC / MEP / facility-service targets, merge overlapping labels into cleaner buckets such as "HVAC", "Fire Protection", "Mechanical & Electrical", "Plumbing", or "Facility Management" when that better fits the company set
 
 OUTPUT JSON:
 {
@@ -14792,7 +15032,7 @@ Create segments for these ${targetDescription} companies. Ensure EVERY company h
       }
     }
 
-    return result;
+    return refineTargetListSegments(result, targetDescription, companySummaries);
   } catch (e) {
     console.error('MECE segmentation error:', e.message);
     return { segments: [], companySegments: {} };
