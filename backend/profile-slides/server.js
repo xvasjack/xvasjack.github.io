@@ -615,6 +615,42 @@ function buildRelationshipContentForAI(scrapedContent, options = {}) {
   return nonNegative.map((section) => `=== ${section.path} PAGE ===\n${section.text}`).join('\n\n');
 }
 
+function buildThinCustomerRecoveryContent(scrapedContent) {
+  const source = ensureString(scrapedContent);
+  if (!source) return '';
+
+  const sections = splitScrapedContentByPage(source);
+  if (sections.length === 0) return source;
+
+  const nonNegative = sections.filter(
+    (section) => classifyRelationshipPageContext(section.path) !== 'negative_person'
+  );
+  if (nonNegative.length === 0) return '';
+
+  const selected = [];
+  const seen = new Set();
+  const pushSections = (predicate) => {
+    nonNegative.forEach((section) => {
+      if (!predicate(section)) return;
+      const key = ensureString(section.path).trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      selected.push(section);
+    });
+  };
+
+  pushSections((section) => classifyRelationshipPageContext(section.path) === 'customer_heavy');
+  pushSections((section) => section.path === '/');
+  pushSections((section) => classifyRelationshipPageContext(section.path) === 'relationship_heavy');
+  pushSections((section) => classifyRelationshipPageContext(section.path) === 'project_heavy');
+  pushSections(() => true);
+
+  return selected
+    .slice(0, 10)
+    .map((section) => `=== ${section.path} PAGE ===\n${section.text}`)
+    .join('\n\n');
+}
+
 let COUNTRY_LOOKUP_CACHE = null;
 
 function buildRuntimeCountryLookup() {
@@ -1136,6 +1172,98 @@ function formatCompactEntryList(value, options = {}) {
   }
 
   return visible.join('\n');
+}
+
+function collectStructuredRelationshipLines(value, options = {}) {
+  const maxLines = Math.max(1, parseInt(String(options.maxLines || '8'), 10));
+  const lines = ensureString(value)
+    .split('\n')
+    .map((line) => removeTruncationTokens(stripLeadingBulletMarker(line)))
+    .map((line) => ensureString(line).trim())
+    .filter(Boolean)
+    .filter((line) => line.includes(':'));
+  if (lines.length < 2) return [];
+
+  const unique = [];
+  const seen = new Set();
+  for (const line of lines) {
+    const normalized = normalizeForComparison(line);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    unique.push(fixAcronymCasing(line));
+    if (unique.length >= maxLines) break;
+  }
+  return unique;
+}
+
+function extractCustomerNamesFromDisplay(value) {
+  const extracted = extractRelationshipsFromMetrics([{ label: 'Customers', value: ensureString(value) }]);
+  const parsedNames = uniqueRelationshipNames(extracted.customers || []);
+  if (parsedNames.length > 0) return parsedNames;
+  return uniqueRelationshipNames(splitReadableEntries(value));
+}
+
+function formatCustomerRowValue(value, segmentMap = null, options = {}) {
+  const maxLines = Math.max(1, parseInt(String(options.maxLines || '8'), 10));
+  const maxNamesPerLine = Math.max(1, parseInt(String(options.maxNamesPerLine || '4'), 10));
+  const maxEntries = Math.max(
+    maxLines * maxNamesPerLine,
+    parseInt(String(options.maxEntries || '16'), 10)
+  );
+  const lineModeThreshold = Math.max(4, parseInt(String(options.lineModeThreshold || '5'), 10));
+  const mergedNames = extractCustomerNamesFromDisplay(value);
+  const normalizedSegments = normalizeSegmentMap(segmentMap);
+
+  if (Object.keys(normalizedSegments).length > 0 && mergedNames.length > 0) {
+    return buildRelationshipDisplayText(normalizedSegments, mergedNames, {
+      maxLines,
+      maxNamesPerLine,
+    });
+  }
+
+  const structuredLines = collectStructuredRelationshipLines(value, { maxLines });
+  if (structuredLines.length > 0) {
+    return structuredLines.join('\n');
+  }
+
+  if (mergedNames.length > 0) {
+    return formatCompactEntryList(mergedNames.join('\n'), { maxEntries, lineModeThreshold });
+  }
+
+  return formatCompactEntryList(value, { maxEntries, lineModeThreshold });
+}
+
+function mergeCustomerDisplayValues(existingValue, incomingValue, segmentMap = null, options = {}) {
+  const mergedNames = uniqueRelationshipNames([
+    ...extractCustomerNamesFromDisplay(existingValue),
+    ...extractCustomerNamesFromDisplay(incomingValue),
+  ]);
+  const normalizedSegments = normalizeSegmentMap(segmentMap);
+  const maxLines = Math.max(1, parseInt(String(options.maxLines || '8'), 10));
+  const maxNamesPerLine = Math.max(1, parseInt(String(options.maxNamesPerLine || '4'), 10));
+  const maxEntries = Math.max(
+    maxLines * maxNamesPerLine,
+    parseInt(String(options.maxEntries || '16'), 10)
+  );
+  const lineModeThreshold = Math.max(4, parseInt(String(options.lineModeThreshold || '5'), 10));
+
+  if (Object.keys(normalizedSegments).length > 0 && mergedNames.length > 0) {
+    return buildRelationshipDisplayText(normalizedSegments, mergedNames, {
+      maxLines,
+      maxNamesPerLine,
+    });
+  }
+
+  if (mergedNames.length > 0) {
+    return formatCompactEntryList(mergedNames.join('\n'), { maxEntries, lineModeThreshold });
+  }
+
+  return formatCustomerRowValue(mergeReadableRowValues(existingValue, incomingValue), null, {
+    maxLines,
+    maxNamesPerLine,
+    maxEntries,
+    lineModeThreshold,
+  });
 }
 
 function isLikelyYearLabel(label) {
@@ -1789,6 +1917,8 @@ function fixAcronymCasing(text) {
   ]);
 
   let result = ensureString(text);
+
+  result = result.replace(/\bL\s*&\s*T\b/gi, 'L&T');
 
   // Dotted shortforms should be uppercase (example: r.o.s -> R.O.S).
   result = result.replace(/\b([a-z])(?:\.[a-z]){1,6}\.?\b/gi, (match) => match.toUpperCase());
@@ -6591,7 +6721,7 @@ async function generatePPTX(
                 company._customerSegments,
                 cleanedCustomers,
                 {
-                  maxLines: 6,
+                  maxLines: 8,
                   maxNamesPerLine: 4,
                 }
               );
@@ -6915,10 +7045,14 @@ async function generatePPTX(
             }
             value = compactPartners;
           } else if (/(customers?|clients?|suppliers?|vendors?|brands?)/i.test(normalizedLower)) {
-            value = formatCompactEntryList(value, {
-              maxEntries: 10,
-              lineModeThreshold: 4,
-            });
+            if (rowCanonical === 'customers') {
+              value = formatCustomerRowValue(value, company._customerSegments);
+            } else {
+              value = formatCompactEntryList(value, {
+                maxEntries: 10,
+                lineModeThreshold: 4,
+              });
+            }
             if (!value) return;
           }
 
@@ -7082,10 +7216,11 @@ async function generatePPTX(
           if (canonical === 'customers' && rowIndexByCanonical.has(canonical)) {
             const existingIndex = rowIndexByCanonical.get(canonical);
             const existingRow = finalTableData[existingIndex];
-            const mergedValue = formatCompactEntryList(mergeReadableRowValues(existingRow[1], value), {
-              maxEntries: 10,
-              lineModeThreshold: 4,
-            });
+            const mergedValue = mergeCustomerDisplayValues(
+              existingRow[1],
+              value,
+              company._customerSegments
+            );
             finalTableData[existingIndex] = ['Customers', mergedValue, existingRow[2] || meta];
             console.log(
               `    [LeftTable Cleanup] Merged duplicate customer/client rows into one "Customers" row`
@@ -10998,7 +11133,9 @@ async function extractRelationshipsFromContentAI(scrapedContent, options = {}) {
   const companyName = ensureString(options.company_name);
   const companyNormalized = companyName.toLowerCase().replace(/\s+/g, '');
   const focus = ensureString(options.focus || 'all').toLowerCase();
-  const aiContent = buildRelationshipContentForAI(content, { focus }) || content;
+  const aiContent = options.skipPageFocusSelection
+    ? content
+    : buildRelationshipContentForAI(content, { focus }) || content;
   const normalizedSource = normalizeTextForComparison(aiContent);
 
   try {
@@ -11103,7 +11240,25 @@ async function recoverFocusedCustomerNames(scrapedContent, companyName = '') {
     company_name: companyName,
     focus: 'customers',
   });
-  return Array.isArray(focusedResult?.customers) ? focusedResult.customers : [];
+  let recoveredNames = Array.isArray(focusedResult?.customers) ? focusedResult.customers : [];
+  if (!hasThinCustomerCoverage(recoveredNames)) {
+    return recoveredNames;
+  }
+
+  const expandedContent = buildThinCustomerRecoveryContent(scrapedContent);
+  if (expandedContent) {
+    const secondaryResult = await extractRelationshipsFromContentAI(expandedContent, {
+      company_name: companyName,
+      focus: 'customers',
+      skipPageFocusSelection: true,
+    });
+    recoveredNames = uniqueRelationshipNames([
+      ...recoveredNames,
+      ...(Array.isArray(secondaryResult?.customers) ? secondaryResult.customers : []),
+    ]);
+  }
+
+  return recoveredNames;
 }
 
 // If product/application rows are empty, use relationship data as fallback for right-side content.

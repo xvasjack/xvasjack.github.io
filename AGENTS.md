@@ -54,6 +54,8 @@ These rules are mandatory for work in this repository.
 - For each requested change, always show: exact row text + plain meaning + exact reason.
 - Do not include generic summaries, API/interface notes, test sections, or assumptions unless explicitly requested.
 - ALWAYS present plans in a table.
-- Required table columns: Slide, Exact row text, Action, Fix layer (Prompt/Validator/Hard filter), Scope (which slides), Reason.
+- ALWAYS include `#` as the first column so issues are easy to reference by number.
+- Default to one numbered table with short cells unless the user explicitly asks for a different format.
+- Required table columns: #, Slide, Exact row text, Action, Fix layer (Prompt/Validator/Hard filter), Scope (which slides), Reason.
 - Never use vague wording like "long list" or "noise" without showing the exact text example.
 - For every removal rule, state clearly if it applies to all slides or only specific slides.
