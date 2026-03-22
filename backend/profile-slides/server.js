@@ -1308,6 +1308,12 @@ function isIndiaStateCountryLocation(location) {
   return normalizeForComparison(getLocationCountryName(location)) === 'india' && isIndiaStateToken(parts[0]);
 }
 
+function isIndiaCityCountryLocation(location) {
+  const parts = splitLocationParts(location);
+  if (parts.length !== 2) return false;
+  return normalizeForComparison(getLocationCountryName(location)) === 'india' && !isIndiaStateToken(parts[0]);
+}
+
 function cleanIndiaCityCandidate(rawValue) {
   const cleaned = fixAcronymCasing(
     ensureString(rawValue).replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim()
@@ -1513,7 +1519,10 @@ function finalizeLocationWithEvidence(location, options = {}) {
       options.evidenceHints || []
     );
     if (!confirmed) {
-      if (!isIndiaStateCountryLocation(finalLocation)) {
+      if (
+        !isIndiaStateCountryLocation(finalLocation) &&
+        !isIndiaCityCountryLocation(finalLocation)
+      ) {
         finalLocation = downgradeLocationToCountry(finalLocation, options.websiteUrl);
       }
     }
@@ -1694,6 +1703,7 @@ function fixAcronymCasing(text) {
     'AIS',
     'TRUE',
     'DTAC', // Companies
+    'IOI',
     'IBM',
     'HP',
     'AMD',
@@ -13726,8 +13736,9 @@ function extractRegionalLocationHint(content, websiteUrl) {
 }
 
 // Post-process and validate HQ location format
-// ALL countries: EXACTLY 2 levels (State/Province, Country)
-// Singapore: "Area, Singapore" preferred, "Singapore" as fallback
+// India: use "City, India" when a real city can be recovered.
+// Other countries: keep exactly 2 levels (State/Province, Country).
+// Singapore: "Area, Singapore" preferred, "Singapore" as fallback.
 function validateAndFixHQFormat(location, websiteUrl) {
   if (!location || typeof location !== 'string') return location;
 
@@ -13811,6 +13822,17 @@ function validateAndFixHQFormat(location, websiteUrl) {
     const lastAuState = normalizeAuStateValue(parts[parts.length - 1]);
     if (lastAuState) {
       return `${lastAuState}, Australia`;
+    }
+  }
+
+  const inferredOrDeclaredCountry =
+    normalizeForComparison(getLocationCountryName(loc)) || normalizeForComparison(inferredCountry);
+
+  if (inferredOrDeclaredCountry === 'india' && parts.length >= 3) {
+    const indiaCityLevel = extractIndiaCityLocationHint(loc, loc, websiteUrl);
+    if (indiaCityLevel) {
+      console.log(`  [HQ Fix] Normalized India HQ to city-level: "${loc}" -> "${indiaCityLevel}"`);
+      return indiaCityLevel;
     }
   }
 
@@ -14969,6 +14991,7 @@ ${JSON.stringify(
 - Keep existing non-empty location unless source clearly contradicts it
 - FORMAT: "Province/State, Country" (e.g., "Bangkok, Thailand", "Selangor, Malaysia")
 - India only: if SOURCE explicitly shows a city-level HQ like "Pune" or "Surat", you may keep "Pune, India" or "Surat, India" instead of a broader state-only location
+- India only: if internal field "_locationSource" is "search" and the extracted HQ is already "City, India", do not downgrade it to just "India" only because SOURCE text is silent
 - Singapore: Must have real area name - "Jurong", "Tuas", "Woodlands", "Changi", etc.
   - INVALID areas to REMOVE: "Central" (not a real place), "Singapore" alone
   - If postal code visible: 60xxxx=Jurong, 62xxxx=Tuas, 7xxxxx=Woodlands
