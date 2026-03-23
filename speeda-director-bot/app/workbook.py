@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -99,8 +100,19 @@ class WorkbookAdapter:
         temp_path = self.source_workbook_path.with_name(
             f"{self.source_workbook_path.stem}.codex_sync{self.source_workbook_path.suffix}"
         )
-        shutil.copy2(self.working_workbook_path, temp_path)
-        temp_path.replace(self.source_workbook_path)
+        last_error: Exception | None = None
+        for _ in range(20):
+            try:
+                shutil.copy2(self.working_workbook_path, temp_path)
+                temp_path.replace(self.source_workbook_path)
+                return
+            except PermissionError as exc:
+                last_error = exc
+                time.sleep(1.5)
+        if last_error:
+            raise PermissionError(
+                f"Could not update the source workbook after repeated retries: {self.source_workbook_path}"
+            ) from last_error
 
     def close(self) -> None:
         if self._workbook:

@@ -408,7 +408,7 @@ class SpeedaRunController:
                     except PermissionError:
                         self._mark_run_failed(
                             run_id,
-                            "Original Excel file is open. Close it, then click the same set again.",
+                            "Could not update the original Excel file. Close Excel if it is open, then wait a moment for OneDrive and click the same set again.",
                         )
                         break
                     except Exception as exc:
