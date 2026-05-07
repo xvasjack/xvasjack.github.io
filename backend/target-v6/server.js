@@ -3,7 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
-const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security');
+const XLSX = require('xlsx');
+const { securityHeaders, rateLimiter, escapeHtml, isValidEmail } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
@@ -2202,6 +2203,866 @@ app.post('/api/find-target-v6', async (req, res) => {
       );
     }
   }); // end trackingContext.run
+});
+
+// ============ COMPANY METRICS TOOL ============
+
+const COMPANY_METRICS_MAX_ITEMS = Number(process.env.COMPANY_METRICS_MAX_ITEMS || 50);
+const COMPANY_METRICS_SEARCH_MODEL = process.env.COMPANY_METRICS_SEARCH_MODEL || 'gpt-5-mini';
+const COMPANY_METRICS_VISION_MODEL = process.env.COMPANY_METRICS_VISION_MODEL || 'gpt-5.1';
+const COMPANY_METRICS_EXTRACT_MODEL = process.env.COMPANY_METRICS_EXTRACT_MODEL || 'gpt-5-mini';
+const COMPANY_METRICS_VALIDATE_MODEL = process.env.COMPANY_METRICS_VALIDATE_MODEL || 'gpt-5-mini';
+const COMPANY_METRICS_TIMEOUT_MS = Number(process.env.COMPANY_METRICS_TIMEOUT_MS || 45000);
+
+const CURRENCY_SYMBOLS = {
+  $: 'USD',
+  US$: 'USD',
+  USD: 'USD',
+  JPY: 'JPY',
+  '\u00a5': 'JPY',
+  EUR: 'EUR',
+  '\u20ac': 'EUR',
+  GBP: 'GBP',
+  '\u00a3': 'GBP',
+  SGD: 'SGD',
+  MYR: 'MYR',
+  THB: 'THB',
+  IDR: 'IDR',
+  VND: 'VND',
+  PHP: 'PHP',
+  CNY: 'CNY',
+  RMB: 'CNY',
+  KRW: 'KRW',
+  AUD: 'AUD',
+  CAD: 'CAD',
+  INR: 'INR',
+};
+
+const REVENUE_UNIT_MULTIPLIERS = {
+  ones: 1,
+  unit: 1,
+  units: 1,
+  thousand: 1_000,
+  k: 1_000,
+  million: 1_000_000,
+  m: 1_000_000,
+  mn: 1_000_000,
+  billion: 1_000_000_000,
+  b: 1_000_000_000,
+  bn: 1_000_000_000,
+  trillion: 1_000_000_000_000,
+  t: 1_000_000_000_000,
+};
+
+const exchangeRateCache = new Map();
+
+function cleanMetricString(value) {
+  return String(value || '').trim();
+}
+
+function extractMetricsJson(text) {
+  if (!text || typeof text !== 'string') return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Continue to markdown or object extraction.
+  }
+
+  const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (codeBlock) {
+    try {
+      return JSON.parse(codeBlock[1]);
+    } catch {
+      // Continue to first JSON object extraction.
+    }
+  }
+
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      return JSON.parse(text.slice(firstBrace, lastBrace + 1));
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function extractOpenAIResponseText(data) {
+  if (!data) return '';
+  if (typeof data.output_text === 'string' && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  const chunks = [];
+  const output = Array.isArray(data.output) ? data.output : [];
+  for (const item of output) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const part of content) {
+      if (typeof part?.text === 'string' && part.text.trim()) {
+        chunks.push(part.text.trim());
+      }
+    }
+  }
+  return chunks.join('\n').trim();
+}
+
+async function callCompanyMetricsOpenAI(input, options = {}) {
+  const {
+    model = COMPANY_METRICS_EXTRACT_MODEL,
+    maxOutputTokens = 1800,
+    useWebSearch = false,
+    timeout = COMPANY_METRICS_TIMEOUT_MS,
+  } = options;
+
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not configured');
+  }
+
+  const body = {
+    model,
+    input,
+    max_output_tokens: maxOutputTokens,
+  };
+
+  if (useWebSearch) {
+    body.tools = [{ type: 'web_search' }];
+    body.tool_choice = 'auto';
+  }
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    timeout,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI HTTP ${response.status}: ${errorText.substring(0, 300)}`);
+  }
+
+  const data = await response.json();
+  if (data.usage) {
+    recordTokens(model, data.usage.input_tokens || 0, data.usage.output_tokens || 0);
+  }
+  if (data.error) {
+    throw new Error(data.error.message || 'OpenAI returned an error');
+  }
+
+  return extractOpenAIResponseText(data);
+}
+
+function isBlockedMetricsHost(hostname) {
+  const host = hostname.toLowerCase();
+  return (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+    host === '0.0.0.0'
+  );
+}
+
+function normalizeMetricsUrl(value) {
+  let raw = cleanMetricString(value)
+    .replace(/^<|>$/g, '')
+    .replace(/[),.;\]]+$/g, '');
+  if (!raw) return '';
+  if (!/^https?:\/\//i.test(raw)) {
+    raw = `https://${raw.replace(/^\/+/, '')}`;
+  }
+
+  const url = new URL(raw);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('Only public http/https websites are allowed');
+  }
+  if (!url.hostname.includes('.') || isBlockedMetricsHost(url.hostname)) {
+    throw new Error('Only public company websites are allowed');
+  }
+  return url.toString();
+}
+
+function deriveCompanyFromWebsite(website) {
+  try {
+    const host = new URL(normalizeMetricsUrl(website)).hostname.replace(/^www\./, '');
+    const base = host.split('.')[0] || host;
+    return base
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+      .trim();
+  } catch {
+    return '';
+  }
+}
+
+function extractWebsiteFromLine(line) {
+  const match = cleanMetricString(line).match(
+    /(https?:\/\/[^\s,;]+|www\.[^\s,;]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s,;]*)?)/i
+  );
+  return match?.[0] || '';
+}
+
+function parseCompanyMetricsItems(rawItems) {
+  const lines = cleanMetricString(rawItems)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const items = [];
+  const seen = new Set();
+
+  for (const line of lines) {
+    const websiteCandidate = extractWebsiteFromLine(line);
+    let website = '';
+    let companyName = '';
+
+    if (websiteCandidate) {
+      try {
+        website = normalizeMetricsUrl(websiteCandidate);
+      } catch (error) {
+        items.push({
+          input: line,
+          companyName: '',
+          website: '',
+          parseError: error.message,
+        });
+        continue;
+      }
+
+      companyName = line
+        .replace(websiteCandidate, '')
+        .replace(/^[\s,;|-]+|[\s,;|-]+$/g, '')
+        .trim();
+      if (!companyName) companyName = deriveCompanyFromWebsite(website);
+    } else {
+      companyName = line;
+    }
+
+    const key = `${companyName.toLowerCase()}|${website.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ input: line, companyName, website, parseError: '' });
+  }
+
+  return items;
+}
+
+function normalizeCurrencyCode(value) {
+  const raw = cleanMetricString(value).toUpperCase();
+  return CURRENCY_SYMBOLS[raw] || raw.replace(/[^A-Z]/g, '').slice(0, 3);
+}
+
+function normalizeRevenueUnit(unit) {
+  const raw = cleanMetricString(unit).toLowerCase();
+  if (REVENUE_UNIT_MULTIPLIERS[raw]) return raw;
+  if (raw.includes('billion')) return 'billion';
+  if (raw.includes('million')) return 'million';
+  if (raw.includes('thousand')) return 'thousand';
+  if (raw.includes('trillion')) return 'trillion';
+  return 'million';
+}
+
+function parseMetricNumber(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const cleaned = cleanMetricString(value)
+    .replace(/,/g, '')
+    .match(/-?\d+(?:\.\d+)?/);
+  return cleaned ? Number(cleaned[0]) : null;
+}
+
+function formatMetricNumber(value, decimals = 1) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '';
+  return Number(value).toLocaleString('en-US', {
+    maximumFractionDigits: decimals,
+    minimumFractionDigits: 0,
+  });
+}
+
+async function getCompanyMetricsExchangeRate(fromCurrency, toCurrency) {
+  const from = normalizeCurrencyCode(fromCurrency);
+  const to = normalizeCurrencyCode(toCurrency);
+  if (!from || !to || from === to) return 1;
+
+  const cacheKey = `${from}-${to}`;
+  const cached = exchangeRateCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 12 * 60 * 60 * 1000) {
+    return cached.rate;
+  }
+
+  const response = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(from)}`, {
+    timeout: 15000,
+  });
+  if (!response.ok) {
+    throw new Error(`Exchange-rate lookup failed for ${from}`);
+  }
+  const data = await response.json();
+  const rate = Number(data?.rates?.[to]);
+  if (!rate) {
+    throw new Error(`Exchange-rate lookup did not return ${from} to ${to}`);
+  }
+
+  exchangeRateCache.set(cacheKey, { rate, timestamp: Date.now() });
+  return rate;
+}
+
+async function convertCompanyMetricsRevenue(revenue, targetCurrency, targetUnit) {
+  const amount = parseMetricNumber(revenue?.amount);
+  const sourceCurrency = normalizeCurrencyCode(revenue?.currency);
+  const sourceUnit = normalizeRevenueUnit(revenue?.unit);
+  const destinationCurrency = normalizeCurrencyCode(targetCurrency || 'JPY');
+  const destinationUnit = normalizeRevenueUnit(targetUnit || 'million');
+
+  if (amount === null || !sourceCurrency || !destinationCurrency) {
+    return {
+      amount: null,
+      currency: destinationCurrency,
+      unit: destinationUnit,
+      note: 'Revenue could not be converted because amount or currency was missing.',
+    };
+  }
+
+  const rate = await getCompanyMetricsExchangeRate(sourceCurrency, destinationCurrency);
+  const sourceMultiplier = REVENUE_UNIT_MULTIPLIERS[sourceUnit] || REVENUE_UNIT_MULTIPLIERS.million;
+  const destinationMultiplier =
+    REVENUE_UNIT_MULTIPLIERS[destinationUnit] || REVENUE_UNIT_MULTIPLIERS.million;
+  const convertedAmount = (amount * sourceMultiplier * rate) / destinationMultiplier;
+
+  return {
+    amount: convertedAmount,
+    currency: destinationCurrency,
+    unit: destinationUnit,
+    note:
+      sourceCurrency === destinationCurrency
+        ? `No currency conversion needed; normalized to ${destinationUnit}.`
+        : `Converted from ${sourceCurrency} ${sourceUnit} using live exchange rate.`,
+  };
+}
+
+async function discoverCompanyMetricsWebsite(companyName) {
+  if (!companyName) return '';
+
+  const prompt = `Find the official company website for this company: "${companyName}".
+Return JSON only:
+{"website":"https://official-site.example","confidence":0.0,"reason":"short reason"}
+Rules:
+- Use the company's own official website, not a directory, marketplace, database, or social media page.
+- If you are not sure, return {"website":"","confidence":0,"reason":"not found"}.`;
+
+  const text = await callCompanyMetricsOpenAI(prompt, {
+    model: COMPANY_METRICS_SEARCH_MODEL,
+    useWebSearch: true,
+    maxOutputTokens: 700,
+    timeout: 60000,
+  });
+  const parsed = extractMetricsJson(text);
+  const candidate = parsed?.website || extractWebsiteFromLine(text);
+  if (!candidate) return '';
+  return normalizeMetricsUrl(candidate);
+}
+
+async function captureCompanyMetricsScreenshot(website) {
+  const { chromium } = require('playwright');
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 1400 },
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+      ignoreHTTPSErrors: true,
+    });
+    const page = await context.newPage();
+    await page.goto(website, { waitUntil: 'domcontentloaded', timeout: 35000 });
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+    await page.evaluate('window.scrollTo(0, 0)').catch(() => {});
+
+    const pageTitle = await page.title().catch(() => '');
+    const visibleText = await page
+      .locator('body')
+      .innerText({ timeout: 7000 })
+      .catch(() => '');
+    const screenshot = await page.screenshot({
+      type: 'png',
+      fullPage: false,
+      timeout: 20000,
+    });
+
+    return {
+      finalUrl: page.url(),
+      pageTitle,
+      pageText: visibleText.substring(0, 18000),
+      screenshotBase64: screenshot.toString('base64'),
+    };
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
+async function runCompanyMetricsOcr(screenshotBase64, website, pageTitle) {
+  const prompt = `OCR this website screenshot.
+Return JSON only:
+{"visible_text":"all readable text from the screenshot","important_lines":["line 1","line 2"]}
+Website: ${website}
+Page title: ${pageTitle || 'unknown'}
+Rules:
+- Copy the visible text as accurately as possible.
+- Do not infer revenue or employees here. This step is OCR only.`;
+
+  const input = [
+    {
+      role: 'user',
+      content: [
+        { type: 'input_text', text: prompt },
+        {
+          type: 'input_image',
+          image_url: `data:image/png;base64,${screenshotBase64}`,
+        },
+      ],
+    },
+  ];
+
+  const text = await callCompanyMetricsOpenAI(input, {
+    model: COMPANY_METRICS_VISION_MODEL,
+    maxOutputTokens: 2200,
+    timeout: 90000,
+  });
+  const parsed = extractMetricsJson(text);
+
+  return {
+    visibleText: parsed?.visible_text || text || '',
+    importantLines: Array.isArray(parsed?.important_lines) ? parsed.important_lines : [],
+  };
+}
+
+async function extractCompanyMetrics(companyName, website, ocrText, pageText) {
+  const prompt = `Extract revenue and headcount from this company website text.
+
+Company input: ${companyName || 'unknown'}
+Website: ${website}
+
+OCR text from screenshot:
+${ocrText.substring(0, 12000)}
+
+Extra visible page text:
+${pageText.substring(0, 12000)}
+
+Return JSON only:
+{
+  "company_name": "official name if visible",
+  "revenue": {
+    "amount": number_or_null,
+    "currency": "ISO currency code or null",
+    "unit": "ones|thousand|million|billion|trillion|null",
+    "period": "FY/year/date if visible or null",
+    "evidence": "exact supporting text or null"
+  },
+  "headcount": {
+    "amount": number_or_null,
+    "unit": "employees",
+    "period": "year/date if visible or null",
+    "evidence": "exact supporting text or null"
+  },
+  "notes": "short note"
+}
+
+Rules:
+- Only extract revenue and headcount that are directly supported by the text above.
+- Revenue means sales, turnover, operating revenue, or annual revenue.
+- Headcount means employees, staff, workers, people, or personnel.
+- If the text does not show a value, use null. Do not guess.`;
+
+  const text = await callCompanyMetricsOpenAI(prompt, {
+    model: COMPANY_METRICS_EXTRACT_MODEL,
+    maxOutputTokens: 1600,
+    timeout: 60000,
+  });
+
+  return (
+    extractMetricsJson(text) || {
+      company_name: companyName,
+      revenue: {},
+      headcount: {},
+      notes: 'AI extraction did not return valid JSON.',
+    }
+  );
+}
+
+async function validateCompanyMetrics(companyName, website, extraction, ocrText, pageText) {
+  const prompt = `Validate this company metrics extraction.
+
+Company: ${companyName || extraction?.company_name || 'unknown'}
+Website: ${website}
+
+Extracted JSON:
+${JSON.stringify(extraction, null, 2)}
+
+OCR text:
+${ocrText.substring(0, 10000)}
+
+Extra visible page text:
+${pageText.substring(0, 10000)}
+
+Return JSON only:
+{
+  "revenue_validation": {
+    "status": "verified|corrected|not_found|needs_review",
+    "confidence": 0.0,
+    "final_amount": number_or_null,
+    "final_currency": "ISO code or null",
+    "final_unit": "ones|thousand|million|billion|trillion|null",
+    "final_period": "period or null",
+    "reason": "short reason"
+  },
+  "headcount_validation": {
+    "status": "verified|corrected|not_found|needs_review",
+    "confidence": 0.0,
+    "final_amount": number_or_null,
+    "final_period": "period or null",
+    "reason": "short reason"
+  },
+  "overall_note": "short note"
+}
+
+Rules:
+- First check whether the OCR/page text supports the extracted value.
+- Use web search only to resolve uncertainty or catch a wrong unit/currency.
+- Do not invent a value when neither the website text nor reliable web evidence supports it.`;
+
+  const text = await callCompanyMetricsOpenAI(prompt, {
+    model: COMPANY_METRICS_VALIDATE_MODEL,
+    useWebSearch: true,
+    maxOutputTokens: 1600,
+    timeout: 90000,
+  });
+
+  return (
+    extractMetricsJson(text) || {
+      revenue_validation: {
+        status: 'needs_review',
+        confidence: 0,
+        reason: 'Validator returned no JSON.',
+      },
+      headcount_validation: {
+        status: 'needs_review',
+        confidence: 0,
+        reason: 'Validator returned no JSON.',
+      },
+      overall_note: 'Validator returned no JSON.',
+    }
+  );
+}
+
+function buildFinalCompanyMetricsResult(item, website, screenshot, extraction, validation) {
+  const revenueValidation = validation?.revenue_validation || {};
+  const headcountValidation = validation?.headcount_validation || {};
+  const chooseFinalNumber = (validatorValue, extractionValue, status) => {
+    const finalValue = parseMetricNumber(validatorValue);
+    if (finalValue !== null) return finalValue;
+    const normalizedStatus = cleanMetricString(status).toLowerCase();
+    if (normalizedStatus === 'not_found' || normalizedStatus === 'corrected') return null;
+    return parseMetricNumber(extractionValue);
+  };
+
+  const revenue = {
+    amount: chooseFinalNumber(
+      revenueValidation.final_amount,
+      extraction?.revenue?.amount,
+      revenueValidation.status
+    ),
+    currency: normalizeCurrencyCode(
+      revenueValidation.final_currency || extraction?.revenue?.currency
+    ),
+    unit: normalizeRevenueUnit(revenueValidation.final_unit || extraction?.revenue?.unit),
+    period: revenueValidation.final_period || extraction?.revenue?.period || '',
+    evidence: extraction?.revenue?.evidence || '',
+    status: revenueValidation.status || 'needs_review',
+    confidence: Number(revenueValidation.confidence || 0),
+    reason: revenueValidation.reason || '',
+  };
+
+  const headcount = {
+    amount: chooseFinalNumber(
+      headcountValidation.final_amount,
+      extraction?.headcount?.amount,
+      headcountValidation.status
+    ),
+    unit: 'employees',
+    period: headcountValidation.final_period || extraction?.headcount?.period || '',
+    evidence: extraction?.headcount?.evidence || '',
+    status: headcountValidation.status || 'needs_review',
+    confidence: Number(headcountValidation.confidence || 0),
+    reason: headcountValidation.reason || '',
+  };
+
+  return {
+    input: item.input,
+    companyName: extraction?.company_name || item.companyName || deriveCompanyFromWebsite(website),
+    website,
+    finalUrl: screenshot?.finalUrl || website,
+    screenshotStatus: screenshot?.screenshotBase64 ? 'Captured' : 'Not captured',
+    revenue,
+    headcount,
+    overallNote: validation?.overall_note || extraction?.notes || '',
+    error: '',
+  };
+}
+
+async function processCompanyMetricsItem(item, options) {
+  if (item.parseError) {
+    return {
+      input: item.input,
+      companyName: item.companyName,
+      website: item.website,
+      finalUrl: '',
+      screenshotStatus: 'Not captured',
+      revenue: {},
+      headcount: {},
+      overallNote: '',
+      error: item.parseError,
+    };
+  }
+
+  let website = item.website;
+  if (!website && item.companyName) {
+    website = await discoverCompanyMetricsWebsite(item.companyName);
+  }
+  if (!website) {
+    throw new Error('Official website could not be found.');
+  }
+
+  const screenshot = await captureCompanyMetricsScreenshot(website);
+  const ocr = await runCompanyMetricsOcr(
+    screenshot.screenshotBase64,
+    screenshot.finalUrl,
+    screenshot.pageTitle
+  );
+  const combinedOcrText = [ocr.visibleText, ...(ocr.importantLines || [])]
+    .filter(Boolean)
+    .join('\n');
+  const extraction = await extractCompanyMetrics(
+    item.companyName,
+    screenshot.finalUrl,
+    combinedOcrText,
+    screenshot.pageText
+  );
+  const validation = await validateCompanyMetrics(
+    item.companyName,
+    screenshot.finalUrl,
+    extraction,
+    combinedOcrText,
+    screenshot.pageText
+  );
+
+  const result = buildFinalCompanyMetricsResult(
+    item,
+    screenshot.finalUrl,
+    screenshot,
+    extraction,
+    validation
+  );
+
+  try {
+    result.convertedRevenue = await convertCompanyMetricsRevenue(
+      result.revenue,
+      options.targetCurrency,
+      options.targetUnit
+    );
+  } catch (error) {
+    result.convertedRevenue = {
+      amount: null,
+      currency: normalizeCurrencyCode(options.targetCurrency),
+      unit: normalizeRevenueUnit(options.targetUnit),
+      note: error.message,
+    };
+  }
+
+  return result;
+}
+
+function formatOriginalRevenue(revenue) {
+  if (!revenue || parseMetricNumber(revenue.amount) === null || !revenue.currency) return '';
+  return `${revenue.currency} ${formatMetricNumber(revenue.amount, 2)} ${revenue.unit || ''}`.trim();
+}
+
+function buildCompanyMetricsExcel(results, targetCurrency, targetUnit) {
+  const headers = [
+    'Input',
+    'Company Name',
+    'Website',
+    'Final URL',
+    'Screenshot Status',
+    'Revenue Original',
+    `Revenue (${normalizeCurrencyCode(targetCurrency)} ${normalizeRevenueUnit(targetUnit)})`,
+    'Revenue Period',
+    'Revenue Evidence',
+    'Revenue Validation',
+    'Revenue Confidence',
+    'Headcount',
+    'Headcount Period',
+    'Headcount Evidence',
+    'Headcount Validation',
+    'Headcount Confidence',
+    'AI Note',
+    'Error',
+  ];
+
+  const rows = results.map((result) => [
+    result.input || '',
+    result.companyName || '',
+    result.website || '',
+    result.finalUrl || '',
+    result.screenshotStatus || '',
+    formatOriginalRevenue(result.revenue),
+    result.convertedRevenue?.amount !== null && result.convertedRevenue?.amount !== undefined
+      ? formatMetricNumber(result.convertedRevenue.amount, 1)
+      : '',
+    result.revenue?.period || '',
+    result.revenue?.evidence || '',
+    result.revenue?.status || '',
+    result.revenue?.confidence || '',
+    result.headcount?.amount ? formatMetricNumber(result.headcount.amount, 0) : '',
+    result.headcount?.period || '',
+    result.headcount?.evidence || '',
+    result.headcount?.status || '',
+    result.headcount?.confidence || '',
+    [result.overallNote, result.convertedRevenue?.note].filter(Boolean).join(' | '),
+    result.error || '',
+  ]);
+
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  sheet['!cols'] = headers.map((header) => ({
+    wch: Math.min(Math.max(header.length + 4, 14), 42),
+  }));
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Company Metrics');
+  return XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
+}
+
+function buildCompanyMetricsEmailHtml(results, targetCurrency, targetUnit) {
+  const successCount = results.filter((r) => !r.error).length;
+  const revenueFound = results.filter((r) => parseMetricNumber(r.revenue?.amount) !== null).length;
+  const headcountFound = results.filter(
+    (r) => parseMetricNumber(r.headcount?.amount) !== null
+  ).length;
+
+  return `
+    <h2>Company Metrics Complete</h2>
+    <p>Processed ${successCount}/${results.length} rows.</p>
+    <p>Revenue found: ${revenueFound}. Headcount found: ${headcountFound}.</p>
+    <p>Revenue output unit: ${escapeHtml(normalizeCurrencyCode(targetCurrency))} ${escapeHtml(
+      normalizeRevenueUnit(targetUnit)
+    )}.</p>
+    <p>Please see the attached Excel file for the full results and validation notes.</p>
+  `;
+}
+
+app.post('/api/company-metrics', async (req, res) => {
+  const { Items, Companies, Email, TargetCurrency = 'JPY', TargetUnit = 'million' } = req.body;
+
+  const rawItems = Items || Companies || '';
+  if (!rawItems || !Email) {
+    return res.status(400).json({ error: 'Company or website list and email are required' });
+  }
+  if (!isValidEmail(Email)) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+
+  const items = parseCompanyMetricsItems(rawItems);
+  if (items.length === 0) {
+    return res.status(400).json({ error: 'No valid companies or websites were found' });
+  }
+  if (items.length > COMPANY_METRICS_MAX_ITEMS) {
+    return res.status(400).json({
+      error: `Please submit ${COMPANY_METRICS_MAX_ITEMS} rows or fewer per run`,
+    });
+  }
+
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`NEW COMPANY METRICS REQUEST: ${new Date().toISOString()}`);
+  console.log(`Rows: ${items.length}`);
+  console.log(`Target revenue unit: ${TargetCurrency} ${TargetUnit}`);
+  console.log(`Email: ${Email}`);
+  console.log('='.repeat(70));
+
+  res.json({
+    success: true,
+    message: `Request received. Results will be emailed after ${items.length} website checks finish.`,
+  });
+
+  const tracker = createTracker('company-metrics', Email, {
+    rows: items.length,
+    targetCurrency: TargetCurrency,
+    targetUnit: TargetUnit,
+  });
+
+  trackingContext.run(tracker, async () => {
+    const results = [];
+    try {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        console.log(`Company metrics ${i + 1}/${items.length}: ${item.input}`);
+        try {
+          const result = await processCompanyMetricsItem(item, {
+            targetCurrency: TargetCurrency,
+            targetUnit: TargetUnit,
+          });
+          results.push(result);
+        } catch (error) {
+          console.error(`Company metrics row failed: ${item.input}`, error.message);
+          results.push({
+            input: item.input,
+            companyName: item.companyName,
+            website: item.website,
+            finalUrl: '',
+            screenshotStatus: 'Failed',
+            revenue: {},
+            headcount: {},
+            overallNote: '',
+            error: error.message,
+          });
+        }
+      }
+
+      const excelBase64 = buildCompanyMetricsExcel(results, TargetCurrency, TargetUnit);
+      await sendEmail(
+        Email,
+        `Company Metrics: ${results.length} rows processed`,
+        buildCompanyMetricsEmailHtml(results, TargetCurrency, TargetUnit),
+        {
+          content: excelBase64,
+          name: `company-metrics-${new Date().toISOString().split('T')[0]}.xlsx`,
+        }
+      );
+
+      await tracker.finish({
+        rowsProcessed: results.length,
+        rowsSucceeded: results.filter((r) => !r.error).length,
+      });
+      console.log(`Company metrics complete. Email sent to ${Email}`);
+    } catch (error) {
+      console.error('Company metrics processing error:', error);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+      sendEmail(
+        Email,
+        'Company Metrics - Error',
+        `<p>Error: ${escapeHtml(error.message)}</p>`
+      ).catch((emailError) =>
+        console.error('Failed to send company metrics error email:', emailError)
+      );
+    }
+  });
 });
 
 // ============ HEALTH CHECK ============

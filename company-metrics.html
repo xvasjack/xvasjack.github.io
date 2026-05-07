@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Company Metrics</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="font-sans bg-slate-100 text-slate-900 h-screen flex overflow-hidden">
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm">
+    <div class="p-5 border-b border-slate-200">
+      <a href="find-target.html" class="flex items-center gap-3 text-slate-900 no-underline">
+        <span class="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+        </span>
+        <span class="font-semibold text-lg">YCP Tools</span>
+      </a>
+    </div>
+
+    <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Search</p>
+        <a href="find-target.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v3 Search
+        </a>
+        <a href="find-target-v5.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v5 Search
+        </a>
+        <a href="find-target-v6.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v6 Search
+        </a>
+      </div>
+
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Tools</p>
+        <a href="trading-comparable.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Trading Comp
+        </a>
+        <a href="profile-slides.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Profile Slides
+        </a>
+        <a href="market-research.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Market Research
+        </a>
+        <a href="company-metrics.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium bg-indigo-50 text-indigo-700 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          Company Metrics
+        </a>
+        <a href="due-diligence.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Pre-DD Report
+        </a>
+        <a href="translation.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m4 0c0 3.866-3.582 7-8 7m1.5 0L5 21m2.5-9L10 21m8-12h3m-1.5-1.5v3M14 18l4-10 4 10m-1.2-3h-5.6"/></svg>
+          Translation
+        </a>
+      </div>
+
+      <div>
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Archive</p>
+        <a href="validation.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Validation
+        </a>
+        <a href="validation-v2.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Validation - V2 (Gemini 3 Flash)
+        </a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <header class="bg-white border-b border-slate-200 px-8 py-5">
+      <div class="flex items-center gap-3 mb-1">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+          <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+          Online
+        </span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900">Company Metrics</h1>
+      <p class="text-slate-600 mt-1">Screenshot company websites, extract revenue and headcount, validate them, and email Excel output.</p>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-8">
+      <div class="max-w-3xl mx-auto">
+        <form id="metricsForm" class="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label for="email" class="block text-sm font-medium text-slate-700 mb-1.5">Your Email</label>
+              <input type="email" id="email" required placeholder="your@company.com"
+                class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="targetCurrency" class="block text-sm font-medium text-slate-700 mb-1.5">Currency</label>
+                <input type="text" id="targetCurrency" value="JPY" maxlength="3"
+                  class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
+              </div>
+              <div>
+                <label for="targetUnit" class="block text-sm font-medium text-slate-700 mb-1.5">Unit</label>
+                <select id="targetUnit" class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
+                  <option value="million">million</option>
+                  <option value="billion">billion</option>
+                  <option value="thousand">thousand</option>
+                  <option value="ones">ones</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-5">
+            <label for="items" class="block text-sm font-medium text-slate-700 mb-1.5">Companies or Websites</label>
+            <textarea id="items" rows="10" required placeholder="Toyota&#10;https://www.panasonic.com/&#10;Sony, https://www.sony.com/"
+              class="w-full px-4 py-3 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow resize-none"></textarea>
+            <div class="flex items-center justify-between mt-2">
+              <p id="rowCount" class="text-xs text-slate-500">0 rows</p>
+              <button type="button" id="clearBtn" class="text-sm text-slate-500 hover:text-slate-900">Clear</button>
+            </div>
+          </div>
+
+          <div class="mt-5">
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Upload Excel or CSV</label>
+            <div id="uploadZone" class="border-2 border-dashed border-slate-300 rounded-lg p-5 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors relative">
+              <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="absolute inset-0 opacity-0 cursor-pointer">
+              <svg class="w-9 h-9 mx-auto text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+              <p id="fileLabel" class="text-sm text-slate-500"><span class="text-indigo-600 font-medium">Click to upload</span> or drag and drop</p>
+            </div>
+          </div>
+
+          <div id="statusBox" class="hidden mt-5 rounded-lg border p-4 text-sm"></div>
+
+          <button type="submit" id="submitBtn"
+            class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-5 rounded-lg transition-colors flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8m-18 8h18a2 2 0 002-2V8a2 2 0 00-2-2H3a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+            Run and Email Excel
+          </button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = 'https://xvasjackgithubio-production-f428.up.railway.app/api/company-metrics';
+    const form = document.getElementById('metricsForm');
+    const items = document.getElementById('items');
+    const rowCount = document.getElementById('rowCount');
+    const statusBox = document.getElementById('statusBox');
+    const submitBtn = document.getElementById('submitBtn');
+    const fileInput = document.getElementById('fileInput');
+    const fileLabel = document.getElementById('fileLabel');
+    const clearBtn = document.getElementById('clearBtn');
+
+    function countRows() {
+      const count = items.value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).length;
+      rowCount.textContent = `${count} row${count === 1 ? '' : 's'}`;
+      return count;
+    }
+
+    function showStatus(type, message) {
+      const styles = {
+        success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+        error: 'bg-red-50 border-red-200 text-red-800',
+        info: 'bg-indigo-50 border-indigo-200 text-indigo-800',
+      };
+      statusBox.className = `mt-5 rounded-lg border p-4 text-sm ${styles[type] || styles.info}`;
+      statusBox.textContent = message;
+      statusBox.classList.remove('hidden');
+    }
+
+    function findColumn(headers, names) {
+      return headers.findIndex((header) => {
+        const text = String(header || '').toLowerCase();
+        return names.some((name) => text.includes(name));
+      });
+    }
+
+    function rowsToLines(rows) {
+      const cleanRows = rows.filter((row) => row && row.some((cell) => String(cell || '').trim()));
+      if (cleanRows.length === 0) return [];
+
+      const headers = cleanRows[0].map((cell) => String(cell || '').trim());
+      const companyIndex = findColumn(headers, ['company', 'name']);
+      const websiteIndex = findColumn(headers, ['website', 'url', 'site']);
+      const hasHeaders = companyIndex >= 0 || websiteIndex >= 0;
+      const dataRows = hasHeaders ? cleanRows.slice(1) : cleanRows;
+
+      return dataRows
+        .map((row) => {
+          const company = hasHeaders && companyIndex >= 0 ? String(row[companyIndex] || '').trim() : String(row[0] || '').trim();
+          const website = hasHeaders && websiteIndex >= 0 ? String(row[websiteIndex] || '').trim() : String(row[1] || '').trim();
+          return [company, website].filter(Boolean).join(', ');
+        })
+        .filter(Boolean);
+    }
+
+    items.addEventListener('input', countRows);
+
+    clearBtn.addEventListener('click', () => {
+      items.value = '';
+      fileInput.value = '';
+      fileLabel.innerHTML = '<span class="text-indigo-600 font-medium">Click to upload</span> or drag and drop';
+      countRows();
+      statusBox.classList.add('hidden');
+    });
+
+    fileInput.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false });
+        const lines = rowsToLines(rows);
+        if (lines.length === 0) {
+          showStatus('error', 'No company or website rows were found in that file.');
+          return;
+        }
+
+        items.value = lines.join('\n');
+        fileLabel.textContent = `${file.name} loaded (${lines.length} rows)`;
+        countRows();
+        showStatus('success', `${lines.length} rows loaded from the file.`);
+      } catch (error) {
+        showStatus('error', `File could not be read: ${error.message}`);
+      }
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const rows = countRows();
+      if (rows === 0) {
+        showStatus('error', 'Add at least one company or website.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.classList.add('opacity-60', 'cursor-not-allowed');
+      showStatus('info', 'Job sent. The backend will email the Excel file when it finishes.');
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            Items: items.value,
+            Email: document.getElementById('email').value,
+            TargetCurrency: document.getElementById('targetCurrency').value.toUpperCase(),
+            TargetUnit: document.getElementById('targetUnit').value,
+          }),
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || 'Request failed');
+        }
+
+        showStatus('success', result.message || 'Request received. Results will be emailed.');
+        form.reset();
+        document.getElementById('targetCurrency').value = 'JPY';
+        document.getElementById('targetUnit').value = 'million';
+        fileLabel.innerHTML = '<span class="text-indigo-600 font-medium">Click to upload</span> or drag and drop';
+        countRows();
+      } catch (error) {
+        showStatus('error', error.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+      }
+    });
+
+    countRows();
+  </script>
+</body>
+</html>
