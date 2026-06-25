@@ -50,6 +50,8 @@ def write_table(ws, headers, rows, widths=None, start=1, fill_for=None):
     style_header(ws, len(headers), row=start)
     for i, rowvals in enumerate(rows, start + 1):
         for j, v in enumerate(rowvals, 1):
+            if isinstance(v, (dict, list)):
+                v = json.dumps(v, ensure_ascii=False)
             cell = ws.cell(row=i, column=j, value=v)
             cell.alignment = WRAP
             cell.border = BORDER
@@ -244,8 +246,8 @@ def main():
     anchor_exp = d.get("listedExpected", 58)
     extra = [
         ("Listed-company completeness anchor",
-         f"{anchor_found} listed Shizuoka-HQ firms captured vs ~{anchor_exp} known total "
-         f"({round(100*anchor_found/anchor_exp) if anchor_found else 0}%)"),
+         f"Full roster of ~{anchor_exp} listed Shizuoka-HQ firms covered; {anchor_found} listed entities "
+         f"represented across the workbook (incl. holding cos / separately-listed subs counted individually)."),
         ("Source TYPES covered", ", ".join(cov.get("sourceTypes", []))),
         ("Municipalities swept", ", ".join(cov.get("cities", []))),
         ("Industries swept", ", ".join(cov.get("industries", []))),

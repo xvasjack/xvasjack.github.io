@@ -1,0 +1,908 @@
+[
+ {
+  "id": 7,
+  "name": "株式会社ZOA",
+  "officialUrl": "https://www.zoa.co.jp/",
+  "reasons": [
+   "discrepancy est20/found95.23"
+  ],
+  "priorRevenueOku": 95.23,
+  "priorRevenueJPYM": 9523,
+  "priorHeadcount": 70,
+  "priorDecision": "qualified",
+  "priorBasis": "standalone",
+  "parentNote": "Subsidiary of Daiwabo Information Systems 2001–2019; all stock sold by March 2019. Now independent.",
+  "listed": true,
+  "ticker": "3375",
+  "hqCity": "沼津市"
+ },
+ {
+  "id": 11,
+  "name": "特種東海製紙株式会社",
+  "officialUrl": "https://www.tt-paper.co.jp/",
+  "reasons": [
+   "boundary 954"
+  ],
+  "priorRevenueOku": 954.13,
+  "priorRevenueJPYM": 95413,
+  "priorHeadcount": 1873,
+  "priorDecision": "qualified",
+  "priorBasis": "group",
+  "parentNote": "Holding company formed from 2007 merger of Tokai Pulp and Tokushu Seishi. Independently listed on Tokyo Stock Exchange Prime Market (3708). 15 subsidiaries, 5 affiliated companies.",
+  "listed": true,
+  "ticker": "3708",
+  "hqCity": "島田市"
+ },
+ {
+  "id": 17,
+  "name": "株式会社エンビプロ・ホールディングス",
+  "officialUrl": "https://www.envipro.jp/",
+  "reasons": [
+   "discrepancy est100/found490.91"
+  ],
+  "priorRevenueOku": 490.91,
+  "priorRevenueJPYM": 49091,
+  "priorHeadcount": 773,
+  "priorDecision": "qualified",
+  "priorBasis": "consolidated",
+  "parentNote": "Pure holding company established 2010; no operating parent. Founded by Sano family 1950 (Sano Maruka Shouten).",
+  "listed": true,
+  "ticker": "5698",
+  "hqCity": "富士宮市"
+ },
+ {
+  "id": 31,
+  "name": "株式会社桜井製作所",
+  "officialUrl": "https://sakurai-net.co.jp",
+  "reasons": [
+   "boundary 50"
+  ],
+  "priorRevenueOku": 49.64,
+  "priorRevenueJPYM": 4964,
+  "priorHeadcount": 285,
+  "priorDecision": "qualified",
+  "priorBasis": "consolidated",
+  "parentNote": "Sakurai Ltd. is the parent company of a small group (2 subsidiaries + 1 related company). No external operating parent.",
+  "listed": true,
+  "ticker": "7255",
+  "hqCity": "浜松市"
+ },
+ {
+  "id": 73,
+  "name": "株式会社ローランド（Roland）",
+  "officialUrl": "https://www.roland.com/jp/company/overview/",
+  "reasons": [
+   "discrepancy est256/found1009.52",
+   "boundary 1010"
+  ],
+  "priorRevenueOku": 1009.52,
+  "priorRevenueJPYM": 100952,
+  "priorHeadcount": 2952,
+  "priorDecision": "qualified",
+  "priorBasis": "group",
+  "parentNote": "Independent operating parent. Founded April 18, 1972 by Ikutaro Kakehashi. 18 consolidated subsidiaries including Drum Workshop (acquired 2022) and BOSS. Current CEO Masahiro Minowa (not founding family). Founder Kakehashi deceased April 2017.",
+  "listed": true,
+  "ticker": "7944",
+  "hqCity": "浜松市"
+ },
+ {
+  "id": 173,
+  "name": "株式会社ＡＢＣ",
+  "officialUrl": "https://www.abc-p.jp/",
+  "reasons": [
+   "discrepancy est1162/found116.2"
+  ],
+  "priorRevenueOku": 116.2,
+  "priorRevenueJPYM": 11620,
+  "priorHeadcount": 841,
+  "priorDecision": "qualified",
+  "priorBasis": "standalone",
+  "parentNote": null,
+  "listed": false,
+  "ticker": null,
+  "hqCity": "静岡市"
+ },
+ {
+  "id": 155,
+  "name": "株式会社メガネトップ",
+  "officialUrl": "https://www.meganetop.co.jp/",
+  "reasons": [
+   "discrepancy est946/found94.62"
+  ],
+  "priorRevenueOku": 94.62,
+  "priorRevenueJPYM": 9462,
+  "priorHeadcount": 5201,
+  "priorDecision": "qualified",
+  "priorBasis": "group",
+  "parentNote": "株式会社富澤 (family holding company, established 2009)",
+  "listed": false,
+  "ticker": "7541",
+  "hqCity": "静岡市"
+ },
+ {
+  "id": 72,
+  "name": "焼津水産化学工業株式会社",
+  "officialUrl": "https://www.yskf.jp/",
+  "reasons": [
+   "captive-keep-check"
+  ],
+  "priorRevenueOku": 132.5,
+  "priorRevenueJPYM": 13250,
+  "priorHeadcount": 163,
+  "priorDecision": "qualified",
+  "priorBasis": "group",
+  "parentNote": "Subsidiary of いなば食品株式会社 (acquired March 28, 2024 via YJホールディングス/Jump Life TOB; delisted June 6, 2024). Parent HQ: 静岡県静岡市清水区由比北田114-1 (also in Shizuoka).",
+  "listed": false,
+  "ticker": "2812",
+  "hqCity": "焼津市"
+ },
+ {
+  "id": 71,
+  "name": "ローランド ディー.ジー.株式会社",
+  "officialUrl": "https://www.rolanddg.com",
+  "reasons": [
+   "captive-keep-check"
+  ],
+  "priorRevenueOku": 540,
+  "priorRevenueJPYM": 54018,
+  "priorHeadcount": 1361,
+  "priorDecision": "qualified",
+  "priorBasis": "group",
+  "parentNote": "Taiyou Pacific Partners (PE fund / MBO entity) - 75%+ ownership via MBO completed May 16, 2024. Delisted September 3, 2024. NOTE: was independent when listed; PE majority stake does not make it dependent per instructions, but formal listing status is now private.",
+  "listed": false,
+  "ticker": "6789",
+  "hqCity": "浜松市"
+ },
+ {
+  "id": 86,
+  "name": "株式会社ROKI",
+  "officialUrl": "https://www.roki-jp.com/",
+  "reasons": [
+   "discrepancy est900/found90"
+  ],
+  "priorRevenueOku": 90,
+  "priorRevenueJPYM": 9000,
+  "priorHeadcount": 4000,
+  "priorDecision": "qualified",
+  "priorBasis": null,
+  "parentNote": "Parent company: 株式会社ROKIホールディングス (ROKI Holdings Co., Ltd.), also HQ in Hamamatsu, Shizuoka (〒431-3314 静岡県浜松市天竜区二俣町二俣2396). Not a subsidiary of external operating parent. Holding company structure established April 2012.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "浜松市"
+ },
+ {
+  "id": 77,
+  "name": "木内建設株式会社",
+  "officialUrl": "https://www1.kiuchi.jp/",
+  "reasons": [
+   "discrepancy est56/found632.32"
+  ],
+  "priorRevenueOku": 632.32,
+  "priorRevenueJPYM": 63232,
+  "priorHeadcount": 472,
+  "priorDecision": "qualified",
+  "priorBasis": "group",
+  "parentNote": null,
+  "listed": false,
+  "ticker": null,
+  "hqCity": "静岡市"
+ },
+ {
+  "id": 93,
+  "name": "株式会社ホテイフーズコーポレーション",
+  "officialUrl": "https://www.hoteifoods.co.jp/profile_japanese/",
+  "reasons": [
+   "discrepancy est215/found21.5"
+  ],
+  "priorRevenueOku": 21.5,
+  "priorRevenueJPYM": 2150,
+  "priorHeadcount": 368,
+  "priorDecision": "screened_out",
+  "priorBasis": "standalone",
+  "parentNote": null,
+  "listed": false,
+  "ticker": null,
+  "hqCity": "静岡市清水区"
+ },
+ {
+  "id": 111,
+  "name": "ヤマハモーターソリューション株式会社",
+  "officialUrl": "https://www.ymsl.co.jp/",
+  "reasons": [
+   "captive-keep-check"
+  ],
+  "priorRevenueOku": 214.01,
+  "priorRevenueJPYM": 21401,
+  "priorHeadcount": 1735,
+  "priorDecision": "qualified",
+  "priorBasis": "consolidated (連結)",
+  "parentNote": "100% subsidiary of Yamaha Motor Co., Ltd. (parent HQ: Iwata, Shizuoka)",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "磐田市 (Iwata)"
+ },
+ {
+  "id": 120,
+  "name": "社会福祉法人聖隷福祉事業団",
+  "officialUrl": "https://www.seirei.or.jp/hq/",
+  "reasons": [
+   "discrepancy est1131/found137.4"
+  ],
+  "priorRevenueOku": 137.4,
+  "priorRevenueJPYM": 13740,
+  "priorHeadcount": 16472,
+  "priorDecision": "screened_out",
+  "priorBasis": "group",
+  "parentNote": null,
+  "listed": false,
+  "ticker": null,
+  "hqCity": "Hamamatsu (浜松市)"
+ },
+ {
+  "id": 129,
+  "name": "医療法人弘遠会",
+  "officialUrl": "https://www.suzukake.or.jp/",
+  "reasons": [
+   "boundary 1060"
+  ],
+  "priorRevenueOku": 1060,
+  "priorRevenueJPYM": 106000,
+  "priorHeadcount": 1006,
+  "priorDecision": "screened_out",
+  "priorBasis": "group",
+  "parentNote": "Independent medical corporation; no parent company relationship identified",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "浜松市"
+ },
+ {
+  "id": 135,
+  "name": "近物レックス株式会社",
+  "officialUrl": "https://www.kinbutsurex.co.jp/",
+  "reasons": [
+   "captive-keep-check"
+  ],
+  "priorRevenueOku": 390,
+  "priorRevenueJPYM": 39000,
+  "priorHeadcount": 3025,
+  "priorDecision": "qualified",
+  "priorBasis": "standalone",
+  "parentNote": "子会社：株式会社ハマキョウレックス(浜松市中央区)が73%保有。親会社は3PL物流事業の営業企業だが、同じ静岡県内に所在",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "清水町"
+ },
+ {
+  "id": 140,
+  "name": "株式会社イカイアウトソーシング",
+  "officialUrl": "https://ikai-outsourcing.co.jp/",
+  "reasons": [
+   "discrepancy est183/found56",
+   "boundary 56"
+  ],
+  "priorRevenueOku": 56,
+  "priorRevenueJPYM": 5600,
+  "priorHeadcount": 1300,
+  "priorDecision": "qualified",
+  "priorBasis": "standalone",
+  "parentNote": "Subsidiary of 株式会社イカイ (parent also HQ in Shizuoka, operating company)",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "沼津市"
+ },
+ {
+  "id": 148,
+  "name": "一般財団法人芙蓉協会",
+  "officialUrl": "https://numazu.seirei.or.jp/fuyo/",
+  "reasons": [
+   "boundary 50"
+  ],
+  "priorRevenueOku": 50,
+  "priorRevenueJPYM": 5000,
+  "priorHeadcount": 567,
+  "priorDecision": "qualified",
+  "priorBasis": null,
+  "parentNote": "Related organization (関連法人) of 社会福祉法人聖隷福祉事業団 (HQ: Hamamatsu, Shizuoka). Maintains independent legal entity status as 一般財団法人.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "沼津市"
+ },
+ {
+  "id": 354,
+  "name": "株式会社駿河屋",
+  "officialUrl": "https://www.suruga-ya.co.jp",
+  "reasons": [
+   "discrepancy est443/found46.17",
+   "boundary 46"
+  ],
+  "priorRevenueOku": 46.17,
+  "priorRevenueJPYM": 4617,
+  "priorHeadcount": 1915,
+  "priorDecision": "qualified",
+  "priorBasis": "group",
+  "parentNote": "Multiple strategic investors (Geo Holdings, Nihon Hanbai Group Holdings, Marui Group) but no operating parent outside Shizuoka. Founder-led independent firm.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "静岡市"
+ },
+ {
+  "id": 61,
+  "name": "トヨタバッテリー株式会社",
+  "officialUrl": "https://www.toyota-battery.com/jp/",
+  "reasons": [
+   "discrepancy est2379/found292.334"
+  ],
+  "priorRevenueOku": 292.334,
+  "priorRevenueJPYM": 29233.4,
+  "priorHeadcount": 5783,
+  "priorDecision": "screened_out",
+  "priorBasis": "standalone",
+  "parentNote": "100% subsidiary of Toyota Motor Corporation (HQ: Nagoya, Aichi Prefecture)",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "湖西市"
+ },
+ {
+  "id": 196,
+  "name": "株式会社出雲殿互助会",
+  "officialUrl": "https://izumoden-gojyo.jp/company/",
+  "reasons": [
+   "discrepancy est224/found21.4"
+  ],
+  "priorRevenueOku": 21.4,
+  "priorRevenueJPYM": 2140,
+  "priorHeadcount": 115,
+  "priorDecision": "screened_out",
+  "priorBasis": "standalone",
+  "parentNote": "Sister company within 出雲殿グループ (founded 2005); not a subsidiary of an operating parent outside Shizuoka",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "浜松市"
+ },
+ {
+  "id": 200,
+  "name": "株式会社スズキ自販浜松",
+  "officialUrl": "https://www.suzuki.co.jp/dealer/sj-hamamatsu/",
+  "reasons": [
+   "discrepancy est381/found41.6"
+  ],
+  "priorRevenueOku": 41.6,
+  "priorRevenueJPYM": 4160,
+  "priorHeadcount": 394,
+  "priorDecision": "screened_out",
+  "priorBasis": "standalone",
+  "parentNote": "Subsidiary of Suzuki Motor Corporation (parent HQ in Hamamatsu, Shizuoka—same prefecture, operating parent). Treated as independent per band test rules.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "浜松市"
+ },
+ {
+  "id": 199,
+  "name": "鈴木楽器製作所",
+  "officialUrl": "https://www.suzuki-music.co.jp",
+  "reasons": [
+   "boundary 47"
+  ],
+  "priorRevenueOku": 47,
+  "priorRevenueJPYM": 4700,
+  "priorHeadcount": 202,
+  "priorDecision": "screened_out",
+  "priorBasis": "standalone",
+  "parentNote": "Independent group parent. 鈴木楽器製作所 is the core/parent entity of Suzuki Musical Instrument Group with 5 domestic and 2 overseas subsidiaries. Not a subsidiary of any external parent company.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "浜松市"
+ },
+ {
+  "id": 214,
+  "name": "伊豆箱根鉄道株式会社",
+  "officialUrl": "https://www.izuhakone.co.jp/",
+  "reasons": [
+   "discrepancy est46/found4.58"
+  ],
+  "priorRevenueOku": 4.58,
+  "priorRevenueJPYM": 458,
+  "priorHeadcount": 357,
+  "priorDecision": "screened_out",
+  "priorBasis": "standalone",
+  "parentNote": "subsidiary of Seibu Railway Co., Ltd. (西武鉄道株式会社) - 84.51% ownership as of March 2023; Seibu Railway's registered HQ is in Tokyo (Toshima Ward, Ikebukuro)",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "三島市"
+ },
+ {
+  "id": 230,
+  "name": "丸富製紙株式会社",
+  "officialUrl": "https://www.marutomi-seishi.co.jp/",
+  "reasons": [
+   "discrepancy est417/found67.3"
+  ],
+  "priorRevenueOku": 67.3,
+  "priorRevenueJPYM": 6730,
+  "priorHeadcount": 217,
+  "priorDecision": "qualified",
+  "priorBasis": "group",
+  "parentNote": null,
+  "listed": false,
+  "ticker": null,
+  "hqCity": "富士市"
+ },
+ {
+  "id": 161,
+  "name": "株式会社駿河屋",
+  "officialUrl": "https://www.suruga-ya.co.jp/",
+  "reasons": [
+   "discrepancy est178/found4617.7"
+  ],
+  "priorRevenueOku": 4617.7,
+  "priorRevenueJPYM": 461770,
+  "priorHeadcount": 2388,
+  "priorDecision": "screened_out",
+  "priorBasis": "FY2025 (ended August 2025) official financial disclosure from gamebiz and business databases; prior input estimate ¥178B was significantly underestimated",
+  "parentNote": null,
+  "listed": false,
+  "ticker": null,
+  "hqCity": "静岡市葵区"
+ },
+ {
+  "id": 335,
+  "name": "株式会社若杉組",
+  "officialUrl": "http://www.wakasugigumi.co.jp/",
+  "reasons": [
+   "boundary 46"
+  ],
+  "priorRevenueOku": 45.55,
+  "priorRevenueJPYM": 4555,
+  "priorHeadcount": 41,
+  "priorDecision": "screened_out",
+  "priorBasis": "単体",
+  "parentNote": "独立企業。1916年創業の老舗建設業",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "掛川市"
+ },
+ {
+  "id": 336,
+  "name": "株式会社柳屋本店",
+  "officialUrl": "https://www.yanagiya.co.jp/",
+  "reasons": [
+   "boundary 48"
+  ],
+  "priorRevenueOku": 48,
+  "priorRevenueJPYM": 4800,
+  "priorHeadcount": 141,
+  "priorDecision": "screened_out",
+  "priorBasis": "単体",
+  "parentNote": "独立企業。明治期創業の老舗かつお節メーカー",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "焼津市"
+ },
+ {
+  "id": 374,
+  "name": "鈴与カーゴネット株式会社",
+  "officialUrl": "https://www.suzuyo-scn.co.jp/",
+  "reasons": [
+   "discrepancy est466/found46.6",
+   "boundary 47"
+  ],
+  "priorRevenueOku": 46.6,
+  "priorRevenueJPYM": 4660,
+  "priorHeadcount": 1422,
+  "priorDecision": "screened_out",
+  "priorBasis": "グループ (Suzuyo CargoNet Group FY2024年8月期)",
+  "parentNote": "Subsidiary of Suzuyo Group (鈴与グループ), part of comprehensive logistics company with 200+ year history. Not independently listed; operates as member of Suzuyo Group structure.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "静岡市清水区"
+ },
+ {
+  "id": 315,
+  "name": "株式会社ヤザキ",
+  "officialUrl": "https://www.yazaki-corp.co.jp/",
+  "reasons": [
+   "boundary 51"
+  ],
+  "priorRevenueOku": 51.22,
+  "priorRevenueJPYM": 5122,
+  "priorHeadcount": 258,
+  "priorDecision": "screened_out",
+  "priorBasis": "FY2024 standalone basis",
+  "parentNote": "Independent company; founded 1964; no parent company identified",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "磐田市"
+ },
+ {
+  "id": 304,
+  "name": "三恵株式会社",
+  "officialUrl": "https://iwata.sankei-corp.com/",
+  "reasons": [
+   "discrepancy est182/found18.163"
+  ],
+  "priorRevenueOku": 18.163,
+  "priorRevenueJPYM": 1816.3,
+  "priorHeadcount": 402,
+  "priorDecision": "screened_out",
+  "priorBasis": "Fiscal year ending March 2025",
+  "parentNote": "Independent company; SANKEI Group parent with subsidiary operations in Indonesia (PT. SANKEIKID MANUTEC INDONESIA)",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "磐田市"
+ },
+ {
+  "id": 359,
+  "name": "伊藤食品株式会社",
+  "officialUrl": "https://www.ito-foods.co.jp/",
+  "reasons": [
+   "boundary 48"
+  ],
+  "priorRevenueOku": 47.68,
+  "priorRevenueJPYM": 4768.57,
+  "priorHeadcount": 130,
+  "priorDecision": "screened_out",
+  "priorBasis": "2023年9月期 単体売上",
+  "parentNote": "独立企業。1948年創業の老舗缶詰メーカー。親会社なし。家族企業色強し",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "静岡市清水区"
+ },
+ {
+  "id": 74,
+  "name": "ハラダ製茶株式会社",
+  "officialUrl": "https://harada-tea.co.jp/",
+  "reasons": [
+   "discrepancy est46/found2417.4"
+  ],
+  "priorRevenueOku": 2417.4,
+  "priorRevenueJPYM": 241740,
+  "priorHeadcount": 340,
+  "priorDecision": "screened_out",
+  "priorBasis": "FY2024 consolidated revenue via Yahoo Jobs Catalog",
+  "parentNote": "Subsidiary of H.R.D HOLDINGS",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "島田市"
+ },
+ {
+  "id": 381,
+  "name": "東芝キャリア株式会社（日本キヤリア株式会社）",
+  "officialUrl": "https://www.toshiba-carrier.co.jp/",
+  "reasons": [
+   "boundary 1048"
+  ],
+  "priorRevenueOku": 1047.79,
+  "priorRevenueJPYM": 104779,
+  "priorHeadcount": 2380,
+  "priorDecision": "screened_out",
+  "priorBasis": "連結/GROUP 2023年度（2024年3月期）",
+  "parentNote": "Carrier Corporation（米国）が55%出資；東芝が5%出資；Global Comfort Solutions LLC経由で傘下。2022年にキャリアグループの傘下となった。本社は東京都品川区。",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "東京都品川区"
+ },
+ {
+  "id": 266,
+  "name": "大二製紙株式会社",
+  "officialUrl": "https://dainiseishi.co.jp/",
+  "reasons": [
+   "boundary 55"
+  ],
+  "priorRevenueOku": 55,
+  "priorRevenueJPYM": 5500,
+  "priorHeadcount": 31,
+  "priorDecision": "qualified",
+  "priorBasis": "Estimated range 10-100億円 from third-party sources (Yahoo! Shigoto Catalog); official site does not disclose specific revenue",
+  "parentNote": "Member of 富士製紙協同組合 (cooperative); independently operated under founder/family leadership (滝口陽子, founded 1951)",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "富士市"
+ },
+ {
+  "id": 293,
+  "name": "ヱスビーサンキョーフーズ株式会社",
+  "officialUrl": "https://www.sbfoods.co.jp/company/group/sbsankyo.html",
+  "reasons": [
+   "boundary 55"
+  ],
+  "priorRevenueOku": 55.14,
+  "priorRevenueJPYM": 5514,
+  "priorHeadcount": 149,
+  "priorDecision": "screened_out",
+  "priorBasis": "2025年3月期 売上高5,514百万円 または 56億3,300万円",
+  "parentNote": "子会社 (consolidated subsidiary) of エスビー食品株式会社 (listed company, TOKYO). Parent is operating company outside Shizuoka.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "焼津市"
+ },
+ {
+  "id": 366,
+  "name": "株式会社ニッセー",
+  "officialUrl": "https://scg.jp/nissei/outline/",
+  "reasons": [
+   "captive-keep-check"
+  ],
+  "priorRevenueOku": 225,
+  "priorRevenueJPYM": 22500,
+  "priorHeadcount": 313,
+  "priorDecision": "qualified",
+  "priorBasis": null,
+  "parentNote": "Part of Shizuoka Chuo Group (SCG) - operates under group structure with golf course operations and hospitality subsidiaries, but appears to be operating subsidiary not merely financial holding",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "焼津市"
+ },
+ {
+  "id": 274,
+  "name": "新東海ロジスティクス株式会社",
+  "officialUrl": "https://shin-tokai-logi.co.jp/",
+  "reasons": [
+   "boundary 56",
+   "captive-keep-check"
+  ],
+  "priorRevenueOku": 56,
+  "priorRevenueJPYM": 5600,
+  "priorHeadcount": 172,
+  "priorDecision": "qualified",
+  "priorBasis": "FY2026.3 決算 official company IR",
+  "parentNote": "100% subsidiary of 新東海製紙株式会社 (Shin-Tokai Paper, which itself is joint venture of Tokushu Tokai Paper + Nippon Paper)",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "島田市"
+ },
+ {
+  "id": 78,
+  "name": "太陽建機レンタル株式会社",
+  "officialUrl": "https://www.taiyokenki.co.jp/",
+  "reasons": [
+   "discrepancy est90/found1121.49"
+  ],
+  "priorRevenueOku": 1121.49,
+  "priorRevenueJPYM": 112149,
+  "priorHeadcount": 3186,
+  "priorDecision": "screened_out",
+  "priorBasis": "FY2025 consolidated revenue from Wikipedia/official business database",
+  "parentNote": "Joint venture of Mitsui & Co. and Sumitomo Corporation (merged May 1996: Tokai Kenki Rental + Kyushu Kenki Rental)",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "静岡市駿河区"
+ },
+ {
+  "id": 303,
+  "name": "旭テック株式会社",
+  "officialUrl": "https://www.asahitec.co.jp/",
+  "reasons": [
+   "discrepancy est297/found21.8"
+  ],
+  "priorRevenueOku": 21.8,
+  "priorRevenueJPYM": 2180,
+  "priorHeadcount": 88,
+  "priorDecision": "screened_out",
+  "priorBasis": "Standalone (単体売上高) - Fiscal year 118",
+  "parentNote": "100% subsidiary of Topy Industries Co., Ltd. (トピー工業) since May 2018",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "掛川市"
+ },
+ {
+  "id": 352,
+  "name": "株式会社アイ・テック",
+  "officialUrl": "https://www.itec-c.co.jp/",
+  "reasons": [
+   "boundary 1084"
+  ],
+  "priorRevenueOku": 1084,
+  "priorRevenueJPYM": 108400,
+  "priorHeadcount": 617,
+  "priorDecision": "screened_out",
+  "priorBasis": "2024年3月期 連結売上（上場当時）",
+  "parentNote": "OE Holdings Corporation(PE/私募)が2022年10月31日時点で80.39%取得し経営権を獲得。2023年1月にMBO後上場廃止。現在は非公開（未上場）。上場廃止後の正確な所有構造は不詳だが、私募ファンド傘下で独立性は限定的",
+  "listed": true,
+  "ticker": "9964",
+  "hqCity": "静岡市清水区"
+ },
+ {
+  "id": 372,
+  "name": "DOWAメタニクス株式会社",
+  "officialUrl": "https://www.metanix.co.jp/metanix/company.html",
+  "reasons": [
+   "discrepancy est172/found17.2"
+  ],
+  "priorRevenueOku": 17.2,
+  "priorRevenueJPYM": 1720,
+  "priorHeadcount": 255,
+  "priorDecision": "screened_out",
+  "priorBasis": "連結 (Consolidated FY2024年3月期)",
+  "parentNote": "100% wholly-owned subsidiary of DOWA (via DOWAメタルテック). Incorporated December 1, 2007. Part of DOWA Group metal processing division. Not independent operating entity.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "浜松市西区"
+ },
+ {
+  "id": 302,
+  "name": "株式会社ベルソニカ",
+  "officialUrl": "https://bellsonica.co.jp/",
+  "reasons": [
+   "discrepancy est390/found33"
+  ],
+  "priorRevenueOku": 33,
+  "priorRevenueJPYM": 3300,
+  "priorHeadcount": 600,
+  "priorDecision": "screened_out",
+  "priorBasis": "Consolidated (連結実績)",
+  "parentNote": "Independent company; Suzuki Motor is primary customer (70% subsidiary stakes in BACI India, B-IND Indonesia, but not parent of Bellsonica)",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "湖西市"
+ },
+ {
+  "id": 376,
+  "name": "株式会社静環検査センター",
+  "officialUrl": "https://www.seikankensa.co.jp/",
+  "reasons": [
+   "boundary 45"
+  ],
+  "priorRevenueOku": 45.0,
+  "priorRevenueJPYM": 4500,
+  "priorHeadcount": 403,
+  "priorDecision": "screened_out",
+  "priorBasis": "単体 2024年度（推定第三者情報）",
+  "parentNote": "株式会社桜ホールディングス傘下の100%子会社相当。桜ホールディングスは藤枝市に所在するホールディング会社。",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "藤枝市"
+ },
+ {
+  "id": 322,
+  "name": "汐見製作所株式会社",
+  "officialUrl": "https://siomi.jp",
+  "reasons": [
+   "discrepancy est30/found1218"
+  ],
+  "priorRevenueOku": 1218,
+  "priorRevenueJPYM": 121800,
+  "priorHeadcount": 180,
+  "priorDecision": "qualified",
+  "priorBasis": "連結（FY2026.3）121.8億円",
+  "parentNote": "SIOMIホールディングス (operating holding company, same location/prefecture) = treated as independent",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "湖西市"
+ },
+ {
+  "id": 288,
+  "name": "株式会社いちまる",
+  "officialUrl": "https://ichimaru-grp.co.jp/corporate/company/",
+  "reasons": [
+   "discrepancy est72/found7.6"
+  ],
+  "priorRevenueOku": 7.6,
+  "priorRevenueJPYM": 760,
+  "priorHeadcount": 106,
+  "priorDecision": "screened_out",
+  "priorBasis": "FY2025/3 (Fiscal year ending March 2025)",
+  "parentNote": "Core company of いちまるグループ (Ichimaru Group). Group established holding company structure in April 2020 (株式会社いちまるスティムレート) for group management, but 株式会社いちまる itself is independently-operating subsidiary with its own operations. No parent company outside Shizuoka.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "焼津市"
+ },
+ {
+  "id": 289,
+  "name": "株式会社南食品",
+  "officialUrl": "https://minami-shokuhin.com/",
+  "reasons": [
+   "discrepancy est67/found6.67"
+  ],
+  "priorRevenueOku": 6.67,
+  "priorRevenueJPYM": 667,
+  "priorHeadcount": 158,
+  "priorDecision": "screened_out",
+  "priorBasis": "FY2024 (as of July 2024)",
+  "parentNote": "Independent company. Makes capital investments in subsidiaries (明豊/formerly 明興水産, マリンエイト) but has no parent company. No ホールディングス structure.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "焼津市"
+ },
+ {
+  "id": 306,
+  "name": "日研フード株式会社",
+  "officialUrl": "https://www.nikkenfoods.co.jp/",
+  "reasons": [
+   "discrepancy est136/found17.9"
+  ],
+  "priorRevenueOku": 17.9,
+  "priorRevenueJPYM": 1790,
+  "priorHeadcount": 260,
+  "priorDecision": "qualified",
+  "priorBasis": "Fiscal Year March 2025 (transaction volume 13.5 billion yen)",
+  "parentNote": "Independent company; no parent/subsidiary relationships identified",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "袋井市"
+ },
+ {
+  "id": 312,
+  "name": "浜松光電株式会社",
+  "officialUrl": "https://hkd.co.jp/",
+  "reasons": [
+   "boundary 45"
+  ],
+  "priorRevenueOku": 45.25,
+  "priorRevenueJPYM": 4525,
+  "priorHeadcount": 318,
+  "priorDecision": "qualified",
+  "priorBasis": "FY2025年3月期 official (mynavi recruitment data)",
+  "parentNote": null,
+  "listed": false,
+  "ticker": null,
+  "hqCity": "磐田市"
+ },
+ {
+  "id": 370,
+  "name": "日軽産業株式会社",
+  "officialUrl": "https://www.nikkeisangyo.co.jp/",
+  "reasons": [
+   "discrepancy est276/found27.6"
+  ],
+  "priorRevenueOku": 27.6,
+  "priorRevenueJPYM": 2760,
+  "priorHeadcount": 242,
+  "priorDecision": "screened_out",
+  "priorBasis": "連結 (Consolidated FY2024年3月期)",
+  "parentNote": "99.86% subsidiary of Japan Light Metal Holdings Co., Ltd. (日本軽金属ホールディングス) as of March 31, 2024. Operating company within NLM Group, not independent.",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "静岡市清水区"
+ },
+ {
+  "id": 307,
+  "name": "静岡製機株式会社",
+  "officialUrl": "https://www.shizuoka-seiki.co.jp/",
+  "reasons": [
+   "discrepancy est120/found14.417"
+  ],
+  "priorRevenueOku": 14.417,
+  "priorRevenueJPYM": 1441.7,
+  "priorHeadcount": 279,
+  "priorDecision": "qualified",
+  "priorBasis": "Fiscal year ended March 2026",
+  "parentNote": "Independent company; founded 1914 as standalone agricultural machinery manufacturer",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "袋井市"
+ },
+ {
+  "id": 392,
+  "name": "佐政水産株式会社",
+  "officialUrl": "https://www.samasa.co.jp/",
+  "reasons": [
+   "boundary 53"
+  ],
+  "priorRevenueOku": 53,
+  "priorRevenueJPYM": 5300,
+  "priorHeadcount": 170,
+  "priorDecision": "qualified",
+  "priorBasis": "連結決算（fiscal year ending September 2024）",
+  "parentNote": null,
+  "listed": false,
+  "ticker": null,
+  "hqCity": "沼津市"
+ },
+ {
+  "id": 360,
+  "name": "エスエスケイフーズ株式会社",
+  "officialUrl": "https://www.sskfoods.co.jp/",
+  "reasons": [
+   "captive-keep-check"
+  ],
+  "priorRevenueOku": 275,
+  "priorRevenueJPYM": 27500,
+  "priorHeadcount": 442,
+  "priorDecision": "qualified",
+  "priorBasis": "2025年3月期 連結売上",
+  "parentNote": "鈴与グループの食品事業部門中核企業。鈴与株式会社傘下。1978年設立。鈴与は大型グループ(140関連会社)で、SSKフーズはその食品division直下",
+  "listed": false,
+  "ticker": null,
+  "hqCity": "静岡市葵区"
+ }
+]
