@@ -1,0 +1,7133 @@
+{
+ "ledger": [
+  {
+   "name": "タウンズ株式会社",
+   "normKey": "タウンズ",
+   "hqCity": "伊豆の国市",
+   "industry": "医薬品（感染症抗原検査キット）",
+   "listed": true,
+   "ticker": "197A",
+   "revenueEstOku": 186,
+   "headcountEst": 360,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.tauns.co.jp/profile/company/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.kabutore.biz/kabuka/197A.html"
+   ],
+   "note": "TSE Standard; 上場2024年6月",
+   "id": 1
+  },
+  {
+   "name": "はごろもフーズ株式会社",
+   "normKey": "はごろもフーズ",
+   "hqCity": "静岡市",
+   "industry": "食料品（缶詰・水産加工）",
+   "listed": true,
+   "ticker": "2831",
+   "revenueEstOku": 747,
+   "headcountEst": 677,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://irbank.net/E00508/pl",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://corp.hagoromofoods.co.jp/ja/ir/financial/indicator.html"
+   ],
+   "note": "TSE Standard; 本社は静岡市駿河区",
+   "id": 2
+  },
+  {
+   "name": "株式会社AFC-HDアムスライフサイエンス",
+   "normKey": "afc-hdアムスライフサイエンス",
+   "hqCity": "静岡市",
+   "industry": "食料品（健康食品・化粧品OEM）",
+   "listed": true,
+   "ticker": "2927",
+   "revenueEstOku": 327,
+   "headcountEst": 1634,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.ams-life.co.jp/ams/highlight",
+    "https://www.ams-life.co.jp/ams/ir_stock",
+    "https://www.kabutore.biz/kabuka/2927.html"
+   ],
+   "note": "TSE Standard; 本社は静岡市駿河区",
+   "id": 3
+  },
+  {
+   "name": "株式会社ホームポジション",
+   "normKey": "ホームポジション",
+   "hqCity": "静岡市",
+   "industry": "不動産（戸建住宅販売）",
+   "listed": true,
+   "ticker": "2999",
+   "revenueEstOku": 91,
+   "headcountEst": 220,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.homeposition.co.jp/corporate/company/outline/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.kabutore.biz/kabuka/2999.html"
+   ],
+   "note": "TSE Standard; 売上高は197億円規模（2024年度）",
+   "id": 4
+  },
+  {
+   "name": "株式会社TOKAIホールディングス",
+   "normKey": "tokaiホールディングス",
+   "hqCity": "静岡市",
+   "industry": "卸売業（LPG・都市ガス・CATV・インターネット）",
+   "listed": true,
+   "ticker": "3167",
+   "revenueEstOku": 2435,
+   "headcountEst": 4100,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.hurex.jp/column/company/4057/",
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.tokaiholdings.co.jp/corporate/outline.html"
+   ],
+   "note": "TSE Prime; 本社は静岡市葵区",
+   "id": 5
+  },
+  {
+   "name": "株式会社ティーライフ",
+   "normKey": "ティーライフ",
+   "hqCity": "島田市",
+   "industry": "小売業（通信販売・健康茶・健康食品）",
+   "listed": true,
+   "ticker": "3172",
+   "revenueEstOku": 80,
+   "headcountEst": 177,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.tealife.co.jp/",
+    "https://www.tealifeir.com/company/profile.html",
+    "https://www.kabutore.biz/kabuka/3172.html"
+   ],
+   "note": "TSE Standard",
+   "id": 6
+  },
+  {
+   "name": "株式会社ZOA",
+   "normKey": "zoa",
+   "hqCity": "浜松市",
+   "industry": "小売業（PC・二輪車部品）",
+   "listed": true,
+   "ticker": "3375",
+   "revenueEstOku": 20,
+   "headcountEst": 166,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.zoa.co.jp/about/summary",
+    "https://www.kabutore.biz/kabuka/3375.html"
+   ],
+   "note": "TSE Standard",
+   "id": 7
+  },
+  {
+   "name": "株式会社トヨコー",
+   "normKey": "トヨコー",
+   "hqCity": "富士市",
+   "industry": "建設業（レーザー除錆・特殊コーティング）",
+   "listed": true,
+   "ticker": "341A",
+   "revenueEstOku": 20,
+   "headcountEst": 42,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html"
+   ],
+   "note": "TSE Growth; 上場2025年3月; 2025年3月期売上高約20億円",
+   "id": 8
+  },
+  {
+   "name": "共和レザー株式会社",
+   "normKey": "共和レザー",
+   "hqCity": "浜松市",
+   "industry": "化学（合成皮革・車両内装材）",
+   "listed": true,
+   "ticker": "3553",
+   "revenueEstOku": 558,
+   "headcountEst": 1393,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.kyowale.co.jp/company/outline/",
+    "https://www.kabutore.biz/kabuka/3553.html"
+   ],
+   "note": "TSE Standard; 本社は浜松市中央区",
+   "id": 9
+  },
+  {
+   "name": "株式会社北里コーポレーション",
+   "normKey": "北里コーポレーション",
+   "hqCity": "富士市",
+   "industry": "精密機器（不妊治療向け医療機器）",
+   "listed": true,
+   "ticker": "368A",
+   "revenueEstOku": 109,
+   "headcountEst": 87,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://j-lic.com/companies/368A",
+    "https://ipokabu.net/ipo/368A",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.kabutore.biz/kabuka/368A.html"
+   ],
+   "note": "TSE Prime; 上場2025年6月; 本社は富士市柳島",
+   "id": 10
+  },
+  {
+   "name": "特種東海製紙株式会社",
+   "normKey": "特種東海製紙",
+   "hqCity": "島田市",
+   "industry": "パルプ・紙",
+   "listed": true,
+   "ticker": "3708",
+   "revenueEstOku": 948,
+   "headcountEst": 1863,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://kabutan.jp/stock/finance?code=3708",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.tt-paper.co.jp/company/outline/",
+    "https://www.kabutore.biz/kabuka/3708.html"
+   ],
+   "note": "TSE Prime; 本社は島田市向島町",
+   "id": 11
+  },
+  {
+   "name": "株式会社レント",
+   "normKey": "レント",
+   "hqCity": "静岡市",
+   "industry": "サービス業（建設機械・産業機械総合レンタル）",
+   "listed": true,
+   "ticker": "372A",
+   "revenueEstOku": 437,
+   "headcountEst": 1185,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nsjournal.jp/%E3%80%90%E9%80%9F%E5%A0%B1%E7%89%88%E3%80%91%E6%96%B0%E8%A6%8F%E4%B8%8A%E5%A0%B4%E7%B4%B9%E4%BB%8B%E3%80%80%E3%83%AC%E3%83%B3%E3%83%88%E3%80%806%E6%9C%8830%E6%97%A5-%E3%82%B9%E3%82%BF%E3%83%B3/",
+    "https://www.nsjournal.jp/%E3%80%90%E9%80%9F%E5%A0%B1%E7%89%88%E3%80%91%E6%96%B0%E8%A6%8F%E4%B8%8A%E5%A0%B4%E7%B9%8D%E4%BB%8B%E3%80%80%E3%83%AC%E3%83%B3%E3%83%88%E3%80%806%E6%9C%8830%E6%97%A5-%E3%82%B9%E3%82%BF%E3%83%B3/",
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.kabutore.biz/kabuka/372A.html"
+   ],
+   "note": "TSE Standard; 上場2025年6月; 本社は静岡市清水区",
+   "id": 12
+  },
+  {
+   "name": "株式会社キャンバス",
+   "normKey": "キャンバス",
+   "hqCity": "沼津市",
+   "industry": "医薬品（バイオ・抗がん剤創薬）",
+   "listed": true,
+   "ticker": "4575",
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.canbas.co.jp/company/profile/"
+   ],
+   "note": "TSE Growth; 売上ほぼゼロの研究開発段階企業",
+   "id": 13
+  },
+  {
+   "name": "株式会社秀英予備校",
+   "normKey": "秀英予備校",
+   "hqCity": "静岡市",
+   "industry": "サービス業（学習塾・教育）",
+   "listed": true,
+   "ticker": "4678",
+   "revenueEstOku": 107,
+   "headcountEst": 729,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://baseconnect.in/companies/afe77a67-f37a-493a-ad47-812b374f85e2",
+    "https://www.kabutore.biz/kabuka/4678.html"
+   ],
+   "note": "TSE Standard; 本社は静岡市葵区鷹匠",
+   "id": 14
+  },
+  {
+   "name": "株式会社トーヨーアサノ",
+   "normKey": "トーヨーアサノ",
+   "hqCity": "沼津市",
+   "industry": "ガラス・土石製品（コンクリート二次製品・建設工事）",
+   "listed": true,
+   "ticker": "5271",
+   "revenueEstOku": 117,
+   "headcountEst": 197,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.toyoasano.co.jp/about/profile.html"
+   ],
+   "note": "TSE Standard; 本社は沼津市原",
+   "id": 15
+  },
+  {
+   "name": "ヨシコン株式会社",
+   "normKey": "ヨシコン",
+   "hqCity": "静岡市",
+   "industry": "不動産業（宅地開発・建設・建材販売）",
+   "listed": true,
+   "ticker": "5280",
+   "revenueEstOku": 275,
+   "headcountEst": 450,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.yoshicon.co.jp/main/company/outline/",
+    "https://www.kabutore.biz/kabuka/5280.html"
+   ],
+   "note": "TSE Standard; 本社は静岡市葵区常磐町",
+   "id": 16
+  },
+  {
+   "name": "株式会社エンビプロ・ホールディングス",
+   "normKey": "エンビプロ・ホールディングス",
+   "hqCity": "富士宮市",
+   "industry": "鉄鋼（金属リサイクル・廃棄物処理）",
+   "listed": true,
+   "ticker": "5698",
+   "revenueEstOku": 100,
+   "headcountEst": 443,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.kabutore.biz/kabuka/5698.html"
+   ],
+   "note": "TSE Standard; 本社は富士宮市山宮",
+   "id": 17
+  },
+  {
+   "name": "株式会社しずおかフィナンシャルグループ",
+   "normKey": "しずおかフィナンシャルグループ",
+   "hqCity": "静岡市",
+   "industry": "銀行業",
+   "listed": true,
+   "ticker": "5831",
+   "revenueEstOku": 4386,
+   "headcountEst": 2800,
+   "sizeBand": "excluded",
+   "excludeReason": "銀行持株会社",
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.hurex.jp/column/company/4057/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.shizuoka-fg.co.jp/ir/"
+   ],
+   "note": "TSE Prime; 銀行持株会社のため除外",
+   "id": 18
+  },
+  {
+   "name": "天龍製鋸株式会社",
+   "normKey": "天龍製鋸",
+   "hqCity": "袋井市",
+   "industry": "金属製品（鋸刃・チップソー）",
+   "listed": true,
+   "ticker": "5945",
+   "revenueEstOku": 131,
+   "headcountEst": 970,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://tenryu-saw.com/ja/company/profile/",
+    "https://ja.wikipedia.org/wiki/%E5%A4%A9%E9%BE%8D%E8%A3%BD%E9%8B%B8",
+    "https://www.kabutore.biz/kabuka/5945.html"
+   ],
+   "note": "TSE Standard; 本社は袋井市",
+   "id": 19
+  },
+  {
+   "name": "エンシュウ株式会社",
+   "normKey": "エンシュウ",
+   "hqCity": "浜松市",
+   "industry": "機械（工作機械・輸送機器部品）",
+   "listed": true,
+   "ticker": "6218",
+   "revenueEstOku": 192,
+   "headcountEst": 829,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.enshu.co.jp/ja/profile/corporate/",
+    "https://www.kabutore.biz/kabuka/6218.html"
+   ],
+   "note": "TSE Standard（旧プライム); ヤマハ発動機系",
+   "id": 20
+  },
+  {
+   "name": "株式会社エコム",
+   "normKey": "エコム",
+   "hqCity": "浜松市",
+   "industry": "機械（工業炉・熱技術エンジニアリング）",
+   "listed": true,
+   "ticker": "6225",
+   "revenueEstOku": 23,
+   "headcountEst": 73,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html"
+   ],
+   "note": "名証メイン; 本社は浜松市浜名区",
+   "id": 21
+  },
+  {
+   "name": "靜甲株式会社",
+   "normKey": "靜甲",
+   "hqCity": "静岡市",
+   "industry": "機械（包装機械・冷間鍛造部品・電機空調）",
+   "listed": true,
+   "ticker": "6286",
+   "revenueEstOku": 401,
+   "headcountEst": 420,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.seiko-co.com/company/overview/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.kabutore.biz/kabuka/6286.html"
+   ],
+   "note": "TSE Standard; 本社は静岡市清水区天神",
+   "id": 22
+  },
+  {
+   "name": "株式会社ミダックホールディングス",
+   "normKey": "ミダックホールディングス",
+   "hqCity": "浜松市",
+   "industry": "サービス業（産業廃棄物処理）",
+   "listed": true,
+   "ticker": "6564",
+   "revenueEstOku": 109,
+   "headcountEst": 350,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.midac.jp/company/profile.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.kabutore.biz/kabuka/6564.html"
+   ],
+   "note": "TSE Prime; 本社は浜松市中央区",
+   "id": 23
+  },
+  {
+   "name": "協立電機株式会社",
+   "normKey": "協立電機",
+   "hqCity": "静岡市",
+   "industry": "電気機器（FA機器・科学測定機器）",
+   "listed": true,
+   "ticker": "6874",
+   "revenueEstOku": 382,
+   "headcountEst": 385,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://kabutan.jp/stock/finance?code=6874",
+    "https://irbank.net/E02039",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.kabutore.biz/kabuka/6874.html"
+   ],
+   "note": "TSE Standard; 本社は静岡市駿河区中田本町",
+   "id": 24
+  },
+  {
+   "name": "パルステック工業株式会社",
+   "normKey": "パルステック工業",
+   "hqCity": "浜松市",
+   "industry": "電気機器（光ピックアップ・X線残留応力測定装置）",
+   "listed": true,
+   "ticker": "6894",
+   "revenueEstOku": 25,
+   "headcountEst": 163,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.pulstec.co.jp/ir/highlight/"
+   ],
+   "note": "TSE Standard; 本社は浜松市浜名区細江町",
+   "id": 25
+  },
+  {
+   "name": "ASTI株式会社",
+   "normKey": "asti",
+   "hqCity": "浜松市",
+   "industry": "電気機器（車載電装品・ワイヤーハーネス）",
+   "listed": true,
+   "ticker": "6899",
+   "revenueEstOku": 654,
+   "headcountEst": 2000,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.asti.co.jp/company/outline/",
+    "https://www.kabutore.biz/kabuka/6899.html"
+   ],
+   "note": "TSE Standard; 本社は浜松市中央区米津町",
+   "id": 26
+  },
+  {
+   "name": "浜松ホトニクス株式会社",
+   "normKey": "浜松ホトニクス",
+   "hqCity": "浜松市",
+   "industry": "電気機器（光センサー・光電子増倍管）",
+   "listed": true,
+   "ticker": "6965",
+   "revenueEstOku": 2121,
+   "headcountEst": 3700,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.hurex.jp/column/company/4057/",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://www.hamamatsu.com/jp/ja/investor-relations/financial-highlights.html"
+   ],
+   "note": "TSE Prime; 2025年9月期売上高2120億円",
+   "id": 27
+  },
+  {
+   "name": "株式会社エッチ・ケー・エス",
+   "normKey": "エッチ・ケー・エス",
+   "hqCity": "富士宮市",
+   "industry": "輸送用機器（自動車用チューニング部品）",
+   "listed": true,
+   "ticker": "7219",
+   "revenueEstOku": 44,
+   "headcountEst": null,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.hks-global.com/company/outline.html"
+   ],
+   "note": "TSE Standard; 本社は富士宮市上井出",
+   "id": 28
+  },
+  {
+   "name": "株式会社デイトナ",
+   "normKey": "デイトナ",
+   "hqCity": "森町",
+   "industry": "輸送用機器（二輪車用部品・用品）",
+   "listed": true,
+   "ticker": "7228",
+   "revenueEstOku": 149,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://corporate.daytona.co.jp/company/outline.html"
+   ],
+   "note": "TSE Standard; 本社は周智郡森町",
+   "id": 29
+  },
+  {
+   "name": "株式会社ユニバンス",
+   "normKey": "ユニバンス",
+   "hqCity": "湖西市",
+   "industry": "輸送用機器（自動車トランスミッション・ギアボックス）",
+   "listed": true,
+   "ticker": "7254",
+   "revenueEstOku": 486,
+   "headcountEst": 1138,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://www.uvc.co.jp/en/company/outline.html"
+   ],
+   "note": "TSE Standard; 本社は湖西市鷲津",
+   "id": 30
+  },
+  {
+   "name": "株式会社桜井製作所",
+   "normKey": "桜井製作所",
+   "hqCity": "浜松市",
+   "industry": "輸送用機器（エンジン関連部品・ミッション部品）",
+   "listed": true,
+   "ticker": "7255",
+   "revenueEstOku": 50,
+   "headcountEst": 210,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://sakurai-net.co.jp/en/company/company-profile/",
+    "https://www.kabutore.biz/kabuka/7255.html"
+   ],
+   "note": "TSE Standard; 本社は浜松市",
+   "id": 31
+  },
+  {
+   "name": "株式会社エイケン工業",
+   "normKey": "エイケン工業",
+   "hqCity": "御前崎市",
+   "industry": "輸送用機器（自動車用エンジン部品）",
+   "listed": true,
+   "ticker": "7265",
+   "revenueEstOku": 73,
+   "headcountEst": null,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html"
+   ],
+   "note": "TSE Standard; 本社は御前崎市門屋",
+   "id": 32
+  },
+  {
+   "name": "スズキ株式会社",
+   "normKey": "スズキ",
+   "hqCity": "浜松市",
+   "industry": "輸送用機器（自動車・二輪車）",
+   "listed": true,
+   "ticker": "7269",
+   "revenueEstOku": 58252,
+   "headcountEst": 9800,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.hurex.jp/column/company/4057/",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://www.suzuki.co.jp/corporate/outline/"
+   ],
+   "note": "TSE Prime; 2025年3月期売上高5.8兆円",
+   "id": 33
+  },
+  {
+   "name": "ヤマハ発動機株式会社",
+   "normKey": "ヤマハ発動機",
+   "hqCity": "磐田市",
+   "industry": "輸送用機器（二輪車・船外機）",
+   "listed": true,
+   "ticker": "7272",
+   "revenueEstOku": 25342,
+   "headcountEst": 10200,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.hurex.jp/column/company/4057/",
+    "https://nlab.itmedia.co.jp/research/articles/3155190/",
+    "https://global.yamaha-motor.com/jp/profile/outline/"
+   ],
+   "note": "TSE Prime; 2025年12月期売上高2.5兆円",
+   "id": 34
+  },
+  {
+   "name": "日本プラスト株式会社",
+   "normKey": "日本プラスト",
+   "hqCity": "富士宮市",
+   "industry": "輸送用機器（自動車用エアバッグ・内装樹脂部品）",
+   "listed": true,
+   "ticker": "7291",
+   "revenueEstOku": 1206,
+   "headcountEst": 5709,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.nikkei.com/nkd/company/gaiyo/?scode=7291",
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html",
+    "https://www.n-plast.co.jp/company/profile/"
+   ],
+   "note": "TSE Standard; 本社は富士宮市山宮",
+   "id": 35
+  },
+  {
+   "name": "株式会社村上開明堂",
+   "normKey": "村上開明堂",
+   "hqCity": "静岡市",
+   "industry": "輸送用機器（自動車用ミラー・センサー）",
+   "listed": true,
+   "ticker": "7292",
+   "revenueEstOku": 1092,
+   "headcountEst": 3501,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.nikkei.com/nkd/company/gaiyo/?scode=7292",
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.murakami-kaimeido.co.jp/aboutus/information/"
+   ],
+   "note": "TSE Standard; 本社は静岡市葵区伝馬町",
+   "id": 36
+  },
+  {
+   "name": "株式会社エフ・シー・シー",
+   "normKey": "エフ・シー・シー",
+   "hqCity": "浜松市",
+   "industry": "輸送用機器（クラッチ・駆動部品）",
+   "listed": true,
+   "ticker": "7296",
+   "revenueEstOku": 2608,
+   "headcountEst": 1237,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.fcc-net.co.jp/company/outline/"
+   ],
+   "note": "TSE Prime; 本社は浜松市浜名区細江町; ホンダ系",
+   "id": 37
+  },
+  {
+   "name": "フジオーゼックス株式会社",
+   "normKey": "フジオーゼックス",
+   "hqCity": "菊川市",
+   "industry": "輸送用機器（エンジンバルブ）",
+   "listed": true,
+   "ticker": "7299",
+   "revenueEstOku": 255,
+   "headcountEst": 900,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://finance.logmi.jp/articles/379663",
+    "https://www.kabutore.biz/kabuka/7299.html"
+   ],
+   "note": "TSE Standard; 本社は菊川市",
+   "id": 38
+  },
+  {
+   "name": "スター精密株式会社",
+   "normKey": "スター精密",
+   "hqCity": "静岡市",
+   "industry": "機械（NC自動旋盤・プリンター）",
+   "listed": true,
+   "ticker": "7718",
+   "revenueEstOku": 746,
+   "headcountEst": 1479,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://star-m.jp/ir/finance/highlight/index.html",
+    "https://star-m.jp/",
+    "https://www.kabutore.biz/kabuka/7718.html",
+    "https://reashu.com/shizuokaken_yuuryoukigyou/"
+   ],
+   "note": "TSE Prime; 本社は静岡市駿河区中吉田",
+   "id": 39
+  },
+  {
+   "name": "株式会社クレステック",
+   "normKey": "クレステック",
+   "hqCity": "浜松市",
+   "industry": "その他製品（取扱説明書・マニュアル制作）",
+   "listed": true,
+   "ticker": "7812",
+   "revenueEstOku": 189,
+   "headcountEst": 1200,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.kabutore.biz/kabuka/7812.html"
+   ],
+   "note": "TSE Standard; 本社は浜松市北区（浜名区）東三方町",
+   "id": 40
+  },
+  {
+   "name": "ローランド株式会社",
+   "normKey": "ローランド",
+   "hqCity": "浜松市",
+   "industry": "その他製品（電子楽器）",
+   "listed": true,
+   "ticker": "7944",
+   "revenueEstOku": 1010,
+   "headcountEst": 3000,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://ir.roland.com/ja/ir/finance/highlight.html",
+    "https://www.kabutore.biz/kabuka/7944.html"
+   ],
+   "note": "TSE Prime; 本社は浜松市浜名区新都田; 2024年12月期売上高約1010億円",
+   "id": 41
+  },
+  {
+   "name": "ヤマハ株式会社",
+   "normKey": "ヤマハ",
+   "hqCity": "浜松市",
+   "industry": "その他製品（楽器・音響機器）",
+   "listed": true,
+   "ticker": "7951",
+   "revenueEstOku": 4621,
+   "headcountEst": 4100,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://www.hurex.jp/column/company/4057/",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://www.yamaha.com/ja/about/business/"
+   ],
+   "note": "TSE Prime; 2025年3月期売上高4621億円",
+   "id": 42
+  },
+  {
+   "name": "河合楽器製作所株式会社",
+   "normKey": "河合楽器製作所",
+   "hqCity": "浜松市",
+   "industry": "その他製品（ピアノ・電子楽器・音楽教室）",
+   "listed": true,
+   "ticker": "7952",
+   "revenueEstOku": 729,
+   "headcountEst": 2811,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://www.kawai.co.jp/company/outline/",
+    "https://www.kabutore.biz/kabuka/7952.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_top20.html"
+   ],
+   "note": "TSE Prime; 本社は浜松市中区寺島町; 2025年3月期売上高729億円",
+   "id": 43
+  },
+  {
+   "name": "株式会社スクロール",
+   "normKey": "スクロール",
+   "hqCity": "浜松市",
+   "industry": "小売業（通信販売・EC物流）",
+   "listed": true,
+   "ticker": "8005",
+   "revenueEstOku": 840,
+   "headcountEst": 967,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://tenshoku.mynavi.jp/company/400448/",
+    "https://www.kabutore.biz/kabuka/8005.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_top20.html"
+   ],
+   "note": "TSE Prime; 本社は浜松市中央区佐鳴台",
+   "id": 44
+  },
+  {
+   "name": "マックスバリュ東海株式会社",
+   "normKey": "マックスバリュ東海",
+   "hqCity": "浜松市",
+   "industry": "小売業（食品スーパー）",
+   "listed": true,
+   "ticker": "8198",
+   "revenueEstOku": 3774,
+   "headcountEst": 8484,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://www.hurex.jp/column/company/4057/",
+    "https://nlab.itmedia.co.jp/research/articles/3155190/",
+    "https://www.mv-tokai.co.jp/company/profile/"
+   ],
+   "note": "TSE Standard; 本社は浜松市中央区篠ケ瀬町; イオングループ",
+   "id": 45
+  },
+  {
+   "name": "株式会社エンチョー",
+   "normKey": "エンチョー",
+   "hqCity": "富士市",
+   "industry": "小売業（ホームセンター）",
+   "listed": true,
+   "ticker": "8208",
+   "revenueEstOku": 332,
+   "headcountEst": 1354,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html",
+    "https://ja.wikipedia.org/wiki/%E3%82%A8%E3%83%B3%E3%83%81%E3%83%A7%E3%83%BC",
+    "https://www.kabutore.biz/kabuka/8208.html",
+    "https://www.encho.co.jp/orga/orga02.html"
+   ],
+   "note": "TSE Standard; 本社は富士市中央町; 2025年8月28日付で上場廃止（DCMホールディングス完全子会社化）",
+   "id": 46
+  },
+  {
+   "name": "株式会社スルガ銀行",
+   "normKey": "スルガ銀行",
+   "hqCity": "沼津市",
+   "industry": "銀行業",
+   "listed": true,
+   "ticker": "8358",
+   "revenueEstOku": 1099,
+   "headcountEst": 1949,
+   "sizeBand": "excluded",
+   "excludeReason": "銀行業",
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html",
+    "https://www.surugabank.co.jp/surugabank/corporate/profile/"
+   ],
+   "note": "TSE Prime; 銀行業のため除外",
+   "id": 47
+  },
+  {
+   "name": "株式会社清水銀行",
+   "normKey": "清水銀行",
+   "hqCity": "静岡市",
+   "industry": "銀行業",
+   "listed": true,
+   "ticker": "8364",
+   "revenueEstOku": 291,
+   "headcountEst": 1168,
+   "sizeBand": "excluded",
+   "excludeReason": "銀行業",
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.shimizubank.co.jp/aboutus/information/"
+   ],
+   "note": "TSE Prime; 銀行業のため除外; 本社は静岡市清水区",
+   "id": 48
+  },
+  {
+   "name": "株式会社ハマキョウレックス",
+   "normKey": "ハマキョウレックス",
+   "hqCity": "浜松市",
+   "industry": "陸運業（物流3PL・倉庫）",
+   "listed": true,
+   "ticker": "9037",
+   "revenueEstOku": 1467,
+   "headcountEst": 4997,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://www.hurex.jp/column/company/4057/",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.hamakyorex.co.jp/corporate/outline/"
+   ],
+   "note": "TSE Prime; 本社は浜松市中央区寺脇町; 2025年3月期売上高約1467億円",
+   "id": 49
+  },
+  {
+   "name": "遠州トラック株式会社",
+   "normKey": "遠州トラック",
+   "hqCity": "袋井市",
+   "industry": "陸運業（トラック運送・3PL）",
+   "listed": true,
+   "ticker": "9057",
+   "revenueEstOku": 486,
+   "headcountEst": 1352,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.enshu-truck.co.jp/company/overview",
+    "https://www.enshu-truck.co.jp/company",
+    "https://www.enshu-truck.co.jp/ir/pleased_to_report_results.html"
+   ],
+   "note": "TSE Standard; 本社は袋井市木原",
+   "id": 50
+  },
+  {
+   "name": "静岡ガス株式会社",
+   "normKey": "静岡ガス",
+   "hqCity": "静岡市",
+   "industry": "電気・ガス業（都市ガス）",
+   "listed": true,
+   "ticker": "9543",
+   "revenueEstOku": 2048,
+   "headcountEst": 823,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://www.hurex.jp/column/company/4057/",
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://ir.shizuokagas.co.jp/ja/ir/Finance.html"
+   ],
+   "note": "TSE Prime; 本社は静岡市駿河区八幡",
+   "id": 51
+  },
+  {
+   "name": "株式会社マキヤ",
+   "normKey": "マキヤ",
+   "hqCity": "沼津市",
+   "industry": "小売業（総合ディスカウント・食品スーパー）",
+   "listed": true,
+   "ticker": "9890",
+   "revenueEstOku": 888,
+   "headcountEst": 1463,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html",
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://job.mynavi.jp/27/pc/search/corp200702/outline.html",
+    "https://ja.wikipedia.org/wiki/%E3%83%9E%E3%82%AD%E3%83%A4",
+    "https://www.makiya-group.co.jp/about/data/",
+    "https://www.makiya-group.co.jp/glance/",
+    "https://www.kabutore.biz/kabuka/9890.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_top20.html"
+   ],
+   "note": "TSE Standard; 本社は沼津市三枚橋",
+   "id": 52
+  },
+  {
+   "name": "日本食品化工株式会社",
+   "normKey": "日本食品化工",
+   "hqCity": "富士市",
+   "industry": "食料品（コーンスターチ）",
+   "listed": true,
+   "ticker": "2892",
+   "revenueEstOku": 660,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "本社所在地が静岡県外（東京都千代田区）",
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.bigcompany.jp/22/list/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "本社は東京都千代田区丸の内。静岡は工場のみ",
+   "id": 53
+  },
+  {
+   "name": "赤阪鐵工所株式会社",
+   "normKey": "赤阪鐵工所",
+   "hqCity": "焼津市",
+   "industry": "機械（船舶用ディーゼルエンジン）",
+   "listed": true,
+   "ticker": "6022",
+   "revenueEstOku": 78,
+   "headcountEst": 272,
+   "sizeBand": "excluded",
+   "excludeReason": "本社所在地が静岡県外（東京都千代田区）",
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.akasaka-diesel.jp/company_info/outline/",
+    "https://www.akasaka-tekkojo.co.jp/company/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html"
+   ],
+   "note": "本社は東京都千代田区丸の内。製造拠点は静岡県焼津市",
+   "id": 54
+  },
+  {
+   "name": "株式会社電業社機械製作所",
+   "normKey": "電業社機械製作所",
+   "hqCity": "三島市",
+   "industry": "機械（ポンプ・水処理）",
+   "listed": true,
+   "ticker": "6365",
+   "revenueEstOku": 281,
+   "headcountEst": 649,
+   "sizeBand": "excluded",
+   "excludeReason": "本社所在地が静岡県外（東京都大田区）",
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://irbank.net/E01544",
+    "https://www.bigcompany.jp/22/list/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.kabutore.biz/kabuka/6365.html"
+   ],
+   "note": "本社は東京都大田区大森北。静岡県三島市は拠点の一つ",
+   "id": 55
+  },
+  {
+   "name": "電業社機械製作所（重複確認用）",
+   "normKey": "電業社機械製作所(重複確認用)",
+   "hqCity": "",
+   "industry": "機械",
+   "listed": true,
+   "ticker": "6365",
+   "revenueEstOku": 281,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "本社所在地が静岡県外（東京都大田区）",
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html"
+   ],
+   "note": "重複エントリ",
+   "id": 56
+  },
+  {
+   "name": "株式会社ヤマザキ",
+   "normKey": "ヤマザキ",
+   "hqCity": "浜松市",
+   "industry": "機械（工作機械・輸送機器部品）",
+   "listed": true,
+   "ticker": "6147",
+   "revenueEstOku": 233,
+   "headcountEst": 932,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.yamazaki-grp.com/company/profile/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://kabutore.biz/kabuka/6147.html"
+   ],
+   "note": "TSE Standard; 本社は浜松市",
+   "id": 57
+  },
+  {
+   "name": "ジヤトコ株式会社",
+   "normKey": "ジヤトコ",
+   "hqCity": "富士市",
+   "industry": "自動車部品（CVT・AT）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 3261,
+   "headcountEst": 11700,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.hurex.jp/column/company/4057/",
+    "https://www.jatco.co.jp/english/company/profile.html",
+    "https://nlab.itmedia.co.jp/research/articles/3151917/",
+    "https://ja.wikipedia.org/wiki/%E3%82%B8%E3%83%A4%E3%83%88%E3%82%B3"
+   ],
+   "note": "日産グループ傘下の非上場CVTメーカー。HQ：富士市青島平垣495。2023年実績3261億円",
+   "id": 58
+  },
+  {
+   "name": "株式会社キャタラー",
+   "normKey": "キャタラー",
+   "hqCity": "掛川市",
+   "industry": "自動車排ガス浄化触媒",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 2835,
+   "headcountEst": 1077,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.hurex.jp/column/company/4057/",
+    "https://www.cataler.co.jp/company/info/",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "トヨタグループ傘下。HQ：掛川市。2024年3月期2835億円",
+   "id": 59
+  },
+  {
+   "name": "株式会社エフ・シー・シー（FCC）",
+   "normKey": "エフ・シー・シー(fcc)",
+   "hqCity": "浜松市",
+   "industry": "自動車部品（クラッチ）",
+   "listed": true,
+   "ticker": "7296",
+   "revenueEstOku": 2566,
+   "headcountEst": null,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.hurex.jp/column/company/4057/"
+   ],
+   "note": "HQ：浜松市浜名区。連結売上2566億円（2024年）",
+   "id": 60
+  },
+  {
+   "name": "トヨタバッテリー株式会社",
+   "normKey": "トヨタバッテリー",
+   "hqCity": "湖西市",
+   "industry": "EV用電池（自動車部品）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 2379,
+   "headcountEst": 5393,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.hurex.jp/column/company/4057/",
+    "https://www.toyota-battery.com/jp/company/outline/",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "旧プライムアースEVエナジー。トヨタグループ。HQ：湖西市。2379億円",
+   "id": 61
+  },
+  {
+   "name": "株式会社ユタカ技研",
+   "normKey": "ユタカ技研",
+   "hqCity": "浜松市",
+   "industry": "自動車部品（排気・駆動）",
+   "listed": true,
+   "ticker": "7229",
+   "revenueEstOku": 1792,
+   "headcountEst": 960,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.hurex.jp/column/company/4057/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.yutakagiken.co.jp/company/outline/"
+   ],
+   "note": "ホンダグループ。HQ：浜松市中央区。2024年実績1792億円。2024年に上場廃止・完全子会社化",
+   "id": 62
+  },
+  {
+   "name": "東海澱粉株式会社",
+   "normKey": "東海澱粉",
+   "hqCity": "静岡市",
+   "industry": "食品卸売（澱粉・農産物）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 2058,
+   "headcountEst": 682,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://gurafu.net/jpn/tokai-denpun",
+    "https://www.tdc-net.co.jp/company/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://job.mynavi.jp/27/pc/search/corp50531/outline.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_top20.html"
+   ],
+   "note": "HQ：静岡市葵区伝馬町24-15。連結2058億円、単独1740億円（FY2023）。非上場",
+   "id": 63
+  },
+  {
+   "name": "静岡鉄道株式会社",
+   "normKey": "静岡鉄道",
+   "hqCity": "静岡市",
+   "industry": "鉄道・バス・自動車販売・不動産",
+   "listed": true,
+   "ticker": null,
+   "revenueEstOku": 1654,
+   "headcountEst": 4670,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.shizutetsu.co.jp/company/statement",
+    "https://www.shizutetsu.co.jp/company/about/profile",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://stknavi.com/stk/newgraduates/company/outline.php"
+   ],
+   "note": "静鉄グループ中核。HQ：静岡市葵区。連結1654億円（2024年3月期）。非上場（未公開）",
+   "id": 64
+  },
+  {
+   "name": "鈴与株式会社",
+   "normKey": "鈴与",
+   "hqCity": "静岡市",
+   "industry": "物流・倉庫",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1598,
+   "headcountEst": 1168,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.at-s.com/life/article/ats/1607015.html",
+    "https://www.suzuyo.co.jp/company/profile/",
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": "HQ：静岡市清水区入船町11-1。単体1598億円（2024年8月期）。非上場",
+   "id": 65
+  },
+  {
+   "name": "遠州鉄道株式会社",
+   "normKey": "遠州鉄道",
+   "hqCity": "浜松市",
+   "industry": "鉄道・バス・自動車販売・百貨店",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 2242,
+   "headcountEst": 9097,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.entetsu.co.jp/company/profile/profile.html",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "HQ：浜松市中央区旭町12-1。グループ連結営業収益2242億円（2025年3月期）。非上場",
+   "id": 66
+  },
+  {
+   "name": "臼井国際産業株式会社",
+   "normKey": "臼井国際産業",
+   "hqCity": "清水町",
+   "industry": "自動車部品（コモンレールシステム）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1643,
+   "headcountEst": 707,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nikkei.com/compass/company/btsvQ6a9hBdTZbn64vzV2h",
+    "https://www.usui.co.jp/profile/companyinfo/",
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://www.usui.co.jp/jp/profile/companyinfo/index.html"
+   ],
+   "note": "HQ：駿東郡清水町長沢131-2。連結1643億円（2024年12月期）。非上場",
+   "id": 67
+  },
+  {
+   "name": "株式会社ABC（エービーシー）",
+   "normKey": "abc(エービーシー)",
+   "hqCity": "浜松市",
+   "industry": "アミューズメント（パチンコ）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1162,
+   "headcountEst": null,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.abc-p.jp/company/ir/"
+   ],
+   "note": "HQ：浜松市。静岡中心にパチンコホール33店舗。売上1162億円（2025年3月期）。非上場",
+   "id": 68
+  },
+  {
+   "name": "株式会社メガネトップ（眼鏡市場）",
+   "normKey": "メガネトップ(眼鏡市場)",
+   "hqCity": "静岡市",
+   "industry": "眼鏡・コンタクトレンズ小売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 883,
+   "headcountEst": null,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://x.com/aryarya/status/1814124298694734247"
+   ],
+   "note": "HQ：静岡市葵区。2013年MBOで上場廃止。売上883億円（2024年3月期）。非上場",
+   "id": 69
+  },
+  {
+   "name": "鈴与商事株式会社",
+   "normKey": "鈴与商事",
+   "hqCity": "静岡市",
+   "industry": "エネルギー卸売（ガス・電力）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1343,
+   "headcountEst": 535,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.at-s.com/life/article/ats/1607015.html",
+    "https://www.suzuyoshoji.co.jp/company/info/outline.html"
+   ],
+   "note": "HQ：静岡市清水区。売上1343億円（2024年8月期）。非上場。鈴与グループの商事会社",
+   "id": 70
+  },
+  {
+   "name": "ローランド ディー.ジー.株式会社",
+   "normKey": "ローランドディー.ジー.",
+   "hqCity": "浜松市",
+   "industry": "業務用プリンター・デジタル機器",
+   "listed": false,
+   "ticker": "6789",
+   "revenueEstOku": 282,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://news.at-s.com/article/1531521",
+    "https://www.rolanddg.com/ja/about-us/profile",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html"
+   ],
+   "note": "HQ：浜松市北区（中央区）。2024年上場廃止（MBO）。売上過去最高282億円（2024年6月期）",
+   "id": 71
+  },
+  {
+   "name": "焼津水産化学工業株式会社",
+   "normKey": "焼津水産化学工業",
+   "hqCity": "焼津市",
+   "industry": "天然調味料・機能性食品素材",
+   "listed": false,
+   "ticker": "2812",
+   "revenueEstOku": 133,
+   "headcountEst": 163,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.yskf.jp/company/outline.html",
+    "https://www.yskk.co.jp/company/"
+   ],
+   "note": "HQ：焼津市小川新町。2024年上場廃止（いなば食品TOB）。売上133億円（2024年3月期）",
+   "id": 72
+  },
+  {
+   "name": "株式会社ローランド（Roland）",
+   "normKey": "ローランド(roland)",
+   "hqCity": "浜松市",
+   "industry": "電子楽器・音楽機器",
+   "listed": true,
+   "ticker": "7944",
+   "revenueEstOku": 256,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23_1.html"
+   ],
+   "note": "Roland株式会社はローランド株式会社(7944)とは別会社。ローランドDG(上場廃止6789)の親体と誤解しないこと。こちらはHQ：浜松市、非上場Roland Corp",
+   "id": 73
+  },
+  {
+   "name": "株式会社川根本茶業（ハラダ製茶）",
+   "normKey": "川根本茶業(ハラダ製茶)",
+   "hqCity": "島田市",
+   "industry": "製茶（緑茶加工・販売）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 46,
+   "headcountEst": null,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "HQ：島田市。売上約46億円。旧社名ハラダ製茶",
+   "id": 74
+  },
+  {
+   "name": "株式会社ROKI（ローキ）",
+   "normKey": "roki(ローキ)",
+   "hqCity": "浜松市",
+   "industry": "フィルター製造（自動車・家電）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 90,
+   "headcountEst": 4000,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.roki-jp.com/profile/"
+   ],
+   "note": "HQ：浜松市天竜区二俣町。グループ4000名。売上約90億円（参考値）。非上場",
+   "id": 75
+  },
+  {
+   "name": "ソミックマネージメントホールディングス株式会社（旧ソミック石川）",
+   "normKey": "ソミックマネージメントホールディングス(旧ソミック石川)",
+   "hqCity": "磐田市",
+   "industry": "自動車部品（ボールジョイント等）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1000,
+   "headcountEst": null,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nikkei.com/article/DGXZQOCC029GQ0S4A200C2000000/"
+   ],
+   "note": "HQ：磐田市（2024年移転）。グループ売上約1000億円（2024年時点）。非上場。2027年目標1200億円",
+   "id": 76
+  },
+  {
+   "name": "木内建設株式会社",
+   "normKey": "木内建設",
+   "hqCity": "静岡市",
+   "industry": "総合建設（ゼネコン）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 56,
+   "headcountEst": 529,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.cic-ct.co.jp/column/career-column/career-column-income26/",
+    "https://www1.kiuchi.jp/company/profile/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "HQ：静岡市。売上56億円（直近）。非上場",
+   "id": 77
+  },
+  {
+   "name": "株式会社太陽機器レンタル（太陽機器）",
+   "normKey": "太陽機器レンタル(太陽機器)",
+   "hqCity": "静岡市",
+   "industry": "機械レンタル",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 90,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "HQ：静岡市。売上約90億円（参考値）。非上場",
+   "id": 78
+  },
+  {
+   "name": "イハラニッケイ化学工業株式会社",
+   "normKey": "イハラニッケイ化学工業",
+   "hqCity": "静岡市",
+   "industry": "農薬・化学品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 76,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22?page=2"
+   ],
+   "note": "HQ：静岡市。売上76億円（2019年houjin.jp参考値）",
+   "id": 79
+  },
+  {
+   "name": "株式会社エスパルス（清水エスパルス）",
+   "normKey": "エスパルス(清水エスパルス)",
+   "hqCity": "静岡市",
+   "industry": "プロサッカークラブ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 50,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "スポーツクラブ",
+   "sourceUrls": [
+    "https://www.shizuoka-life.jp/post-9627/"
+   ],
+   "note": "HQ：静岡市。売上50億円超（3期連続）。スポーツクラブのため除外",
+   "id": 80
+  },
+  {
+   "name": "株式会社ジュビロ",
+   "normKey": "ジュビロ",
+   "hqCity": "磐田市",
+   "industry": "プロサッカークラブ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 43,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "スポーツクラブ",
+   "sourceUrls": [
+    "https://at-s.com/news/article/shizuoka/1459896.html"
+   ],
+   "note": "HQ：磐田市。売上42.5億円（2024年1月期）。スポーツクラブのため除外",
+   "id": 81
+  },
+  {
+   "name": "矢崎総業株式会社",
+   "normKey": "矢崎総業",
+   "hqCity": "",
+   "industry": "自動車ワイヤーハーネス・計器",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 24926,
+   "headcountEst": 18139,
+   "sizeBand": "excluded",
+   "excludeReason": "HQ不在（本社は東京都港区）",
+   "sourceUrls": [
+    "https://www.yazaki-group.com/company/corp/index.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "本店：東京都港区。静岡県裾野市に本社機能があるが、登記本店は東京",
+   "id": 82
+  },
+  {
+   "name": "富士機工株式会社",
+   "normKey": "富士機工",
+   "hqCity": "湖西市",
+   "industry": "自動車部品（ステアリング等）",
+   "listed": false,
+   "ticker": "7260",
+   "revenueEstOku": 547,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html"
+   ],
+   "note": "HQ：湖西市新居町新居。2024年上場廃止。連結547億円（直近）",
+   "id": 83
+  },
+  {
+   "name": "いなば食品株式会社",
+   "normKey": "いなば食品",
+   "hqCity": "静岡市清水区",
+   "industry": "食品製造（缶詰・ペットフード）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1665,
+   "headcountEst": 2800,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.inaba-foods.jp/company/",
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "缶詰・レトルト・ペットフード（CIAOちゅ～る）メーカー。本社：清水区由比。売上高1,665億円（2025年3月期）",
+   "id": 84
+  },
+  {
+   "name": "株式会社ソミック石川",
+   "normKey": "ソミック石川",
+   "hqCity": "浜松市",
+   "industry": "ボールジョイント・自動車足回り部品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 647,
+   "headcountEst": 1805,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.somic.co.jp/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://www.somic.co.jp/about/information/"
+   ],
+   "note": "浜松市南区古川町500本社。国内ボールジョイントシェア56%。売上高647億円（2023年度）",
+   "id": 85
+  },
+  {
+   "name": "株式会社ROKI",
+   "normKey": "roki",
+   "hqCity": "浜松市",
+   "industry": "自動車・産業機械用フィルター製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 900,
+   "headcountEst": 4000,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.roki-jp.com/profile/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "浜松市天竜区二俣町本社。エアクリーナー生産台数世界有数。グループ従業員4,000名。売上推定",
+   "id": 86
+  },
+  {
+   "name": "浜名湖電装株式会社",
+   "normKey": "浜名湖電装",
+   "hqCity": "湖西市",
+   "industry": "自動車電装品（ホーン・ソレノイド）製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 605,
+   "headcountEst": 1596,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.hamanakodenso.co.jp/corporate/outline/",
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "デンソーグループ。湖西市鷲津136本社。単体売上605億円（2025年3月期）",
+   "id": 87
+  },
+  {
+   "name": "パーパス株式会社",
+   "normKey": "パーパス",
+   "hqCity": "富士市",
+   "industry": "給湯器・ガス機器製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 254,
+   "headcountEst": 849,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.purpose.co.jp/profile/company/outline.html",
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "富士市西柏原新田201本社。給湯器メーカー。売上高は旧データ（254億円）",
+   "id": 88
+  },
+  {
+   "name": "日星電気株式会社",
+   "normKey": "日星電気",
+   "hqCity": "浜松市",
+   "industry": "光ファイバー・シリコーンゴム・電子部品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 440,
+   "headcountEst": 700,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nissei-el.co.jp/company/outline/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://www.nissei-el.co.jp/recruit/data/"
+   ],
+   "note": "浜松市中央区大久保町1509本社。売上高440億円（2024年11月期）。グループ5,000名",
+   "id": 89
+  },
+  {
+   "name": "三井・ケマーズ フロロプロダクツ株式会社",
+   "normKey": "三井・ケマーズフロロプロダクツ",
+   "hqCity": "静岡市清水区",
+   "industry": "フッ素樹脂（テフロン）・フッ素化学品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 477,
+   "headcountEst": 416,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.mc-fluoro.co.jp/corporate/outline/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://www.mc-fluoro.co.jp/corporate/base/"
+   ],
+   "note": "三井化学とケマーズの折半出資。清水区三保3600本社。テフロン国内唯一の生産拠点。売上高477億円（2026年4月決算）",
+   "id": 90
+  },
+  {
+   "name": "株式会社タミヤ",
+   "normKey": "タミヤ",
+   "hqCity": "静岡市",
+   "industry": "模型・プラモデル製造販売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 141,
+   "headcountEst": 353,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.tamiya.com/japan/company/outline.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "静岡市静岡区本社。世界有数の総合模型メーカー。売上高141億円（2024年3月期）",
+   "id": 91
+  },
+  {
+   "name": "株式会社アイエイアイ",
+   "normKey": "アイエイアイ",
+   "hqCity": "静岡市清水区",
+   "industry": "産業用ロボット・電動アクチュエーター製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 367,
+   "headcountEst": 1452,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.iai-robot.co.jp/company/profile/index.html",
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "清水区に本社。単軸・直交ロボット世界トップシェア。売上高367億円（2024年12月期）",
+   "id": 92
+  },
+  {
+   "name": "株式会社ホテイフーズコーポレーション",
+   "normKey": "ホテイフーズコーポレーション",
+   "hqCity": "静岡市清水区",
+   "industry": "食品製造（缶詰・レトルト）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 215,
+   "headcountEst": 416,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.hoteifoods.co.jp/profile_japanese/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "清水区蒲原4-26-6本社。やきとり缶・おでん缶で知られる。売上高215億円（2024年9月期）",
+   "id": 93
+  },
+  {
+   "name": "ハラダ製茶株式会社",
+   "normKey": "ハラダ製茶",
+   "hqCity": "島田市",
+   "industry": "茶製造販売（OEM含む）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 241,
+   "headcountEst": 340,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://harada-tea.co.jp/companyinfo/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "島田市岸町194本社。大正6年創業。売上高241億円（2024年12月期）",
+   "id": 94
+  },
+  {
+   "name": "三立製菓株式会社",
+   "normKey": "三立製菓",
+   "hqCity": "浜松市",
+   "industry": "菓子製造（源氏パイ・カンパン）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 107,
+   "headcountEst": 480,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.sanritsuseika.co.jp/company/",
+    "https://job.mynavi.jp/27/pc/search/corp73523/outline.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "浜松市中央区に本社。源氏パイ・チョコバット等のロングセラー。売上高107億円",
+   "id": 95
+  },
+  {
+   "name": "株式会社平成建設",
+   "normKey": "平成建設",
+   "hqCity": "沼津市",
+   "industry": "建設業（大工職人育成型ゼネコン）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 198,
+   "headcountEst": 558,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.heiseikensetu.co.jp/company/profile.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "沼津市大岡1540-1本社。1989年設立。大工育成で有名。売上高198億円（2024年10月期）",
+   "id": 96
+  },
+  {
+   "name": "須山建設株式会社",
+   "normKey": "須山建設",
+   "hqCity": "浜松市",
+   "industry": "総合建設（ゼネコン）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 215,
+   "headcountEst": 245,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.suyama-group.co.jp/company/profile/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "浜松市中央区布橋2-6-1本社。1905年創業。売上高215億円（2025年3月期）",
+   "id": 97
+  },
+  {
+   "name": "太陽建機レンタル株式会社",
+   "normKey": "太陽建機レンタル",
+   "hqCity": "静岡市",
+   "industry": "建設機械レンタル",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1121,
+   "headcountEst": 3389,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.buffett-code.com/company/7fitv3br1k/",
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.taiyokenki.co.jp/company/post.html",
+    "https://www.hurex.jp/column/company/4057/",
+    "https://www.navitime.co.jp/poi?spot=00011-051014925",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "三井物産・住友商事グループ。静岡市駿河区本社。売上高1,121億円（2025年5月期）",
+   "id": 98
+  },
+  {
+   "name": "株式会社静岡新聞社",
+   "normKey": "静岡新聞社",
+   "hqCity": "静岡市",
+   "industry": "新聞出版",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 205,
+   "headcountEst": 424,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nikkei.com/compass/company/5UxDbsUPCy8z9sv2LxENh7",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "静岡市駿河区登呂3-1-1本社。1941年設立。売上高205億円（推定）",
+   "id": 99
+  },
+  {
+   "name": "静岡放送株式会社",
+   "normKey": "静岡放送",
+   "hqCity": "静岡市",
+   "industry": "テレビ・ラジオ放送（TBS系）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 238,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://shizushinsbs.co.jp/corporate",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "静岡市駿河区登呂3-1-1本社。TBSテレビ系列。静岡新聞社グループ",
+   "id": 100
+  },
+  {
+   "name": "株式会社静岡朝日テレビ",
+   "normKey": "静岡朝日テレビ",
+   "hqCity": "静岡市",
+   "industry": "テレビ放送（テレビ朝日系）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 82,
+   "headcountEst": 142,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.satv.co.jp/0800company/0010about/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "静岡市葵区東町15本社。売上高82億円（2025年3月期）。従業員142名",
+   "id": 101
+  },
+  {
+   "name": "株式会社テレビ静岡",
+   "normKey": "テレビ静岡",
+   "hqCity": "静岡市",
+   "industry": "テレビ放送（フジテレビ系）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 80,
+   "headcountEst": 147,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nikkei.com/compass/company/w35tRgCHs8FhJwaE58mZPT",
+    "https://www.sut-tv.com/company/overview/"
+   ],
+   "note": "静岡市駿河区栗原18-65本社。売上高約80億円。フジテレビ系列",
+   "id": 102
+  },
+  {
+   "name": "株式会社静岡第一テレビ",
+   "normKey": "静岡第一テレビ",
+   "hqCity": "静岡市",
+   "industry": "テレビ放送（日本テレビ系）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 78,
+   "headcountEst": 123,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.tv-sdt.co.jp/company/about/",
+    "https://catr.jp/companies/2b4da/16694",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "静岡市駿河区中原本社。売上高78億円（2025年3月期）。日本テレビ系列",
+   "id": 103
+  },
+  {
+   "name": "株式会社あいネットサービス（あいネットグループ）",
+   "normKey": "あいネットサービス(あいネットグループ)",
+   "hqCity": "静岡市",
+   "industry": "冠婚葬祭・生活サービス",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 180,
+   "headcountEst": 1120,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www2.ainetgrp.co.jp/group/company.php"
+   ],
+   "note": "静岡市本社。グループ売上高180億円（2025年8月）。静岡・三重・長野で冠婚葬祭事業",
+   "id": 104
+  },
+  {
+   "name": "さわやか株式会社",
+   "normKey": "さわやか",
+   "hqCity": "袋井市",
+   "industry": "飲食業（炭焼きレストラン）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 80,
+   "headcountEst": 1600,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.genkotsu-hb.com/company/outline/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://corp.genkotsu-hb.com/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22",
+    "https://www.genkotsu-hb.com/company/"
+   ],
+   "note": "袋井市本社。げんこつハンバーグの炭焼きレストランさわやか（静岡県内35店舗）。売上高は推定",
+   "id": 105
+  },
+  {
+   "name": "株式会社駿河生産プラットフォーム",
+   "normKey": "駿河生産プラットフォーム",
+   "hqCity": "静岡市清水区",
+   "industry": "金型部品・自動化部品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 3133,
+   "headcountEst": 882,
+   "sizeBand": "excluded",
+   "excludeReason": "ミスミグループ（東京）の子会社。静岡に工場あるが親会社は東京上場企業",
+   "sourceUrls": [
+    "https://www.nikkei.com/compass/company/hdpFkj4RwLsXtkTTnwJWNp",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://www.suruga-g.co.jp/company/outline.html",
+    "https://www.koyou.pref.shizuoka.jp/employment/detail/5042"
+   ],
+   "note": "ミスミグループ100%子会社。親会社（ミスミグループ本社）は東京上場",
+   "id": 106
+  },
+  {
+   "name": "AGCテクノグラス株式会社",
+   "normKey": "agcテクノグラス",
+   "hqCity": "榛原郡吉田町",
+   "industry": "特殊ガラス製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 455,
+   "headcountEst": 500,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.atgc.co.jp/company/about/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "吉田町川尻3583-5本社。AGC株式会社100%子会社。1883年創業。売上高455億円（2025年12月期）",
+   "id": 107
+  },
+  {
+   "name": "朝日電装株式会社",
+   "normKey": "朝日電装",
+   "hqCity": "浜松市",
+   "industry": "自動車・バイク用スイッチ・電装品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 182,
+   "headcountEst": 620,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.ad-asahidenso.co.jp/company/aboutus/"
+   ],
+   "note": "浜松市浜名区染地台6-2-1本社。二輪・四輪・船舶用スイッチ類。売上高182億円（2024年12月期）",
+   "id": 108
+  },
+  {
+   "name": "マーレエレクトリックドライブズジャパン株式会社",
+   "normKey": "マーレエレクトリックドライブズジャパン",
+   "hqCity": "沼津市",
+   "industry": "自動車電装品（スターターモーター・オルタネーター）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 158,
+   "headcountEst": 423,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.jp.mahle.com/ja/mahle-in-japan/mahle-electric-drives/",
+    "https://www.koyou.pref.shizuoka.jp/employment/detail/735"
+   ],
+   "note": "旧国産電機。沼津市大岡本社。MAHLEグループ子会社。売上高158億円",
+   "id": 109
+  },
+  {
+   "name": "株式会社建設システム（KENTEM）",
+   "normKey": "建設システム(kentem)",
+   "hqCity": "富士市",
+   "industry": "建設業向けITソフトウェア",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 90,
+   "headcountEst": 575,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kentem.jp/company/about/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "富士市石坂312-1本社。建設業向け施工管理ソフト専業。売上高90億円（2024年6月期）",
+   "id": 110
+  },
+  {
+   "name": "ヤマハモーターソリューション株式会社",
+   "normKey": "ヤマハモーターソリューション",
+   "hqCity": "磐田市",
+   "industry": "ITソリューション（製造業向け）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 122,
+   "headcountEst": 341,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.ymsl.co.jp/company/outline/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "磐田市岩井2000-1本社。ヤマハ発動機100%子会社。売上高122億円（2022年12月期）",
+   "id": 111
+  },
+  {
+   "name": "大井川鐵道株式会社",
+   "normKey": "大井川鐵道",
+   "hqCity": "島田市",
+   "industry": "観光鉄道（SL・アプト式）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 15,
+   "headcountEst": 228,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://daitetsu.jp/about",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://www.oigawa-railway.co.jp/",
+    "https://ja.wikipedia.org/wiki/%E5%A4%A7%E4%BA%95%E5%B7%9D%E9%90%B5%E9%81%93"
+   ],
+   "note": "島田市金谷東2-1112-2本社。SL動態保存・井川線アプト式鉄道。売上高約15億円規模",
+   "id": 112
+  },
+  {
+   "name": "株式会社時之栖",
+   "normKey": "時之栖",
+   "hqCity": "御殿場市",
+   "industry": "ホテル・温泉リゾート・レジャー",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 100,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://baseconnect.in/companies/6dd68e58-9c49-4234-bd4a-112cf46e14e6",
+    "https://reashu.com/shizuokaken_yuuryoukigyou/"
+   ],
+   "note": "御殿場市神山本社。御殿場高原ホテル・時之栖等運営。売上高非公開",
+   "id": 113
+  },
+  {
+   "name": "株式会社シャンソン化粧品",
+   "normKey": "シャンソン化粧品",
+   "hqCity": "静岡市",
+   "industry": "化粧品製造販売（訪問販売型）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 290,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://chansoncosmetics.jp/oem/company/outline/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://www.koyou.pref.shizuoka.jp/employment/detail/663"
+   ],
+   "note": "静岡市駿河区国吉田本社。1946年設立。石油系乳化剤不使用化粧品。売上非公開",
+   "id": 114
+  },
+  {
+   "name": "株式会社コスメロール",
+   "normKey": "コスメロール",
+   "hqCity": "御殿場市",
+   "industry": "化粧品製造（ロレアルグループ）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 220,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.loreal.com/ja-jp/japan/articles/group/cosmelor-company/"
+   ],
+   "note": "御殿場市本社。ロレアルグループの日本唯一の工場。ランコム・シュウウエムラ製品製造",
+   "id": 115
+  },
+  {
+   "name": "岳南電車株式会社",
+   "normKey": "岳南電車",
+   "hqCity": "富士市",
+   "industry": "地方鉄道",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 2,
+   "headcountEst": 39,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.gakutetsu.jp/",
+    "https://www.gakutetsu.jp/company/"
+   ],
+   "note": "富士市今泉1-17-39本社。吉原〜岳南江尾（9.2km）運営。収益は非常に小規模",
+   "id": 116
+  },
+  {
+   "name": "富士スピードウェイ株式会社",
+   "normKey": "富士スピードウェイ",
+   "hqCity": "",
+   "industry": "サーキット運営",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 52,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "本社が東京都千代田区。サーキット施設は静岡県小山町だが本社ではない",
+   "sourceUrls": [
+    "https://www.fsw.tv/freeinfo/052286.html"
+   ],
+   "note": "登記上の本社は東京都千代田区。サーキットは静岡県小山町",
+   "id": 117
+  },
+  {
+   "name": "富士フイルムエレクトロニクスマテリアルズ株式会社",
+   "normKey": "富士フイルムエレクトロニクスマテリアルズ",
+   "hqCity": "吉田町",
+   "industry": "半導体用化学材料製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 251,
+   "sizeBand": "excluded",
+   "excludeReason": "本社が神奈川県横浜市。静岡は工場所在地のみ",
+   "sourceUrls": [
+    "https://www.fujifilm.com/ffem/ja/about/company-profile",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://www.fujifilm.com/ffem/ja/about/office"
+   ],
+   "note": "本社は神奈川県横浜市港北区新横浜。静岡県吉田町に工場あり",
+   "id": 118
+  },
+  {
+   "name": "ローム浜松株式会社",
+   "normKey": "ローム浜松",
+   "hqCity": "浜松市",
+   "industry": "半導体製造（前工程）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 166,
+   "headcountEst": 215,
+   "sizeBand": "excluded",
+   "excludeReason": "ローム（京都）の製造子会社。2025年10月に社名変更・統合",
+   "sourceUrls": [
+    "https://micro.rohm.com/jp/hamamatsu/company/profile.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "浜松市中央区に工場あり。ローム株式会社（京都本社・上場）の製造子会社",
+   "id": 119
+  },
+  {
+   "name": "社会福祉法人聖隷福祉事業団",
+   "normKey": "社会福祉法人聖隷福祉事業団",
+   "hqCity": "浜松市",
+   "industry": "医療・福祉（社会福祉法人）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1131,
+   "headcountEst": 16010,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "社会福祉法人。収益1,131億円（2023年3月期）。213施設。too_bigの境界上だが1131億円>1000億円",
+   "id": 120
+  },
+  {
+   "name": "株式会社杏林堂薬局",
+   "normKey": "杏林堂薬局",
+   "hqCity": "浜松市",
+   "industry": "ドラッグストア（小売業）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1471,
+   "headcountEst": 4576,
+   "sizeBand": "too_big",
+   "excludeReason": "子会社であり、operating parentが北海道（ツルハホールディングス）に所在",
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://www.kyorindo.co.jp/company/outline/"
+   ],
+   "note": "非上場。ツルハHD子会社。売上1,471億円（2026年2月期）。本社浜松市。operating parentは北海道（ツルハHD）",
+   "id": 121
+  },
+  {
+   "name": "社会福祉法人天竜厚生会",
+   "normKey": "社会福祉法人天竜厚生会",
+   "hqCity": "浜松市",
+   "industry": "福祉・介護（社会福祉法人）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 145,
+   "headcountEst": 2350,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "社会福祉法人。売上145億円（2024年3月期）。従業員2,350名超",
+   "id": 122
+  },
+  {
+   "name": "株式会社遠鉄ストア",
+   "normKey": "遠鉄ストア",
+   "hqCity": "浜松市",
+   "industry": "スーパーマーケット（小売業）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 548,
+   "headcountEst": 1758,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://www.entstore.co.jp/company/profile/"
+   ],
+   "note": "非上場。遠鉄グループ。売上548億円（2025年3月）",
+   "id": 123
+  },
+  {
+   "name": "浜松磐田信用金庫",
+   "normKey": "浜松磐田信用金庫",
+   "hqCity": "浜松市",
+   "industry": "信用金庫（金融）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 1673,
+   "sizeBand": "excluded",
+   "excludeReason": "銀行・信用金庫（金融機関）は除外対象",
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": null,
+   "id": 124
+  },
+  {
+   "name": "とぴあ浜松農業協同組合",
+   "normKey": "とぴあ浜松農業協同組合",
+   "hqCity": "浜松市",
+   "industry": "農業協同組合",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 1382,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "農業協同組合。収益規模不明",
+   "id": 125
+  },
+  {
+   "name": "公益財団法人浜松市医療公社",
+   "normKey": "公益財団法人浜松市医療公社",
+   "hqCity": "浜松市",
+   "industry": "医療（公益財団法人）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 1236,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "公益財団法人。浜松市立病院等運営",
+   "id": 126
+  },
+  {
+   "name": "株式会社クラ・ゼミ",
+   "normKey": "クラ・ゼミ",
+   "hqCity": "浜松市",
+   "industry": "教育（学習塾）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 135,
+   "headcountEst": 1210,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://kurazemi.co.jp/guide/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "非上場。学習塾「クラ・ゼミ」運営。収益規模不明",
+   "id": 127
+  },
+  {
+   "name": "株式会社クラスター",
+   "normKey": "クラスター",
+   "hqCity": "浜松市",
+   "industry": "製造業",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 1123,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "非上場。詳細業種・売上高不明",
+   "id": 128
+  },
+  {
+   "name": "医療法人弘遠会",
+   "normKey": "医療法人弘遠会",
+   "hqCity": "浜松市",
+   "industry": "医療（医療法人）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 1116,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "医療法人。売上高不明",
+   "id": 129
+  },
+  {
+   "name": "株式会社デンソーワイパシステムズ",
+   "normKey": "デンソーワイパシステムズ",
+   "hqCity": "湖西市",
+   "industry": "自動車用ワイパー製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 600,
+   "headcountEst": 3167,
+   "sizeBand": "excluded",
+   "excludeReason": "operating parent（デンソー）が愛知県に所在",
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "デンソー100%子会社（愛知）",
+   "id": 130
+  },
+  {
+   "name": "ヤマハ発動機ビズパートナー株式会社",
+   "normKey": "ヤマハ発動機ビズパートナー",
+   "hqCity": "磐田市",
+   "industry": "人材・事務サービス（ヤマハ発動機グループ）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 164,
+   "headcountEst": 1045,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://www.yamaha-motorbiz.co.jp/company/profile/"
+   ],
+   "note": "ヤマハ発動機（磐田市）の子会社。親会社が静岡県内",
+   "id": 131
+  },
+  {
+   "name": "株式会社スズキ部品製造",
+   "normKey": "スズキ部品製造",
+   "hqCity": "浜松市",
+   "industry": "自動車部品（ミッションケース等）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 650,
+   "headcountEst": 1014,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "スズキ（浜松市）の子会社。売上300〜1000億円。親は静岡県内",
+   "id": 132
+  },
+  {
+   "name": "パイオニア・ディスプレイ・プロダクツ株式会社",
+   "normKey": "パイオニア・ディスプレイ・プロダクツ",
+   "hqCity": "袋井市",
+   "industry": "電子機器・ディスプレイ製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 990,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html"
+   ],
+   "note": "パイオニアグループ（東京本社）の製造子会社",
+   "id": 133
+  },
+  {
+   "name": "浜名梱包輸送株式会社",
+   "normKey": "浜名梱包輸送",
+   "hqCity": "浜松市",
+   "industry": "陸運・倉庫・梱包",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 139,
+   "headcountEst": 1119,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000967.000049221.html",
+    "https://www.bruru.jp/?act=ranking-detail&pid=22"
+   ],
+   "note": "非上場。売上139億円（2024年3月）",
+   "id": 134
+  },
+  {
+   "name": "近物レックス株式会社",
+   "normKey": "近物レックス",
+   "hqCity": "清水町",
+   "industry": "物流・貨物運送",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 379,
+   "headcountEst": 3060,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3151917/",
+    "https://www.bruru.jp/?act=ranking-detail&pid=22"
+   ],
+   "note": "ハマキョウレックス（浜松市・東証プライム）の子会社。本社静岡県清水町",
+   "id": 135
+  },
+  {
+   "name": "富士伊豆農業協同組合",
+   "normKey": "富士伊豆農業協同組合",
+   "hqCity": "沼津市",
+   "industry": "農業協同組合",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 2259,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "農業協同組合。収益規模不明",
+   "id": 136
+  },
+  {
+   "name": "アルムメディカルサポート株式会社",
+   "normKey": "アルムメディカルサポート",
+   "hqCity": "三島市",
+   "industry": "医療器具製造請負・人材派遣",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 74,
+   "headcountEst": 1719,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "非上場。売上73.9億円（2025年3月期）。従業員1,719名",
+   "id": 137
+  },
+  {
+   "name": "株式会社イカイコントラクト",
+   "normKey": "イカイコントラクト",
+   "hqCity": "沼津市",
+   "industry": "製造請負・アウトソーシング",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 1363,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "イカイグループ。非上場。売上高不明",
+   "id": 138
+  },
+  {
+   "name": "株式会社三幸コーポレーション",
+   "normKey": "三幸コーポレーション",
+   "hqCity": "沼津市",
+   "industry": "人材派遣・製造請負",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 1300,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "非上場。売上高不明",
+   "id": 139
+  },
+  {
+   "name": "株式会社イカイアウトソーシング",
+   "normKey": "イカイアウトソーシング",
+   "hqCity": "沼津市",
+   "industry": "アウトソーシング・人材派遣",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 183,
+   "headcountEst": 1400,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "非上場。イカイグループ。売上182.8億円",
+   "id": 140
+  },
+  {
+   "name": "医療法人財団百葉の会",
+   "normKey": "医療法人財団百葉の会",
+   "hqCity": "富士市",
+   "industry": "医療（医療法人財団）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 1078,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "医療法人財団。売上高不明",
+   "id": 141
+  },
+  {
+   "name": "コイト電工株式会社",
+   "normKey": "コイト電工",
+   "hqCity": "長泉町",
+   "industry": "鉄道車両機器・交通信号",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 357,
+   "headcountEst": 1056,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "非上場。小糸製作所（東京）子会社。売上357億円（2025年3月期）",
+   "id": 142
+  },
+  {
+   "name": "社会医療法人青虎会",
+   "normKey": "社会医療法人青虎会",
+   "hqCity": "御殿場市",
+   "industry": "医療（社会医療法人）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 970,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "社会医療法人。売上高不明",
+   "id": 143
+  },
+  {
+   "name": "株式会社米久",
+   "normKey": "米久",
+   "hqCity": "沼津市",
+   "industry": "食品加工（精肉・ハム）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1893,
+   "headcountEst": 814,
+   "sizeBand": "excluded",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html",
+    "https://www.yonekyu.co.jp/company/outline.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "非上場。売上高不明",
+   "id": 144
+  },
+  {
+   "name": "三生医薬株式会社",
+   "normKey": "三生医薬",
+   "hqCity": "富士市",
+   "industry": "医薬品・健康食品受託製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 250,
+   "headcountEst": 700,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html",
+    "https://www.sunsho.co.jp/jp/company/profile.shtml",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22",
+    "https://www.sansho-pharma.com/"
+   ],
+   "note": "非上場。売上250億円（2024年3月期）",
+   "id": 145
+  },
+  {
+   "name": "公益財団法人復康会",
+   "normKey": "公益財団法人復康会",
+   "hqCity": "沼津市",
+   "industry": "福祉（公益財団法人）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 655,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "公益財団法人。売上高不明",
+   "id": 146
+  },
+  {
+   "name": "社会福祉法人湖成会",
+   "normKey": "社会福祉法人湖成会",
+   "hqCity": "富士宮市",
+   "industry": "社会福祉法人",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 645,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "社会福祉法人。売上高不明",
+   "id": 147
+  },
+  {
+   "name": "一般財団法人芙蓉協会",
+   "normKey": "一般財団法人芙蓉協会",
+   "hqCity": "沼津市",
+   "industry": "福祉（一般財団法人）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 634,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "一般財団法人。売上高不明",
+   "id": 148
+  },
+  {
+   "name": "住電装プラテック株式会社",
+   "normKey": "住電装プラテック",
+   "hqCity": "御殿場市",
+   "industry": "自動車用ワイヤーハーネス部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 85,
+   "headcountEst": 621,
+   "sizeBand": "excluded",
+   "excludeReason": "operating parent（住友電装）が三重県に所在",
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "住友電装グループ（三重県）子会社",
+   "id": 149
+  },
+  {
+   "name": "株式会社Ｚ会",
+   "normKey": "z会",
+   "hqCity": "三島市",
+   "industry": "教育（通信・対面）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 190,
+   "headcountEst": 595,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html",
+    "https://www.zkai.co.jp/home/corporate/profile/"
+   ],
+   "note": "非上場。親：増進会ホールディングス（三島市）。売上高不明",
+   "id": 150
+  },
+  {
+   "name": "株式会社静岡中央銀行",
+   "normKey": "静岡中央銀行",
+   "hqCity": "沼津市",
+   "industry": "地方銀行",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 572,
+   "sizeBand": "excluded",
+   "excludeReason": "銀行（金融機関）は除外対象",
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html",
+    "https://www.shizuokachuo-bank.co.jp/about/gaiyo.html"
+   ],
+   "note": null,
+   "id": 151
+  },
+  {
+   "name": "医療法人社団喜生会",
+   "normKey": "医療法人社団喜生会",
+   "hqCity": "富士市",
+   "industry": "医療（医療法人）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 542,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "医療法人。売上高不明",
+   "id": 152
+  },
+  {
+   "name": "ポリプラスチックス株式会社",
+   "normKey": "ポリプラスチックス",
+   "hqCity": "富士市",
+   "industry": "エンジニアリングプラスチック製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1868,
+   "headcountEst": 2383,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "非上場。連結売上1,868億円（2023年3月期）。本社富士市",
+   "id": 153
+  },
+  {
+   "name": "ジヤトコエンジニアリング株式会社",
+   "normKey": "ジヤトコエンジニアリング",
+   "hqCity": "富士市",
+   "industry": "自動車部品製造（エンジニアリング）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 111,
+   "headcountEst": 790,
+   "sizeBand": "excluded",
+   "excludeReason": "operating parent chain外（日産→ジヤトコ→ジヤトコエンジニアリング）",
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": "ジヤトコ（日産75%出資）の子会社。2025年10月合併予定",
+   "id": 154
+  },
+  {
+   "name": "株式会社メガネトップ",
+   "normKey": "メガネトップ",
+   "hqCity": "静岡市",
+   "industry": "眼鏡・コンタクトレンズ小売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 946,
+   "headcountEst": 5201,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.meganetop.co.jp/profile/"
+   ],
+   "note": "非上場。売上946億円（2025年3月）。業界売上No.1",
+   "id": 155
+  },
+  {
+   "name": "株式会社静岡銀行",
+   "normKey": "静岡銀行",
+   "hqCity": "静岡市",
+   "industry": "地方銀行",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 2651,
+   "headcountEst": 2666,
+   "sizeBand": "excluded",
+   "excludeReason": "銀行（金融機関）は除外対象",
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": "しずおかFG傘下。上場廃止（親会社5831が上場）",
+   "id": 156
+  },
+  {
+   "name": "アサヒサンクリーン株式会社",
+   "normKey": "アサヒサンクリーン",
+   "hqCity": "静岡市",
+   "industry": "訪問入浴介護サービス",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 237,
+   "headcountEst": 3659,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": "非上場。現社名ASCare。売上237億円（2025年度）",
+   "id": 157
+  },
+  {
+   "name": "株式会社ヤマシタ",
+   "normKey": "ヤマシタ",
+   "hqCity": "島田市",
+   "industry": "福祉用具レンタル・リネンサプライ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 337,
+   "headcountEst": 2829,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.yamashita-ltd.co.jp/"
+   ],
+   "note": "非上場。売上337億円（2025年3月期）",
+   "id": 158
+  },
+  {
+   "name": "静岡県厚生農業協同組合連合会",
+   "normKey": "静岡県厚生農業協同組合連合会",
+   "hqCity": "静岡市",
+   "industry": "農業協同組合（医療・福祉）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 2028,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": "JA静岡厚生連。農業協同組合。売上高不明",
+   "id": 159
+  },
+  {
+   "name": "日本ハムファクトリー株式会社",
+   "normKey": "日本ハムファクトリー",
+   "hqCity": "吉田町",
+   "industry": "食品加工（ハム・ソーセージ）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 841,
+   "headcountEst": 1995,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.nipponham-factory.co.jp/files/user/pdf/company/nhfactory.pdf",
+    "https://www.nipponham-factory.co.jp/company/"
+   ],
+   "note": "日本ハムグループ（大阪本社）の子会社。工場が吉田町",
+   "id": 160
+  },
+  {
+   "name": "株式会社エーツー（駿河屋）",
+   "normKey": "エーツー(駿河屋)",
+   "hqCity": "静岡市",
+   "industry": "メディアリサイクル（中古品売買）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 178,
+   "headcountEst": 1592,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": "非上場。現商号：株式会社駿河屋。売上178億円",
+   "id": 161
+  },
+  {
+   "name": "株式会社タカラ・エムシー",
+   "normKey": "タカラ・エムシー",
+   "hqCity": "静岡市",
+   "industry": "スーパーマーケット（フードマーケットマム）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 554,
+   "headcountEst": 2953,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": "非上場。売上554億円（2024年7月）",
+   "id": 162
+  },
+  {
+   "name": "株式会社TOKAIコミュニケーションズ",
+   "normKey": "tokaiコミュニケーションズ",
+   "hqCity": "静岡市",
+   "industry": "通信（CATV・インターネット）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 554,
+   "headcountEst": 1420,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.tokai-com.co.jp/company/overview.php"
+   ],
+   "note": "TOKAIホールディングス傘下（静岡市）。売上高不明（グループ連結に含む）",
+   "id": 163
+  },
+  {
+   "name": "株式会社静鉄ストア",
+   "normKey": "静鉄ストア",
+   "hqCity": "静岡市",
+   "industry": "スーパーマーケット（小売業）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 434,
+   "headcountEst": 1365,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.s-store.co.jp/company/fundamentals.html"
+   ],
+   "note": "静岡鉄道（静岡市）グループ。売上高不明",
+   "id": 164
+  },
+  {
+   "name": "トヨタユナイテッド静岡株式会社",
+   "normKey": "トヨタユナイテッド静岡",
+   "hqCity": "静岡市",
+   "industry": "自動車販売（トヨタ系ディーラー）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 1364,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": "非上場。トヨタ系販売店。売上高不明",
+   "id": 165
+  },
+  {
+   "name": "静岡トヨタ自動車株式会社",
+   "normKey": "静岡トヨタ自動車",
+   "hqCity": "静岡市",
+   "industry": "自動車販売（トヨタ系ディーラー）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 797,
+   "headcountEst": 1310,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.shizuokatoyota.co.jp/corporateguide"
+   ],
+   "note": "非上場。トヨタ系販売店。売上高不明",
+   "id": 166
+  },
+  {
+   "name": "社会医療法人駿甲会",
+   "normKey": "社会医療法人駿甲会",
+   "hqCity": "焼津市",
+   "industry": "医療（社会医療法人）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 1151,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": "社会医療法人。売上高不明",
+   "id": 167
+  },
+  {
+   "name": "ＳＵＳ株式会社",
+   "normKey": "sus",
+   "hqCity": "静岡市",
+   "industry": "アルミプロファイル・FA部品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 273,
+   "headcountEst": 1057,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.sus.co.jp/company/profile.php"
+   ],
+   "note": "非上場。売上273億円（2023年度）",
+   "id": 168
+  },
+  {
+   "name": "しずおか焼津信用金庫",
+   "normKey": "しずおか焼津信用金庫",
+   "hqCity": "静岡市",
+   "industry": "信用金庫（金融）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 992,
+   "sizeBand": "excluded",
+   "excludeReason": "信用金庫（金融機関）は除外対象",
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": null,
+   "id": 169
+  },
+  {
+   "name": "株式会社田子重",
+   "normKey": "田子重",
+   "hqCity": "焼津市",
+   "industry": "スーパーマーケット（小売業）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 411,
+   "headcountEst": 912,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.tagoju.co.jp/company/outline/",
+    "https://reashu.com/shizuokaken_yuuryoukigyou/"
+   ],
+   "note": "非上場。売上高不明",
+   "id": 170
+  },
+  {
+   "name": "大井川農業協同組合",
+   "normKey": "大井川農業協同組合",
+   "hqCity": "藤枝市",
+   "industry": "農業協同組合",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 861,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": "農業協同組合。売上高不明",
+   "id": 171
+  },
+  {
+   "name": "矢崎化工株式会社",
+   "normKey": "矢崎化工",
+   "hqCity": "静岡市",
+   "industry": "パイプフレーム・作業台製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 203,
+   "headcountEst": 855,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.yazaki.co.jp/company/profile/"
+   ],
+   "note": "非上場。矢崎グループとは別会社。売上高不明",
+   "id": 172
+  },
+  {
+   "name": "株式会社ＡＢＣ",
+   "normKey": "abc",
+   "hqCity": "静岡市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1162,
+   "headcountEst": 843,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.abc-p.jp/company/outline/"
+   ],
+   "note": "非上場。詳細業種・売上高不明",
+   "id": 173
+  },
+  {
+   "name": "協和医科器械株式会社",
+   "normKey": "協和医科器械",
+   "hqCity": "静岡市",
+   "industry": "医療機器卸・販売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 945,
+   "headcountEst": 826,
+   "sizeBand": "excluded",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/",
+    "https://www.kyowaika.co.jp/company/outline/"
+   ],
+   "note": "非上場。売上高不明",
+   "id": 174
+  },
+  {
+   "name": "株式会社メンテックカンザイ",
+   "normKey": "メンテックカンザイ",
+   "hqCity": "静岡市",
+   "industry": "ビルメンテナンス・設備管理",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 772,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://nlab.itmedia.co.jp/research/articles/3154138/"
+   ],
+   "note": "非上場。売上高不明",
+   "id": 175
+  },
+  {
+   "name": "鈴与グループ（鈴与株式会社含むグループ全体）",
+   "normKey": "鈴与グループ(鈴与含むグループ全体)",
+   "hqCity": "静岡市",
+   "industry": "物流・エネルギー・流通（グループ）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 5310,
+   "headcountEst": 13200,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "グループ全体。中核：鈴与株式会社（静岡市清水区）。グループ売上5,310億円",
+   "id": 176
+  },
+  {
+   "name": "遠州鉄道株式会社（遠鉄グループ）",
+   "normKey": "遠州鉄道(遠鉄グループ)",
+   "hqCity": "浜松市",
+   "industry": "鉄道・流通・観光（グループ）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 2246,
+   "headcountEst": 8937,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "遠鉄グループ全体従業員数8,937名。グループ連結売上2,246億円",
+   "id": 177
+  },
+  {
+   "name": "プライムアースEVエナジー株式会社（現トヨタバッテリー）",
+   "normKey": "プライムアースevエナジー(現トヨタバッテリー)",
+   "hqCity": "湖西市",
+   "industry": "車載電池製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 2015,
+   "headcountEst": 4796,
+   "sizeBand": "excluded",
+   "excludeReason": "operating parent（トヨタ自動車）が愛知県に所在（重複エントリ）",
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "現トヨタバッテリー株式会社。トヨタ100%子会社",
+   "id": 178
+  },
+  {
+   "name": "東芝キャリア株式会社（現日本キャリア）",
+   "normKey": "東芝キャリア(現日本キャリア)",
+   "hqCity": "",
+   "industry": "業務用空調機器製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1000,
+   "headcountEst": 2200,
+   "sizeBand": "excluded",
+   "excludeReason": "本社（本店）が静岡県外（東京都品川区）に所在",
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "2024年5月に本社を東京品川区に移転。工場のみ富士市",
+   "id": 179
+  },
+  {
+   "name": "あいネットグループ",
+   "normKey": "あいネットグループ",
+   "hqCity": "静岡市",
+   "industry": "冠婚葬祭・介護",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 210,
+   "headcountEst": 1050,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "非上場。売上210億円",
+   "id": 180
+  },
+  {
+   "name": "株式会社建設システム",
+   "normKey": "建設システム",
+   "hqCity": "富士市",
+   "industry": "建設業向けITソフトウェア",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 54,
+   "headcountEst": 304,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html",
+    "https://www.kentem.jp/company/about/",
+    "https://career.kentem.jp/company/"
+   ],
+   "note": "非上場。売上54億円",
+   "id": 181
+  },
+  {
+   "name": "三島信用金庫",
+   "normKey": "三島信用金庫",
+   "hqCity": "三島市",
+   "industry": "信用金庫（金融）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 779,
+   "sizeBand": "excluded",
+   "excludeReason": "信用金庫（金融機関）は除外対象",
+   "sourceUrls": [
+    "https://prtimes.jp/main/html/rd/p/000000968.000049221.html"
+   ],
+   "note": null,
+   "id": 182
+  },
+  {
+   "name": "鈴与建設株式会社",
+   "normKey": "鈴与建設",
+   "hqCity": "清水区",
+   "industry": "総合建設（ゼネコン）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 328,
+   "headcountEst": 302,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.suzuyo-kensetsu.co.jp/about_us/outline.html"
+   ],
+   "note": "本社：清水区松原町5-17。鈴与グループ。2025年8月期売上328億円。",
+   "id": 183
+  },
+  {
+   "name": "株式会社あいネットサービス",
+   "normKey": "あいネットサービス",
+   "hqCity": "駿河区",
+   "industry": "冠婚葬祭・サービス",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 180,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www2.ainetgrp.co.jp/group/company.php"
+   ],
+   "note": "本社：駿河区宮本町8-10。あいネットグループ中核。グループ売上約180億円。",
+   "id": 184
+  },
+  {
+   "name": "株式会社フジドリームエアラインズ",
+   "normKey": "フジドリームエアラインズ",
+   "hqCity": "葵区",
+   "industry": "航空運送",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 293,
+   "headcountEst": 499,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://baseconnect.in/companies/999743f8-c800-4c58-b0d2-3bb27cb31a06",
+    "https://www.fujidream.co.jp/en/",
+    "https://ja.wikipedia.org/wiki/%E3%83%95%E3%82%B8%E3%83%89%E3%83%AA%E3%83%BC%E3%83%A0%E3%82%A8%E3%82%A2%E3%83%A9%E3%82%A4%E3%83%B3%E3%82%BA"
+   ],
+   "note": "本社：葵区栄町1-3。鈴与グループ傘下。2024年度売上293億円。",
+   "id": 185
+  },
+  {
+   "name": "平井工業株式会社",
+   "normKey": "平井工業",
+   "hqCity": "葵区",
+   "industry": "総合建設",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 136,
+   "headcountEst": 160,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://hi-hirai.co.jp/profile/company-overview%EF%BC%8Flocation/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "本社：葵区太田町33。売上136億円だが従業員160名。revenue>50億だが従業員<200かつheadcount<200で境界線上。売上が50億超えているため likely_in に変更を検討。",
+   "id": 186
+  },
+  {
+   "name": "株式会社静岡産業社",
+   "normKey": "静岡産業社",
+   "hqCity": "駿河区",
+   "industry": "包装資材卸売・専門商社",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 404,
+   "headcountEst": 693,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.sizsan.co.jp/company/plofile/",
+    "https://www.sizsan.co.jp/company/plofile",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "本社：駿河区馬渕3-6-30。パッケージ専門商社。2024年7月期連結売上404億円。",
+   "id": 187
+  },
+  {
+   "name": "しずてつジャストライン株式会社",
+   "normKey": "しずてつジャストライン",
+   "hqCity": "葵区",
+   "industry": "バス・輸送",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 64,
+   "headcountEst": null,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.justline.co.jp/recruitment/profile.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "本社：葵区宮前町28。静鉄グループ。2024年3月期売上64億円。",
+   "id": 188
+  },
+  {
+   "name": "株式会社食鮮館タイヨー",
+   "normKey": "食鮮館タイヨー",
+   "hqCity": "葵区",
+   "industry": "スーパーマーケット小売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 166,
+   "headcountEst": 900,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://syokusenkan-taiyo.jp/pg439.html"
+   ],
+   "note": "本社：葵区流通センター10-6。バローホールディングス傘下。2024年度売上166億円。",
+   "id": 189
+  },
+  {
+   "name": "清水食品株式会社",
+   "normKey": "清水食品",
+   "hqCity": "葵区",
+   "industry": "食品製造（缶詰・水産食品）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 99,
+   "headcountEst": 322,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://kigyolog.com/company.php?id=1609",
+    "https://www.ssk-ltd.co.jp/company/",
+    "https://job.sjcnavi.com/2024/company/931"
+   ],
+   "note": "本社：葵区栄町1-3鈴与静岡ビル3F。鈴与グループ。2024年3月期売上99億円。従業員数不明で境界上だが売上50-100億の範囲。",
+   "id": 190
+  },
+  {
+   "name": "鈴与海運株式会社",
+   "normKey": "鈴与海運",
+   "hqCity": "清水区",
+   "industry": "内航海運",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 79,
+   "headcountEst": 59,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.suzuyomarine.co.jp/profile/"
+   ],
+   "note": "本社：清水区入船町。鈴与グループ。2025年3月期売上79億円。従業員59名。",
+   "id": 191
+  },
+  {
+   "name": "日星工業株式会社",
+   "normKey": "日星工業",
+   "hqCity": "清水区",
+   "industry": "自動車用照明部品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 220,
+   "sizeBand": "unknown",
+   "excludeReason": "親会社（小糸製作所・東京）の子会社の可能性",
+   "sourceUrls": [
+    "https://www.nissei-polarg.co.jp/company/"
+   ],
+   "note": "本社：清水区吉川790。小糸製作所グループ傘下。売上不明。従業員220名。親会社は東京本社の小糸製作所。",
+   "id": 192
+  },
+  {
+   "name": "大石産業株式会社",
+   "normKey": "大石産業",
+   "hqCity": "浜松市",
+   "industry": "包装材・製紙（パルプモウルド）",
+   "listed": true,
+   "ticker": null,
+   "revenueEstOku": 219,
+   "headcountEst": 579,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.osk.co.jp/about/company.php"
+   ],
+   "note": "連結売上219億円(2024年3月期)。浜松市。パルプモウルド・フィルム・重包装袋・段ボール製造。東証スタンダード。",
+   "id": 193
+  },
+  {
+   "name": "アオイテック株式会社",
+   "normKey": "アオイテック",
+   "hqCity": "浜松市",
+   "industry": "電気機器・自動車部品（LED照明）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 436,
+   "headcountEst": 323,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.aoitec.co.jp/company/",
+    "https://baseconnect.in/companies/09bd17dd-29f0-4e40-9b67-8a8fc31f4c61"
+   ],
+   "note": "売上436億円(2024年11月)。浜松市中央区東三方町162-1。車載LEDヘッドランプ電子部品製造。非上場。",
+   "id": 194
+  },
+  {
+   "name": "株式会社エネジン",
+   "normKey": "エネジン",
+   "hqCity": "浜松市",
+   "industry": "エネルギー・LPガス",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 90,
+   "headcountEst": 223,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.enegene.co.jp/",
+    "https://www.enegene.co.jp/about/outline.html"
+   ],
+   "note": "売上90億円(2025年9月)。浜松市中央区高林5-6-31。LPガス供給・太陽光・電力・リフォーム。非上場。",
+   "id": 195
+  },
+  {
+   "name": "株式会社出雲殿互助会",
+   "normKey": "出雲殿互助会",
+   "hqCity": "浜松市",
+   "industry": "サービス・冠婚葬祭",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 224,
+   "headcountEst": 232,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://izumoden-gojyo.jp/company/",
+    "http://www.zengokyo.or.jp/navi/gojokai/prefecture/shizuoka/"
+   ],
+   "note": "グループ売上224億円(2020年8月期)。浜松市中央区連尺町307-14。静岡・愛知で冠婚葬祭施設89か所展開。",
+   "id": 196
+  },
+  {
+   "name": "中村建設株式会社",
+   "normKey": "中村建設",
+   "hqCity": "浜松市",
+   "industry": "建設・土木",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 222,
+   "headcountEst": 214,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nakaken.co.jp/company/corporate"
+   ],
+   "note": "売上222億円(2024年6月期)。浜松市中央区中沢町71-23。総合建設業。非上場。",
+   "id": 197
+  },
+  {
+   "name": "有限会社春華堂",
+   "normKey": "春華堂",
+   "hqCity": "浜松市",
+   "industry": "食品・菓子製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 83,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://group.shunkado.co.jp/company/"
+   ],
+   "note": "売上約83億円。浜松市中央区神田町553。うなぎパイ製造。非上場。",
+   "id": 198
+  },
+  {
+   "name": "鈴木楽器製作所",
+   "normKey": "鈴木楽器製作所",
+   "hqCity": "浜松市",
+   "industry": "楽器・その他製品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 41,
+   "headcountEst": null,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.suzuki-music.co.jp/company/outline/"
+   ],
+   "note": "売上41億円(令和6年1月期)。浜松市中央区。鍵盤ハーモニカ「メロディオン」・ハーモニカ等教育楽器。",
+   "id": 199
+  },
+  {
+   "name": "株式会社スズキ自販浜松",
+   "normKey": "スズキ自販浜松",
+   "hqCity": "浜松市",
+   "industry": "小売・自動車ディーラー",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 381,
+   "headcountEst": 383,
+   "sizeBand": "excluded",
+   "excludeReason": "スズキ株式会社（浜松市本社）の直営販売子会社。キャプティブ販売会社として除外。",
+   "sourceUrls": [
+    "https://www.suzuki.co.jp/dealer/sj-hamamatsu/corporate/"
+   ],
+   "note": "売上381億円(2025年3月期)。浜松市中央区篠原町21339。スズキ直営ディーラー。",
+   "id": 200
+  },
+  {
+   "name": "ダイコー化学工業株式会社",
+   "normKey": "ダイコー化学工業",
+   "hqCity": "浜松市",
+   "industry": "化学・合成樹脂製品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 162,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.daikohkk.co.jp/company/outline/"
+   ],
+   "note": "浜松市中央区豊町3226-1。合成樹脂製品の製造・販売。従業員162名。非上場。",
+   "id": 201
+  },
+  {
+   "name": "株式会社長倉製作所",
+   "normKey": "長倉製作所",
+   "hqCity": "沼津市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 265,
+   "headcountEst": 260,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nagakura-mc.co.jp/profile/"
+   ],
+   "note": "冷間鍛造専業。本社：沼津市桃里606。米・越・メキシコ拠点。2024年9月売上265億円。",
+   "id": 202
+  },
+  {
+   "name": "株式会社TOKAIケーブルネットワーク",
+   "normKey": "tokaiケーブルネットワーク",
+   "hqCity": "沼津市",
+   "industry": "メディア・IT",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 144,
+   "headcountEst": 287,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://tokai-catv.co.jp/company/profile/"
+   ],
+   "note": "TOKAIホールディングス傘下CATV。本社：沼津市寿町8-28。令和7年3月期売上144億円。",
+   "id": 203
+  },
+  {
+   "name": "株式会社イカイ",
+   "normKey": "イカイ",
+   "hqCity": "沼津市",
+   "industry": "サービス(人材)",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 216,
+   "headcountEst": 5320,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.ikaigp.co.jp/company/about/"
+   ],
+   "note": "イカイグループ持株会社。本社：沼津市松長787。構内請負・人材派遣。グループ売上216億円（2025年3月）。",
+   "id": 204
+  },
+  {
+   "name": "株式会社エキスパートパワーシズオカ",
+   "normKey": "エキスパートパワーシズオカ",
+   "hqCity": "沼津市",
+   "industry": "サービス(人材)",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 850,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://eps-corporate.jp/company/7470"
+   ],
+   "note": "イカイグループ中核子会社。本社：沼津市御幸町17-5。製造系請負・派遣。",
+   "id": 205
+  },
+  {
+   "name": "株式会社あおき（フードストアあおき）",
+   "normKey": "あおき(フードストアあおき)",
+   "hqCity": "沼津市",
+   "industry": "小売・卸売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 175,
+   "headcountEst": 665,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://superaoki.com/company/"
+   ],
+   "note": "本社：沼津市大岡1961-26。食品スーパー。従業員665名。売上未公表。",
+   "id": 206
+  },
+  {
+   "name": "株式会社バンデロール",
+   "normKey": "バンデロール",
+   "hqCity": "沼津市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 450,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.banderole.co.jp/company/"
+   ],
+   "note": "本社：沼津市西島町20-2。「のっぽ」パン製造販売。インストアベーカリー。従業員約450名。",
+   "id": 207
+  },
+  {
+   "name": "株式会社平安",
+   "normKey": "平安",
+   "hqCity": "沼津市",
+   "industry": "サービス(冠婚葬祭)",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 349,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://heian-numazu.com/company/"
+   ],
+   "note": "本社：沼津市。静岡県東部で葬祭・冠婚事業。26直営会館。互助会契約約81,000件。従業員349名。",
+   "id": 208
+  },
+  {
+   "name": "株式会社マルイチ",
+   "normKey": "マルイチ",
+   "hqCity": "沼津市",
+   "industry": "小売・卸売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 157,
+   "headcountEst": 550,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://supermaruichi.com/information/"
+   ],
+   "note": "本社：沼津市。食品スーパー運営。2025年5月売上高157億円。従業員550名。",
+   "id": 209
+  },
+  {
+   "name": "富士急シティバス株式会社",
+   "normKey": "富士急シティバス",
+   "hqCity": "沼津市",
+   "industry": "物流・運輸",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 139,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.fujikyucitybus.com/company/"
+   ],
+   "note": "本社：沼津市東椎路475。路線・高速・貸切バス。富士急行子会社。従業員139名。",
+   "id": 210
+  },
+  {
+   "name": "株式会社不二テクノス",
+   "normKey": "不二テクノス",
+   "hqCity": "沼津市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 128,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.fujitechnos-numazu.co.jp/company/"
+   ],
+   "note": "本社：沼津市大諏訪676。不二工機グループ。冷凍空調制御機器製造。従業員128名。",
+   "id": 211
+  },
+  {
+   "name": "株式会社フジクラエナジーシステムズ",
+   "normKey": "フジクラエナジーシステムズ",
+   "hqCity": "沼津市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 161,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.fes.fujikura.com/corporate/index.html"
+   ],
+   "note": "本社：沼津市双葉町9-1。フジクラ100%子会社。架空送電線・メタルケーブル製造。2022年設立。",
+   "id": 212
+  },
+  {
+   "name": "エネリア東部株式会社",
+   "normKey": "エネリア東部",
+   "hqCity": "沼津市",
+   "industry": "サービス(エネルギー)",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 105,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.eneriatobu.shizuokagas.co.jp/company/"
+   ],
+   "note": "本社：沼津市岡一色809。静岡ガスグループ。都市ガス小売。従業員105名。",
+   "id": 213
+  },
+  {
+   "name": "伊豆箱根鉄道株式会社",
+   "normKey": "伊豆箱根鉄道",
+   "hqCity": "三島市",
+   "industry": "物流・運輸",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 46,
+   "headcountEst": 357,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.izuhakone.co.jp/izu-group/izu_company/company_article/p000514.html"
+   ],
+   "note": "本社：三島市大場300。西武グループ傘下。鉄道・バス・不動産。2025年3月期売上約46億円。2004年上場廃止。",
+   "id": 214
+  },
+  {
+   "name": "株式会社Z会ホールディングス",
+   "normKey": "z会ホールディングス",
+   "hqCity": "三島市",
+   "industry": "サービス(教育)",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 5,
+   "headcountEst": 617,
+   "sizeBand": "excluded",
+   "excludeReason": "中間持株会社（実質事業はZ会が行う）で売上も5億円未満",
+   "sourceUrls": [
+    "https://baseconnect.in/companies/10bd1941-1929-4fd8-8029-6b19cf97c42e",
+    "https://www.zkai.co.jp/home/corporate/profile/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "本社：三島市文教町1-9-11。増進会ホールディングスの中間持株会社。2025年3月期単体売上5.4億円（持株会社のため実質事業はZ会が実施）。",
+   "id": 215
+  },
+  {
+   "name": "加和太建設株式会社",
+   "normKey": "加和太建設",
+   "hqCity": "三島市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 150,
+   "headcountEst": 318,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kawata.org/profile/",
+    "https://reashu.com/shizuokaken_yuuryoukigyou/"
+   ],
+   "note": "本社：三島市文教町1-5-15。総合建設業・不動産・IT。直近売上約149.8億円。",
+   "id": 216
+  },
+  {
+   "name": "中林建設株式会社",
+   "normKey": "中林建設",
+   "hqCity": "三島市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 42,
+   "headcountEst": 177,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nh-const.com/"
+   ],
+   "note": "本社：三島市谷田173-2。送電・土木・杭打ち工事。2022年売上42.3億円。",
+   "id": 217
+  },
+  {
+   "name": "丸善工業株式会社",
+   "normKey": "丸善工業",
+   "hqCity": "三島市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 112,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://maruzenkogyo.co.jp/about"
+   ],
+   "note": "本社：三島市長伏155-8。小型建設機械・車両検査装置・包装機械製造。従業員112名。",
+   "id": 218
+  },
+  {
+   "name": "伊豆箱根交通株式会社",
+   "normKey": "伊豆箱根交通",
+   "hqCity": "三島市",
+   "industry": "物流・運輸",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.izuhakone.co.jp/koutsu/izutraffic_sub_nav/overview/p000711.html"
+   ],
+   "note": "本社：三島市大場300。伊豆箱根鉄道グループのタクシー子会社。",
+   "id": 219
+  },
+  {
+   "name": "高村工業株式会社",
+   "normKey": "高村工業",
+   "hqCity": "御殿場市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 42,
+   "headcountEst": 220,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.takamura-k.co.jp/company_profile/overview.html"
+   ],
+   "note": "本社：御殿場市板妻21。電着塗装専業。年商42億円。ダブルコートカチオン電着塗装世界初。",
+   "id": 220
+  },
+  {
+   "name": "アポロ精工株式会社",
+   "normKey": "アポロ精工",
+   "hqCity": "御殿場市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 30,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.apolloseiko.co.jp/company/profile/"
+   ],
+   "note": "本社：御殿場市神場2271-7。自動はんだ付け装置製造。売上7割は海外。従業員30名。",
+   "id": 221
+  },
+  {
+   "name": "新倉工業株式会社",
+   "normKey": "新倉工業",
+   "hqCity": "御殿場市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 110,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.niikura.co.jp/company/"
+   ],
+   "note": "本社：御殿場市神場2314-6。舶用バルブ・スプレーノズル・プラント機器製造。従業員110名。",
+   "id": 222
+  },
+  {
+   "name": "キリンディスティラリー株式会社",
+   "normKey": "キリンディスティラリー",
+   "hqCity": "御殿場市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "キリンホールディングスの子会社であり親会社は東京都中野区",
+   "sourceUrls": [
+    "https://www.kirinholdings.com/jp/profile/organization/kirinbrewery/group/distillery/"
+   ],
+   "note": "富士御殿場蒸溜所（御殿場市柴怒田）。キリンビール100%子会社。ウイスキー製造。",
+   "id": 223
+  },
+  {
+   "name": "株式会社アオイ",
+   "normKey": "アオイ",
+   "hqCity": "御殿場市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.gotemba.or.jp/industry/pindust"
+   ],
+   "note": "本社：御殿場市神場757-1。自動はんだ付け・FA機器グループ企業。詳細財務不明。",
+   "id": 224
+  },
+  {
+   "name": "オーティーピー株式会社",
+   "normKey": "オーティーピー",
+   "hqCity": "御殿場市",
+   "industry": "化学・素材・医薬",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.gotemba.or.jp/industry/pindust/%E3%82%AA%E3%83%BC%E3%83%86%E3%82%A3%E3%83%BC%E3%83%94%E3%83%BC%E6%A0%AA%E5%BC%8F%E4%BC%9A%E7%A4%BE"
+   ],
+   "note": "本社：御殿場市萩原1549。ナイロン・ウレタンチューブ製造。1999年設立。小規模。",
+   "id": 225
+  },
+  {
+   "name": "ニデックマテリアル株式会社",
+   "normKey": "ニデックマテリアル",
+   "hqCity": "裾野市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 225,
+   "sizeBand": "excluded",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nidec-instruments.com/nmtl/corporate/outline.html",
+    "https://salesnow.jp/db/companies/jcb09ygwhh320jr2"
+   ],
+   "note": "本社：裾野市千福46-1。ニデックインスツルメンツ傘下。電気接点・タングステン合金製造。",
+   "id": 226
+  },
+  {
+   "name": "株式会社芝浦機械",
+   "normKey": "芝浦機械",
+   "hqCity": "沼津市",
+   "industry": "機械/金属/電機",
+   "listed": true,
+   "ticker": "6104",
+   "revenueEstOku": 1328,
+   "headcountEst": 3135,
+   "sizeBand": "excluded",
+   "excludeReason": "本店所在地が静岡県外（東京都千代田区）に移転済み",
+   "sourceUrls": [
+    "https://www.shibaura-machine.co.jp/jp/company/gaikyo.html",
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://www.bigcompany.jp/22/list/",
+    "https://rs-shizuoka.net/staffblog/shizuoka_uiblog.html",
+    "https://www.shibaura-machine.co.jp/jp/company/",
+    "https://www.kabutore.biz/kabuka/6104.html"
+   ],
+   "note": "2021年4月以降、本店・主要機能は東京都千代田区内幸町2-2-2に移転。沼津は「沼津本社」として残るが登記上の主本社は東京。",
+   "id": 227
+  },
+  {
+   "name": "株式会社ダイレクトワン",
+   "normKey": "ダイレクトワン",
+   "hqCity": "沼津市",
+   "industry": "サービス(金融)",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "銀行グループのキャプティブ金融会社",
+   "sourceUrls": [
+    "https://www.directone.co.jp/directone/06_other/company.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "本社：沼津市魚町1。スルガ銀行グループの消費者金融・リース会社。銀行系キャプティブファイナンス。",
+   "id": 228
+  },
+  {
+   "name": "株式会社原町加工紙",
+   "normKey": "原町加工紙",
+   "hqCity": "沼津市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 32,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://haramachikakoushi.com/company/profile/"
+   ],
+   "note": "本社：沼津市原1058-2。ポケットティッシュ・ボックスティッシュ製造。従業員32名。",
+   "id": 229
+  },
+  {
+   "name": "丸富製紙株式会社",
+   "normKey": "丸富製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 417,
+   "headcountEst": 217,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.marutomi-seishi.co.jp/company/"
+   ],
+   "note": "単体417億円、連結グループ673億円（2025年3月末）。家庭紙（トイレットペーパー）専業。本社：富士市比奈678。",
+   "id": 230
+  },
+  {
+   "name": "五條製紙株式会社",
+   "normKey": "五條製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 70,
+   "headcountEst": 190,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.gojo.co.jp/company/profile"
+   ],
+   "note": "売上70億円、従業員190名。最高級塗工紙・特殊加工紙製造。本社：富士市原田451-1。",
+   "id": 231
+  },
+  {
+   "name": "大興製紙株式会社",
+   "normKey": "大興製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 103,
+   "headcountEst": 193,
+   "sizeBand": "excluded",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://tk-paper.co.jp/business_info/",
+    "https://tk-paper.co.jp/business_info/corporate_profile/"
+   ],
+   "note": "従業員193名（2024年1月）。クラフト紙・特殊紙製造。レンゴー100%子会社（2021年～）。本社：富士市上横割10番地。親会社（レンゴー）は静岡県外だが大興製紙自体は富士市本社の独立法人として存続。",
+   "id": 232
+  },
+  {
+   "name": "丸井製紙株式会社",
+   "normKey": "丸井製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 62,
+   "headcountEst": 120,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://maruipaper.jp/company/",
+    "https://maruipaper.jp/",
+    "https://maruipaper.jp/company/companyoutline/"
+   ],
+   "note": "従業員120名。コート白ボール・トイレットペーパー製造。本社：富士市久沢37。",
+   "id": 233
+  },
+  {
+   "name": "コアレックス信栄株式会社",
+   "normKey": "コアレックス信栄",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 140,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://corelex.jp/about/group-shinei.php"
+   ],
+   "note": "従業員140名。家庭紙（トイレットペーパー）製造。本社：富士市中之郷575-1。",
+   "id": 234
+  },
+  {
+   "name": "TENTOK株式会社（旧：天間特殊製紙）",
+   "normKey": "tentok(旧:天間特殊製紙)",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 300,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.tentok.co.jp/",
+    "https://www.jpa.gr.jp/about/member/factory/index.html"
+   ],
+   "note": "従業員300名。建材用紙・高級特殊薄葉紙製造で国内トップシェア品あり。直近5年で売上175%成長。旧社名：天間特殊製紙（2023年12月改名）。本社：富士市天間264。",
+   "id": 235
+  },
+  {
+   "name": "特種東海エコロジー株式会社",
+   "normKey": "特種東海エコロジー",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "特種東海製紙グループの製造子会社。親の特種東海製紙（東証プライム、本社：島田市）が静岡県内であっても本社は富士市外の島田市のため、富士市子会社は excluded（親が静岡県外ではないが、子会社・工場拠点として independent でない）。実際は富士市本社法人として存続するため保留としてunknownも可だが、親会社が完全支配するため excluded。",
+   "sourceUrls": [
+    "https://tt-ecology.co.jp/aboutus/index.html"
+   ],
+   "note": null,
+   "id": 236
+  },
+  {
+   "name": "東京製紙株式会社",
+   "normKey": "東京製紙",
+   "hqCity": "富士宮市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 140,
+   "headcountEst": 247,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fuji-cci.jp/jobsearch/233"
+   ],
+   "note": "売上140億円、従業員247名。特殊紙・機能紙・液体容器パッケージ製造。本社：富士宮市小泉866。",
+   "id": 237
+  },
+  {
+   "name": "エリエールペーパー株式会社",
+   "normKey": "エリエールペーパー",
+   "hqCity": "富士宮市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "大王製紙（東証プライム、本社：愛媛県四国中央市）の100%子会社製造拠点。親が静岡県外のため excluded。",
+   "sourceUrls": [
+    "https://elleair-paper.co.jp/company.html"
+   ],
+   "note": null,
+   "id": 238
+  },
+  {
+   "name": "マスコー製紙株式会社",
+   "normKey": "マスコー製紙",
+   "hqCity": "富士宮市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 70,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://tenshoku.mynavi.jp/company/188533/"
+   ],
+   "note": "従業員70名。本社：富士宮市浅間町14-12。",
+   "id": 239
+  },
+  {
+   "name": "太洋紙業株式会社",
+   "normKey": "太洋紙業",
+   "hqCity": "富士宮市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 85,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html",
+    "https://www.taiyo-paper.co.jp/corporate/"
+   ],
+   "note": "富士製紙協同組合加盟。本社：富士宮市小泉（富士製紙協同組合名簿記載）。規模不明。",
+   "id": 240
+  },
+  {
+   "name": "株式会社アミノ",
+   "normKey": "アミノ",
+   "hqCity": "富士宮市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 126,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://amino.co.jp/about/company-s-outline-and-history.html"
+   ],
+   "note": "プレス機械・鍛造機械の製造メーカー。従業員126名。2029年目標売上10億円。本社：富士宮市三園平555。現時点では規模が50億未満・200人未満のためtoo_small。",
+   "id": 241
+  },
+  {
+   "name": "ミヤマ工業株式会社",
+   "normKey": "ミヤマ工業",
+   "hqCity": "富士宮市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 144,
+   "headcountEst": 430,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://miyamakogyo.com/company_information/"
+   ],
+   "note": "グループ連結売上143.6億円、単体70.6億円。グループ従業員430名。自動車・電気機器部品製造。本社：富士宮市三園平1355。",
+   "id": 242
+  },
+  {
+   "name": "大宮精機株式会社",
+   "normKey": "大宮精機",
+   "hqCity": "富士宮市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 75,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.ohmiya-seiki.co.jp/"
+   ],
+   "note": "ワイヤーコーティング装置・医療チューブ押出成形ライン製造。従業員75名。本社：富士宮市万野原新田3718-1。",
+   "id": 243
+  },
+  {
+   "name": "株式会社関東精工",
+   "normKey": "関東精工",
+   "hqCity": "富士宮市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 100,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kantoseiko.co.jp/about/"
+   ],
+   "note": "精密板金加工・油圧ユニット・産業用装置製造。従業員100名超。本社：富士宮市西山2103。",
+   "id": 244
+  },
+  {
+   "name": "グリーンカプス製薬株式会社",
+   "normKey": "グリーンカプス製薬",
+   "hqCity": "富士宮市",
+   "industry": "化学・素材・医薬",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 60,
+   "sizeBand": "excluded",
+   "excludeReason": "東和薬品（東証プライム、本社：大阪府門真市）の100%子会社。親が静岡県外のため excluded。",
+   "sourceUrls": [
+    "https://www.greencaps.co.jp/company/outline/",
+    "https://www.greencaps.co.jp/company/"
+   ],
+   "note": null,
+   "id": 245
+  },
+  {
+   "name": "富士宮通運株式会社",
+   "normKey": "富士宮通運",
+   "hqCity": "富士宮市",
+   "industry": "物流・運輸",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 26,
+   "headcountEst": 402,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujinomiya-tsuun.co.jp/aboutus/outline/"
+   ],
+   "note": "鈴与グループ。売上約26億円、従業員402名（パート含む）。化粧品・健康食品等の3PL。本社：富士宮市南陵3-1。売上50億未満のためtoo_small。",
+   "id": 246
+  },
+  {
+   "name": "富士運送株式会社",
+   "normKey": "富士運送",
+   "hqCity": "富士市",
+   "industry": "物流・運輸",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 222,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.fujiunsou.co.jp/about/"
+   ],
+   "note": "従業員222名（2026年3月）。総合物流（運輸・倉庫・構内作業）。創業1899年。本社：富士市水戸島元町5-18。",
+   "id": 247
+  },
+  {
+   "name": "株式会社石井組",
+   "normKey": "石井組",
+   "hqCity": "富士市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 101,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://ishiigumi.jp/"
+   ],
+   "note": "創業120年超の総合建設会社。従業員101名（2024年）。本社：富士市水戸島元町4-10。",
+   "id": 248
+  },
+  {
+   "name": "株式会社大石組",
+   "normKey": "大石組",
+   "hqCity": "富士宮市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.ooishigumi.co.jp/outline/"
+   ],
+   "note": "1953年創業の総合建設業。本社：富士宮市弓沢町635。規模不明。",
+   "id": 249
+  },
+  {
+   "name": "株式会社サンケミカル",
+   "normKey": "サンケミカル",
+   "hqCity": "富士市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 60,
+   "headcountEst": 300,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://s-chemical.co.jp/company/"
+   ],
+   "note": "売上60億円（令和8年5月）、従業員300名。自動車・住宅部品（ブロー・インジェクション成形）。本社：富士市蓼原1084-1。",
+   "id": 250
+  },
+  {
+   "name": "東海製蝋株式会社",
+   "normKey": "東海製蝋",
+   "hqCity": "富士宮市",
+   "industry": "化学・素材・医薬",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 35,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.tokai-seiro.co.jp/about/"
+   ],
+   "note": "1877年創業の老舗ローソク製造会社。従業員35名。本社：富士宮市（富士山麓）。",
+   "id": 251
+  },
+  {
+   "name": "新橋製紙株式会社",
+   "normKey": "新橋製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 86,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.shimbashi-paper.jp/corporate_profile/"
+   ],
+   "note": "1948年設立。従業員86名。トイレットペーパー・産業用紙製造。本社：富士市依田橋町1-5。",
+   "id": 252
+  },
+  {
+   "name": "三和製紙株式会社",
+   "normKey": "三和製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 6,
+   "headcountEst": 21,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://sanwa-paper.com/company/"
+   ],
+   "note": "売上6億円、従業員21名。再生紙トイレットペーパー製造。本社：富士市久沢170。",
+   "id": 253
+  },
+  {
+   "name": "紺屋製紙株式会社",
+   "normKey": "紺屋製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://konya.co.jp/company/outline/"
+   ],
+   "note": "1957年設立。ペーパータオル・産業用特殊紙製造。資本金5,000万円。本社：富士市伝法3199。",
+   "id": 254
+  },
+  {
+   "name": "富士共和製紙株式会社",
+   "normKey": "富士共和製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 85,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.koyou.pref.shizuoka.jp/employment/detail/561"
+   ],
+   "note": "1930年設立。従業員85名。本社：富士市久沢1-1-2。",
+   "id": 255
+  },
+  {
+   "name": "白峰紙工株式会社",
+   "normKey": "白峰紙工",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 5,
+   "headcountEst": 20,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "http://www.hakuhoh.co.jp/company.html"
+   ],
+   "note": "売上3〜10億円、従業員11〜30名。PPC・プロッターロール紙加工。本社：富士市宮下338-4。",
+   "id": 256
+  },
+  {
+   "name": "岳南鉄道株式会社",
+   "normKey": "岳南鉄道",
+   "hqCity": "富士市",
+   "industry": "物流・運輸",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "富士急行（山梨県富士吉田市）の持分法適用会社。不動産・ゴルフ事業主体。親会社が静岡県外のため excluded。",
+   "sourceUrls": [
+    "https://www.gakutetsu.jp/fudousan/company/index.html"
+   ],
+   "note": null,
+   "id": 257
+  },
+  {
+   "name": "株式会社田中組",
+   "normKey": "田中組",
+   "hqCity": "富士市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://kktanaka.com/profile/"
+   ],
+   "note": "創業60年超の総合建設・土木会社。本社：富士市（2026年新社屋予定）。規模不明。",
+   "id": 258
+  },
+  {
+   "name": "株式会社大石工業",
+   "normKey": "大石工業",
+   "hqCity": "富士宮市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://tenshoku.mynavi.jp/company/list/h22207/"
+   ],
+   "note": "富士宮市の建設・土木会社。規模不明。",
+   "id": 259
+  },
+  {
+   "name": "丸茂製紙株式会社",
+   "normKey": "丸茂製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 24,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://salesnow.jp/db/companies/jcbkbsx0hub1g9r1"
+   ],
+   "note": "従業員24名。トイレットペーパー原紙専抄。本社：富士市今泉2-6-19。",
+   "id": 260
+  },
+  {
+   "name": "富士製紙協同組合",
+   "normKey": "富士製紙協同組合",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "事業協同組合（法人格は組合）。企業ではないため excluded。",
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": null,
+   "id": 261
+  },
+  {
+   "name": "イズミコーポレーション株式会社",
+   "normKey": "イズミコーポレーション",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": "富士製紙協同組合加盟。富士市所在。規模不明。",
+   "id": 262
+  },
+  {
+   "name": "株式会社山恭製紙所",
+   "normKey": "山恭製紙所",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": "富士製紙協同組合加盟。富士市所在。規模不明。",
+   "id": 263
+  },
+  {
+   "name": "高野製紙工業株式会社",
+   "normKey": "高野製紙工業",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": "富士製紙協同組合加盟。富士市所在。規模不明。",
+   "id": 264
+  },
+  {
+   "name": "富士里和製紙株式会社",
+   "normKey": "富士里和製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": "富士製紙協同組合加盟。富士市所在。規模不明。",
+   "id": 265
+  },
+  {
+   "name": "大二製紙株式会社",
+   "normKey": "大二製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": "富士製紙協同組合加盟。富士市所在。規模不明。",
+   "id": 266
+  },
+  {
+   "name": "勇和産業株式会社",
+   "normKey": "勇和産業",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": "富士製紙協同組合加盟。富士市所在。規模不明。",
+   "id": 267
+  },
+  {
+   "name": "丸富衛材株式会社",
+   "normKey": "丸富衛材",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "丸富製紙グループの子会社。独立した本社法人だが丸富製紙グループの傘下子会社のため excluded。",
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": null,
+   "id": 268
+  },
+  {
+   "name": "小野製紙株式会社",
+   "normKey": "小野製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "丸富製紙グループの子会社のため excluded。",
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": null,
+   "id": 269
+  },
+  {
+   "name": "美藤製紙株式会社",
+   "normKey": "美藤製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "丸富製紙グループの子会社のため excluded。",
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": null,
+   "id": 270
+  },
+  {
+   "name": "コアレックス道栄株式会社",
+   "normKey": "コアレックス道栄",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": "富士製紙協同組合加盟。コアレックスグループ会社。富士市所在。規模不明。",
+   "id": 271
+  },
+  {
+   "name": "高尾丸王製紙株式会社",
+   "normKey": "高尾丸王製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": "富士製紙協同組合加盟。富士市所在。規模不明。",
+   "id": 272
+  },
+  {
+   "name": "松菱製紙株式会社",
+   "normKey": "松菱製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": "富士製紙協同組合加盟。富士市所在。規模不明。",
+   "id": 273
+  },
+  {
+   "name": "新東海ロジスティクス株式会社",
+   "normKey": "新東海ロジスティクス",
+   "hqCity": "島田市",
+   "industry": "物流・運輸",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 52,
+   "headcountEst": 172,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.shin-tokai-logistics.co.jp/"
+   ],
+   "note": "特種東海製紙グループ物流子会社。売上52億、172名",
+   "id": 274
+  },
+  {
+   "name": "新東海製紙株式会社",
+   "normKey": "新東海製紙",
+   "hqCity": "島田市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.shin-tokai-paper.co.jp/company/summary.php"
+   ],
+   "note": "HQ: 島田市向島町4379。特種東海製紙と日本製紙の合弁完全子会社。単体財務非公開",
+   "id": 275
+  },
+  {
+   "name": "ナカダ産業株式会社",
+   "normKey": "ナカダ産業",
+   "hqCity": "島田市",
+   "industry": "繊維・その他製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 121,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nakada-sangyo.co.jp/"
+   ],
+   "note": "HQ: 島田市。ネット・コンベヤベルト製造。121名、売上非公開",
+   "id": 276
+  },
+  {
+   "name": "サンエムパッケージ株式会社",
+   "normKey": "サンエムパッケージ",
+   "hqCity": "島田市",
+   "industry": "化学・素材・医薬",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 150,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.sunm.co.jp/"
+   ],
+   "note": "HQ: 島田市。不織布・マスク・包装材製造。150名、売上非公開",
+   "id": 277
+  },
+  {
+   "name": "特種東海フォレスト株式会社",
+   "normKey": "特種東海フォレスト",
+   "hqCity": "島田市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 35,
+   "headcountEst": 75,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://tt-forest.co.jp/"
+   ],
+   "note": "HQ: 島田市。特種東海製紙G林業子会社。売上35億、75名",
+   "id": 278
+  },
+  {
+   "name": "木村飲料株式会社",
+   "normKey": "木村飲料",
+   "hqCity": "島田市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 27,
+   "headcountEst": 59,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://kimura-drink.co.jp/",
+    "https://www.kimura-drink.net/company/outline/"
+   ],
+   "note": "HQ: 島田市。地サイダー・清涼飲料。売上27億、59名",
+   "id": 279
+  },
+  {
+   "name": "カワサキ機工株式会社",
+   "normKey": "カワサキ機工",
+   "hqCity": "掛川市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 55,
+   "headcountEst": 258,
+   "sizeBand": "excluded",
+   "excludeReason": "HQ: 掛川市。島田市に工場あるが本社は島田市外",
+   "sourceUrls": [
+    "https://www.kawasakikiko.co.jp/company/",
+    "https://www.kawasaki-kiko.co.jp/company/outline"
+   ],
+   "note": null,
+   "id": 280
+  },
+  {
+   "name": "アロエ製薬株式会社",
+   "normKey": "アロエ製薬",
+   "hqCity": "",
+   "industry": "化学・素材・医薬",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 15,
+   "headcountEst": 78,
+   "sizeBand": "excluded",
+   "excludeReason": "小林製薬グループの完全子会社。親会社HQ大阪",
+   "sourceUrls": [
+    "https://www.kobayashi.co.jp/"
+   ],
+   "note": null,
+   "id": 281
+  },
+  {
+   "name": "福一漁業株式会社",
+   "normKey": "福一漁業",
+   "hqCity": "焼津市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 371,
+   "headcountEst": 468,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://fukuichi-world.jp/about/outline/"
+   ],
+   "note": "HQ: 焼津市中港5-9-25。遠洋漁業・水産加工。グループ売上371億、468名",
+   "id": 282
+  },
+  {
+   "name": "マルハチ村松株式会社",
+   "normKey": "マルハチ村松",
+   "hqCity": "焼津市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 236,
+   "headcountEst": 393,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.maruhachi-muramatsu.co.jp/company/",
+    "https://www.08m.co.jp/company/about/"
+   ],
+   "note": "HQ: 焼津市。だし・調味料製造。グループ売上236億、393名",
+   "id": 283
+  },
+  {
+   "name": "株式会社橋本組",
+   "normKey": "橋本組",
+   "hqCity": "焼津市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 137,
+   "headcountEst": 280,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.hashimotogumi.co.jp/",
+    "https://www.hashimotogumi.co.jp/profile/outline/"
+   ],
+   "note": "HQ: 焼津市。建設・土木。売上137億、280名",
+   "id": 284
+  },
+  {
+   "name": "株式会社朋電舎",
+   "normKey": "朋電舎",
+   "hqCity": "焼津市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 75,
+   "headcountEst": 251,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.hodensa.co.jp/company/"
+   ],
+   "note": "HQ: 焼津市。電気設備工事・電気機器。売上75億、251名",
+   "id": 285
+  },
+  {
+   "name": "株式会社マルテ小林商店",
+   "normKey": "マルテ小林商店",
+   "hqCity": "焼津市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 61,
+   "headcountEst": 150,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.marute-kobayashi.co.jp/company/",
+    "http://www.marute-g.co.jp/corporate-profile/"
+   ],
+   "note": "HQ: 焼津市。水産加工・販売。売上60.9億、150名",
+   "id": 286
+  },
+  {
+   "name": "カネゼン株式会社",
+   "normKey": "カネゼン",
+   "hqCity": "焼津市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 70,
+   "headcountEst": 75,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kanezen.co.jp/company/",
+    "http://www.kanezen.co.jp/company/about.asp",
+    "https://www.kanezen.co.jp/"
+   ],
+   "note": "HQ: 焼津市。かつお節・水産加工。売上70億、75名",
+   "id": 287
+  },
+  {
+   "name": "株式会社いちまる",
+   "normKey": "いちまる",
+   "hqCity": "焼津市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 72,
+   "headcountEst": 100,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.ichimaru.co.jp/company/",
+    "https://www.ichimaru-grp.co.jp/company/outline.html"
+   ],
+   "note": "HQ: 焼津市。まぐろ・かつお水産加工。売上72億、100名",
+   "id": 288
+  },
+  {
+   "name": "株式会社南食品",
+   "normKey": "南食品",
+   "hqCity": "焼津市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 67,
+   "headcountEst": 158,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.minamisyokuhin.co.jp/company/"
+   ],
+   "note": "HQ: 焼津市。水産加工。売上66.7億、158名",
+   "id": 289
+  },
+  {
+   "name": "東海テック株式会社",
+   "normKey": "東海テック",
+   "hqCity": "焼津市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 71,
+   "headcountEst": 96,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.tokai-tech.co.jp/company/"
+   ],
+   "note": "HQ: 焼津市。設備工事・メンテナンス。売上71億、96名",
+   "id": 290
+  },
+  {
+   "name": "シーラック株式会社",
+   "normKey": "シーラック",
+   "hqCity": "焼津市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 20,
+   "headcountEst": 140,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.searac.co.jp/company/"
+   ],
+   "note": "HQ: 焼津市。水産食品製造。売上19.5億、140名。売上基準では too_small だが headcount 140名で境界付近のため unknown",
+   "id": 291
+  },
+  {
+   "name": "山松水産株式会社",
+   "normKey": "山松水産",
+   "hqCity": "焼津市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 71,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.yamamatsu-suisan.co.jp/",
+    "https://www.yamamatsu-suisan.jp/company/"
+   ],
+   "note": "HQ: 焼津市。まぐろ水産加工。財務情報非公開",
+   "id": 292
+  },
+  {
+   "name": "ヱスビーサンキョーフーズ株式会社",
+   "normKey": "ヱスビーサンキョーフーズ",
+   "hqCity": "焼津市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 56,
+   "headcountEst": 153,
+   "sizeBand": "excluded",
+   "excludeReason": "エスビー食品株式会社(東京)の完全子会社。親会社HQ東京",
+   "sourceUrls": [
+    "https://www.sbsankyo.co.jp/company/",
+    "https://www.sbfoods.co.jp/company/group/sbsankyo.html"
+   ],
+   "note": null,
+   "id": 293
+  },
+  {
+   "name": "日本ホイスト株式会社",
+   "normKey": "日本ホイスト",
+   "hqCity": "",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "HQ: 広島県福山市。焼津に工場あるが本社は焼津市外",
+   "sourceUrls": [
+    "https://www.nippon-hoist.co.jp/company/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": null,
+   "id": 294
+  },
+  {
+   "name": "株式会社ふじや食品",
+   "normKey": "ふじや食品",
+   "hqCity": "藤枝市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 99,
+   "headcountEst": 520,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.fujiya-foods.co.jp/company/"
+   ],
+   "note": "HQ: 藤枝市。缶詰・レトルト食品製造。売上99億、520名",
+   "id": 295
+  },
+  {
+   "name": "環境のミカタ株式会社",
+   "normKey": "環境のミカタ",
+   "hqCity": "藤枝市",
+   "industry": "サービス",
+   "listed": true,
+   "ticker": "9224",
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://kankyonomicata.co.jp/company/"
+   ],
+   "note": "TOKYO PRO Market上場(9224)。HQ: 藤枝市。環境・廃棄物処理サービス",
+   "id": 296
+  },
+  {
+   "name": "東海ガス株式会社",
+   "normKey": "東海ガス",
+   "hqCity": "藤枝市",
+   "industry": "サービス",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 157,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.tokaigas.co.jp/company/"
+   ],
+   "note": "HQ: 藤枝市。都市ガス供給。157名、売上非公開",
+   "id": 297
+  },
+  {
+   "name": "株式会社SIC LOGITEC",
+   "normKey": "siclogitec",
+   "hqCity": "藤枝市",
+   "industry": "物流・運輸",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 19,
+   "headcountEst": 97,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.sic-logitec.co.jp/company/"
+   ],
+   "note": "旧焼津冷凍運輸。HQ: 藤枝市上当間854。売上18.6億、97名",
+   "id": 298
+  },
+  {
+   "name": "ショウケンガリレイ株式会社",
+   "normKey": "ショウケンガリレイ",
+   "hqCity": "藤枝市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 17,
+   "headcountEst": 78,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.shoken-galilei.co.jp/company/"
+   ],
+   "note": "HQ: 藤枝市。食品加工機械。売上15-18億、78名",
+   "id": 299
+  },
+  {
+   "name": "エム・エルエンジニアリング株式会社",
+   "normKey": "エム・エルエンジニアリング",
+   "hqCity": "藤枝市",
+   "industry": "機械/金属/電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 40,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.ml-engineering.co.jp/company/"
+   ],
+   "note": "HQ: 藤枝市。機械設計・製造。約40名、売上非公開",
+   "id": 300
+  },
+  {
+   "name": "株式会社ジェイテクトコラムシステム",
+   "normKey": "ジェイテクトコラムシステム",
+   "hqCity": "湖西市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 9013,
+   "headcountEst": 3292,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.column.jtekt.co.jp/about/company/",
+    "https://www.jtekt-cs.com/company/"
+   ],
+   "note": "旧富士機工。ジェイテクトグループ。ステアリングコラム等の製造。本社：湖西市（推定）。2025年3月期連結売上901億円は too_big閾値以下。連結3292名。単体288億円。再判定: 連結901億→likely_in境界。連結売上901億は50–1000億内。",
+   "id": 301
+  },
+  {
+   "name": "株式会社ベルソニカ",
+   "normKey": "ベルソニカ",
+   "hqCity": "湖西市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 390,
+   "headcountEst": 600,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://bellsonica.co.jp/corporate/"
+   ],
+   "note": "自動車骨格部品の開発・製造。本社：湖西市山口630-18。2024年3月期連結売上390億円。",
+   "id": 302
+  },
+  {
+   "name": "旭テック株式会社",
+   "normKey": "旭テック",
+   "hqCity": "掛川市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 297,
+   "headcountEst": 975,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.asahitec.co.jp/company/"
+   ],
+   "note": "トピー工業100%子会社。アルミホイール・アルミ鋳造部品製造。本社：掛川市上西郷1569-1。2025年3月期連結売上297億円。",
+   "id": 303
+  },
+  {
+   "name": "三恵株式会社",
+   "normKey": "三恵",
+   "hqCity": "磐田市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 182,
+   "headcountEst": 402,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://iwata.sankei-corp.com/profile/"
+   ],
+   "note": "自動車部品（プラスチック・アルミ等）製造。本社：磐田市西平松2261。2025年3月期売上181.6億円。",
+   "id": 304
+  },
+  {
+   "name": "東海精機株式会社",
+   "normKey": "東海精機",
+   "hqCity": "磐田市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 180,
+   "headcountEst": 480,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.toukai-seiki.co.jp/company/profile"
+   ],
+   "note": "アルミダイカスト・カーエアコン用コンプレッサーパーツ製造。本田宗一郎創業の旧アート商会ルーツ。本社：磐田市中泉2830。",
+   "id": 305
+  },
+  {
+   "name": "日研フード株式会社",
+   "normKey": "日研フード",
+   "hqCity": "袋井市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 136,
+   "headcountEst": 264,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.nikkenfoods.co.jp/en/company/overview/",
+    "https://baseconnect.in/companies/6a5ff723-40f8-4fef-995a-90142b28f6ae",
+    "https://reashu.com/shizuokaken_yuuryoukigyou/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "天然調味料・粉末インスタント茶・健康食品の製造販売。本社：袋井市春岡723-1。2024年度売上135.9億円。",
+   "id": 306
+  },
+  {
+   "name": "静岡製機株式会社",
+   "normKey": "静岡製機",
+   "hqCity": "袋井市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 120,
+   "headcountEst": 269,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.shizuoka-seiki.co.jp/about/company/"
+   ],
+   "note": "農産物関連機器・業務用熱機器・環境関連機器製造販売。本社：袋井市。2025年3月現在売上120億円。",
+   "id": 307
+  },
+  {
+   "name": "遠州中央農業協同組合（JA遠州中央）",
+   "normKey": "遠州中央農業協同組合(ja遠州中央)",
+   "hqCity": "磐田市",
+   "industry": "小売・卸売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 91,
+   "headcountEst": 674,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://jaenchu.ja-shizuoka.or.jp/about/summary/"
+   ],
+   "note": "磐田市を中心とする農業協同組合。本社：磐田市見付359。2025年度農産物販売高91億円。",
+   "id": 308
+  },
+  {
+   "name": "ヤマハモーターエンジニアリング株式会社",
+   "normKey": "ヤマハモーターエンジニアリング",
+   "hqCity": "磐田市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 86,
+   "headcountEst": 464,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.yec.co.jp/corporate/profile/index.html"
+   ],
+   "note": "ヤマハ発動機グループの開発特化型企業。本社：磐田市西貝塚3622-8。2024年12月期売上86億円。売上は50億円以下ではないが200名超のため規模確認が必要。実際の売上は86億円なのでlikely_inに再判定。",
+   "id": 309
+  },
+  {
+   "name": "株式会社榛葉鉄工所",
+   "normKey": "榛葉鉄工所",
+   "hqCity": "掛川市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 49,
+   "headcountEst": 200,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.shinba.net/corporate/aboutus/"
+   ],
+   "note": "二輪車マフラー設計・製造。スズキ・川崎重工業向け。本社：掛川市本所650。2019年度売上48.96億円。従業員200名。売上が50億円未満かつ従業員200名境界。",
+   "id": 310
+  },
+  {
+   "name": "株式会社ニッパ",
+   "normKey": "ニッパ",
+   "hqCity": "磐田市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 96,
+   "headcountEst": 272,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kk-nippa.co.jp/en/company/outline.php"
+   ],
+   "note": "デンソーグループ。精密プレス加工・自動車エンジン部品製造。本社：磐田市。2024年売上95.9億円。従業員272名。売上96億円でlikely_in範囲内に再判定。",
+   "id": 311
+  },
+  {
+   "name": "浜松光電株式会社",
+   "normKey": "浜松光電",
+   "hqCity": "磐田市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 45,
+   "headcountEst": 318,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://hkd.co.jp/company/"
+   ],
+   "note": "磁気センサ・圧力センサ製造。本社：磐田市宮本249-9。2025年3月期売上45.25億円。従業員318名。売上45億円は50億円未満だが従業員318名超なのでlikely_in。",
+   "id": 312
+  },
+  {
+   "name": "株式会社アマノ",
+   "normKey": "アマノ",
+   "hqCity": "磐田市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 61,
+   "headcountEst": 180,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.amano-grp.co.jp/company/profile/"
+   ],
+   "note": "介護浴槽・内視鏡洗浄消毒器製造。本社：磐田市池田1381-10。2024年6月期売上61億円。従業員180名。売上61億円でlikely_in範囲内。",
+   "id": 313
+  },
+  {
+   "name": "丸山製茶株式会社",
+   "normKey": "丸山製茶",
+   "hqCity": "掛川市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 117,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.maruyamaseicha.co.jp/company/outline/",
+    "https://maruyamaseicha.co.jp/company/information/"
+   ],
+   "note": "掛川茶・深蒸し茶の製造・卸・輸出入。本社：掛川市板沢510-3。従業員117名。売上不明。",
+   "id": 314
+  },
+  {
+   "name": "株式会社ヤザキ",
+   "normKey": "ヤザキ",
+   "hqCity": "磐田市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 51,
+   "headcountEst": 258,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.yazaki-corp.co.jp/company/about/"
+   ],
+   "note": "自動車・複写機・食品容器等プラスチック部品製造。本社：磐田市西貝塚3769。売上51.22億円。従業員258名。",
+   "id": 315
+  },
+  {
+   "name": "磐田化学工業株式会社",
+   "normKey": "磐田化学工業",
+   "hqCity": "磐田市",
+   "industry": "化学・素材・医薬",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 120,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.i-kagaku.co.jp/"
+   ],
+   "note": "クエン酸・有機酸・食品添加物の製造販売。本社：磐田市中泉3069。従業員120名。売上不明。",
+   "id": 316
+  },
+  {
+   "name": "月島ジェイアクアサービス機器株式会社",
+   "normKey": "月島ジェイアクアサービス機器",
+   "hqCity": "掛川市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 24,
+   "headcountEst": 65,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "http://www.tsk-g.co.jp/tjms/company/company.html"
+   ],
+   "note": "水処理機器の製造・販売。月島JFEアクアソリューショングループ。本社：掛川市領家1450。2023年度売上23.6億円。従業員65名。",
+   "id": 317
+  },
+  {
+   "name": "千歳産業株式会社",
+   "normKey": "千歳産業",
+   "hqCity": "掛川市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 138,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://tenshoku.mynavi.jp/company/list/h22213/"
+   ],
+   "note": "自動車・輸送機器関連。本社：掛川市初馬字駒形561。従業員138名。売上不明。資本金2.5億円。",
+   "id": 318
+  },
+  {
+   "name": "GSユアサエナジー株式会社",
+   "normKey": "gsユアサエナジー",
+   "hqCity": "湖西市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 400,
+   "sizeBand": "excluded",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.gs-yuasa.com/gye/about/company/"
+   ],
+   "note": "GSユアサグループ。自動車用鉛蓄電池・EV用制御弁式鉛蓄電池の開発・生産。本社：湖西市境宿555。従業員400名。売上不明。",
+   "id": 319
+  },
+  {
+   "name": "株式会社TF-METAL",
+   "normKey": "tf-metal",
+   "hqCity": "湖西市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 220,
+   "headcountEst": 390,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.tf-metal.jp/about/company/"
+   ],
+   "note": "自動車用シートフレーム・リクライナー等機構部品製造。タチエスグループ。本社：湖西市新居町内山1558。2024年3月期単体売上220億円。",
+   "id": 320
+  },
+  {
+   "name": "協和工業株式会社",
+   "normKey": "協和工業",
+   "hqCity": "湖西市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 39,
+   "headcountEst": 64,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kyowaindustry.co.jp/company/profile/"
+   ],
+   "note": "高精度プレス・自動車部品（ステアリングコラム・トランスミッション等）製造。本社：湖西市吉美3400。2025年8月期売上39億円。",
+   "id": 321
+  },
+  {
+   "name": "汐見製作所株式会社",
+   "normKey": "汐見製作所",
+   "hqCity": "湖西市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 30,
+   "headcountEst": 175,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://siomi.jp/company/about.html"
+   ],
+   "note": "自動二輪・四輪・船外機部品製造。本社：湖西市新居町新居2800。2020年9月期売上30.1億円。従業員175名。",
+   "id": 322
+  },
+  {
+   "name": "天龍産業株式会社",
+   "normKey": "天龍産業",
+   "hqCity": "磐田市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 91,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://tenryus.com/company/"
+   ],
+   "note": "クラッチ等自動車部品製造。本社：磐田市高木1550-1。従業員91名。売上不明。",
+   "id": 323
+  },
+  {
+   "name": "フクロイ乳業株式会社",
+   "normKey": "フクロイ乳業",
+   "hqCity": "袋井市",
+   "industry": "食品・飲料",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 78,
+   "headcountEst": 57,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://tenshoku.mynavi.jp/company/list/h22216/",
+    "https://www.fukuroi-milk.co.jp/profile/"
+   ],
+   "note": "牛乳・乳製品製造販売。本社：袋井市新池845-4。売上78億円。従業員57名。売上は50億超だが従業員57名と少ない。ただし売上50–1000億内のためlikely_inに変更。",
+   "id": 324
+  },
+  {
+   "name": "川合樹脂工業株式会社",
+   "normKey": "川合樹脂工業",
+   "hqCity": "袋井市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://kawai-jyushi.co.jp/"
+   ],
+   "note": "プラスチック射出成形による自動車部品・家電部品製造。本社：袋井市浅羽3725。売上・従業員数不明。",
+   "id": 325
+  },
+  {
+   "name": "株式会社アイテック",
+   "normKey": "アイテック",
+   "hqCity": "磐田市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 37,
+   "headcountEst": 180,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.aitech-co.jp/company/outline.html"
+   ],
+   "note": "ブロー成形・グラスウール成形・プレス成形による自動車部品製造。本社：磐田市。2025年3月期売上36.82億円。従業員180名。",
+   "id": 326
+  },
+  {
+   "name": "株式会社西山技研",
+   "normKey": "西山技研",
+   "hqCity": "袋井市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://tenshoku.mynavi.jp/company/list/h22216/"
+   ],
+   "note": "自動車部品製造。本社：袋井市。売上・従業員数不明。",
+   "id": 327
+  },
+  {
+   "name": "佐原工業株式会社",
+   "normKey": "佐原工業",
+   "hqCity": "湖西市",
+   "industry": "輸送機器・自動車部品",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "http://www.saharakogyo.co.jp/about/index.html"
+   ],
+   "note": "精密樹脂成形加工・自動車電装品・電子機器向けプラスチックインサート成形。本社：湖西市鷲津2801-1。ベトナムに海外法人あり。売上不明。",
+   "id": 328
+  },
+  {
+   "name": "磐田刃物株式会社",
+   "normKey": "磐田刃物",
+   "hqCity": "磐田市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.ipros.jp/ranking/company/area/city/22211/"
+   ],
+   "note": "産業用・電動工具用チップソー（超硬丸のこ）製造・販売。本社：磐田市。売上・従業員不明。",
+   "id": 329
+  },
+  {
+   "name": "フクデ化学工業株式会社",
+   "normKey": "フクデ化学工業",
+   "hqCity": "磐田市",
+   "industry": "化学・素材・医薬",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://iwata-de.com/corporate/c0010/"
+   ],
+   "note": "化学製品の精製・再生（蒸留等）。本社：磐田市。売上・従業員不明。",
+   "id": 330
+  },
+  {
+   "name": "ゼンウェル・オーダード株式会社",
+   "normKey": "ゼンウェル・オーダード",
+   "hqCity": "磐田市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 21,
+   "headcountEst": 80,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.city.iwata.shizuoka.jp/iiwatashi/work/kigyo/1006385.html"
+   ],
+   "note": "部品供給装置・省力化機器（パーツフィーダー）製造。本社：磐田市高見丘1218。2019年10月期売上20.6億円。従業員80名。",
+   "id": 331
+  },
+  {
+   "name": "鈴木製機株式会社",
+   "normKey": "鈴木製機",
+   "hqCity": "掛川市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 53,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.szk-s.co.jp/company/"
+   ],
+   "note": "垂直搬送機・リフター・昇降機の設計・製作・施工・メンテナンス。本社：掛川市下垂木2428。従業員53名。売上不明。",
+   "id": 332
+  },
+  {
+   "name": "大和鍛工株式会社",
+   "normKey": "大和鍛工",
+   "hqCity": "掛川市",
+   "industry": "機械・金属・電機",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://kakejob.com/corporate/0011/"
+   ],
+   "note": "熱間型鍛造専門企業。藤田企業グループ。スズキ第一次協力工場。本社：掛川市。売上・従業員不明。",
+   "id": 333
+  },
+  {
+   "name": "袋井ガス株式会社",
+   "normKey": "袋井ガス",
+   "hqCity": "袋井市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 2,
+   "headcountEst": 11,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.fukuroigas.co.jp/company.html"
+   ],
+   "note": "袋井市一部供給区域の都市ガス事業者（静岡ガス系）。本社：袋井市高尾1940-1。売上2.39億円。従業員11名。",
+   "id": 334
+  },
+  {
+   "name": "株式会社若杉組",
+   "normKey": "若杉組",
+   "hqCity": "掛川市",
+   "industry": "建設・不動産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 46,
+   "headcountEst": 43,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://alarmbox.jp/companyinfo/entities/7080401014659"
+   ],
+   "note": "土木・建築・舗装の総合建設業。本社：掛川市千浜6141。2025年6月時点売上45.5億円。従業員43名。",
+   "id": 335
+  },
+  {
+   "name": "株式会社柳屋本店",
+   "normKey": "柳屋本店",
+   "hqCity": "焼津市",
+   "industry": "水産（かつお節）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 41,
+   "headcountEst": 141,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.koyou.pref.shizuoka.jp/employment/detail/466",
+    "https://www.yanagiya.co.jp/company/"
+   ],
+   "note": "本社焼津市東小川2-1-10。年商40.6億円。かつお節・削り節・だし製造",
+   "id": 336
+  },
+  {
+   "name": "株式会社新丸正",
+   "normKey": "新丸正",
+   "hqCity": "焼津市",
+   "industry": "水産（かつお節・だし）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 39,
+   "headcountEst": 90,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://s-marusyo.jp/corporate/corporate01.html"
+   ],
+   "note": "本社焼津市三和1384-1。かつお節・削り節・だしパック製造。従業員90名（2019年）",
+   "id": 337
+  },
+  {
+   "name": "石原水産株式会社",
+   "normKey": "石原水産",
+   "hqCity": "焼津市",
+   "industry": "水産（かつお・まぐろ加工）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 72,
+   "headcountEst": 230,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://ishiharasuisan.co.jp/company-2/",
+    "https://ja.wikipedia.org/wiki/%E7%9F%B3%E5%8E%9F%E6%B0%B4%E7%94%A3"
+   ],
+   "note": "本社焼津市八楠2-5-2。かつお・まぐろ・サーモン水産加工品製造販売。1964年設立",
+   "id": 338
+  },
+  {
+   "name": "株式会社STIサンヨー",
+   "normKey": "stiサンヨー",
+   "hqCity": "焼津市",
+   "industry": "食品（缶詰・レトルト）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 93,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.stisanyo.com/company/"
+   ],
+   "note": "旧三洋食品。本社は東京都港区（登記）、製造は焼津市焼津5-7-3。STIフードHD傘下。親会社外部のため検討要",
+   "id": 339
+  },
+  {
+   "name": "テイボー株式会社",
+   "normKey": "テイボー",
+   "hqCity": "浜松市",
+   "industry": "ペン先・医療機器部品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 113.6,
+   "headcountEst": 560,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://teibow.co.jp/company/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "houjin.jp rank 69 shows ¥10.666B (~107億) single; company site shows 113.6億 (2024年3月期)",
+   "id": 340
+  },
+  {
+   "name": "理研軽金属工業株式会社",
+   "normKey": "理研軽金属工業",
+   "hqCity": "静岡市",
+   "industry": "アルミニウム押出形材",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 90,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.rikenkeikinzoku.co.jp/company/info/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "houjin.jp rank 75 shows ¥8.291B (~83億); HQ in Shizuoka city (Suruga ward) confirmed",
+   "id": 341
+  },
+  {
+   "name": "株式会社フードストアあおき",
+   "normKey": "フードストアあおき",
+   "hqCity": "沼津市",
+   "industry": "スーパーマーケット",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 175,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://reashu.com/shizuokaken_yuuryoukigyou/"
+   ],
+   "note": "HQ in Numazu; revenue ~175億",
+   "id": 342
+  },
+  {
+   "name": "株式会社遠鉄百貨店",
+   "normKey": "遠鉄百貨店",
+   "hqCity": "浜松市",
+   "industry": "百貨店",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 282,
+   "headcountEst": 388,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.endepa.com/company"
+   ],
+   "note": "HQ in Hamamatsu; subsidiary of 遠州鉄道 (Hamamatsu, Shizuoka) → parent IS in Shizuoka. Revenue ~282億 (2021年3月期)",
+   "id": 343
+  },
+  {
+   "name": "増進会ホールディングス株式会社",
+   "normKey": "増進会ホールディングス",
+   "hqCity": "三島市",
+   "industry": "教育・通信教育持株会社",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 238,
+   "headcountEst": 617,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://houjin.jp/c/8080101005817",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22",
+    "https://www.zkai.co.jp/",
+    "https://baseconnect.in/companies/a8daab84-9012-4a49-a4dd-dac93bb485a4"
+   ],
+   "note": "HQ in Mishima; parent of Z会 group. Z会HDの売上は5.4億 (holding co. level); group consolidated revenue estimated ~190-200億. Cannot confirm exact group size from available data",
+   "id": 344
+  },
+  {
+   "name": "興亜工業株式会社",
+   "normKey": "興亜工業",
+   "hqCity": "富士市",
+   "industry": "段ボール原紙製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 332,
+   "headcountEst": 267,
+   "sizeBand": "excluded",
+   "excludeReason": "グループ企業 of 丸紅 (Tokyo); parent is outside Shizuoka",
+   "sourceUrls": [
+    "https://www.koa-kogyo.co.jp/corporate/summary/",
+    "https://www.koa-ind.co.jp/company/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22",
+    "https://www.jpa.gr.jp/about/member/factory/index.html"
+   ],
+   "note": null,
+   "id": 345
+  },
+  {
+   "name": "南部化成株式会社",
+   "normKey": "南部化成",
+   "hqCity": "榛原郡吉田町",
+   "industry": "プラスチック製品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 164,
+   "headcountEst": 625,
+   "sizeBand": "excluded",
+   "excludeReason": "Subsidiary of 日清紡ホールディングス (Tokyo); parent is outside Shizuoka",
+   "sourceUrls": [
+    "https://www.nanbu.co.jp/company/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": null,
+   "id": 346
+  },
+  {
+   "name": "アルファクラブ静岡株式会社",
+   "normKey": "アルファクラブ静岡",
+   "hqCity": "静岡市",
+   "industry": "冠婚葬祭・互助会",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 80,
+   "headcountEst": 105,
+   "sizeBand": "excluded",
+   "excludeReason": "Part of アルファクラブグループ (関東・東北 based group); parent not Shizuoka-based",
+   "sourceUrls": [
+    "https://www.alphaclub-s.com/company/"
+   ],
+   "note": null,
+   "id": 347
+  },
+  {
+   "name": "株式会社SBS情報システム",
+   "normKey": "sbs情報システム",
+   "hqCity": "静岡市",
+   "industry": "IT（自治体・医療向けソフトウェア/システム）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 70,
+   "headcountEst": 278,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.sbs-infosys.co.jp/company/outline.html",
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "静岡放送（SBSグループ、静岡本拠）の子会社。FY2024.3売上約70億円、278名",
+   "id": 348
+  },
+  {
+   "name": "鈴与システムテクノロジー株式会社",
+   "normKey": "鈴与システムテクノロジー",
+   "hqCity": "静岡市",
+   "industry": "IT（物流・医療向けITソリューション）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 61,
+   "headcountEst": 304,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.sst-web.com/company/outline/"
+   ],
+   "note": "鈴与グループ（静岡市清水区本拠）の子会社。HQ: 静岡市清水区中之郷2-1-5。FY2023売上約61億円、304名",
+   "id": 349
+  },
+  {
+   "name": "SBSホールディングス株式会社",
+   "normKey": "sbsホールディングス",
+   "hqCity": "",
+   "industry": "物流",
+   "listed": true,
+   "ticker": "2384",
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "HQ is Tokyo (新宿区), not Shizuoka",
+   "sourceUrls": [
+    "https://www.kabutore.biz/todofuken/kenno23.html",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": null,
+   "id": 350
+  },
+  {
+   "name": "富士テクニカ宮津株式会社",
+   "normKey": "富士テクニカ宮津",
+   "hqCity": "清水町（駿東郡）",
+   "industry": "自動車用プレス金型",
+   "listed": true,
+   "ticker": "6476",
+   "revenueEstOku": 70,
+   "headcountEst": 390,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.fuji-miyazu.co.jp/ir/highlight.html",
+    "https://fuji-miyazu.co.jp/en/about-us/"
+   ],
+   "note": "TSEスタンダード上場。本社所在地は静岡県駿東郡清水町的場20番地。自動車用プレス金型専業。売上高約70億円（2025年3月期）、従業員390名。候補リストに不在。",
+   "id": 351
+  },
+  {
+   "name": "株式会社アイ・テック",
+   "normKey": "アイ・テック",
+   "hqCity": "静岡市清水区",
+   "industry": "産業用品卸売",
+   "listed": true,
+   "ticker": "2444",
+   "revenueEstOku": 1084,
+   "headcountEst": 617,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://j-lic.com/companies/9964",
+    "https://www.itec-c.co.jp/recruit/about/"
+   ],
+   "note": "証券コード9964、旧東証スタンダード上場。2023年1月に株式併合により非上場化。本社：静岡市清水区三保387番地7。売上高1,084億円（2024年3月）。候補リストに不在。ただし非上場化済みで現在は親会社傘下のため実態確認要。",
+   "id": 352
+  },
+  {
+   "name": "富士テクニカ宮津株式会社（確定）",
+   "normKey": "富士テクニカ宮津(確定)",
+   "hqCity": "清水町（駿東郡）",
+   "industry": "自動車用プレス金型",
+   "listed": true,
+   "ticker": "6476",
+   "revenueEstOku": 70,
+   "headcountEst": 390,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.fuji-miyazu.co.jp/ir/highlight.html"
+   ],
+   "note": "本社：静岡県駿東郡清水町的場20番地（清水町は静岡県内）。東証スタンダード上場。売上高約70億円（2025年3月期）、従業員390名。自動車プレス金型の独立系メーカー。候補リストに不在。",
+   "id": 353
+  },
+  {
+   "name": "株式会社駿河屋（旧エーツー）",
+   "normKey": "駿河屋(旧エーツー)",
+   "hqCity": "静岡市葵区",
+   "industry": "中古品売買・リサイクルショップ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 443,
+   "headcountEst": 600,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://baseconnect.in/companies/0ba4d206-4170-4db0-9da0-48c92c6fe7fb"
+   ],
+   "note": "2025年5月に株式会社エーツーが株式会社駿河屋に社名変更。本社：静岡市葵区。ゲーム・ホビー・古本の買取販売。売上高443億円（2024年8月期）、従業員約600名。候補リストに「株式会社エーツー（駿河屋）」として既に存在。",
+   "id": 354
+  },
+  {
+   "name": "遠州鉄道株式会社（遠鉄グループ持株会社）",
+   "normKey": "遠州鉄道(遠鉄グループ持株会社)",
+   "hqCity": "浜松市中央区",
+   "industry": "鉄道・バス・不動産・百貨店",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 2246,
+   "headcountEst": 2186,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.entetsu.co.jp/company/profile/profile.html"
+   ],
+   "note": "本社：浜松市中央区旭町12-1。グループ連結売上2,246億円（2025年3月期）。候補リストに「遠州鉄道株式会社（遠鉄グループ）」として既に存在。",
+   "id": 355
+  },
+  {
+   "name": "臼幸産業株式会社",
+   "normKey": "臼幸産業",
+   "hqCity": "駿東郡小山町",
+   "industry": "建設（総合建設・住宅・土木）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 83,
+   "headcountEst": 142,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://usuko.co.jp/company/",
+    "https://usuko.co.jp/"
+   ],
+   "note": "本社：静岡県駿東郡小山町藤曲109-1。売上¥83億（2025年6月期）、従業員142名。従業員200名未満かつ売上50億以上なのでborderline。exclusion listに未掲載。",
+   "id": 356
+  },
+  {
+   "name": "杉山特殊製紙株式会社",
+   "normKey": "杉山特殊製紙",
+   "hqCity": "",
+   "industry": "特殊製紙",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "本社：静岡県沼津市（富士市ではなく）。規模未確認のため対象外扱い。ただし静岡県内には変わりなし",
+   "sourceUrls": [
+    "https://fujiseishi.com/profile.html"
+   ],
+   "note": "富士製紙協同組合のメンバーリストに掲載。ただし本社が沼津市井出466-4であることを確認（富士市ではなく沼津市）。規模不明。",
+   "id": 357
+  },
+  {
+   "name": "巴川コーポレーション株式会社",
+   "normKey": "巴川コーポレーション",
+   "hqCity": "静岡市",
+   "industry": "特殊紙・機能材料",
+   "listed": true,
+   "ticker": "3878",
+   "revenueEstOku": 337,
+   "headcountEst": 700,
+   "sizeBand": "excluded",
+   "excludeReason": "本社：東京都中央区（静岡は工場のみ）",
+   "sourceUrls": [
+    "https://www.bigcompany.jp/22/list/",
+    "https://www.kabutore.biz/kabuka/3878.html",
+    "https://www.tomoegawa.co.jp/innovation/guide/"
+   ],
+   "note": "静岡市清水区に工場があるが本社は東京都中央区。HQが静岡県外のため除外。",
+   "id": 358
+  },
+  {
+   "name": "伊藤食品株式会社",
+   "normKey": "伊藤食品",
+   "hqCity": "静岡市",
+   "industry": "食品（缶詰）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 48,
+   "headcountEst": 130,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.ito-foods.co.jp/company/"
+   ],
+   "note": "サバ・イワシ等の缶詰製造。本社：清水区幸町。売上47.7億円（2023年9月期）",
+   "id": 359
+  },
+  {
+   "name": "エスエスケイフーズ株式会社",
+   "normKey": "エスエスケイフーズ",
+   "hqCity": "静岡市",
+   "industry": "食品（調味料・飲料）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 275,
+   "headcountEst": 442,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.sskfoods.co.jp/company/outline/"
+   ],
+   "note": "鈴与グループ。マヨネーズ・ドレッシング・ボトル缶飲料製造販売。売上275億円（2025年3月期）",
+   "id": 360
+  },
+  {
+   "name": "丸幸製茶株式会社",
+   "normKey": "丸幸製茶",
+   "hqCity": "菊川市",
+   "industry": "茶業（製茶・卸）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 30,
+   "headcountEst": null,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://baseconnect.in/companies/3343f1e4-ac11-4b75-897b-b7b341fd5b99"
+   ],
+   "note": "丸幸製茶＋お茶の丸幸合計年商約30億円。菊川市河東。1892年創業",
+   "id": 361
+  },
+  {
+   "name": "茗広茶業株式会社",
+   "normKey": "茗広茶業",
+   "hqCity": "静岡市",
+   "industry": "茶業（茶・抹茶・粉末茶OEM製造販売）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 48,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://meiko-chagyo.co.jp/company/"
+   ],
+   "note": "殺菌抹茶・粉末茶OEM製造。FSSC22000認証。従業員48名。売上不明",
+   "id": 362
+  },
+  {
+   "name": "株式会社たこ満",
+   "normKey": "たこ満",
+   "hqCity": "掛川市",
+   "industry": "食品（和菓子・洋菓子製造）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 31,
+   "headcountEst": 435,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.takoman.co.jp/about/"
+   ],
+   "note": "遠州の菓子メーカー。大砂丘等。売上30.8億円（2024年6月期）",
+   "id": 363
+  },
+  {
+   "name": "株式会社富士冷",
+   "normKey": "富士冷",
+   "hqCity": "焼津市",
+   "industry": "水産（水産物専門商社・缶詰・レトルト製造）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 106,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://tenshoku.mynavi.jp/company/387234/"
+   ],
+   "note": "水産物食品専門商社、缶詰・レトルト・冷凍食品製造。売上不明。従業員106名",
+   "id": 364
+  },
+  {
+   "name": "大昭和紙工産業株式会社",
+   "normKey": "大昭和紙工産業",
+   "hqCity": "富士市",
+   "industry": "紙・板紙製造/段ボール",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 457,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.daishowasiko.com/outline/"
+   ],
+   "note": "富士市に本社。大昭和製紙グループ（日本製紙系）の製品加工・販売会社。457億円(2023年度)。",
+   "id": 365
+  },
+  {
+   "name": "株式会社ニッセー",
+   "normKey": "ニッセー",
+   "hqCity": "焼津市",
+   "industry": "飲料OEM製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 225,
+   "headcountEst": 313,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://scg.jp/nissei/outline/",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "焼津市に本社。清涼飲料水OEM製造大手。約225億円(推定)。静岡コカ・コーラ系列ではなく独立系。",
+   "id": 366
+  },
+  {
+   "name": "ケイ・アイ化成株式会社",
+   "normKey": "ケイ・アイ化成",
+   "hqCity": "磐田市",
+   "industry": "医薬品・化学品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 81,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://ki-chemical.co.jp/profile/outline/"
+   ],
+   "note": "磐田市に本社。医薬品・特殊化学品の受託製造。約81億円(推定)。",
+   "id": 367
+  },
+  {
+   "name": "不二電子工業株式会社",
+   "normKey": "不二電子工業",
+   "hqCity": "静岡市",
+   "industry": "スイッチ・電子部品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 79,
+   "headcountEst": 377,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.fuji-ele.co.jp/company",
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "静岡市に本社。自動車用スイッチ・電子部品メーカー。約79億円(推定)。",
+   "id": 368
+  },
+  {
+   "name": "フジ都市開発株式会社",
+   "normKey": "フジ都市開発",
+   "hqCity": "静岡市",
+   "industry": "不動産開発",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.fujitoshi.co.jp/company/outline.html"
+   ],
+   "note": "静岡市駿河区に本社。木内建設グループ（静岡系）の不動産部門。売上規模不明。",
+   "id": 369
+  },
+  {
+   "name": "日軽産業株式会社",
+   "normKey": "日軽産業",
+   "hqCity": "静岡市",
+   "industry": "アルミニウム加工品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 276,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "Subsidiary of Nippon Light Metal Holdings (Tokyo-listed, out-of-prefecture parent)",
+   "sourceUrls": [
+    "https://www.nikkeisangyo.co.jp/company/"
+   ],
+   "note": "静岡市清水区に本社。日本軽金属ホールディングス（東証・東京）の100%子会社。",
+   "id": 370
+  },
+  {
+   "name": "株式会社NTN袋井製作所",
+   "normKey": "ntn袋井製作所",
+   "hqCity": "袋井市",
+   "industry": "等速ジョイント・ベアリング製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 207,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "Subsidiary of NTN Corporation (Osaka-based, out-of-prefecture parent)",
+   "sourceUrls": [
+    "https://ntn-fukuroi.jp/"
+   ],
+   "note": "袋井市に本社。NTN株式会社（大阪本社・東証）の製造子会社。",
+   "id": 371
+  },
+  {
+   "name": "DOWAメタニクス株式会社",
+   "normKey": "dowaメタニクス",
+   "hqCity": "磐田市",
+   "industry": "非鉄金属加工",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 172,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "Subsidiary of DOWA Holdings (Tokyo-listed, out-of-prefecture parent)",
+   "sourceUrls": [
+    "https://www.metanix.co.jp/metanix/company.html"
+   ],
+   "note": "磐田市に本社。DOWAホールディングス（東証・東京）の子会社。",
+   "id": 372
+  },
+  {
+   "name": "明電システムソリューション株式会社",
+   "normKey": "明電システムソリューション",
+   "hqCity": "沼津市",
+   "industry": "ITシステムソリューション",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "Subsidiary of Meidensha Corporation (Tokyo-listed, out-of-prefecture parent)",
+   "sourceUrls": [
+    "https://www.msol.co.jp/company/outline/"
+   ],
+   "note": "沼津市に本社。明電舎（東証・東京）の100%IT子会社。",
+   "id": 373
+  },
+  {
+   "name": "鈴与カーゴネット株式会社",
+   "normKey": "鈴与カーゴネット",
+   "hqCity": "静岡市清水区",
+   "industry": "物流・運輸",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 466,
+   "headcountEst": 1517,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.bruru.jp/?act=ranking-detail&pid=22",
+    "https://www.suzuyo-scn.co.jp/company/"
+   ],
+   "note": "Non-listed. Trucking and logistics subsidiary of Suzuyo group (Shizuoka-HQ parent).",
+   "id": 374
+  },
+  {
+   "name": "富士ロジテックホールディングス株式会社",
+   "normKey": "富士ロジテックホールディングス",
+   "hqCity": "静岡市",
+   "industry": "物流・倉庫",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 220,
+   "headcountEst": 796,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.bruru.jp/?act=ranking-detail&pid=22",
+    "https://www.koyou.pref.shizuoka.jp/employment/detail/253",
+    "https://www.fujilogi.co.jp/company/profile.php"
+   ],
+   "note": "Non-listed. Logistics and warehousing.",
+   "id": 375
+  },
+  {
+   "name": "株式会社静環検査センター",
+   "normKey": "静環検査センター",
+   "hqCity": "藤枝市",
+   "industry": "サービス・環境検査",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 45,
+   "headcountEst": 413,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://houjin.jp/finances/rankings/net_sales/prefs/22"
+   ],
+   "note": "Non-listed. Environmental testing services. Revenue ~45億 is below threshold but headcount 413 suggests borderline; tagged too_small on revenue.",
+   "id": 376
+  },
+  {
+   "name": "翔運輸株式会社",
+   "normKey": "翔運輸",
+   "hqCity": "磐田市",
+   "industry": "貨物自動車運送",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 194,
+   "headcountEst": 303,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.sho-unyu.co.jp/company/base/"
+   ],
+   "note": "売上194億円（運送会社ランキングデータより）。従業員303名",
+   "id": 377
+  },
+  {
+   "name": "スズキ輸送梱包株式会社",
+   "normKey": "スズキ輸送梱包",
+   "hqCity": "浜松市",
+   "industry": "一般貨物自動車運送・梱包",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 401,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.suzukitp.co.jp/company/"
+   ],
+   "note": "売上401億円（運送会社ランキングデータより）。スズキ向け部品納入代行",
+   "id": 378
+  },
+  {
+   "name": "株式会社靜甲（靜甲株式会社）",
+   "normKey": "靜甲(靜甲)",
+   "hqCity": "静岡市",
+   "industry": "ポンプ・流体機器製造・販売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "静岡市に本社のポンプメーカー。売上・従業員詳細不明",
+   "id": 379
+  },
+  {
+   "name": "株式会社IAI（アイエイアイ）",
+   "normKey": "iai(アイエイアイ)",
+   "hqCity": "静岡市",
+   "industry": "産業用ロボット・アクチュエータ製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 346,
+   "headcountEst": 1182,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "売上346億円。静岡市本社。産業用電動アクチュエータで高シェア",
+   "id": 380
+  },
+  {
+   "name": "東芝キャリア株式会社",
+   "normKey": "東芝キャリア",
+   "hqCity": "富士市",
+   "industry": "空調機器製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1018,
+   "headcountEst": 2200,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://rs-shizuoka.net/staffblog/shizuoka_blog_2.html"
+   ],
+   "note": "売上1018億円（100B相当）。富士市本社。東芝・キャリアJV。境界ケース",
+   "id": 381
+  },
+  {
+   "name": "目黒製作所（マーレエレクトリックドライブズジャパン旧：国産電機）",
+   "normKey": "目黒製作所(マーレエレクトリックドライブズジャパン旧:国産電機)",
+   "hqCity": "沼津市",
+   "industry": "発電機・モーター・電装品製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 521,
+   "sizeBand": "excluded",
+   "excludeReason": "ドイツMAHLEグループの完全子会社",
+   "sourceUrls": [
+    "https://www.jp.mahle.com/ja/mahle-in-japan/mahle-electric-drives/"
+   ],
+   "note": null,
+   "id": 382
+  },
+  {
+   "name": "日本製紙パピリア株式会社",
+   "normKey": "日本製紙パピリア",
+   "hqCity": "富士市",
+   "industry": "特殊紙・薄葉紙製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "日本製紙株式会社（東京）の子会社。親会社が静岡県外",
+   "sourceUrls": [
+    "https://www.jpa.gr.jp/about/member/factory/index.html"
+   ],
+   "note": null,
+   "id": 383
+  },
+  {
+   "name": "東洋冷蔵フード&ロジスティクス株式会社",
+   "normKey": "東洋冷蔵フード&ロジスティクス",
+   "hqCity": "静岡市",
+   "industry": "冷蔵倉庫・食品物流",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 60,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.bruru.jp/?act=ranking-detail&pid=22"
+   ],
+   "note": "売上60億円。冷蔵食品物流専門",
+   "id": 384
+  },
+  {
+   "name": "株式会社サンワネッツ（サンワNETS）",
+   "normKey": "サンワネッツ(サンワnets)",
+   "hqCity": "袋井市",
+   "industry": "総合物流・倉庫",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 101,
+   "headcountEst": null,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.bruru.jp/?act=ranking-detail&pid=22"
+   ],
+   "note": "売上101億円。袋井市本社。4万坪倉庫・車両390台",
+   "id": 385
+  },
+  {
+   "name": "JA静岡経済連（静岡県経済農業協同組合連合会）",
+   "normKey": "ja静岡経済連(静岡県経済農業協同組合連合会)",
+   "hqCity": "静岡市",
+   "industry": "農業協同組合連合会（農産物販売・農業資材供給）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 1599,
+   "headcountEst": 246,
+   "sizeBand": "too_big",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://jashizuoka-keizairen.net/overview/"
+   ],
+   "note": "取扱高1599億円。農業協同組合連合会",
+   "id": 386
+  },
+  {
+   "name": "常盤工業株式会社",
+   "normKey": "常盤工業",
+   "hqCity": "浜松市",
+   "industry": "建設・ゼネコン",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 58,
+   "headcountEst": 111,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.tokiwak.co.jp/company/overview/"
+   ],
+   "note": "浜松市中央区新津町所在。FY2024/9売上57.8億円、従業員111名。収入・人員ともに閾値下限付近。",
+   "id": 387
+  },
+  {
+   "name": "雑貨屋ブルドッグ株式会社",
+   "normKey": "雑貨屋ブルドッグ",
+   "hqCity": "",
+   "industry": "雑貨小売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "HQ moved out of Shizuoka after merger",
+   "sourceUrls": [
+    "https://kabutore.biz/kabuka/3331.html"
+   ],
+   "note": "旧上場(3331)、2016年上場廃止後に合併し本社が神戸市に移転。浜松市にHQなし",
+   "id": 388
+  },
+  {
+   "name": "東洋アサノ株式会社",
+   "normKey": "東洋アサノ",
+   "hqCity": "沼津市",
+   "industry": "生コンクリート製造・建材",
+   "listed": true,
+   "ticker": "5271",
+   "revenueEstOku": 117,
+   "headcountEst": 300,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.kabutore.biz/kabuka/5271.html"
+   ],
+   "note": "沼津市大手町; TSE Standard; 売上117億",
+   "id": 389
+  },
+  {
+   "name": "大日製紙株式会社",
+   "normKey": "大日製紙",
+   "hqCity": "富士市",
+   "industry": "製紙・パルプ",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 115,
+   "sizeBand": "excluded",
+   "excludeReason": "大王製紙グループ子会社（静岡県外の上場親会社）",
+   "sourceUrls": [
+    "https://www.dainichi-paper.co.jp/company/"
+   ],
+   "note": "富士市新橋町9-1。機能紙・特殊板紙。大王製紙グループ（愛媛HQ・上場）子会社のため除外。",
+   "id": 390
+  },
+  {
+   "name": "マルコ水産株式会社",
+   "normKey": "マルコ水産",
+   "hqCity": "焼津市",
+   "industry": "水産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 177,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.maruko-fish.co.jp/company.html"
+   ],
+   "note": "焼津市越後島441。マグロ・カツオ一次・二次加工。独立非上場。従業員177名、売上高非公開。",
+   "id": 391
+  },
+  {
+   "name": "佐政水産株式会社",
+   "normKey": "佐政水産",
+   "hqCity": "沼津市",
+   "industry": "水産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 53,
+   "headcountEst": 130,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.samasa.co.jp/company/"
+   ],
+   "note": "沼津市千本港町41。水産物卸・加工・冷蔵庫・観光施設（沼津深海水族館）運営。独立非上場。2024年9月期売上53億、130名。",
+   "id": 392
+  },
+  {
+   "name": "カネ十農園株式会社",
+   "normKey": "カネ十農園",
+   "hqCity": "牧之原市",
+   "industry": "茶業（製茶）",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 15,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://kaneju-farm.co.jp/about/"
+   ],
+   "note": "牧之原市須々木469-1。茶栽培・製茶・販売・OEM。独立非上場。資本金500万円、従業員15名。規模小。",
+   "id": 393
+  },
+  {
+   "name": "株式会社金虎",
+   "normKey": "金虎",
+   "hqCity": "焼津市",
+   "industry": "水産",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": 85,
+   "sizeBand": "too_small",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://kanetora.jp/company/profile/"
+   ],
+   "note": "焼津市本町4-12-10。鰹節・削り節・ペットフード製造。独立非上場。資本金2,000万円、従業員85名。売上高非公開、規模小と推定。",
+   "id": 394
+  },
+  {
+   "name": "株式会社ヤマザキ（惣菜メーカー）",
+   "normKey": "ヤマザキ(惣菜メーカー)",
+   "hqCity": "榛原郡吉田町",
+   "industry": "チルド惣菜・煮豆食品",
+   "listed": true,
+   "ticker": "6147",
+   "revenueEstOku": 31,
+   "headcountEst": 184,
+   "sizeBand": "too_small",
+   "excludeReason": "Revenue <50億 and headcount <200",
+   "sourceUrls": [
+    "https://www.yamazaki-grp.com/company/profile/"
+   ],
+   "note": "榛原郡吉田町本社。東証スタンダード。チルド煮豆惣菜メーカー。2025年3月期売上30.9億円。too_small。",
+   "id": 395
+  },
+  {
+   "name": "株式会社エッチ・ケー・エス（HKS）",
+   "normKey": "エッチ・ケー・エス(hks)",
+   "hqCity": "富士宮市",
+   "industry": "輸送機器・自動車チューニングパーツ製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 86,
+   "headcountEst": 367,
+   "sizeBand": "likely_in",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://www.hks-global.com/company/outline.html"
+   ],
+   "note": "本社：富士宮市北山7181（登記：富士宮市上井出2266）。1973年創業。ターボ・マフラー・サスペンション等のアフターパーツで世界ブランド。英・タイ・中国に拠点。2022年連結売上86億円。独立系・非上場。",
+   "id": 396
+  },
+  {
+   "name": "日本キヤリア株式会社（旧東芝キヤリア）",
+   "normKey": "日本キヤリア(旧東芝キヤリア)",
+   "hqCity": "",
+   "industry": "電機・空調システム製造",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "excluded",
+   "excludeReason": "2024年5月に本社を神奈川県川崎市から東京都品川区へ移転。富士市は事業所（工場）のみ。HQ not in Shizuoka。米国Carrierグループ傘下。",
+   "sourceUrls": [
+    "https://www.toshiba-carrier.co.jp/company/index_j.htm"
+   ],
+   "note": null,
+   "id": 397
+  },
+  {
+   "name": "株式会社アイエーイー",
+   "normKey": "アイエーイー",
+   "hqCity": "静岡市",
+   "industry": "サービス・人材派遣",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": null,
+   "headcountEst": null,
+   "sizeBand": "unknown",
+   "excludeReason": null,
+   "sourceUrls": [
+    "https://iae.co.jp/"
+   ],
+   "note": "静岡県内を中心とした総合人材ビジネス会社。人材派遣・紹介・教育研修・アウトソーシングを展開。事務・製造・IT・医療・介護・販売の各職種対応。規模・売上の公開情報なし。",
+   "id": 398
+  },
+  {
+   "name": "ハラダ製茶販売株式会社",
+   "normKey": "ハラダ製茶販売",
+   "hqCity": "",
+   "industry": "食品・茶販売",
+   "listed": false,
+   "ticker": null,
+   "revenueEstOku": 106,
+   "headcountEst": 519,
+   "sizeBand": "excluded",
+   "excludeReason": "本社は東京都杉並区。ハラダ製茶グループの販売子会社だが登記HQは東京。HQ not in Shizuoka。",
+   "sourceUrls": [
+    "https://harada-tea.co.jp/companyinfo/group/"
+   ],
+   "note": null,
+   "id": 399
+  }
+ ],
+ "bands": {
+  "likely_in": 158,
+  "too_small": 83,
+  "too_big": 36,
+  "excluded": 62,
+  "unknown": 60
+ },
+ "listed": 71,
+ "raw": 963
+}
