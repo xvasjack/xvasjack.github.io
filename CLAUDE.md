@@ -273,3 +273,7 @@ SCREENSHOT_API_URL  # Custom screenshot API URL (optional)
 - Commit style: `Type: Description` (Add, Fix, Improve, Update)
 - Run `npm test` before pushing (backend changes only)
 - **Commit + push is part of the task, not a separate step. See HARD RULES at top of file.**
+
+## HARD RULE — PLAIN LANGUAGE (user is NOT technical)
+
+NEVER explain anything a non-technical person wouldn't understand. No jargon, no file paths, no code, no error dumps, no "how it works" unless explicitly asked. Replies = what's done + what's next, in everyday words, a few short lines. All technical detail goes in commits and code, never in chat.
