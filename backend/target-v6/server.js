@@ -3075,6 +3075,30 @@ app.get('/', (req, res) => {
 
 // ============ SERVER STARTUP ============
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Target V6 server running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Target V6 server running on port ${PORT}`);
+  });
+}
+
+// Exported for unit testing only. Importing this file has no side effects
+// (the server starts only when the file is run directly, above).
+module.exports = {
+  extractMetricsJson,
+  extractOpenAIResponseText,
+  isBlockedMetricsHost,
+  normalizeMetricsUrl,
+  deriveCompanyFromWebsite,
+  extractWebsiteFromLine,
+  parseCompanyMetricsItems,
+  normalizeCurrencyCode,
+  normalizeRevenueUnit,
+  parseMetricNumber,
+  formatMetricNumber,
+  cleanMetricString,
+  buildFinalCompanyMetricsResult,
+  formatOriginalRevenue,
+  buildCompanyMetricsExcel,
+  buildCompanyMetricsEmailHtml,
+  convertCompanyMetricsRevenue,
+};
