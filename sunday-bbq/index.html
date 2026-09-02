@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sungai Tua Sunday BBQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+:root{
+  --bg:#EDF1EC; --surface:#FFFFFF; --surface-2:#F5F7F3; --line:#D3DBD2; --line-strong:#B6C2B5;
+  --ink:#1B2620; --ink-2:#4A5A51; --ink-3:#7C8B82;
+  --ember:#D1502A; --ember-ink:#FFFFFF; --ember-soft:#FBE9E2;
+  --river:#2C6C70; --river-soft:#DDEDEC;
+  --ok:#2F7D4F; --ok-soft:#DDF0E3;
+  --focus:#2C6C70;
+  --sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --display:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131A16; --surface:#1B2320; --surface-2:#222C27; --line:#2E3A33; --line-strong:#41504A;
+    --ink:#E7EDE8; --ink-2:#B3C0B7; --ink-3:#7F8F86;
+    --ember:#EE7448; --ember-ink:#1B120E; --ember-soft:#3A241B;
+    --river:#63B4B7; --river-soft:#1E3436;
+    --ok:#6CC58C; --ok-soft:#1E3529;
+    --focus:#63B4B7;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131A16; --surface:#1B2320; --surface-2:#222C27; --line:#2E3A33; --line-strong:#41504A;
+  --ink:#E7EDE8; --ink-2:#B3C0B7; --ink-3:#7F8F86;
+  --ember:#EE7448; --ember-ink:#1B120E; --ember-soft:#3A241B;
+  --river:#63B4B7; --river-soft:#1E3436;
+  --ok:#6CC58C; --ok-soft:#1E3529;
+  --focus:#63B4B7;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;line-height:1.1}
+h1{font-size:clamp(28px,4.5vw,42px);font-weight:800;letter-spacing:-0.02em}
+h2{font-size:17px;font-weight:700}
+h3{font-size:13px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.08em}
+button,input,select,textarea{font:inherit;color:inherit}
+input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+button{cursor:pointer;border:1px solid var(--line-strong);background:var(--surface);border-radius:6px;padding:6px 12px;font-weight:500}
+button.primary{background:var(--ember);color:var(--ember-ink);border-color:var(--ember);font-weight:600}
+button.ghost{border-color:transparent;background:transparent;color:var(--ink-3);padding:4px 6px}
+button.ghost:hover{color:var(--ember);background:var(--ember-soft)}
+.num{font-variant-numeric:tabular-nums}
+
+.top{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end;justify-content:space-between;padding:26px clamp(16px,4vw,40px) 18px;border-bottom:1px solid var(--line)}
+.eyebrow{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--river);font-weight:600;margin-bottom:6px}
+.top .right{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.you{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-2)}
+.you select{font-weight:600;color:var(--ink)}
+.sync{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-3);padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+.sync.live i{background:var(--ok)}
+.sync.local i{background:var(--ember)}
+
+main{padding:18px clamp(16px,4vw,40px) 60px;display:grid;gap:18px;max-width:1240px;margin:0 auto}
+
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.fact label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin-bottom:4px;font-weight:600}
+.fact input{width:100%;font-weight:600;font-size:15px}
+.fact.people{grid-column:1/-1}
+.fact.wide{grid-column:span 2}
+@media (max-width:420px){.fact.wide{grid-column:span 1}}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border-radius:999px;padding:5px 12px;border:1px solid var(--line-strong);background:var(--surface);font-weight:600;font-size:13px;display:inline-flex;gap:6px;align-items:center}
+.chip.in{background:var(--ok-soft);border-color:var(--ok);color:var(--ink)}
+.chip.out{color:var(--ink-3);text-decoration:line-through}
+
+.grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:18px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.panel-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.panel-h .meta{font-size:13px;color:var(--ink-3)}
+.panel-b{padding:12px 16px 16px}
+.side{display:grid;gap:18px}
+
+/* shopping list */
+.cat{margin-top:12px}
+.cat:first-child{margin-top:0}
+.cat h3{padding:4px 0 6px;display:flex;justify-content:space-between;align-items:baseline}
+.cat h3 span{font-weight:500;letter-spacing:0;text-transform:none;color:var(--ink-3);font-size:12px}
+.row{display:grid;grid-template-columns:22px minmax(0,1fr) 82px 108px 76px 26px;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line)}
+.row.head{border-top:0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:600;padding-bottom:2px}
+.row input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--ok)}
+.row input[type=text],.row select,.row input[type=number]{padding:5px 7px;width:100%}
+.row input.cost{text-align:right}
+.row.done .name{color:var(--ink-3);text-decoration:line-through}
+.row .unassigned{border-color:var(--ember);background:var(--ember-soft)}
+.empty{color:var(--ink-3);font-size:13px;padding:8px 0}
+@media (max-width:560px){
+  .row{grid-template-columns:22px minmax(0,1fr) 26px;grid-template-areas:"c n x" ". q q" ". b p"}
+  .row.head{display:none}
+  .row .c{grid-area:c}.row .n{grid-area:n}.row .x{grid-area:x}.row .q{grid-area:q}.row .b{grid-area:b}.row .p{grid-area:p}
+}
+.addbar{display:grid;grid-template-columns:minmax(0,2fr) 70px minmax(0,1fr) minmax(0,1fr) 80px auto;gap:8px;padding:12px 16px;background:var(--surface-2);border-top:1px solid var(--line)}
+@media (max-width:700px){.addbar{grid-template-columns:1fr 1fr}.addbar input.name{grid-column:1/-1}}
+
+/* who buys what */
+.people-grid{display:grid;gap:10px}
+.person{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.person b{font-family:var(--display);font-size:15px}
+.person .total{font-weight:700;text-align:right}
+.person .list{grid-column:1/-1;font-size:13px;color:var(--ink-2)}
+.person .list em{font-style:normal;color:var(--ink-3)}
+.person.none .list{color:var(--ember)}
+.totalbar{display:flex;justify-content:space-between;padding:10px 12px 0;font-weight:600;border-top:1px solid var(--line);margin-top:10px}
+.totalbar small{font-weight:500;color:var(--ink-3)}
+
+/* run sheet */
+.slot{display:grid;grid-template-columns:62px minmax(0,1fr) 100px 26px;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line)}
+.slot:first-child{border-top:0}
+.slot input,.slot select{padding:5px 7px;width:100%}
+.slot input.time{font-family:var(--display);font-weight:700;text-align:center}
+
+/* notes */
+.note{padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.note:first-child{border-top:0}
+.note .by{font-weight:600}
+.note .when{color:var(--ink-3);font-size:12px;margin-left:6px}
+.note p{margin:2px 0 0;white-space:pre-wrap}
+.notebox{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px}
+.notebox textarea{resize:vertical;min-height:38px}
+
+.tips{font-size:13px;color:var(--ink-2)}
+.tips ul{margin:0;padding-left:18px}
+.tips li{margin:4px 0}
+.tips li::marker{color:var(--river)}
+.tips .links{display:flex;gap:8px;margin:12px 0 0}
+.tips .links a{color:var(--river);font-weight:600;text-decoration:none;border:1px solid var(--line-strong);border-radius:6px;padding:5px 10px}
+.tips .links a:hover{background:var(--river-soft)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+
+
+<header class="top">
+  <div>
+    <span class="eyebrow">Sunday morning · Hutan Lipur Sungai Tua</span>
+    <h1>Sungai Tua Sunday BBQ</h1>
+  </div>
+  <div class="right">
+    <label class="you">You are <select id="who"></select></label>
+    <span class="sync" id="sync"><i></i><span>Connecting</span></span>
+  </div>
+</header>
+
+<main>
+  <section class="facts" id="facts">
+    <div class="fact"><label for="f-date">Date</label><input id="f-date" type="date" data-plan="date"></div>
+    <div class="fact"><label for="f-meet">Meet time</label><input id="f-meet" type="time" data-plan="meetTime"></div>
+    <div class="fact wide"><label for="f-place">Meet point</label><input id="f-place" type="text" data-plan="meetPlace" placeholder="Where do we gather"></div>
+    <div class="fact"><label for="f-cars">Cars</label><input id="f-cars" type="text" data-plan="cars" placeholder="Who drives"></div>
+    <div class="fact people"><label>Who is in</label><div class="chips" id="chips"></div></div>
+  </section>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="panel-h"><h2>Shopping list</h2><span class="meta" id="list-meta"></span></div>
+      <div class="panel-b" id="items"></div>
+      <form class="addbar" id="add-item">
+        <input class="name" type="text" name="name" placeholder="Add something to buy" required>
+        <input type="text" name="qty" placeholder="Qty">
+        <select name="cat" id="add-cat"></select>
+        <select name="buyer" id="add-buyer"></select>
+        <input type="number" name="cost" placeholder="RM" min="0" step="1">
+        <button class="primary" type="submit">Add</button>
+      </form>
+    </section>
+
+    <div class="side">
+      <section class="panel">
+        <div class="panel-h"><h2>Who buys what</h2><span class="meta">estimated RM</span></div>
+        <div class="panel-b"><div class="people-grid" id="people"></div><div class="totalbar" id="totalbar"></div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-h"><h2>Morning run sheet</h2><button class="ghost" id="add-slot" type="button">+ slot</button></div>
+        <div class="panel-b" id="slots"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-h"><h2>Notes</h2><span class="meta">everyone sees these</span></div>
+        <div class="panel-b">
+          <div id="notes"></div>
+          <form class="notebox" id="add-note"><textarea name="text" placeholder="Anything the group should know" required></textarea><button class="primary" type="submit">Post</button></form>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-h"><h2>Sungai Tua notes</h2></div>
+        <div class="panel-b tips">
+          <ul>
+            <li>Riverside spots go first. Aim to be parked by 8 am.</li>
+            <li>Small cash entry fee per person and per car. Bring coins.</li>
+            <li>No shops inside. Last stop for ice and forgotten items is Batu Caves or Selayang.</li>
+            <li>Bring your own grill and charcoal. Pits are few and often taken.</li>
+            <li>Rocks are slippery. Water shoes or sandals with grip.</li>
+            <li>Pack out every bag of rubbish.</li>
+          </ul>
+          <p class="links"><a href="https://waze.com/ul?q=Hutan%20Lipur%20Sungai%20Tua&navigate=yes" target="_blank" rel="noopener">Open in Waze</a><a href="https://www.google.com/maps/search/?api=1&query=Hutan+Lipur+Sungai+Tua" target="_blank" rel="noopener">Google Maps</a></p>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  const PEOPLE = ["ZH","Jie","Fei","Adriana","Sara"];
+  const CATS = ["Meat & seafood","Veg & sides","Drinks & ice","Charcoal & grill","Plates & gear","Other"];
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const fmtRM = n => "RM " + (Math.round(Number(n)||0)).toLocaleString("en-MY");
+
+  /* ---------- store: shared db when available, this browser otherwise ---------- */
+  // Starting plan for a browser that runs without the shared store. The shared store is seeded separately.
+  const LOCAL_SEED = {"plan/main":{"date":"2026-09-06","meetTime":"07:15","meetPlace":"Batu Caves MRT carpark, then convoy","cars":"ZH and Fei drive","attending":{"ZH":true,"Jie":true,"Fei":true,"Adriana":true,"Sara":true}},"items":{"i01":{"name":"Chicken wings, marinated Saturday night","qty":"2 kg","cat":"Meat & seafood","buyer":"Jie","cost":40,"done":false,"order":1,"by":"Fei","ts":1788314400000},"i02":{"name":"Lamb chops","qty":"1 kg","cat":"Meat & seafood","buyer":"ZH","cost":60,"done":false,"order":2,"by":"Fei","ts":1788314400001},"i03":{"name":"Sausages","qty":"2 packs","cat":"Meat & seafood","buyer":"Sara","cost":25,"done":false,"order":3,"by":"Fei","ts":1788314400002},"i04":{"name":"Prawns, large","qty":"1 kg","cat":"Meat & seafood","buyer":"Fei","cost":45,"done":false,"order":4,"by":"Fei","ts":1788314400003},"i05":{"name":"Otak-otak","qty":"20 pcs","cat":"Meat & seafood","buyer":"Adriana","cost":20,"done":false,"order":5,"by":"Fei","ts":1788314400004},"i06":{"name":"Corn on the cob","qty":"6","cat":"Veg & sides","buyer":"Adriana","cost":12,"done":false,"order":6,"by":"Fei","ts":1788314400005},"i07":{"name":"Sweet potatoes","qty":"1 kg","cat":"Veg & sides","buyer":"Adriana","cost":8,"done":false,"order":7,"by":"Fei","ts":1788314400006},"i08":{"name":"Garlic bread","qty":"2 loaves","cat":"Veg & sides","buyer":"Sara","cost":14,"done":false,"order":8,"by":"Fei","ts":1788314400007},"i09":{"name":"Capsicum and onion for skewers","qty":"4 + 3","cat":"Veg & sides","buyer":"Adriana","cost":10,"done":false,"order":9,"by":"Fei","ts":1788314400008},"i10":{"name":"Watermelon","qty":"1","cat":"Veg & sides","buyer":"Sara","cost":12,"done":false,"order":10,"by":"Fei","ts":1788314400009},"i11":{"name":"Marinade: kicap manis, honey, garlic","qty":"","cat":"Veg & sides","buyer":"Jie","cost":15,"done":false,"order":11,"by":"Fei","ts":1788314400010},"i12":{"name":"Sambal and chilli sauce","qty":"","cat":"Veg & sides","buyer":"Jie","cost":8,"done":false,"order":12,"by":"Fei","ts":1788314400011},"i13":{"name":"Ice","qty":"3 bags","cat":"Drinks & ice","buyer":"Fei","cost":12,"done":false,"order":13,"by":"Fei","ts":1788314400012},"i14":{"name":"Mineral water 1.5L","qty":"6","cat":"Drinks & ice","buyer":"Fei","cost":12,"done":false,"order":14,"by":"Fei","ts":1788314400013},"i15":{"name":"100Plus","qty":"12 cans","cat":"Drinks & ice","buyer":"Sara","cost":30,"done":false,"order":15,"by":"Fei","ts":1788314400014},"i16":{"name":"Ribena cordial","qty":"1 bottle","cat":"Drinks & ice","buyer":"Sara","cost":10,"done":false,"order":16,"by":"Fei","ts":1788314400015},"i17":{"name":"Charcoal","qty":"2 x 3 kg","cat":"Charcoal & grill","buyer":"ZH","cost":24,"done":false,"order":17,"by":"Fei","ts":1788314400016},"i18":{"name":"Fire starters","qty":"1 box","cat":"Charcoal & grill","buyer":"ZH","cost":8,"done":false,"order":18,"by":"Fei","ts":1788314400017},"i19":{"name":"Portable grill and grill net","qty":"bring","cat":"Charcoal & grill","buyer":"ZH","cost":0,"done":false,"order":19,"by":"Fei","ts":1788314400018},"i20":{"name":"Tongs, skewers, foil","qty":"","cat":"Charcoal & grill","buyer":"Jie","cost":15,"done":false,"order":20,"by":"Fei","ts":1788314400019},"i21":{"name":"Cooler box","qty":"bring","cat":"Charcoal & grill","buyer":"Fei","cost":0,"done":false,"order":21,"by":"Fei","ts":1788314400020},"i22":{"name":"Paper plates, cups, forks","qty":"for 5","cat":"Plates & gear","buyer":"Adriana","cost":12,"done":false,"order":22,"by":"Fei","ts":1788314400021},"i23":{"name":"Trash bags","qty":"1 roll","cat":"Plates & gear","buyer":"Adriana","cost":5,"done":false,"order":23,"by":"Fei","ts":1788314400022},"i24":{"name":"Wet wipes and tissues","qty":"","cat":"Plates & gear","buyer":"Sara","cost":8,"done":false,"order":24,"by":"Fei","ts":1788314400023},"i25":{"name":"Picnic mat","qty":"bring","cat":"Plates & gear","buyer":"Jie","cost":0,"done":false,"order":25,"by":"Fei","ts":1788314400024},"i26":{"name":"Insect repellent","qty":"1","cat":"Plates & gear","buyer":"Sara","cost":10,"done":false,"order":26,"by":"Fei","ts":1788314400025},"i27":{"name":"Coins for entry fee","qty":"","cat":"Other","buyer":"Fei","cost":20,"done":false,"order":27,"by":"Fei","ts":1788314400026},"i28":{"name":"Bluetooth speaker","qty":"bring","cat":"Other","buyer":"Fei","cost":0,"done":false,"order":28,"by":"Fei","ts":1788314400027},"i29":{"name":"First aid kit","qty":"bring","cat":"Other","buyer":"Adriana","cost":0,"done":false,"order":29,"by":"Fei","ts":1788314400028}},"slots":{"s1":{"time":"07:15","what":"Meet at Batu Caves MRT carpark, load cars","who":"Fei","ts":1788314400000},"s2":{"time":"07:30","what":"Ice run in Batu Caves, last supply stop","who":"Sara","ts":1788314400001},"s3":{"time":"08:00","what":"Arrive Sungai Tua, pay entry, grab a riverside spot","who":"ZH","ts":1788314400002},"s4":{"time":"08:15","what":"Set up grill, light charcoal","who":"ZH","ts":1788314400003},"s5":{"time":"08:45","what":"Swim while the coals settle","who":"","ts":1788314400004},"s6":{"time":"09:15","what":"Start grilling","who":"Jie","ts":1788314400005},"s7":{"time":"11:30","what":"Pack up, rubbish out, rinse grill","who":"Adriana","ts":1788314400006},"s8":{"time":"12:00","what":"Leave before the noon crowd","who":"","ts":1788314400007}},"notes":{"n1":{"who":"Fei","text":"Marinate the wings Saturday night. If it pours on Sunday morning we push to the following week.","ts":1788314400000}},"seeded":true};
+  const state = { plan: {}, items: [], slots: [], notes: [] };
+  let mode = "local";
+
+  const LocalStore = (() => {
+    const KEY = "sungaiTuaBBQ.v1";
+    const subs = {};
+    let data;
+    try { data = JSON.parse(localStorage.getItem(KEY) || "null"); } catch(e){ data = null; }
+    if (!data) data = JSON.parse(JSON.stringify(LOCAL_SEED));
+    const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch(e){} };
+    const fire = k => (subs[k]||[]).forEach(fn => fn());
+    window.addEventListener("storage", e => { if (e.key===KEY){ try{ data = JSON.parse(e.newValue)||data; }catch(_){} Object.keys(subs).forEach(fire); } });
+    const id = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+    return {
+      subDoc(path, cb){ (subs[path] ||= []).push(() => cb(data[path])); cb(data[path]); },
+      subCol(col, cb){ const f = () => cb(Object.entries(data[col]).map(([id,d]) => ({id, ...d}))); (subs[col] ||= []).push(f); f(); },
+      async setDoc(path, d){ data[path] = d; persist(); fire(path); },
+      async setIn(col, id, d){ data[col][id] = d; persist(); fire(col); },
+      async patch(col, id, p){ if (data[col][id]) { Object.assign(data[col][id], p); persist(); fire(col); } },
+      async del(col, id){ delete data[col][id]; persist(); fire(col); },
+      async add(col, d){ const i = id(); return this.setIn(col, i, d); },
+    };
+  })();
+
+  const DbStore = db => ({
+    subDoc(path, cb){ db.doc(path).onSnapshot(s => cb(s.exists ? s.data() : null), err => syncState("error", "Sync stopped")); },
+    subCol(col, cb){ db.collection(col).onSnapshot(s => cb(s.docs.map(d => ({id:d.id, ...d.data()}))), err => syncState("error", "Sync stopped")); },
+    setDoc: (path, d) => db.doc(path).set(d),
+    setIn: (col, id, d) => db.collection(col).doc(id).set(d),
+    patch: (col, id, p) => db.collection(col).doc(id).update(p),
+    del: (col, id) => db.collection(col).doc(id).delete(),
+    add: (col, d) => db.collection(col).add(d),
+  });
+
+  let store = LocalStore;
+  const guard = p => Promise.resolve(p).catch(e => { toast(e && e.code === "quota_exceeded" ? "Storage full. Delete some rows first." : "Could not save. Try again."); });
+
+  function syncState(kind, text){
+    const el = $("#sync"); el.className = "sync " + kind; el.lastElementChild.textContent = text;
+  }
+
+  /* ---------- identity ---------- */
+  let me = "";
+  try { me = localStorage.getItem("sungaiTuaBBQ.me") || ""; } catch(e){}
+  const whoSel = $("#who");
+  whoSel.innerHTML = '<option value="">pick your name</option>' + PEOPLE.map(p => `<option ${p===me?"selected":""}>${p}</option>`).join("");
+  whoSel.addEventListener("change", () => { me = whoSel.value; try{ localStorage.setItem("sungaiTuaBBQ.me", me); }catch(e){} });
+  const author = () => me || "Someone";
+
+  /* ---------- plan facts ---------- */
+  function renderPlan(){
+    const p = state.plan || {};
+    document.querySelectorAll("[data-plan]").forEach(inp => { if (document.activeElement !== inp) inp.value = p[inp.dataset.plan] || ""; });
+    const att = p.attending || {};
+    $("#chips").innerHTML = PEOPLE.map(n => {
+      const v = att[n]; const cls = v===true ? "in" : v===false ? "out" : "";
+      return `<button type="button" class="chip ${cls}" data-name="${n}">${n}${v===true?" ✓":v===false?"":" ?"}</button>`;
+    }).join("");
+  }
+  const savePlan = patch => guard(store.setDoc("plan/main", { ...(state.plan||{}), ...patch }));
+  document.querySelectorAll("[data-plan]").forEach(inp => inp.addEventListener("change", () => savePlan({ [inp.dataset.plan]: inp.value })));
+  $("#chips").addEventListener("click", e => {
+    const b = e.target.closest(".chip"); if (!b) return;
+    const att = { ...((state.plan||{}).attending || {}) };
+    const cur = att[b.dataset.name]; att[b.dataset.name] = cur===true ? false : cur===false ? null : true;
+    if (att[b.dataset.name] === null) delete att[b.dataset.name];
+    savePlan({ attending: att });
+  });
+
+  /* ---------- shopping list ---------- */
+  const buyerOpts = sel => `<option value="" ${!sel?"selected":""}>— who?</option>` + PEOPLE.map(p => `<option ${p===sel?"selected":""}>${p}</option>`).join("");
+  $("#add-cat").innerHTML = CATS.map(c => `<option>${c}</option>`).join("");
+  $("#add-buyer").innerHTML = buyerOpts("");
+
+  const editing = root => { const a = document.activeElement; return !!a && root.contains(a) && (a.tagName === "INPUT" || a.tagName === "TEXTAREA") && a.type !== "checkbox"; };
+  let itemsDirty = false;
+  function renderItems(){
+    const root = $("#items");
+    if (editing(root)) { itemsDirty = true; return; }
+    itemsDirty = false;
+    const items = state.items.slice().sort((a,b) => (a.order??0)-(b.order??0) || (a.ts??0)-(b.ts??0));
+    const done = items.filter(i => i.done).length;
+    $("#list-meta").textContent = items.length ? `${done} of ${items.length} bought` : "";
+    if (!items.length) { root.innerHTML = '<div class="empty">Nothing on the list yet. Add the first item below.</div>'; return; }
+    let html = '<div class="row head"><span></span><span>Item</span><span>Qty</span><span>Buyer</span><span style="text-align:right">Est. RM</span><span></span></div>';
+    for (const c of CATS) {
+      const rows = items.filter(i => (i.cat||"Other") === c);
+      if (!rows.length) continue;
+      const sub = rows.reduce((s,i) => s + (Number(i.cost)||0), 0);
+      html += `<div class="cat"><h3>${c}<span class="num">${fmtRM(sub)}</span></h3>`;
+      html += rows.map(i => `
+        <div class="row ${i.done?"done":""}" data-id="${i.id}">
+          <input class="c" type="checkbox" data-f="done" ${i.done?"checked":""} aria-label="Bought">
+          <input class="n name" type="text" data-f="name" value="${esc(i.name)}">
+          <input class="q" type="text" data-f="qty" value="${esc(i.qty)}" placeholder="qty">
+          <select class="b ${i.buyer?"":"unassigned"}" data-f="buyer">${buyerOpts(i.buyer)}</select>
+          <input class="p cost num" type="number" data-f="cost" value="${i.cost ?? ""}" min="0" step="1" placeholder="RM">
+          <button class="x ghost" type="button" data-del title="Remove">×</button>
+        </div>`).join("");
+      html += "</div>";
+    }
+    root.innerHTML = html;
+  }
+  $("#items").addEventListener("change", e => {
+    const row = e.target.closest(".row[data-id]"); const f = e.target.dataset.f; if (!row || !f) return;
+    let v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+    if (f === "cost") v = v === "" ? null : Number(v);
+    guard(store.patch("items", row.dataset.id, { [f]: v, editedBy: author(), editedAt: Date.now() }));
+  });
+  $("#items").addEventListener("focusout", () => { setTimeout(() => { if (itemsDirty && !$("#items").contains(document.activeElement)) renderItems(); }, 0); });
+  $("#items").addEventListener("click", e => {
+    const b = e.target.closest("[data-del]"); if (!b) return;
+    const row = b.closest(".row"); guard(store.del("items", row.dataset.id));
+  });
+  $("#add-item").addEventListener("submit", e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const name = String(f.get("name")||"").trim(); if (!name) return;
+    const order = state.items.reduce((m,i) => Math.max(m, i.order??0), 0) + 1;
+    guard(store.add("items", { name, qty: String(f.get("qty")||"").trim(), cat: f.get("cat"), buyer: f.get("buyer")||"", cost: f.get("cost") ? Number(f.get("cost")) : null, done:false, order, by: author(), ts: Date.now() }));
+    e.target.reset(); e.target.querySelector(".name").focus();
+  });
+
+  /* ---------- who buys what ---------- */
+  function renderPeople(){
+    const items = state.items;
+    const html = PEOPLE.map(p => {
+      const mine = items.filter(i => i.buyer === p);
+      const total = mine.reduce((s,i) => s + (Number(i.cost)||0), 0);
+      const list = mine.length ? mine.map(i => `${i.done?"<s>":""}${esc(i.name)}${i.qty?` <em>${esc(i.qty)}</em>`:""}${i.done?"</s>":""}`).join(" · ") : "nothing yet";
+      return `<div class="person ${mine.length?"":"none"}"><b>${p}</b><span class="total num">${fmtRM(total)}</span><div class="list">${list}</div></div>`;
+    });
+    const un = items.filter(i => !i.buyer);
+    if (un.length) html.push(`<div class="person none"><b>Unassigned</b><span class="total num">${fmtRM(un.reduce((s,i)=>s+(Number(i.cost)||0),0))}</span><div class="list">${un.map(i=>esc(i.name)).join(" · ")}</div></div>`);
+    $("#people").innerHTML = html.join("");
+    const total = items.reduce((s,i) => s + (Number(i.cost)||0), 0);
+    const heads = PEOPLE.filter(p => (state.plan?.attending||{})[p] === true).length || PEOPLE.length;
+    $("#totalbar").innerHTML = `<span>Total <small>· ${heads} pax</small></span><span class="num">${fmtRM(total)} <small>≈ ${fmtRM(total/heads)} each</small></span>`;
+  }
+
+  /* ---------- run sheet ---------- */
+  let slotsDirty = false;
+  function renderSlots(){
+    const root = $("#slots");
+    if (editing(root)) { slotsDirty = true; return; }
+    slotsDirty = false;
+    const slots = state.slots.slice().sort((a,b) => String(a.time||"").localeCompare(String(b.time||"")));
+    root.innerHTML = slots.length ? slots.map(s => `
+      <div class="slot" data-id="${s.id}">
+        <input class="time num" type="text" inputmode="numeric" maxlength="5" placeholder="08:00" data-f="time" value="${esc(s.time)}" aria-label="Time">
+        <input type="text" data-f="what" value="${esc(s.what)}" placeholder="what happens">
+        <select data-f="who">${buyerOpts(s.who)}</select>
+        <button class="ghost" type="button" data-del title="Remove">×</button>
+      </div>`).join("") : '<div class="empty">No slots yet.</div>';
+  }
+  $("#slots").addEventListener("change", e => {
+    const row = e.target.closest(".slot"); const f = e.target.dataset.f; if (!row || !f) return;
+    guard(store.patch("slots", row.dataset.id, { [f]: e.target.value }));
+  });
+  $("#slots").addEventListener("focusout", () => { setTimeout(() => { if (slotsDirty && !$("#slots").contains(document.activeElement)) renderSlots(); }, 0); });
+  $("#slots").addEventListener("click", e => { const b = e.target.closest("[data-del]"); if (b) guard(store.del("slots", b.closest(".slot").dataset.id)); });
+  $("#add-slot").addEventListener("click", () => guard(store.add("slots", { time: "", what: "", who: "", ts: Date.now() })));
+
+  /* ---------- notes ---------- */
+  function renderNotes(){
+    const notes = state.notes.slice().sort((a,b) => (b.ts||0)-(a.ts||0)).slice(0, 60);
+    $("#notes").innerHTML = notes.length ? notes.map(n => {
+      const d = new Date(n.ts||0);
+      const when = isNaN(d) ? "" : d.toLocaleString("en-MY", { weekday:"short", hour:"2-digit", minute:"2-digit" });
+      return `<div class="note"><span class="by">${esc(n.who)}</span><span class="when">${when}</span><p>${esc(n.text)}</p></div>`;
+    }).join("") : '<div class="empty">No notes yet.</div>';
+  }
+  $("#add-note").addEventListener("submit", e => {
+    e.preventDefault();
+    if (!me) { toast("Pick your name at the top first"); whoSel.focus(); return; }
+    const ta = e.target.querySelector("textarea"); const text = ta.value.trim(); if (!text) return;
+    guard(store.add("notes", { who: author(), text, ts: Date.now() })); ta.value = "";
+  });
+
+  /* ---------- toast ---------- */
+  let toastT;
+  function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2600); }
+
+  /* ---------- boot ---------- */
+  function subscribeAll(){
+    store.subDoc("plan/main", d => { state.plan = d || {}; renderPlan(); renderPeople(); });
+    store.subCol("items", rows => { state.items = rows; renderItems(); renderPeople(); });
+    store.subCol("slots", rows => { state.slots = rows; renderSlots(); });
+    store.subCol("notes", rows => { state.notes = rows; renderNotes(); });
+  }
+  renderPlan(); renderItems(); renderPeople(); renderSlots(); renderNotes();
+
+  const canUse = typeof window.claude === "object" && window.claude && typeof window.claude.use === "function";
+  (canUse ? window.claude.use("db") : Promise.resolve(null)).then(db => {
+    if (db) { mode = "db"; store = DbStore(db); syncState("live", "Live · shared with everyone"); }
+    else { syncState("local", "Saved on this device only"); }
+    subscribeAll();
+  }).catch(() => { syncState("local", "Saved on this device only"); subscribeAll(); });
+})();
+</script>
+
+</body>
+</html>
