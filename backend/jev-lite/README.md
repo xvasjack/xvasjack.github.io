@@ -1,6 +1,21 @@
 # jev-lite
 
-BTC/USD rule backtester + strategy research. No server yet (scaffold in `shared/`, `railway.json`).
+BTC/USD rule backtester, strategy research and a daily paper trader.
+
+## Paper trader (`server.js`, `paper.js`, `storage.js`)
+
+Strategy: ensemble of smaTrend 40/50/60/75d on daily Bitstamp candles (target position 0, 0.25, 0.5, 0.75 or 1). Once a day at 00:05 UTC it fetches completed daily candles, computes the target, rebalances a virtual $10k account at the ticker price with 15 bps/side fees, saves state, and emails a one-line summary vs buy & hold. Idempotent per daily candle; catches up on restart.
+
+| Route                      | Purpose                                                               |
+| -------------------------- | --------------------------------------------------------------------- |
+| `GET /health`              | Railway health check                                                  |
+| `GET /api/jev-lite/status` | equity, return vs buy & hold, drawdown, last signal, last trades      |
+| `GET /api/jev-lite/signal` | live signal from Bitstamp (no state change)                           |
+| `POST /api/jev-lite/run`   | run the daily job now; header `x-run-token`, body `{ "force": true }` |
+
+Env: `SENDGRID_API_KEY`, `SENDER_EMAIL`, `JEV_EMAIL` (recipient, default sender), `JEV_RUN_TOKEN`, `JEV_RUN_HOUR_UTC` (0), `JEV_RUN_MINUTE` (5), `JEV_CATCHUP_ON_START` (1), `JEV_COST_BPS` (15), `JEV_START_CASH` (10000). State goes to Cloudflare R2 when `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` are set (Railway disk is ephemeral), else `state/paper-state.json`.
+
+`node scripts/replay-paper.js --from 2025-01-01` replays the paper code path over history and compares it with the backtest engine (they agree within ~1.5 points). Note: the 2023-2026 catalog numbers below start the SMAs cold in Jan 2023 (75-day warmup), so they understate the ensemble; with warmup from 2022 data it made +324% over 2023-2026 vs +359% buy & hold.
 
 ## Files
 
