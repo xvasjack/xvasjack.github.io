@@ -208,6 +208,22 @@ describe('jev-lite rules', () => {
     expect(trendCombo(downD, { smaDays: 20, momDays: 10, short: true })[119]).toBe(-1);
   });
 
+  test('dipBuy enters X% below SMA and exits back at SMA or after maxHold', () => {
+    const { dipBuy } = require('../jev-lite/rules');
+    const c = daily([...Array(30).fill(100), 75, 75, 101, 101]);
+    const p = dipBuy(c, { days: 20, dip: 0.2 });
+    expect(p[30]).toBe(1); // 75 < 0.8 * ~100
+    expect(p[31]).toBe(1);
+    expect(p[32]).toBe(0); // 101 > SMA (~98)
+    const held = dipBuy(daily([...Array(30).fill(100), ...Array(10).fill(75)]), {
+      days: 20,
+      dip: 0.2,
+      maxHoldDays: 3,
+    });
+    expect(held[30]).toBe(1);
+    expect(held[33]).toBe(0);
+  });
+
   test('ensemble averages member positions', () => {
     const c = daily(Array.from({ length: 120 }, (_, i) => 100 + i));
     const p = ensemble(c, {

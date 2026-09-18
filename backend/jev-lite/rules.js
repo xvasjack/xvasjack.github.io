@@ -390,6 +390,36 @@ function volTarget(candles, params = {}) {
 }
 
 /**
+ * Contrarian dip buy: enter long when close < SMA(days) * (1 - dip); exit when
+ * close > SMA(days) * (1 + exitAbove) or after maxHoldDays (0 = no limit).
+ * params: { days=200, dip=0.2, exitAbove=0, maxHoldDays=0 }
+ */
+function dipBuy(candles, params = {}) {
+  const n = daysToBars(params.days || 200, candles, params);
+  const dip = params.dip ?? 0.2;
+  const exitAbove = params.exitAbove ?? 0;
+  const maxHold = params.maxHoldDays ? daysToBars(params.maxHoldDays, candles, params) : 0;
+  const c = closes(candles);
+  const m = sma(c, n);
+  const pos = new Int8Array(candles.length);
+  let state = 0;
+  let entered = -1;
+  for (let i = 0; i < candles.length; i++) {
+    if (Number.isNaN(m[i])) continue;
+    if (state === 0) {
+      if (c[i] < m[i] * (1 - dip)) {
+        state = 1;
+        entered = i;
+      }
+    } else if (c[i] > m[i] * (1 + exitAbove) || (maxHold && i - entered >= maxHold)) {
+      state = 0;
+    }
+    pos[i] = state;
+  }
+  return pos;
+}
+
+/**
  * Constant leverage wrapper: base rule position x leverage (engine clamps to maxLeverage
  * and charges borrowApr on the part above 1x). params: { base='smaTrend', baseParams={}, leverage=2 }
  */
@@ -469,6 +499,7 @@ const RULES = {
   chandelier,
   rsiDip,
   trendCombo,
+  dipBuy,
   volTarget,
   levered,
   ensemble,
