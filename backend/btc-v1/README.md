@@ -2,6 +2,29 @@
 
 BTC/USD rule backtester, strategy research and a daily paper trader.
 
+## Daily check with a popup (simplest use)
+
+`node run.js check` fetches the price and:
+
+1. writes a file to `Desktop\BTC signal\` whose **name is the answer**, e.g. `2026-09-18  be 75% in BTC  (above 3 of 4).txt` (keeps the last 7 days),
+2. shows a popup window with the details that stays until you close it (skip with `--no-popup`),
+3. logs one line to `state/log.txt`.
+
+No account, no trading. Desktop folder can be changed with env `BTC_DESKTOP_DIR`.
+
+**Button:** `check.bat` in this folder does the same. Right-click it -> Send to -> Desktop (create shortcut). Double-click the shortcut any time.
+
+**Every day at 09:30 local time** (PowerShell, run once; if the laptop was off it runs at next start):
+
+```
+$a = New-ScheduledTaskAction -Execute "C:\Users\User\btc-bot\backend\btc-v1\check.bat"
+$t = New-ScheduledTaskTrigger -Daily -At 09:30
+$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun
+Register-ScheduledTask -TaskName "btc-v1" -Action $a -Trigger $t -Settings $s
+```
+
+Remove with `Unregister-ScheduledTask -TaskName "btc-v1"`.
+
 ## Run it locally (no server, no email, no cloud)
 
 ```

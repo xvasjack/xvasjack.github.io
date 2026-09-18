@@ -1,8 +1,9 @@
 'use strict';
 /**
- * Local paper trader. No server, no email, no cloud. State in state/paper-state.json.
+ * Local runner. No server, no email, no cloud.
  *
- *   node run.js            run once: fetch, signal, rebalance, print
+ *   node run.js check      fetch price, POPUP with today's answer (stays until closed). Use this daily.
+ *   node run.js            paper account: fetch, signal, rebalance, print (optional)
  *   node run.js status     print account
  *   node run.js signal     print today's signal only
  *   node run.js --loop     run now, then every day at 00:05 UTC (keep terminal open), notifies
@@ -107,6 +108,89 @@ async function signalOnly() {
     console.log(`  SMA ${m.days}d $${m.sma} price ${m.above ? 'above' : 'below'}`);
 }
 
+/** Text for the daily popup. No account, just the rule. */
+function checkText(signal, price, now = new Date()) {
+  const above = signal.smas.filter((m) => m.above);
+  const n = above.length;
+  const total = signal.smas.length;
+  const lines = [
+    `${now.toISOString().slice(0, 10)}   BTC $${Math.round(price).toLocaleString('en-US')}`,
+    '',
+    `Price is above ${n} of ${total} averages:`,
+    ...signal.smas.map(
+      (m) =>
+        `  ${m.above ? 'YES' : 'no '}  ${m.days}-day avg  $${Math.round(m.sma).toLocaleString('en-US')}`
+    ),
+    '',
+    `=> Be ${Math.round(signal.target * 100)}% in BTC, ${100 - Math.round(signal.target * 100)}% in cash`,
+  ];
+  return lines.join('\n');
+}
+
+/** Popup window that stays until closed (Windows MessageBox / macOS dialog / zenity). */
+function popup(title, message) {
+  const { execFile } = require('child_process');
+  const q = (s) => s.replace(/'/g, "''");
+  try {
+    if (process.platform === 'win32') {
+      const ps = `Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('${q(message).replace(/\n/g, "'+[char]10+'")}', '${q(title)}') | Out-Null`;
+      execFile('powershell', ['-NoProfile', '-Command', ps], () => {});
+    } else if (process.platform === 'darwin') {
+      execFile('osascript', ['-e', `display dialog "${message}" with title "${title}"`], () => {});
+    } else {
+      execFile('zenity', ['--info', '--title', title, '--text', message], () => {});
+    }
+  } catch (_e) {
+    // best effort
+  }
+}
+
+/** Filename that IS the notification, e.g. "2026-09-18  be 75% in BTC  (above 3 of 4).txt" */
+function signalFileName(signal, now = new Date()) {
+  const n = signal.smas.filter((m) => m.above).length;
+  return `${now.toISOString().slice(0, 10)}  be ${Math.round(signal.target * 100)}% in BTC  (above ${n} of ${signal.smas.length}).txt`;
+}
+
+/** Write the signal file into Desktop/BTC signal/, keep only the newest `keep` files. */
+function writeDesktopFile(signal, text, { dir, now = new Date(), keep = 7 } = {}) {
+  const fs = require('fs');
+  const path = require('path');
+  const os = require('os');
+  const folder =
+    dir || process.env.BTC_DESKTOP_DIR || path.join(os.homedir(), 'Desktop', 'BTC signal');
+  fs.mkdirSync(folder, { recursive: true });
+  const file = path.join(folder, signalFileName(signal, now));
+  fs.writeFileSync(file, text + '\n');
+  const old = fs
+    .readdirSync(folder)
+    .filter((f) => /^\d{4}-\d{2}-\d{2} {2}be \d+% in BTC {2}\(above \d of \d\)\.txt$/.test(f))
+    .sort()
+    .reverse()
+    .slice(keep);
+  for (const f of old) fs.unlinkSync(path.join(folder, f));
+  return file;
+}
+
+/** `node run.js check`: fetch, write Desktop file, show popup, log one line. */
+async function check() {
+  const candles = await paper.fetchDailyCandles();
+  const signal = paper.computeSignal(candles);
+  const price = await paper.fetchLastPrice();
+  const text = checkText(signal, price);
+  console.log(text);
+  appendLog(
+    `check | BTC $${Math.round(price)} | above ${signal.smas.filter((m) => m.above).length}/${signal.smas.length} | be ${Math.round(signal.target * 100)}% in BTC`
+  );
+  try {
+    console.log(`written -> ${writeDesktopFile(signal, text)}`);
+  } catch (e) {
+    console.error('could not write desktop file:', e.message);
+  }
+  if (!process.argv.includes('--no-popup')) {
+    popup(`btc-v1: be ${Math.round(signal.target * 100)}% in BTC`, text);
+  }
+}
+
 function msUntil0005() {
   const now = new Date();
   const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 5));
@@ -126,18 +210,21 @@ async function loop() {
 
 if (require.main === module) {
   const a = process.argv.slice(2);
-  const job = a.includes('status')
-    ? status()
-    : a.includes('signal')
-      ? signalOnly()
-      : a.includes('--loop')
-        ? loop()
-        : runOnce({ force: a.includes('--force'), notifyUser: a.includes('--notify') });
+  const job = a.includes('check')
+    ? check()
+    : a.includes('status')
+      ? status()
+      : a.includes('signal')
+        ? signalOnly()
+        : a.includes('--loop')
+          ? loop()
+          : runOnce({ force: a.includes('--force'), notifyUser: a.includes('--notify') });
   job.catch((e) => {
     console.error('failed:', e.message);
     if (a.includes('--notify')) notify('btc-v1: run failed', e.message);
+    if (a.includes('check')) popup('btc-v1: check failed', `${e.message}\n\nIs the internet on?`);
     process.exit(1);
   });
 }
 
-module.exports = { textReport, oneLiner, runOnce };
+module.exports = { textReport, oneLiner, checkText, signalFileName, writeDesktopFile, runOnce };

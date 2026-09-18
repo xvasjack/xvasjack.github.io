@@ -167,11 +167,39 @@ describe('btc-v1 local run.js', () => {
     expect(txt).toMatch(/SMA 40d/);
     expect(txt).toMatch(/trade: buy/);
     expect(txt).toMatch(/buy&hold/);
-    const { oneLiner } = require('../btc-v1/run');
+    const { oneLiner, checkText } = require('../btc-v1/run');
     const line = oneLiner(st, s, 100, traded);
     expect(line).toMatch(/above 1\/1: 40d/);
     expect(line).toMatch(/be 50% in BTC/);
     expect(line).toMatch(/BUY \$/);
+    const sig = paper.computeSignal(up);
+    const text = checkText(sig, 219.5, new Date('2026-09-18T01:30:00Z'));
+    expect(text).toMatch(/2026-09-18 {3}BTC \$220/);
+    expect(text).toMatch(/above 4 of 4 averages/);
+    expect(text).toMatch(/YES {2}40-day avg/);
+    expect(text).toMatch(/Be 100% in BTC, 0% in cash/);
+    const cashText = checkText(paper.computeSignal(down), 181, new Date());
+    expect(cashText).toMatch(/above 0 of 4/);
+    expect(cashText).toMatch(/Be 0% in BTC, 100% in cash/);
+  });
+
+  test('desktop signal file: name is the message, keeps newest 7', () => {
+    const { signalFileName, writeDesktopFile } = require('../btc-v1/run');
+    const fs = require('fs');
+    const path = require('path');
+    const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'btc-desk-'));
+    const sig = paper.computeSignal(up);
+    expect(signalFileName(sig, new Date('2026-09-18T01:00:00Z'))).toBe(
+      '2026-09-18  be 100% in BTC  (above 4 of 4).txt'
+    );
+    for (let d = 1; d <= 9; d++) {
+      writeDesktopFile(sig, 'hello', { dir, now: new Date(`2026-09-0${d}T01:00:00Z`) });
+    }
+    const files = fs.readdirSync(dir).sort();
+    expect(files).toHaveLength(7);
+    expect(files[0]).toMatch(/^2026-09-03/);
+    expect(files[6]).toMatch(/^2026-09-09/);
+    expect(fs.readFileSync(path.join(dir, files[6]), 'utf8')).toBe('hello\n');
   });
 });
 
