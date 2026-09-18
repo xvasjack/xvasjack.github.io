@@ -2,7 +2,20 @@
 
 BTC/USD rule backtester, strategy research and a daily paper trader.
 
-## Paper trader (`server.js`, `paper.js`, `storage.js`)
+## Run it locally (no server, no email, no cloud)
+
+```
+cd backend && npm install          # once
+cd jev-lite
+node run.js            # fetch today's candle, compute signal, rebalance paper account, print
+node run.js status     # show account
+node run.js signal     # show signal only
+node run.js --loop     # keep running: now, then daily at 00:05 UTC
+```
+
+State lives in `jev-lite/state/paper-state.json` (gitignored). Needs internet for Bitstamp's public API. No keys.
+
+## Paper trader service (`server.js`, `paper.js`, `storage.js`)
 
 Strategy: ensemble of smaTrend 40/50/60/75d on daily Bitstamp candles (target position 0, 0.25, 0.5, 0.75 or 1). Once a day at 00:05 UTC it fetches completed daily candles, computes the target, rebalances a virtual $10k account at the ticker price with 15 bps/side fees, saves state, and emails a one-line summary vs buy & hold. Idempotent per daily candle; catches up on restart.
 

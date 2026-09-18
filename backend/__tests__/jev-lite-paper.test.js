@@ -150,6 +150,26 @@ describe('jev-lite paper: replay matches backtest engine', () => {
   });
 });
 
+describe('jev-lite local run.js', () => {
+  test('text report lists position, SMAs, equity and buy & hold', () => {
+    const { textReport } = require('../jev-lite/run');
+    const st = paper.newState(0);
+    const s = {
+      asOf: T0,
+      close: 100,
+      target: 0.5,
+      strategy: 'x',
+      smas: [{ days: 40, sma: 95, above: true }],
+    };
+    const { traded } = paper.step(st, s, 100);
+    const txt = textReport(st, s, 100, traded);
+    expect(txt).toMatch(/position: LONG 50%/);
+    expect(txt).toMatch(/SMA 40d/);
+    expect(txt).toMatch(/trade: buy/);
+    expect(txt).toMatch(/buy&hold/);
+  });
+});
+
 describe('jev-lite server', () => {
   test('msUntilNextRun is within 24h and status route works without state', async () => {
     process.env.JEV_STATE_FILE = require('path').join(
