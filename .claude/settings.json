@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ai-computer-agent/.claude/hooks/agent_guard.py"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/ai-computer-agent/.claude/hooks/agent_guard.py\""
           }
         ]
       }
