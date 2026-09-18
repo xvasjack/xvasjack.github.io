@@ -151,13 +151,31 @@ function signalFileName(signal, now = new Date()) {
   return `${now.toISOString().slice(0, 10)}  be ${Math.round(signal.target * 100)}% in BTC  (above ${n} of ${signal.smas.length}).txt`;
 }
 
+/** Real Desktop path. On Windows ask the shell (handles OneDrive-redirected Desktop). */
+function desktopDir(os = require('os')) {
+  const path = require('path');
+  if (process.platform === 'win32') {
+    try {
+      const { execFileSync } = require('child_process');
+      const out = execFileSync(
+        'powershell',
+        ['-NoProfile', '-Command', "[Environment]::GetFolderPath('Desktop')"],
+        { encoding: 'utf8', timeout: 15000 }
+      ).trim();
+      if (out) return out;
+    } catch (_e) {
+      // fall through
+    }
+  }
+  return path.join(os.homedir(), 'Desktop');
+}
+
 /** Write the signal file into Desktop/BTC signal/, keep only the newest `keep` files. */
 function writeDesktopFile(signal, text, { dir, now = new Date(), keep = 7 } = {}) {
   const fs = require('fs');
   const path = require('path');
   const os = require('os');
-  const folder =
-    dir || process.env.BTC_DESKTOP_DIR || path.join(os.homedir(), 'Desktop', 'BTC signal');
+  const folder = dir || process.env.BTC_DESKTOP_DIR || path.join(desktopDir(os), 'BTC signal');
   fs.mkdirSync(folder, { recursive: true });
   const file = path.join(folder, signalFileName(signal, now));
   fs.writeFileSync(file, text + '\n');
