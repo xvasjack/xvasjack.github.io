@@ -13,7 +13,26 @@ node run.js signal     # show signal only
 node run.js --loop     # keep running: now, then daily at 00:05 UTC
 ```
 
-State lives in `jev-lite/state/paper-state.json` (gitignored). Needs internet for Bitstamp's public API. No keys.
+State lives in `jev-lite/state/paper-state.json` (gitignored), one line per run in `jev-lite/state/log.txt`. Needs internet for Bitstamp's public API. No keys.
+
+### Run daily automatically with a desktop notification
+
+`node run.js --notify` runs once and pops a desktop notification (Windows toast / macOS / Linux). Schedule it:
+
+Windows (PowerShell, edit the path). 08:10 local = 00:10 UTC in Singapore:
+
+```
+schtasks /Create /SC DAILY /ST 08:10 /TN "jev-lite" /TR "cmd /c cd /d C:\path\to\xvasjack.github.io\backend\jev-lite && node run.js --notify >> state\task.log 2>&1"
+schtasks /Run /TN "jev-lite"     # test it now
+```
+
+macOS / Linux (`crontab -e`), 10 minutes past midnight UTC:
+
+```
+10 0 * * * cd /path/to/xvasjack.github.io/backend/jev-lite && /usr/bin/env node run.js --notify >> state/task.log 2>&1
+```
+
+If the machine is asleep at that time the run happens at the next start (`schtasks` option `/RL` not needed; the rule is idempotent per day, so running late or twice is harmless).
 
 ## Paper trader service (`server.js`, `paper.js`, `storage.js`)
 
