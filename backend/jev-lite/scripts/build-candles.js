@@ -4,7 +4,7 @@
  * ff137/bitstamp-btcusd-minute-data 1-minute source files.
  *
  * Usage:
- *   node scripts/build-candles.js <hist.csv.gz> <latest.csv> [outDir]
+ *   node scripts/build-candles.js <hist.csv.gz> <latest.csv> [outDir] [--from 2023-01-01] [--frames 1h,15m] [--suffix _2012]
  *
  * Source: https://github.com/ff137/bitstamp-btcusd-minute-data
  *   data/historical/btcusd_bitstamp_1min_2012-2025.csv.gz
@@ -16,8 +16,19 @@ const path = require('path');
 const zlib = require('zlib');
 const readline = require('readline');
 
-const START_TS = Date.UTC(2023, 0, 1) / 1000;
-const FRAMES = { '1h': 3600, '15m': 900 };
+const ALL_FRAMES = { '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
+
+function parseArgs(argv) {
+  const positional = [];
+  const opts = { from: '2023-01-01', frames: ['1h', '15m'], suffix: '' };
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--from') opts.from = argv[++i];
+    else if (argv[i] === '--frames') opts.frames = argv[++i].split(',');
+    else if (argv[i] === '--suffix') opts.suffix = argv[++i];
+    else positional.push(argv[i]);
+  }
+  return { positional, opts };
+}
 
 function lineStream(file) {
   const raw = fs.createReadStream(file);
@@ -26,10 +37,19 @@ function lineStream(file) {
 }
 
 async function main() {
-  const [histFile, latestFile, outDirArg] = process.argv.slice(2);
+  const { positional, opts } = parseArgs(process.argv.slice(2));
+  const [histFile, latestFile, outDirArg] = positional;
   if (!histFile || !latestFile) {
-    console.error('usage: node scripts/build-candles.js <hist.csv.gz> <latest.csv> [outDir]');
+    console.error(
+      'usage: node scripts/build-candles.js <hist.csv.gz> <latest.csv> [outDir] [--from YYYY-MM-DD] [--frames 1h,15m] [--suffix _x]'
+    );
     process.exit(1);
+  }
+  const START_TS = Date.parse(opts.from + 'T00:00:00Z') / 1000;
+  const FRAMES = {};
+  for (const f of opts.frames) {
+    if (!ALL_FRAMES[f]) throw new Error(`unknown frame ${f}`);
+    FRAMES[f] = ALL_FRAMES[f];
   }
   const outDir = outDirArg || path.join(__dirname, '..', 'data');
   fs.mkdirSync(outDir, { recursive: true });
@@ -96,7 +116,7 @@ async function main() {
       const b = buckets[frame].get(k);
       out.push(`${k},${b.o},${b.h},${b.l},${b.c},${+b.v.toFixed(8)}`);
     }
-    const file = path.join(outDir, `btcusd_${frame}.csv`);
+    const file = path.join(outDir, `btcusd_${frame}${opts.suffix}.csv`);
     fs.writeFileSync(file, out.join('\n') + '\n');
     const first = new Date(keys[0] * 1000).toISOString();
     const last = new Date(keys[keys.length - 1] * 1000).toISOString();

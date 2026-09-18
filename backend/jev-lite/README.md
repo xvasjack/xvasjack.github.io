@@ -71,6 +71,22 @@ Buy & hold: +358%, maxDD 53%, Sharpe 1.11, 2025-26 (OOS) -18%.
 - Rejected: shorting (all L/S variants worse than long-only), intraday rules on 1h/15m (costs dominate), US-hours seasonality (no stable hour-of-day edge), weekday effects (not OOS), RSI dip buying (tiny exposure).
 - Caveats: 3.7 years, one cycle, ~35-40 trades per strategy. Results shift +-10% OOS depending on which UTC hour the daily bar closes. Earlier BTC cycles favoured longer (100-200d) filters.
 
+## Long history 2014-2026 (`scripts/long-history.js` -> `results/LONG_HISTORY.md`)
+
+Daily bars from 2013 (`data/btcusd_1d_2012.csv`, timeframe `1d-long`), 15 bps/side, long only, no leverage.
+
+| Strategy           | 2014-26 return | CAGR | maxDD | Sharpe | 2018 bear | 2022 bear | Years positive |
+| ------------------ | -------------- | ---- | ----- | ------ | --------- | --------- | -------------- |
+| buy & hold         | +10,315%       | 44%  | 83%   | 0.88   | -73%      | -64%      | 8/13           |
+| smaTrend-50d       | +39,501%       | 60%  | 62%   | 1.23   | -40%      | -51%      | 10/13          |
+| ensemble sma40-75  | +36,046%       | 59%  | 62%   | 1.24   | -44%      | -47%      | 10/13          |
+| ensemble sma40-200 | +33,197%       | 58%  | 62%   | 1.23   | -45%      | -33%      | 9/13           |
+| smaTrend-200d      | +11,941%       | 46%  | 67%   | 0.99   | -55%      | 0%        | 8/13           |
+
+- The 40-75d region holds across three full cycles: more return, higher Sharpe and lower drawdown than holding.
+- It does not protect well in choppy bears: 2018 and 2022 still lost 40-50% (holding lost 64-73%). Longer filters (125-200d) handled 2022 far better but were chopped up in 2014-15 and 2021.
+- Walk-forward picking a single SMA length by prior-years Sharpe is noisy: it chose 20d for 2018-21 and 125d after 2022, compounding +8,551% vs +17,594% holding over 2016-26, with worst-year drawdown 56% vs 81%. Use the fixed 40-75 ensemble rather than yearly re-fitting.
+
 ## Rebuild candles
 
 Source: https://github.com/ff137/bitstamp-btcusd-minute-data

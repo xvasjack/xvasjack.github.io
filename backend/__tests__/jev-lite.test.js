@@ -387,8 +387,8 @@ describe('jev-lite data files', () => {
       const p = path.join(__dirname, '..', 'jev-lite', 'data', file);
       expect(fs.existsSync(p)).toBe(true);
       const candles = loadCandles(p);
-      const step = tf === '1h' ? 3600 : 900;
-      expect(candles[0].timestamp).toBe(T0);
+      const step = { '15m': 900, '1h': 3600, '1d-long': 86400 }[tf];
+      expect(candles[0].timestamp).toBe(tf === '1d-long' ? Date.UTC(2012, 0, 1) / 1000 : T0);
       expect(candles.length).toBeGreaterThan(10000);
       let gaps = 0;
       let badOhlc = 0;

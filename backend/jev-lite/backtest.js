@@ -22,7 +22,12 @@ const DATA_DIR = path.join(__dirname, 'data');
 const RESULTS_DIR = path.join(__dirname, 'results');
 const YEAR_SECONDS = 365 * 86400;
 const TF_SECONDS = { '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
-const DATA_FILES = { '15m': 'btcusd_15m.csv', '1h': 'btcusd_1h.csv' };
+// '1d' is resampled from 1h (2023+). '1d-long' is daily from 2012 for long-history checks.
+const DATA_FILES = {
+  '15m': 'btcusd_15m.csv',
+  '1h': 'btcusd_1h.csv',
+  '1d-long': 'btcusd_1d_2012.csv',
+};
 const BARS_PER_YEAR = Object.fromEntries(
   Object.entries(TF_SECONDS).map(([tf, s]) => [tf, YEAR_SECONDS / s])
 );
