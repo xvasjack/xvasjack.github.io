@@ -7,5 +7,7 @@
     "backtest": "node backtest.js",
     "build-candles": "node scripts/build-candles.js"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }

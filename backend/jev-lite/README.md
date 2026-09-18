@@ -1,24 +1,75 @@
 # jev-lite
 
-BTC/USD rule backtester. No server yet (scaffold in `shared/`, `railway.json`).
+BTC/USD rule backtester + strategy research. No server yet (scaffold in `shared/`, `railway.json`).
 
 ## Files
 
-| File | Purpose |
-|------|---------|
-| `rules.js` | `momentum`, `meanReversion`, `breakout`, `buyAndHold`. Each returns 0/1 position per candle using only past data. |
-| `backtest.js` | Engine + CLI. Long/flat, all-in, next-bar-open execution, fee+slippage per side. |
-| `scripts/build-candles.js` | 1min source -> 1h + 15m CSV (2023-01-01 .. latest). |
-| `data/btcusd_1h.csv`, `data/btcusd_15m.csv` | Candles. Cols: `timestamp(utc open s),open,high,low,close,volume`. |
-| `results/backtest-results.json` | Last run output. |
+| File                                         | Purpose                                                                                                                                        |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rules.js`                                   | Rules: `(candles, params) => positions` (1 long, -1 short, 0 flat, fractions ok). No lookahead.                                                |
+| `strategies.js`                              | Catalog of named strategy configs run by `backtest.js`.                                                                                        |
+| `backtest.js`                                | Engine + CLI. Next-bar-open fills, fee+slippage per side, short funding, borrow cost above 1x, IS/OOS + yearly splits, resampling 1h -> 4h/1d. |
+| `scripts/research.js`                        | Sweeps, leverage, day-boundary robustness, walk-forward parameter selection -> `results/REPORT.md`.                                            |
+| `scripts/build-candles.js`                   | 1min source -> 1h + 15m CSV (2023-01-01 .. latest).                                                                                            |
+| `data/btcusd_1h.csv`, `data/btcusd_15m.csv`  | Candles. Cols: `timestamp(utc open s),open,high,low,close,volume`. 4h/1d are resampled in memory.                                              |
+| `results/backtest-results.json`              | Last catalog run.                                                                                                                              |
+| `results/REPORT.md`, `results/research.json` | Last research run (all tables).                                                                                                                |
 
 ## Run
 
 ```
-node backtest.js                      # all rules, both timeframes
-node backtest.js --tf 1h --rule momentum
-node backtest.js --fee 10 --slip 5    # bps per side (defaults)
+node backtest.js                          # whole catalog, 1h/4h/1d as configured
+node backtest.js --rule smaTrend --tf 1d  # one rule, default params
+node backtest.js --fee 10 --slip 5        # bps per side (defaults)
+node backtest.js --oos 2025-01-01         # OOS start (default)
+node backtest.js --sort oos               # sort by OOS Sharpe
+node scripts/research.js                  # full report (takes ~1 min)
 ```
+
+## Rules
+
+| Rule          | Params (defaults)                            | Logic                                                        |
+| ------------- | -------------------------------------------- | ------------------------------------------------------------ |
+| buyAndHold    |                                              | always long (benchmark)                                      |
+| momentum      | fast 20, slow 50 (bars)                      | SMA fast > slow                                              |
+| meanReversion | period 20, entryZ 2, exitZ 0 (bars)          | z-score dip buy                                              |
+| breakout      | entry 55, exit 20 (bars)                     | Donchian                                                     |
+| smaTrend      | days 200, band 0, short                      | close vs SMA(days), hysteresis band                          |
+| emaCross      | fastDays 50, slowDays 200, short             | EMA cross                                                    |
+| tsmom         | lookbackDays 90, short                       | sign of trailing return                                      |
+| donchian      | entryDays 20, exitDays 10, short             | Turtle channel, stop-and-reverse                             |
+| chandelier    | entryDays 20, atrBars 14, k 3                | Donchian entry, ATR trailing exit                            |
+| rsiDip        | rsiBars 14, entry 30, exit 55, trendDays 200 | RSI dip inside uptrend                                       |
+| trendCombo    | smaDays 200, momDays 90, short               | long only if trend AND momentum agree                        |
+| volTarget     | base, baseParams, targetVol 0.4, volDays 20  | base position x targetVol/realisedVol, capped at maxLeverage |
+| levered       | base, baseParams, leverage 2                 | base position x L                                            |
+| ensemble      | members [{rule, params}]                     | mean of member positions                                     |
+| skipDays      | days [5]                                     | flat on listed UTC weekdays                                  |
+| hours         | from 13, to 21                               | long only in UTC hour window                                 |
+
+"…Days" params are converted to bars for the timeframe in use.
+
+## Cost model
+
+Default 10 bps fee + 5 bps slippage per side on every unit of position change. `borrowApr` (default 10%/yr) on the part of |position| above 1x. `shortFundingApr` (default 0) while short. Equity <= 0 = wiped out. Liquidation is not otherwise modelled.
+
+## Findings (2023-01-01 .. 2026-09-18, 15 bps/side) — see `results/REPORT.md`
+
+Buy & hold: +358%, maxDD 53%, Sharpe 1.11, 2025-26 (OOS) -18%.
+
+| Strategy                       | Return | maxDD | Sharpe | OOS return | Years positive |
+| ------------------------------ | ------ | ----- | ------ | ---------- | -------------- |
+| ensemble smaTrend 40/50/60/75d | +213%  | 31%   | 1.12   | +15.5%     | 4/4            |
+| smaTrend-50d                   | +213%  | 27%   | 1.10   | +9.5%      | 4/4            |
+| ensemble sma40-75 x1.5         | +341%  | 45%   | 1.07   | +15.8%     | 4/4            |
+| volTarget(sma40-75) 80% cap 2x | +381%  | 49%   | 1.03   | +13.6%     | 4/4            |
+| smaTrend-50d x2                | +440%  | 53%   | 1.01   | -0.9%      | 3/4            |
+
+- Daily price-vs-SMA trend filter with 40-75 day length is the robust region: positive every year, drawdown roughly halved, positive OOS while buy & hold was -18%. 10-30d and 200d+ do not hold up OOS.
+- Walk-forward (SMA length picked each year using only prior years, always chose 40d): 2024-2026 compound +105% vs buy & hold +81%, worst-year drawdown 24% vs 40%.
+- Unlevered, trend filters return less than buy & hold in this bull-heavy sample (they sit out ~35-45% of the time). With 1.5x-2x leverage or 80% vol targeting they match/beat it at similar or lower drawdown, but leverage costs and liquidation risk are only roughly modelled.
+- Rejected: shorting (all L/S variants worse than long-only), intraday rules on 1h/15m (costs dominate), US-hours seasonality (no stable hour-of-day edge), weekday effects (not OOS), RSI dip buying (tiny exposure).
+- Caveats: 3.7 years, one cycle, ~35-40 trades per strategy. Results shift +-10% OOS depending on which UTC hour the daily bar closes. Earlier BTC cycles favoured longer (100-200d) filters.
 
 ## Rebuild candles
 
@@ -29,19 +80,6 @@ curl -sSL -o /tmp/hist.csv.gz https://raw.githubusercontent.com/ff137/bitstamp-b
 curl -sSL -o /tmp/latest.csv   https://raw.githubusercontent.com/ff137/bitstamp-btcusd-minute-data/main/data/updates/btcusd_bitstamp_1min_latest.csv
 node --max-old-space-size=2048 scripts/build-candles.js /tmp/hist.csv.gz /tmp/latest.csv
 ```
-
-## Rule defaults
-
-| Rule | Entry | Exit |
-|------|-------|------|
-| momentum | SMA20 > SMA50 | SMA20 <= SMA50 |
-| meanReversion | z(close, SMA20) < -2 | z > 0 |
-| breakout | close > prior 55-bar high | close < prior 20-bar low |
-| buyAndHold | bar 1 | last bar |
-
-## Metrics
-
-totalReturn, cagr, maxDrawdown, sharpe (per-bar returns net of costs, annualised by bars/year), calmar, exposure, trades, winRate, avgTradePct, profitFactor, buyHoldReturn.
 
 ## Tests
 

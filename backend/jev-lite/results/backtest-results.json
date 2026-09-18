@@ -1,317 +1,4223 @@
 {
-  "generatedAt": "2026-09-18T10:39:26.562Z",
+  "generatedAt": "2026-09-18T11:24:28.574Z",
   "feeBps": 10,
   "slippageBps": 5,
-  "results": {
-    "1h": {
-      "candles": 32545,
-      "from": "2023-01-01T00:00:00.000Z",
-      "to": "2026-09-18T00:00:00.000Z",
-      "rules": {
-        "momentum": {
-          "bars": 32545,
-          "years": 3.715,
-          "totalReturn": -0.2524,
-          "cagr": -0.0753,
-          "maxDrawdown": 0.6575,
-          "sharpe": -0.078,
-          "calmar": -0.115,
-          "exposure": 0.529,
-          "trades": 389,
-          "winRate": 0.347,
-          "avgTradePct": 0.00143,
-          "profitFactor": 1.139,
-          "buyHoldReturn": 3.6291,
-          "lastTrades": [
-            {
-              "entryTs": 1789182000,
-              "exitTs": 1789214400,
-              "entryPx": 77264.45,
-              "exitPx": 77341.32,
-              "bars": 9,
-              "pnlPct": -0.0005065975361241426
-            },
-            {
-              "entryTs": 1789372800,
-              "exitTs": 1789484400,
-              "entryPx": 77841.41,
-              "exitPx": 75877.89,
-              "bars": 31,
-              "pnlPct": -0.026686783230159716
-            },
-            {
-              "entryTs": 1789642800,
-              "exitTs": 1789689600,
-              "entryPx": 76329.88,
-              "exitPx": 76519.1,
-              "bars": 13,
-              "pnlPct": 0.0009752583129960524
+  "oosStart": "2025-01-01",
+  "results": [
+    {
+      "name": "ensemble-sma40-75",
+      "tf": "1d",
+      "rule": "ensemble",
+      "params": {
+        "members": [
+          {
+            "rule": "smaTrend",
+            "params": {
+              "days": 40
             }
-          ]
+          },
+          {
+            "rule": "smaTrend",
+            "params": {
+              "days": 50
+            }
+          },
+          {
+            "rule": "smaTrend",
+            "params": {
+              "days": 60
+            }
+          },
+          {
+            "rule": "smaTrend",
+            "params": {
+              "days": 75
+            }
+          }
+        ]
+      },
+      "maxLeverage": 1,
+      "note": "average of smaTrend 40/50/60/75d; plateau found in sweep, see results/REPORT.md",
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 2.1293,
+        "cagr": 0.3598,
+        "maxDrawdown": 0.3133,
+        "sharpe": 1.117,
+        "calmar": 1.148,
+        "exposure": 0.6409,
+        "avgLeverage": 0.5474,
+        "turnoverPerYear": 20.07,
+        "trades": 34,
+        "winRate": 0.2353,
+        "avgTradePct": 0.04361,
+        "profitFactor": 3.679,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.7099,
+          "maxDrawdown": 0.3133,
+          "sharpe": 1.512,
+          "buyHold": 4.6492
         },
-        "meanReversion": {
-          "bars": 32545,
-          "years": 3.715,
-          "totalReturn": -0.8583,
-          "cagr": -0.409,
-          "maxDrawdown": 0.8623,
-          "sharpe": -1.852,
-          "calmar": -0.474,
-          "exposure": 0.2715,
-          "trades": 610,
-          "winRate": 0.6213,
-          "avgTradePct": -0.00154,
-          "profitFactor": 0.754,
-          "buyHoldReturn": 3.6291,
-          "lastTrades": [
-            {
-              "entryTs": 1789239600,
-              "exitTs": 1789264800,
-              "entryPx": 77130.03,
-              "exitPx": 77291.54,
-              "bars": 7,
-              "pnlPct": 0.0005908553387050652
-            },
-            {
-              "entryTs": 1789290000,
-              "exitTs": 1789311600,
-              "entryPx": 76792.52,
-              "exitPx": 77176.49,
-              "bars": 6,
-              "pnlPct": 0.0034925962190066606
-            },
-            {
-              "entryTs": 1789459200,
-              "exitTs": 1789552800,
-              "entryPx": 76890.64,
-              "exitPx": 75922.65,
-              "bars": 26,
-              "pnlPct": -0.014070294836926789
-            }
-          ]
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.1548,
+          "maxDrawdown": 0.2411,
+          "sharpe": 0.469,
+          "buyHold": -0.182
         },
-        "breakout": {
-          "bars": 32545,
-          "years": 3.715,
-          "totalReturn": -0.0012,
-          "cagr": -0.0003,
-          "maxDrawdown": 0.5042,
-          "sharpe": 0.135,
-          "calmar": -0.001,
-          "exposure": 0.3415,
-          "trades": 222,
-          "winRate": 0.3423,
-          "avgTradePct": 0.00236,
-          "profitFactor": 1.195,
-          "buyHoldReturn": 3.6291,
-          "lastTrades": [
-            {
-              "entryTs": 1788447600,
-              "exitTs": 1788526800,
-              "entryPx": 80534.52,
-              "exitPx": 79437.16,
-              "bars": 22,
-              "pnlPct": -0.015105519223309272
-            },
-            {
-              "entryTs": 1788739200,
-              "exitTs": 1788796800,
-              "entryPx": 80338.98,
-              "exitPx": 78807.8,
-              "bars": 16,
-              "pnlPct": -0.020530403796513053
-            },
-            {
-              "entryTs": 1789354800,
-              "exitTs": 1789455600,
-              "entryPx": 77568.69,
-              "exitPx": 77266.5,
-              "bars": 28,
-              "pnlPct": -0.005389929235623203
-            }
-          ]
-        },
-        "buyAndHold": {
-          "bars": 32545,
-          "years": 3.715,
-          "totalReturn": 3.6177,
-          "cagr": 0.5095,
-          "maxDrawdown": 0.5385,
-          "sharpe": 1.121,
-          "calmar": 0.946,
-          "exposure": 1,
-          "trades": 1,
-          "winRate": 1,
-          "avgTradePct": 3.62468,
-          "profitFactor": null,
-          "buyHoldReturn": 3.6291,
-          "lastTrades": [
-            {
-              "entryTs": 1672534800,
-              "exitTs": 1789689600,
-              "entryPx": 16521,
-              "exitPx": 76519.1,
-              "bars": 32543,
-              "pnlPct": 3.624678975243582
-            }
-          ]
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.639,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.134
+          },
+          "2024": {
+            "return": 0.6534,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3133
+          },
+          "2025": {
+            "return": 0.0599,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.1661
+          },
+          "2026": {
+            "return": 0.0895,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1385
+          }
         }
-      }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1784073600,
+          "exitTs": 1785542400,
+          "entryPx": 65000,
+          "exitPx": 62817.96,
+          "bars": 17,
+          "pnlPct": -0.0312281338847048
+        },
+        {
+          "side": "long",
+          "entryTs": 1785715200,
+          "exitTs": 1786752000,
+          "entryPx": 63499.99,
+          "exitPx": 62975.97,
+          "bars": 12,
+          "pnlPct": -0.006399625062418646
+        },
+        {
+          "side": "long",
+          "entryTs": 1787011200,
+          "exitTs": 1789603200,
+          "entryPx": 64488.02,
+          "exitPx": 76354.94,
+          "bars": 30,
+          "pnlPct": 0.1822414084042272
+        }
+      ]
     },
-    "15m": {
-      "candles": 130182,
-      "from": "2023-01-01T00:00:00.000Z",
-      "to": "2026-09-18T01:15:00.000Z",
-      "rules": {
-        "momentum": {
-          "bars": 130182,
-          "years": 3.715,
-          "totalReturn": -0.9768,
-          "cagr": -0.6371,
-          "maxDrawdown": 0.9808,
-          "sharpe": -2.914,
-          "calmar": -0.65,
-          "exposure": 0.5164,
-          "trades": 1587,
-          "winRate": 0.2924,
-          "avgTradePct": -0.00073,
-          "profitFactor": 0.866,
-          "buyHoldReturn": 3.6297,
-          "lastTrades": [
-            {
-              "entryTs": 1789361100,
-              "exitTs": 1789434900,
-              "entryPx": 77595.01,
-              "exitPx": 77807.33,
-              "bars": 82,
-              "pnlPct": 0.0012321540392865593
-            },
-            {
-              "entryTs": 1789541100,
-              "exitTs": 1789575300,
-              "entryPx": 75870.13,
-              "exitPx": 75785.85,
-              "bars": 38,
-              "pnlPct": -0.002609179330522071
-            },
-            {
-              "entryTs": 1789592400,
-              "exitTs": 1789684200,
-              "entryPx": 76100.35,
-              "exitPx": 76214.41,
-              "bars": 102,
-              "pnlPct": -0.0000034377634268167867
-            }
-          ]
+    {
+      "name": "buyAndHold",
+      "tf": "1d",
+      "rule": "buyAndHold",
+      "params": {},
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 3.5818,
+        "cagr": 0.5068,
+        "maxDrawdown": 0.5308,
+        "sharpe": 1.111,
+        "calmar": 0.955,
+        "exposure": 1,
+        "avgLeverage": 1,
+        "turnoverPerYear": 0.54,
+        "trades": 1,
+        "winRate": 1,
+        "avgTradePct": 3.58865,
+        "profitFactor": null,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 4.6098,
+          "maxDrawdown": 0.2623,
+          "sharpe": 2.003,
+          "buyHold": 4.6492
         },
-        "meanReversion": {
-          "bars": 130182,
-          "years": 3.715,
-          "totalReturn": -0.9991,
-          "cagr": -0.8509,
-          "maxDrawdown": 0.9992,
-          "sharpe": -6.721,
-          "calmar": -0.852,
-          "exposure": 0.2565,
-          "trades": 2486,
-          "winRate": 0.5792,
-          "avgTradePct": -0.0013,
-          "profitFactor": 0.617,
-          "buyHoldReturn": 3.6297,
-          "lastTrades": [
-            {
-              "entryTs": 1789567200,
-              "exitTs": 1789581600,
-              "entryPx": 75586.92,
-              "exitPx": 75688.84,
-              "bars": 16,
-              "pnlPct": -0.00015364113261917556
-            },
-            {
-              "entryTs": 1789645500,
-              "exitTs": 1789646400,
-              "entryPx": 76115.05,
-              "exitPx": 76400.03,
-              "bars": 1,
-              "pnlPct": 0.002238452907802113
-            },
-            {
-              "entryTs": 1789683300,
-              "exitTs": 1789693200,
-              "entryPx": 76310.06,
-              "exitPx": 76520,
-              "bars": 11,
-              "pnlPct": 0.0012470177588645992
-            }
-          ]
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.1833,
+          "maxDrawdown": 0.5308,
+          "sharpe": -0.053,
+          "buyHold": -0.182
         },
-        "breakout": {
-          "bars": 130182,
-          "years": 3.715,
-          "totalReturn": -0.8213,
-          "cagr": -0.3709,
-          "maxDrawdown": 0.8685,
-          "sharpe": -1.56,
-          "calmar": -0.427,
-          "exposure": 0.3266,
-          "trades": 939,
-          "winRate": 0.3014,
-          "avgTradePct": -0.00016,
-          "profitFactor": 0.973,
-          "buyHoldReturn": 3.6297,
-          "lastTrades": [
-            {
-              "entryTs": 1789559100,
-              "exitTs": 1789568100,
-              "entryPx": 76160.03,
-              "exitPx": 75501.17,
-              "bars": 10,
-              "pnlPct": -0.010138017999730131
-            },
-            {
-              "entryTs": 1789608600,
-              "exitTs": 1789645500,
-              "entryPx": 76558.01,
-              "exitPx": 76115.05,
-              "bars": 41,
-              "pnlPct": -0.007277260406846953
-            },
-            {
-              "entryTs": 1789647300,
-              "exitTs": 1789652700,
-              "entryPx": 76737.8,
-              "exitPx": 76079.28,
-              "bars": 6,
-              "pnlPct": -0.010068557086598928
-            }
-          ]
-        },
-        "buyAndHold": {
-          "bars": 130182,
-          "years": 3.715,
-          "totalReturn": 3.6194,
-          "cagr": 0.5097,
-          "maxDrawdown": 0.5393,
-          "sharpe": 1.121,
-          "calmar": 0.945,
-          "exposure": 1,
-          "trades": 1,
-          "winRate": 1,
-          "avgTradePct": 3.62638,
-          "profitFactor": null,
-          "buyHoldReturn": 3.6297,
-          "lastTrades": [
-            {
-              "entryTs": 1672532100,
-              "exitTs": 1789694100,
-              "entryPx": 16517,
-              "exitPx": 76528.7,
-              "bars": 130180,
-              "pnlPct": 3.6263793031422455
-            }
-          ]
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 1.5395,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2007
+          },
+          "2024": {
+            "return": 1.209,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.2623
+          },
+          "2025": {
+            "return": -0.0627,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.321
+          },
+          "2026": {
+            "return": -0.1286,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.3963
+          }
         }
-      }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1672617600,
+          "exitTs": 1789603200,
+          "entryPx": 16615,
+          "exitPx": 76354.94,
+          "bars": 1354,
+          "pnlPct": 3.5886492681312143
+        }
+      ]
+    },
+    {
+      "name": "smaTrend-50d",
+      "tf": "1d",
+      "rule": "smaTrend",
+      "params": {
+        "days": 50
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 2.1314,
+        "cagr": 0.36,
+        "maxDrawdown": 0.2746,
+        "sharpe": 1.098,
+        "calmar": 1.311,
+        "exposure": 0.5553,
+        "avgLeverage": 0.5553,
+        "turnoverPerYear": 22.09,
+        "trades": 41,
+        "winRate": 0.2683,
+        "avgTradePct": 0.03808,
+        "profitFactor": 3.278,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.8588,
+          "maxDrawdown": 0.2746,
+          "sharpe": 1.566,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.0954,
+          "maxDrawdown": 0.2624,
+          "sharpe": 0.336,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.6458,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1075
+          },
+          "2024": {
+            "return": 0.737,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.2746
+          },
+          "2025": {
+            "return": 0.0306,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.1618
+          },
+          "2026": {
+            "return": 0.0629,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1823
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1784332800,
+          "exitTs": 1785542400,
+          "entryPx": 63891.98,
+          "exitPx": 62817.96,
+          "bars": 14,
+          "pnlPct": -0.018284719615826228
+        },
+        {
+          "side": "long",
+          "entryTs": 1785715200,
+          "exitTs": 1786752000,
+          "entryPx": 63499.99,
+          "exitPx": 62975.97,
+          "bars": 12,
+          "pnlPct": -0.009739906336992954
+        },
+        {
+          "side": "long",
+          "entryTs": 1787011200,
+          "exitTs": 1789603200,
+          "entryPx": 64488.02,
+          "exitPx": 76354.94,
+          "bars": 30,
+          "pnlPct": 0.18224140840422787
+        }
+      ]
+    },
+    {
+      "name": "ensemble-sma40-75 1.5x",
+      "tf": "1d",
+      "rule": "levered",
+      "params": {
+        "base": "ensemble",
+        "baseParams": {
+          "members": [
+            {
+              "rule": "smaTrend",
+              "params": {
+                "days": 40
+              }
+            },
+            {
+              "rule": "smaTrend",
+              "params": {
+                "days": 50
+              }
+            },
+            {
+              "rule": "smaTrend",
+              "params": {
+                "days": 60
+              }
+            },
+            {
+              "rule": "smaTrend",
+              "params": {
+                "days": 75
+              }
+            }
+          ]
+        },
+        "leverage": 1.5
+      },
+      "maxLeverage": 1.5,
+      "note": "up to 1.5x, 10%/yr borrow on the part above 1x",
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 3.4096,
+        "cagr": 0.4914,
+        "maxDrawdown": 0.4537,
+        "sharpe": 1.068,
+        "calmar": 1.083,
+        "exposure": 0.6409,
+        "avgLeverage": 0.8211,
+        "turnoverPerYear": 30.1,
+        "trades": 34,
+        "winRate": 0.2353,
+        "avgTradePct": 0.06396,
+        "profitFactor": 3.546,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 2.8094,
+          "maxDrawdown": 0.4537,
+          "sharpe": 1.464,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.1575,
+          "maxDrawdown": 0.3467,
+          "sharpe": 0.416,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.9792,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2082
+          },
+          "2024": {
+            "return": 0.9248,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.4537
+          },
+          "2025": {
+            "return": 0.0465,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2447
+          },
+          "2026": {
+            "return": 0.1061,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.2024
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1784073600,
+          "exitTs": 1785542400,
+          "entryPx": 65000,
+          "exitPx": 62817.96,
+          "bars": 17,
+          "pnlPct": -0.04739177818383389
+        },
+        {
+          "side": "long",
+          "entryTs": 1785715200,
+          "exitTs": 1786752000,
+          "entryPx": 63499.99,
+          "exitPx": 62975.97,
+          "bars": 12,
+          "pnlPct": -0.010304360677274804
+        },
+        {
+          "side": "long",
+          "entryTs": 1787011200,
+          "exitTs": 1789603200,
+          "entryPx": 64488.02,
+          "exitPx": 76354.94,
+          "bars": 30,
+          "pnlPct": 0.27063596538625956
+        }
+      ]
+    },
+    {
+      "name": "volTarget(buyAndHold) 40% 1x",
+      "tf": "1d",
+      "rule": "volTarget",
+      "params": {
+        "base": "buyAndHold",
+        "targetVol": 0.4,
+        "volDays": 20
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 2.5729,
+        "cagr": 0.4092,
+        "maxDrawdown": 0.5293,
+        "sharpe": 1.048,
+        "calmar": 0.773,
+        "exposure": 1,
+        "avgLeverage": 0.8841,
+        "turnoverPerYear": 6.56,
+        "trades": 1,
+        "winRate": 1,
+        "avgTradePct": 2.5783,
+        "profitFactor": null,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 3.3557,
+          "maxDrawdown": 0.2563,
+          "sharpe": 1.972,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.1797,
+          "maxDrawdown": 0.5293,
+          "sharpe": -0.101,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 1.2221,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1962
+          },
+          "2024": {
+            "return": 0.9602,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.2563
+          },
+          "2025": {
+            "return": -0.0589,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.3108
+          },
+          "2026": {
+            "return": -0.1284,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.3975
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1672617600,
+          "exitTs": 1789603200,
+          "entryPx": 16615,
+          "exitPx": 76354.94,
+          "bars": 1354,
+          "pnlPct": 2.578297974906195
+        }
+      ]
+    },
+    {
+      "name": "smaTrend-50d 2x",
+      "tf": "1d",
+      "rule": "levered",
+      "params": {
+        "base": "smaTrend",
+        "baseParams": {
+          "days": 50
+        },
+        "leverage": 2
+      },
+      "maxLeverage": 2,
+      "note": "2x when long, 10%/yr borrow on the part above 1x, liquidation not modelled",
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 4.3952,
+        "cagr": 0.5746,
+        "maxDrawdown": 0.5259,
+        "sharpe": 1.014,
+        "calmar": 1.093,
+        "exposure": 0.5553,
+        "avgLeverage": 1.1106,
+        "turnoverPerYear": 44.18,
+        "trades": 41,
+        "winRate": 0.2195,
+        "avgTradePct": 0.07524,
+        "profitFactor": 3.096,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 4.4458,
+          "maxDrawdown": 0.5259,
+          "sharpe": 1.486,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0093,
+          "maxDrawdown": 0.4779,
+          "sharpe": 0.239,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 1.3242,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2245
+          },
+          "2024": {
+            "return": 1.3431,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.5259
+          },
+          "2025": {
+            "return": -0.0437,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.313
+          },
+          "2026": {
+            "return": 0.036,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.3391
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1784332800,
+          "exitTs": 1785542400,
+          "entryPx": 63891.98,
+          "exitPx": 62817.96,
+          "bars": 14,
+          "pnlPct": -0.04297230177922373
+        },
+        {
+          "side": "long",
+          "entryTs": 1785715200,
+          "exitTs": 1786752000,
+          "entryPx": 63499.99,
+          "exitPx": 62975.97,
+          "bars": 12,
+          "pnlPct": -0.023174719422216716
+        },
+        {
+          "side": "long",
+          "entryTs": 1787011200,
+          "exitTs": 1789603200,
+          "entryPx": 64488.02,
+          "exitPx": 76354.94,
+          "bars": 30,
+          "pnlPct": 0.3592997184981175
+        }
+      ]
+    },
+    {
+      "name": "trendCombo-200/90",
+      "tf": "1d",
+      "rule": "trendCombo",
+      "params": {
+        "smaDays": 200,
+        "momDays": 90
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.6128,
+        "cagr": 0.2953,
+        "maxDrawdown": 0.2032,
+        "sharpe": 1.003,
+        "calmar": 1.453,
+        "exposure": 0.4395,
+        "avgLeverage": 0.4395,
+        "turnoverPerYear": 9.16,
+        "trades": 17,
+        "winRate": 0.3529,
+        "avgTradePct": 0.08927,
+        "profitFactor": 5.455,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.3581,
+          "maxDrawdown": 0.2032,
+          "sharpe": 1.364,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.108,
+          "maxDrawdown": 0.1384,
+          "sharpe": 0.386,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.2238,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1332
+          },
+          "2024": {
+            "return": 0.9268,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.2032
+          },
+          "2025": {
+            "return": 0.14,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.1384
+          },
+          "2026": {
+            "return": -0.0281,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.07
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1740355200,
+          "exitTs": 1740441600,
+          "entryPx": 96264,
+          "exitPx": 91516,
+          "bars": 1,
+          "pnlPct": -0.05074871187567531
+        },
+        {
+          "side": "long",
+          "entryTs": 1746576000,
+          "exitTs": 1760140800,
+          "entryPx": 96815,
+          "exitPx": 112989,
+          "bars": 157,
+          "pnlPct": 0.16531029799101193
+        },
+        {
+          "side": "long",
+          "entryTs": 1787356800,
+          "exitTs": 1789603200,
+          "entryPx": 78325.29,
+          "exitPx": 76354.94,
+          "bars": 26,
+          "pnlPct": -0.026618253312564066
+        }
+      ]
+    },
+    {
+      "name": "trendCombo-100/30",
+      "tf": "1d",
+      "rule": "trendCombo",
+      "params": {
+        "smaDays": 100,
+        "momDays": 30
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.4847,
+        "cagr": 0.2778,
+        "maxDrawdown": 0.2744,
+        "sharpe": 0.995,
+        "calmar": 1.013,
+        "exposure": 0.4078,
+        "avgLeverage": 0.4078,
+        "turnoverPerYear": 18.32,
+        "trades": 34,
+        "winRate": 0.4412,
+        "avgTradePct": 0.03771,
+        "profitFactor": 2.866,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.3623,
+          "maxDrawdown": 0.179,
+          "sharpe": 1.423,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.0518,
+          "maxDrawdown": 0.1756,
+          "sharpe": 0.246,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.3937,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1288
+          },
+          "2024": {
+            "return": 0.6949,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.179
+          },
+          "2025": {
+            "return": -0.0139,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.1756
+          },
+          "2026": {
+            "return": 0.0666,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.0834
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1776384000,
+          "exitTs": 1776643200,
+          "entryPx": 75172,
+          "exitPx": 73834,
+          "bars": 3,
+          "pnlPct": -0.019272481775128858
+        },
+        {
+          "side": "long",
+          "entryTs": 1776729600,
+          "exitTs": 1779494400,
+          "entryPx": 75870,
+          "exitPx": 75451.01,
+          "bars": 32,
+          "pnlPct": -0.007014188941610655
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10018161543432225
+        }
+      ]
+    },
+    {
+      "name": "emaCross-50/200",
+      "tf": "1d",
+      "rule": "emaCross",
+      "params": {
+        "fastDays": 50,
+        "slowDays": 200
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 2.0243,
+        "cagr": 0.3473,
+        "maxDrawdown": 0.2819,
+        "sharpe": 0.984,
+        "calmar": 1.232,
+        "exposure": 0.6327,
+        "avgLeverage": 0.6327,
+        "turnoverPerYear": 1.08,
+        "trades": 2,
+        "winRate": 0.5,
+        "avgTradePct": 1.03049,
+        "profitFactor": 155.792,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 2.1155,
+          "maxDrawdown": 0.2623,
+          "sharpe": 1.555,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0293,
+          "maxDrawdown": 0.2817,
+          "sharpe": 0.095,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.4104,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1638
+          },
+          "2024": {
+            "return": 1.209,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.2623
+          },
+          "2025": {
+            "return": -0.0147,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2817
+          },
+          "2026": {
+            "return": -0.0148,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.0334
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1689811200,
+          "exitTs": 1763424000,
+          "entryPx": 29917,
+          "exitPx": 92112,
+          "bars": 852,
+          "pnlPct": 2.0742999632316037
+        },
+        {
+          "side": "long",
+          "entryTs": 1789257600,
+          "exitTs": 1789603200,
+          "entryPx": 77269.21,
+          "exitPx": 76354.94,
+          "bars": 4,
+          "pnlPct": -0.01331451958677965
+        }
+      ]
+    },
+    {
+      "name": "trendCombo-200/90 2x",
+      "tf": "1d",
+      "rule": "levered",
+      "params": {
+        "base": "trendCombo",
+        "baseParams": {
+          "smaDays": 200,
+          "momDays": 90
+        },
+        "leverage": 2
+      },
+      "maxLeverage": 2,
+      "note": "2x when long, 10%/yr borrow on the part above 1x, liquidation not modelled",
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 3.1432,
+        "cagr": 0.4665,
+        "maxDrawdown": 0.4275,
+        "sharpe": 0.931,
+        "calmar": 1.091,
+        "exposure": 0.4395,
+        "avgLeverage": 0.8791,
+        "turnoverPerYear": 18.32,
+        "trades": 17,
+        "winRate": 0.3529,
+        "avgTradePct": 0.19754,
+        "profitFactor": 5.707,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 2.8983,
+          "maxDrawdown": 0.4275,
+          "sharpe": 1.296,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.0628,
+          "maxDrawdown": 0.2716,
+          "sharpe": 0.299,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.3867,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2599
+          },
+          "2024": {
+            "return": 1.8113,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.4275
+          },
+          "2025": {
+            "return": 0.1422,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2716
+          },
+          "2026": {
+            "return": -0.0695,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1404
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1740355200,
+          "exitTs": 1740441600,
+          "entryPx": 96264,
+          "exitPx": 91516,
+          "bars": 1,
+          "pnlPct": -0.10159566129217701
+        },
+        {
+          "side": "long",
+          "entryTs": 1746576000,
+          "exitTs": 1760140800,
+          "entryPx": 96815,
+          "exitPx": 112989,
+          "bars": 157,
+          "pnlPct": 0.2396352115508089
+        },
+        {
+          "side": "long",
+          "entryTs": 1787356800,
+          "exitTs": 1789603200,
+          "entryPx": 78325.29,
+          "exitPx": 76354.94,
+          "bars": 26,
+          "pnlPct": -0.06672908268980271
+        }
+      ]
+    },
+    {
+      "name": "tsmom-180d",
+      "tf": "1d",
+      "rule": "tsmom",
+      "params": {
+        "lookbackDays": 180
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.7362,
+        "cagr": 0.3115,
+        "maxDrawdown": 0.2819,
+        "sharpe": 0.92,
+        "calmar": 1.105,
+        "exposure": 0.5966,
+        "avgLeverage": 0.5966,
+        "turnoverPerYear": 4.85,
+        "trades": 9,
+        "winRate": 0.4444,
+        "avgTradePct": 0.1687,
+        "profitFactor": 6.585,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.4307,
+          "maxDrawdown": 0.261,
+          "sharpe": 1.29,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.1257,
+          "maxDrawdown": 0.2817,
+          "sharpe": 0.377,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.2748,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2007
+          },
+          "2024": {
+            "return": 0.9067,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.261
+          },
+          "2025": {
+            "return": 0.0191,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2817
+          },
+          "2026": {
+            "return": 0.1045,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.07
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1762732800,
+          "exitTs": 1762905600,
+          "entryPx": 104677,
+          "exitPx": 103027,
+          "bars": 2,
+          "pnlPct": -0.017239130850139173
+        },
+        {
+          "side": "long",
+          "entryTs": 1785888000,
+          "exitTs": 1785974400,
+          "entryPx": 64056.47,
+          "exitPx": 64600.21,
+          "bars": 1,
+          "pnlPct": 0.00697571509950512
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10018161543432313
+        }
+      ]
+    },
+    {
+      "name": "smaTrend-100d-band2%",
+      "tf": "1d",
+      "rule": "smaTrend",
+      "params": {
+        "days": 100,
+        "band": 0.02
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.4304,
+        "cagr": 0.2703,
+        "maxDrawdown": 0.2919,
+        "sharpe": 0.897,
+        "calmar": 0.926,
+        "exposure": 0.5546,
+        "avgLeverage": 0.5546,
+        "turnoverPerYear": 5.93,
+        "trades": 11,
+        "winRate": 0.4545,
+        "avgTradePct": 0.12462,
+        "profitFactor": 3.87,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.3186,
+          "maxDrawdown": 0.279,
+          "sharpe": 1.279,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.0482,
+          "maxDrawdown": 0.2919,
+          "sharpe": 0.234,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.2,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2166
+          },
+          "2024": {
+            "return": 0.9322,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.279
+          },
+          "2025": {
+            "return": 0.035,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.232
+          },
+          "2026": {
+            "return": 0.0128,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1338
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1759363200,
+          "exitTs": 1760227200,
+          "entryPx": 118674,
+          "exitPx": 110769,
+          "bars": 10,
+          "pnlPct": -0.06801113554780303
+        },
+        {
+          "side": "long",
+          "entryTs": 1776470400,
+          "exitTs": 1780358400,
+          "entryPx": 77107,
+          "exitPx": 71305.47,
+          "bars": 45,
+          "pnlPct": -0.07662713119431475
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10018161543432313
+        }
+      ]
+    },
+    {
+      "name": "ensemble-trend7",
+      "tf": "1d",
+      "rule": "ensemble",
+      "params": {},
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.2874,
+        "cagr": 0.2497,
+        "maxDrawdown": 0.2799,
+        "sharpe": 0.891,
+        "calmar": 0.892,
+        "exposure": 0.8407,
+        "avgLeverage": 0.5456,
+        "turnoverPerYear": 11.31,
+        "trades": 15,
+        "winRate": 0.2,
+        "avgTradePct": 0.07558,
+        "profitFactor": 6.737,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.2451,
+          "maxDrawdown": 0.2799,
+          "sharpe": 1.313,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.0188,
+          "maxDrawdown": 0.2258,
+          "sharpe": 0.159,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.2655,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1741
+          },
+          "2024": {
+            "return": 0.7741,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.2799
+          },
+          "2025": {
+            "return": 0.0066,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.1854
+          },
+          "2026": {
+            "return": 0.0121,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.0948
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1774310400,
+          "exitTs": 1774569600,
+          "entryPx": 70875,
+          "exitPx": 68779,
+          "bars": 3,
+          "pnlPct": -0.0044049911664936214
+        },
+        {
+          "side": "long",
+          "entryTs": 1775433600,
+          "exitTs": 1780444800,
+          "entryPx": 69005,
+          "exitPx": 66669.99,
+          "bars": 58,
+          "pnlPct": -0.029447119788226672
+        },
+        {
+          "side": "long",
+          "entryTs": 1784073600,
+          "exitTs": 1789603200,
+          "entryPx": 65000,
+          "exitPx": 76354.94,
+          "bars": 64,
+          "pnlPct": 0.07747548730311227
+        }
+      ]
+    },
+    {
+      "name": "ensemble-trend7 1.5x",
+      "tf": "1d",
+      "rule": "levered",
+      "params": {
+        "base": "ensemble",
+        "leverage": 1.5
+      },
+      "maxLeverage": 1.5,
+      "note": "up to 1.5x, 10%/yr borrow on the part above 1x",
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.8698,
+        "cagr": 0.3284,
+        "maxDrawdown": 0.4115,
+        "sharpe": 0.853,
+        "calmar": 0.798,
+        "exposure": 0.8407,
+        "avgLeverage": 0.8184,
+        "turnoverPerYear": 16.97,
+        "trades": 15,
+        "winRate": 0.2,
+        "avgTradePct": 0.1094,
+        "profitFactor": 6.371,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.943,
+          "maxDrawdown": 0.4115,
+          "sharpe": 1.275,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0249,
+          "maxDrawdown": 0.3272,
+          "sharpe": 0.118,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.3734,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2568
+          },
+          "2024": {
+            "return": 1.1428,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.4115
+          },
+          "2025": {
+            "return": -0.0328,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2691
+          },
+          "2026": {
+            "return": 0.0081,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1396
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1774310400,
+          "exitTs": 1774569600,
+          "entryPx": 70875,
+          "exitPx": 68779,
+          "bars": 3,
+          "pnlPct": -0.006610977873535817
+        },
+        {
+          "side": "long",
+          "entryTs": 1775433600,
+          "exitTs": 1780444800,
+          "entryPx": 69005,
+          "exitPx": 66669.99,
+          "bars": 58,
+          "pnlPct": -0.04519880967589829
+        },
+        {
+          "side": "long",
+          "entryTs": 1784073600,
+          "exitTs": 1789603200,
+          "entryPx": 65000,
+          "exitPx": 76354.94,
+          "bars": 64,
+          "pnlPct": 0.10935725472722235
+        }
+      ]
+    },
+    {
+      "name": "emaCross-10/50",
+      "tf": "1d",
+      "rule": "emaCross",
+      "params": {
+        "fastDays": 10,
+        "slowDays": 50
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.2311,
+        "cagr": 0.2413,
+        "maxDrawdown": 0.3637,
+        "sharpe": 0.819,
+        "calmar": 0.663,
+        "exposure": 0.5568,
+        "avgLeverage": 0.5568,
+        "turnoverPerYear": 8.62,
+        "trades": 16,
+        "winRate": 0.4375,
+        "avgTradePct": 0.07189,
+        "profitFactor": 2.735,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.0589,
+          "maxDrawdown": 0.3637,
+          "sharpe": 1.119,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.0836,
+          "maxDrawdown": 0.309,
+          "sharpe": 0.315,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.3162,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1953
+          },
+          "2024": {
+            "return": 0.5643,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3637
+          },
+          "2025": {
+            "return": 0.0581,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2223
+          },
+          "2026": {
+            "return": 0.0242,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1114
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1768435200,
+          "exitTs": 1769040000,
+          "entryPx": 96946,
+          "exitPx": 89373,
+          "bars": 7,
+          "pnlPct": -0.0794984785344417
+        },
+        {
+          "side": "long",
+          "entryTs": 1775952000,
+          "exitTs": 1779926400,
+          "entryPx": 73060,
+          "exitPx": 74330.47,
+          "bars": 46,
+          "pnlPct": 0.015863321858745394
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10018161543432313
+        }
+      ]
+    },
+    {
+      "name": "tsmom-30d",
+      "tf": "1d",
+      "rule": "tsmom",
+      "params": {
+        "lookbackDays": 30
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.25,
+        "cagr": 0.2441,
+        "maxDrawdown": 0.3617,
+        "sharpe": 0.813,
+        "calmar": 0.675,
+        "exposure": 0.5627,
+        "avgLeverage": 0.5627,
+        "turnoverPerYear": 33.4,
+        "trades": 62,
+        "winRate": 0.3871,
+        "avgTradePct": 0.02141,
+        "profitFactor": 2.072,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.5819,
+          "maxDrawdown": 0.3617,
+          "sharpe": 1.4,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.1286,
+          "maxDrawdown": 0.3285,
+          "sharpe": -0.182,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.8828,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1288
+          },
+          "2024": {
+            "return": 0.3713,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3617
+          },
+          "2025": {
+            "return": -0.0402,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.231
+          },
+          "2026": {
+            "return": -0.0921,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.2836
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1784419200,
+          "exitTs": 1786492800,
+          "entryPx": 64792.57,
+          "exitPx": 63539.69,
+          "bars": 24,
+          "pnlPct": -0.020807779888958877
+        },
+        {
+          "side": "long",
+          "entryTs": 1786579200,
+          "exitTs": 1786665600,
+          "entryPx": 63406.33,
+          "exitPx": 63418.05,
+          "bars": 1,
+          "pnlPct": -0.0013154376700245107
+        },
+        {
+          "side": "long",
+          "entryTs": 1787097600,
+          "exitTs": 1789603200,
+          "entryPx": 64686.09,
+          "exitPx": 76354.94,
+          "bars": 29,
+          "pnlPct": 0.17862136341831691
+        }
+      ]
+    },
+    {
+      "name": "chandelier-20d/3ATR",
+      "tf": "1d",
+      "rule": "chandelier",
+      "params": {
+        "entryDays": 20,
+        "atrBars": 14,
+        "k": 3
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.1684,
+        "cagr": 0.2318,
+        "maxDrawdown": 0.3749,
+        "sharpe": 0.794,
+        "calmar": 0.618,
+        "exposure": 0.5479,
+        "avgLeverage": 0.5479,
+        "turnoverPerYear": 10.24,
+        "trades": 19,
+        "winRate": 0.4737,
+        "avgTradePct": 0.05728,
+        "profitFactor": 2.745,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.6113,
+          "maxDrawdown": 0.3749,
+          "sharpe": 1.406,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.1696,
+          "maxDrawdown": 0.3123,
+          "sharpe": -0.359,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.667,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1257
+          },
+          "2024": {
+            "return": 0.5665,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3749
+          },
+          "2025": {
+            "return": -0.1132,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.1932
+          },
+          "2026": {
+            "return": -0.0636,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1943
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1776124800,
+          "exitTs": 1779494400,
+          "entryPx": 74451,
+          "exitPx": 75451.01,
+          "bars": 39,
+          "pnlPct": 0.011911639669044627
+        },
+        {
+          "side": "long",
+          "entryTs": 1784073600,
+          "exitTs": 1786924800,
+          "entryPx": 65000,
+          "exitPx": 62831.65,
+          "bars": 33,
+          "pnlPct": -0.034809191923075744
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10018161543432269
+        }
+      ]
+    },
+    {
+      "name": "smaTrend-200d-band2%",
+      "tf": "1d",
+      "rule": "smaTrend",
+      "params": {
+        "days": 200,
+        "band": 0.02
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.129,
+        "cagr": 0.2257,
+        "maxDrawdown": 0.3103,
+        "sharpe": 0.778,
+        "calmar": 0.728,
+        "exposure": 0.5118,
+        "avgLeverage": 0.5118,
+        "turnoverPerYear": 4.31,
+        "trades": 8,
+        "winRate": 0.5,
+        "avgTradePct": 0.13848,
+        "profitFactor": 5.008,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.1944,
+          "maxDrawdown": 0.3103,
+          "sharpe": 1.233,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0298,
+          "maxDrawdown": 0.28,
+          "sharpe": 0.071,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.3033,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1161
+          },
+          "2024": {
+            "return": 0.6837,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3103
+          },
+          "2025": {
+            "return": -0.0697,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.28
+          },
+          "2026": {
+            "return": 0.0428,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.07
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1742428800,
+          "exitTs": 1743292800,
+          "entryPx": 86870,
+          "exitPx": 82608,
+          "bars": 10,
+          "pnlPct": -0.0504882237826636
+        },
+        {
+          "side": "long",
+          "entryTs": 1745366400,
+          "exitTs": 1762214400,
+          "entryPx": 93482,
+          "exitPx": 106550,
+          "bars": 195,
+          "pnlPct": 0.13808193021116177
+        },
+        {
+          "side": "long",
+          "entryTs": 1787270400,
+          "exitTs": 1789603200,
+          "entryPx": 73000.01,
+          "exitPx": 76354.94,
+          "bars": 27,
+          "pnlPct": 0.04438900200150653
+        }
+      ]
+    },
+    {
+      "name": "smaTrend-200d",
+      "tf": "1d",
+      "rule": "smaTrend",
+      "params": {
+        "days": 200
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.0954,
+        "cagr": 0.2205,
+        "maxDrawdown": 0.3213,
+        "sharpe": 0.764,
+        "calmar": 0.686,
+        "exposure": 0.514,
+        "avgLeverage": 0.514,
+        "turnoverPerYear": 9.16,
+        "trades": 17,
+        "winRate": 0.2941,
+        "avgTradePct": 0.06559,
+        "profitFactor": 4.085,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.3185,
+          "maxDrawdown": 0.2634,
+          "sharpe": 1.308,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0962,
+          "maxDrawdown": 0.321,
+          "sharpe": -0.078,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.2893,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1393
+          },
+          "2024": {
+            "return": 0.7982,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.2634
+          },
+          "2025": {
+            "return": -0.1773,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.321
+          },
+          "2026": {
+            "return": 0.0985,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.07
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1761264000,
+          "exitTs": 1761868800,
+          "entryPx": 110110,
+          "exitPx": 108307,
+          "bars": 7,
+          "pnlPct": -0.01784997275451805
+        },
+        {
+          "side": "long",
+          "entryTs": 1761955200,
+          "exitTs": 1762214400,
+          "entryPx": 109554,
+          "exitPx": 106550,
+          "bars": 3,
+          "pnlPct": -0.02887913722912916
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10018161543432313
+        }
+      ]
+    },
+    {
+      "name": "volTarget(ensemble) 60% 2x",
+      "tf": "1d",
+      "rule": "volTarget",
+      "params": {
+        "base": "ensemble",
+        "targetVol": 0.6,
+        "volDays": 20
+      },
+      "maxLeverage": 2,
+      "note": "dynamic leverage up to 2x, 10%/yr borrow above 1x",
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 1.2675,
+        "cagr": 0.2467,
+        "maxDrawdown": 0.4129,
+        "sharpe": 0.721,
+        "calmar": 0.598,
+        "exposure": 0.8407,
+        "avgLeverage": 0.8156,
+        "turnoverPerYear": 24.73,
+        "trades": 15,
+        "winRate": 0.2,
+        "avgTradePct": 0.0926,
+        "profitFactor": 4.14,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.3956,
+          "maxDrawdown": 0.4129,
+          "sharpe": 1.134,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0535,
+          "maxDrawdown": 0.3823,
+          "sharpe": 0.094,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.1788,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.3377
+          },
+          "2024": {
+            "return": 1.0322,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.4129
+          },
+          "2025": {
+            "return": -0.0469,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2824
+          },
+          "2026": {
+            "return": -0.0069,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1837
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1774310400,
+          "exitTs": 1774569600,
+          "entryPx": 70875,
+          "exitPx": 68779,
+          "bars": 3,
+          "pnlPct": -0.006090579040026856
+        },
+        {
+          "side": "long",
+          "entryTs": 1775433600,
+          "exitTs": 1780444800,
+          "entryPx": 69005,
+          "exitPx": 66669.99,
+          "bars": 58,
+          "pnlPct": -0.07536999339129735
+        },
+        {
+          "side": "long",
+          "entryTs": 1784073600,
+          "exitTs": 1789603200,
+          "entryPx": 65000,
+          "exitPx": 76354.94,
+          "bars": 64,
+          "pnlPct": 0.12722297655351222
+        }
+      ]
+    },
+    {
+      "name": "emaCross-20/100",
+      "tf": "1d",
+      "rule": "emaCross",
+      "params": {
+        "fastDays": 20,
+        "slowDays": 100
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.9926,
+        "cagr": 0.2041,
+        "maxDrawdown": 0.3679,
+        "sharpe": 0.719,
+        "calmar": 0.555,
+        "exposure": 0.5796,
+        "avgLeverage": 0.5796,
+        "turnoverPerYear": 4.31,
+        "trades": 8,
+        "winRate": 0.375,
+        "avgTradePct": 0.14655,
+        "profitFactor": 3.641,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.0965,
+          "maxDrawdown": 0.3679,
+          "sharpe": 1.119,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0496,
+          "maxDrawdown": 0.2154,
+          "sharpe": -0.008,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.2376,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1921
+          },
+          "2024": {
+            "return": 0.694,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3679
+          },
+          "2025": {
+            "return": 0.029,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2154
+          },
+          "2026": {
+            "return": -0.0763,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1272
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1745712000,
+          "exitTs": 1761091200,
+          "entryPx": 94662,
+          "exitPx": 108324,
+          "bars": 178,
+          "pnlPct": 0.142607529948658
+        },
+        {
+          "side": "long",
+          "entryTs": 1777680000,
+          "exitTs": 1780099200,
+          "entryPx": 78232,
+          "exitPx": 73373.3,
+          "bars": 28,
+          "pnlPct": -0.06351313976377992
+        },
+        {
+          "side": "long",
+          "entryTs": 1787443200,
+          "exitTs": 1789603200,
+          "entryPx": 77065.63,
+          "exitPx": 76354.94,
+          "bars": 25,
+          "pnlPct": -0.010708047283854327
+        }
+      ]
+    },
+    {
+      "name": "donchian-20/10",
+      "tf": "1d",
+      "rule": "donchian",
+      "params": {
+        "entryDays": 20,
+        "exitDays": 10
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.896,
+        "cagr": 0.1881,
+        "maxDrawdown": 0.3445,
+        "sharpe": 0.718,
+        "calmar": 0.546,
+        "exposure": 0.4742,
+        "avgLeverage": 0.4742,
+        "turnoverPerYear": 11.31,
+        "trades": 21,
+        "winRate": 0.4286,
+        "avgTradePct": 0.04228,
+        "profitFactor": 2.327,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.862,
+          "maxDrawdown": 0.3121,
+          "sharpe": 1.057,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.0183,
+          "maxDrawdown": 0.3445,
+          "sharpe": 0.162,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.2028,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1744
+          },
+          "2024": {
+            "return": 0.5481,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3121
+          },
+          "2025": {
+            "return": -0.0624,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2483
+          },
+          "2026": {
+            "return": 0.0861,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1757
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1772668800,
+          "exitTs": 1774224000,
+          "entryPx": 72691,
+          "exitPx": 67853,
+          "bars": 18,
+          "pnlPct": -0.06795586111072882
+        },
+        {
+          "side": "long",
+          "entryTs": 1776124800,
+          "exitTs": 1778976000,
+          "entryPx": 74451,
+          "exitPx": 78117,
+          "bars": 33,
+          "pnlPct": 0.04766657936092189
+        },
+        {
+          "side": "long",
+          "entryTs": 1784073600,
+          "exitTs": 1789516800,
+          "entryPx": 65000,
+          "exitPx": 75577.29,
+          "bars": 63,
+          "pnlPct": 0.1609834471538465
+        }
+      ]
+    },
+    {
+      "name": "tsmom-90d",
+      "tf": "1d",
+      "rule": "tsmom",
+      "params": {
+        "lookbackDays": 90
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.955,
+        "cagr": 0.1979,
+        "maxDrawdown": 0.3006,
+        "sharpe": 0.713,
+        "calmar": 0.658,
+        "exposure": 0.5553,
+        "avgLeverage": 0.5553,
+        "turnoverPerYear": 14.01,
+        "trades": 26,
+        "winRate": 0.3077,
+        "avgTradePct": 0.04875,
+        "profitFactor": 2.844,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.1295,
+          "maxDrawdown": 0.3006,
+          "sharpe": 1.154,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0819,
+          "maxDrawdown": 0.2779,
+          "sharpe": -0.103,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.0768,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.3006
+          },
+          "2024": {
+            "return": 0.9776,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.2037
+          },
+          "2025": {
+            "return": 0.14,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.1384
+          },
+          "2026": {
+            "return": -0.1947,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.2197
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1777766400,
+          "exitTs": 1777852800,
+          "entryPx": 78690,
+          "exitPx": 78563,
+          "bars": 1,
+          "pnlPct": -0.0031115071800735805
+        },
+        {
+          "side": "long",
+          "entryTs": 1777939200,
+          "exitTs": 1780444800,
+          "entryPx": 79855,
+          "exitPx": 66669.99,
+          "bars": 29,
+          "pnlPct": -0.16636422246571925
+        },
+        {
+          "side": "long",
+          "entryTs": 1787356800,
+          "exitTs": 1789603200,
+          "entryPx": 78325.29,
+          "exitPx": 76354.94,
+          "bars": 26,
+          "pnlPct": -0.02661825331256329
+        }
+      ]
+    },
+    {
+      "name": "smaTrend-100d",
+      "tf": "1d",
+      "rule": "smaTrend",
+      "params": {
+        "days": 100
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.8932,
+        "cagr": 0.1876,
+        "maxDrawdown": 0.365,
+        "sharpe": 0.693,
+        "calmar": 0.514,
+        "exposure": 0.5442,
+        "avgLeverage": 0.5442,
+        "turnoverPerYear": 15.08,
+        "trades": 28,
+        "winRate": 0.2143,
+        "avgTradePct": 0.0411,
+        "profitFactor": 2.634,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.827,
+          "maxDrawdown": 0.365,
+          "sharpe": 0.977,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.0362,
+          "maxDrawdown": 0.2583,
+          "sharpe": 0.205,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.1151,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.272
+          },
+          "2024": {
+            "return": 0.6385,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.365
+          },
+          "2025": {
+            "return": 0.028,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.1917
+          },
+          "2026": {
+            "return": 0.008,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1338
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1776384000,
+          "exitTs": 1776643200,
+          "entryPx": 75172,
+          "exitPx": 73834,
+          "bars": 3,
+          "pnlPct": -0.01927248177512897
+        },
+        {
+          "side": "long",
+          "entryTs": 1776729600,
+          "exitTs": 1780358400,
+          "entryPx": 75870,
+          "exitPx": 71305.47,
+          "bars": 42,
+          "pnlPct": -0.06157227105575347
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10018161543432291
+        }
+      ]
+    },
+    {
+      "name": "smaTrend-100d (4h)",
+      "tf": "4h",
+      "rule": "smaTrend",
+      "params": {
+        "days": 100
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 8136,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.715,
+        "totalReturn": 0.8252,
+        "cagr": 0.1758,
+        "maxDrawdown": 0.4386,
+        "sharpe": 0.669,
+        "calmar": 0.401,
+        "exposure": 0.5442,
+        "avgLeverage": 0.5442,
+        "turnoverPerYear": 32.84,
+        "trades": 61,
+        "winRate": 0.1311,
+        "avgTradePct": 0.01633,
+        "profitFactor": 2.2,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 4386,
+          "return": 0.8539,
+          "maxDrawdown": 0.4386,
+          "sharpe": 1.022,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 3750,
+          "return": -0.0155,
+          "maxDrawdown": 0.3207,
+          "sharpe": 0.085,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.2878,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.175
+          },
+          "2024": {
+            "return": 0.4397,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.4386
+          },
+          "2025": {
+            "return": -0.0308,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2549
+          },
+          "2026": {
+            "return": 0.0158,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1317
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1776657600,
+          "exitTs": 1779984000,
+          "entryPx": 74665,
+          "exitPx": 72782.02,
+          "bars": 231,
+          "pnlPct": -0.026681216500369143
+        },
+        {
+          "side": "long",
+          "entryTs": 1779998400,
+          "exitTs": 1780300800,
+          "entryPx": 73308.82,
+          "exitPx": 72711.6,
+          "bars": 21,
+          "pnlPct": -0.009634412339470488
+        },
+        {
+          "side": "long",
+          "entryTs": 1787155200,
+          "exitTs": 1789675200,
+          "entryPx": 68525.61,
+          "exitPx": 76354.94,
+          "bars": 175,
+          "pnlPct": 0.11258269120114406
+        }
+      ]
+    },
+    {
+      "name": "volTarget(smaTrend-100d) 40% 1x",
+      "tf": "1d",
+      "rule": "volTarget",
+      "params": {
+        "base": "smaTrend",
+        "baseParams": {
+          "days": 100
+        },
+        "targetVol": 0.4,
+        "volDays": 20
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.6908,
+        "cagr": 0.152,
+        "maxDrawdown": 0.3265,
+        "sharpe": 0.64,
+        "calmar": 0.465,
+        "exposure": 0.5442,
+        "avgLeverage": 0.4882,
+        "turnoverPerYear": 16.75,
+        "trades": 28,
+        "winRate": 0.1786,
+        "avgTradePct": 0.03418,
+        "profitFactor": 2.362,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.6276,
+          "maxDrawdown": 0.3265,
+          "sharpe": 0.912,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.0388,
+          "maxDrawdown": 0.2587,
+          "sharpe": 0.211,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.0418,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2805
+          },
+          "2024": {
+            "return": 0.5623,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3265
+          },
+          "2025": {
+            "return": 0.0288,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.1917
+          },
+          "2026": {
+            "return": 0.0097,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1338
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1776384000,
+          "exitTs": 1776643200,
+          "entryPx": 75172,
+          "exitPx": 73834,
+          "bars": 3,
+          "pnlPct": -0.019272481775128858
+        },
+        {
+          "side": "long",
+          "entryTs": 1776729600,
+          "exitTs": 1780358400,
+          "entryPx": 75870,
+          "exitPx": 71305.47,
+          "bars": 42,
+          "pnlPct": -0.06216330806658443
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10272031044328833
+        }
+      ]
+    },
+    {
+      "name": "skipFriday",
+      "tf": "1d",
+      "rule": "skipDays",
+      "params": {
+        "days": [5]
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.8604,
+        "cagr": 0.182,
+        "maxDrawdown": 0.551,
+        "sharpe": 0.605,
+        "calmar": 0.33,
+        "exposure": 0.8569,
+        "avgLeverage": 0.8569,
+        "turnoverPerYear": 104.52,
+        "trades": 194,
+        "winRate": 0.5309,
+        "avgTradePct": 0.00641,
+        "profitFactor": 1.352,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.7424,
+          "maxDrawdown": 0.2767,
+          "sharpe": 1.343,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.3216,
+          "maxDrawdown": 0.551,
+          "sharpe": -0.38,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.6936,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.224
+          },
+          "2024": {
+            "return": 0.6192,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.2767
+          },
+          "2025": {
+            "return": -0.057,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2869
+          },
+          "2026": {
+            "return": -0.2806,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.4672
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1787961600,
+          "exitTs": 1788480000,
+          "entryPx": 77835.18,
+          "exitPx": 81265,
+          "bars": 6,
+          "pnlPct": 0.04249906661743452
+        },
+        {
+          "side": "long",
+          "entryTs": 1788566400,
+          "exitTs": 1789084800,
+          "entryPx": 79676.6,
+          "exitPx": 76528.6,
+          "bars": 6,
+          "pnlPct": -0.040950453458104
+        },
+        {
+          "side": "long",
+          "entryTs": 1789171200,
+          "exitTs": 1789603200,
+          "entryPx": 77212.48,
+          "exitPx": 76354.94,
+          "bars": 5,
+          "pnlPct": -0.012589576322376672
+        }
+      ]
+    },
+    {
+      "name": "donchian-55/20",
+      "tf": "1d",
+      "rule": "donchian",
+      "params": {
+        "entryDays": 55,
+        "exitDays": 20
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.6323,
+        "cagr": 0.1411,
+        "maxDrawdown": 0.3238,
+        "sharpe": 0.604,
+        "calmar": 0.436,
+        "exposure": 0.3982,
+        "avgLeverage": 0.3982,
+        "turnoverPerYear": 5.93,
+        "trades": 11,
+        "winRate": 0.4545,
+        "avgTradePct": 0.05698,
+        "profitFactor": 2.819,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.9126,
+          "maxDrawdown": 0.1835,
+          "sharpe": 1.124,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.1465,
+          "maxDrawdown": 0.3235,
+          "sharpe": -0.348,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.1544,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.1835
+          },
+          "2024": {
+            "return": 0.6568,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.1709
+          },
+          "2025": {
+            "return": -0.111,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2182
+          },
+          "2026": {
+            "return": -0.04,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.1475
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1768348800,
+          "exitTs": 1769385600,
+          "entryPx": 95367,
+          "exitPx": 86568,
+          "bars": 12,
+          "pnlPct": -0.09362622290729472
+        },
+        {
+          "side": "long",
+          "entryTs": 1776470400,
+          "exitTs": 1779494400,
+          "entryPx": 77107,
+          "exitPx": 75451.01,
+          "bars": 35,
+          "pnlPct": -0.022944304862074993
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789516800,
+          "entryPx": 69298.02,
+          "exitPx": 75577.29,
+          "bars": 27,
+          "pnlPct": 0.08897662682137208
+        }
+      ]
+    },
+    {
+      "name": "skipWeekend",
+      "tf": "1d",
+      "rule": "skipDays",
+      "params": {
+        "days": [0, 6]
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.7387,
+        "cagr": 0.1607,
+        "maxDrawdown": 0.5899,
+        "sharpe": 0.558,
+        "calmar": 0.272,
+        "exposure": 0.7153,
+        "avgLeverage": 0.7153,
+        "turnoverPerYear": 104.52,
+        "trades": 194,
+        "winRate": 0.4742,
+        "avgTradePct": 0.00621,
+        "profitFactor": 1.324,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 1.7089,
+          "maxDrawdown": 0.3876,
+          "sharpe": 1.306,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.3581,
+          "maxDrawdown": 0.5899,
+          "sharpe": -0.446,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.6511,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2278
+          },
+          "2024": {
+            "return": 0.6406,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3876
+          },
+          "2025": {
+            "return": -0.2399,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.4171
+          },
+          "2026": {
+            "return": -0.1555,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.3545
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1788134400,
+          "exitTs": 1788566400,
+          "entryPx": 77659.15,
+          "exitPx": 79676.6,
+          "bars": 5,
+          "pnlPct": 0.024439297880545885
+        },
+        {
+          "side": "long",
+          "entryTs": 1788739200,
+          "exitTs": 1789171200,
+          "entryPx": 80338.98,
+          "exitPx": 77212.48,
+          "bars": 5,
+          "pnlPct": -0.040357977161273206
+        },
+        {
+          "side": "long",
+          "entryTs": 1789344000,
+          "exitTs": 1789603200,
+          "entryPx": 76804.19,
+          "exitPx": 76354.94,
+          "bars": 3,
+          "pnlPct": -0.007340516318185331
+        }
+      ]
+    },
+    {
+      "name": "smaTrend-100d-band2% L/S",
+      "tf": "1d",
+      "rule": "smaTrend",
+      "params": {
+        "days": 100,
+        "band": 0.02,
+        "short": true
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.6484,
+        "cagr": 0.1441,
+        "maxDrawdown": 0.4136,
+        "sharpe": 0.525,
+        "calmar": 0.348,
+        "exposure": 0.927,
+        "avgLeverage": 0.927,
+        "turnoverPerYear": 11.31,
+        "trades": 21,
+        "winRate": 0.2857,
+        "avgTradePct": 0.04851,
+        "profitFactor": 1.943,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.5463,
+          "maxDrawdown": 0.4136,
+          "sharpe": 0.71,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": 0.066,
+          "maxDrawdown": 0.3723,
+          "sharpe": 0.304,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": -0.0161,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.3577
+          },
+          "2024": {
+            "return": 0.5716,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.4136
+          },
+          "2025": {
+            "return": 0.0259,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.3723
+          },
+          "2026": {
+            "return": 0.0391,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.2931
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1776470400,
+          "exitTs": 1780358400,
+          "entryPx": 77107,
+          "exitPx": 71305.47,
+          "bars": 45,
+          "pnlPct": -0.07801427120754312
+        },
+        {
+          "side": "short",
+          "entryTs": 1780358400,
+          "exitTs": 1787184000,
+          "entryPx": 71305.47,
+          "exitPx": 69298.02,
+          "bars": 79,
+          "pnlPct": -0.005191366090130933
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10018161543432269
+        }
+      ]
+    },
+    {
+      "name": "rsiDip-4h (RSI14<30, >200d)",
+      "tf": "4h",
+      "rule": "rsiDip",
+      "params": {
+        "rsiBars": 14,
+        "entry": 30,
+        "exit": 55,
+        "trendDays": 200
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 8136,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.715,
+        "totalReturn": 0.258,
+        "cagr": 0.0637,
+        "maxDrawdown": 0.1293,
+        "sharpe": 0.496,
+        "calmar": 0.493,
+        "exposure": 0.069,
+        "avgLeverage": 0.069,
+        "turnoverPerYear": 14,
+        "trades": 26,
+        "winRate": 0.7308,
+        "avgTradePct": 0.01165,
+        "profitFactor": 1.76,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 4386,
+          "return": 0.1682,
+          "maxDrawdown": 0.1134,
+          "sharpe": 0.56,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 3750,
+          "return": 0.0768,
+          "maxDrawdown": 0.1293,
+          "sharpe": 0.408,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.078,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.076
+          },
+          "2024": {
+            "return": 0.0837,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.1134
+          },
+          "2025": {
+            "return": 0.0522,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.1293
+          },
+          "2026": {
+            "return": 0.0234,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.0123
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1758528000,
+          "exitTs": 1759104000,
+          "entryPx": 112594,
+          "exitPx": 112203,
+          "bars": 40,
+          "pnlPct": -0.004967444979306124
+        },
+        {
+          "side": "long",
+          "entryTs": 1760126400,
+          "exitTs": 1760688000,
+          "entryPx": 116680,
+          "exitPx": 105615,
+          "bars": 39,
+          "pnlPct": -0.09618977116900929
+        },
+        {
+          "side": "long",
+          "entryTs": 1789084800,
+          "exitTs": 1789401600,
+          "entryPx": 76528.6,
+          "exitPx": 78554.34,
+          "bars": 22,
+          "pnlPct": 0.024930659779481168
+        }
+      ]
+    },
+    {
+      "name": "volTarget(smaTrend-100d) 40% 2x",
+      "tf": "1d",
+      "rule": "volTarget",
+      "params": {
+        "base": "smaTrend",
+        "baseParams": {
+          "days": 100
+        },
+        "targetVol": 0.4,
+        "volDays": 20
+      },
+      "maxLeverage": 2,
+      "note": "uses up to 2x leverage; liquidation not modelled beyond equity<=0",
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.3399,
+        "cagr": 0.082,
+        "maxDrawdown": 0.3995,
+        "sharpe": 0.402,
+        "calmar": 0.205,
+        "exposure": 0.5442,
+        "avgLeverage": 0.5765,
+        "turnoverPerYear": 24.81,
+        "trades": 28,
+        "winRate": 0.1786,
+        "avgTradePct": 0.03056,
+        "profitFactor": 1.841,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.4259,
+          "maxDrawdown": 0.3995,
+          "sharpe": 0.66,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0603,
+          "maxDrawdown": 0.3569,
+          "sharpe": 0.01,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": -0.0954,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.3995
+          },
+          "2024": {
+            "return": 0.5764,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3603
+          },
+          "2025": {
+            "return": -0.0034,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2465
+          },
+          "2026": {
+            "return": -0.0571,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.2114
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1776384000,
+          "exitTs": 1776643200,
+          "entryPx": 75172,
+          "exitPx": 73834,
+          "bars": 3,
+          "pnlPct": -0.019676353737322905
+        },
+        {
+          "side": "long",
+          "entryTs": 1776729600,
+          "exitTs": 1780358400,
+          "entryPx": 75870,
+          "exitPx": 71305.47,
+          "bars": 42,
+          "pnlPct": -0.12832406182979605
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10867203753717081
+        }
+      ]
+    },
+    {
+      "name": "smaTrend-200d L/S",
+      "tf": "1d",
+      "rule": "smaTrend",
+      "params": {
+        "days": 200,
+        "short": true
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.3115,
+        "cagr": 0.0758,
+        "maxDrawdown": 0.5437,
+        "sharpe": 0.385,
+        "calmar": 0.139,
+        "exposure": 0.8532,
+        "avgLeverage": 0.8532,
+        "turnoverPerYear": 17.78,
+        "trades": 33,
+        "winRate": 0.1818,
+        "avgTradePct": 0.02069,
+        "profitFactor": 1.627,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.5967,
+          "maxDrawdown": 0.4347,
+          "sharpe": 0.764,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.1786,
+          "maxDrawdown": 0.4961,
+          "sharpe": -0.045,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.1586,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2265
+          },
+          "2024": {
+            "return": 0.3781,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.4347
+          },
+          "2025": {
+            "return": -0.3214,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.4961
+          },
+          "2026": {
+            "return": 0.2104,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.2806
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1761955200,
+          "exitTs": 1762214400,
+          "entryPx": 109554,
+          "exitPx": 106550,
+          "bars": 3,
+          "pnlPct": -0.030338006827683284
+        },
+        {
+          "side": "short",
+          "entryTs": 1762214400,
+          "exitTs": 1787184000,
+          "entryPx": 106550,
+          "exitPx": 69298.02,
+          "bars": 289,
+          "pnlPct": 0.30397222322900075
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10018161543432202
+        }
+      ]
+    },
+    {
+      "name": "emaCross-20/100 L/S",
+      "tf": "1d",
+      "rule": "emaCross",
+      "params": {
+        "fastDays": 20,
+        "slowDays": 100,
+        "short": true
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.1373,
+        "cagr": 0.0353,
+        "maxDrawdown": 0.5427,
+        "sharpe": 0.3,
+        "calmar": 0.065,
+        "exposure": 0.927,
+        "avgLeverage": 0.927,
+        "turnoverPerYear": 8.08,
+        "trades": 15,
+        "winRate": 0.2667,
+        "avgTradePct": 0.04478,
+        "profitFactor": 1.583,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.2955,
+          "maxDrawdown": 0.5427,
+          "sharpe": 0.512,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.1221,
+          "maxDrawdown": 0.3691,
+          "sharpe": 0.044,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.057,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.31
+          },
+          "2024": {
+            "return": 0.2257,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.5427
+          },
+          "2025": {
+            "return": 0.0293,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.3452
+          },
+          "2026": {
+            "return": -0.1471,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.3691
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1777680000,
+          "exitTs": 1780099200,
+          "entryPx": 78232,
+          "exitPx": 73373.3,
+          "bars": 28,
+          "pnlPct": -0.06491998031496116
+        },
+        {
+          "side": "short",
+          "entryTs": 1780099200,
+          "exitTs": 1787443200,
+          "entryPx": 73373.3,
+          "exitPx": 77065.63,
+          "bars": 85,
+          "pnlPct": -0.08816421507678296
+        },
+        {
+          "side": "long",
+          "entryTs": 1787443200,
+          "exitTs": 1789603200,
+          "entryPx": 77065.63,
+          "exitPx": 76354.94,
+          "bars": 25,
+          "pnlPct": -0.01070804728385466
+        }
+      ]
+    },
+    {
+      "name": "tsmom-90d L/S",
+      "tf": "1d",
+      "rule": "tsmom",
+      "params": {
+        "lookbackDays": 90,
+        "short": true
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.0287,
+        "cagr": 0.0077,
+        "maxDrawdown": 0.518,
+        "sharpe": 0.239,
+        "calmar": 0.015,
+        "exposure": 0.9336,
+        "avgLeverage": 0.9336,
+        "turnoverPerYear": 27.48,
+        "trades": 51,
+        "winRate": 0.2549,
+        "avgTradePct": 0.01299,
+        "profitFactor": 1.417,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.2629,
+          "maxDrawdown": 0.4901,
+          "sharpe": 0.484,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.1855,
+          "maxDrawdown": 0.518,
+          "sharpe": -0.056,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": -0.2343,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.4901
+          },
+          "2024": {
+            "return": 0.6493,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3396
+          },
+          "2025": {
+            "return": 0.25,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2402
+          },
+          "2026": {
+            "return": -0.3484,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.518
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1777939200,
+          "exitTs": 1780444800,
+          "entryPx": 79855,
+          "exitPx": 66669.99,
+          "bars": 29,
+          "pnlPct": -0.16761655463026737
+        },
+        {
+          "side": "short",
+          "entryTs": 1780444800,
+          "exitTs": 1787356800,
+          "entryPx": 66669.99,
+          "exitPx": 78325.29,
+          "bars": 80,
+          "pnlPct": -0.18031552627410596
+        },
+        {
+          "side": "long",
+          "entryTs": 1787356800,
+          "exitTs": 1789603200,
+          "entryPx": 78325.29,
+          "exitPx": 76354.94,
+          "bars": 26,
+          "pnlPct": -0.026618253312563844
+        }
+      ]
+    },
+    {
+      "name": "donchian-55/20 L/S",
+      "tf": "1d",
+      "rule": "donchian",
+      "params": {
+        "entryDays": 55,
+        "exitDays": 20,
+        "short": true
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.0502,
+        "cagr": 0.0133,
+        "maxDrawdown": 0.3764,
+        "sharpe": 0.222,
+        "calmar": 0.035,
+        "exposure": 0.615,
+        "avgLeverage": 0.615,
+        "turnoverPerYear": 10.24,
+        "trades": 19,
+        "winRate": 0.4211,
+        "avgTradePct": 0.01249,
+        "profitFactor": 1.268,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.2069,
+          "maxDrawdown": 0.3764,
+          "sharpe": 0.438,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.1298,
+          "maxDrawdown": 0.3589,
+          "sharpe": -0.028,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": -0.0316,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.315
+          },
+          "2024": {
+            "return": 0.2462,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3764
+          },
+          "2025": {
+            "return": -0.0734,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.3589
+          },
+          "2026": {
+            "return": -0.0608,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.2022
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1776470400,
+          "exitTs": 1779494400,
+          "entryPx": 77107,
+          "exitPx": 75451.01,
+          "bars": 35,
+          "pnlPct": -0.02294430486207444
+        },
+        {
+          "side": "short",
+          "entryTs": 1780444800,
+          "exitTs": 1784073600,
+          "entryPx": 66669.99,
+          "exitPx": 65000,
+          "bars": 42,
+          "pnlPct": 0.007239825591288218
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789516800,
+          "entryPx": 69298.02,
+          "exitPx": 75577.29,
+          "bars": 27,
+          "pnlPct": 0.08897662682137208
+        }
+      ]
+    },
+    {
+      "name": "trendCombo-100/30 L/S",
+      "tf": "1d",
+      "rule": "trendCombo",
+      "params": {
+        "smaDays": 100,
+        "momDays": 30,
+        "short": true
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": 0.0044,
+        "cagr": 0.0012,
+        "maxDrawdown": 0.5298,
+        "sharpe": 0.201,
+        "calmar": 0.002,
+        "exposure": 0.6792,
+        "avgLeverage": 0.6792,
+        "turnoverPerYear": 46.33,
+        "trades": 86,
+        "winRate": 0.314,
+        "avgTradePct": 0.00623,
+        "profitFactor": 1.254,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": 0.0955,
+          "maxDrawdown": 0.5298,
+          "sharpe": 0.314,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0832,
+          "maxDrawdown": 0.2987,
+          "sharpe": 0.066,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.1501,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.2729
+          },
+          "2024": {
+            "return": -0.0474,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.5298
+          },
+          "2025": {
+            "return": -0.0415,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.2356
+          },
+          "2026": {
+            "return": -0.0434,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0.2987
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "short",
+          "entryTs": 1786492800,
+          "exitTs": 1786579200,
+          "entryPx": 63539.69,
+          "exitPx": 63406.33,
+          "bars": 1,
+          "pnlPct": 0.0005956973507426078
+        },
+        {
+          "side": "short",
+          "entryTs": 1786665600,
+          "exitTs": 1787097600,
+          "entryPx": 63418.05,
+          "exitPx": 64686.09,
+          "bars": 5,
+          "pnlPct": -0.021820559648762616
+        },
+        {
+          "side": "long",
+          "entryTs": 1787184000,
+          "exitTs": 1789603200,
+          "entryPx": 69298.02,
+          "exitPx": 76354.94,
+          "bars": 28,
+          "pnlPct": 0.10018161543432225
+        }
+      ]
+    },
+    {
+      "name": "breakout-55/20 (1h)",
+      "tf": "1h",
+      "rule": "breakout",
+      "params": {
+        "entry": 55,
+        "exit": 20
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 32545,
+        "from": "2023-01-01",
+        "to": "2026-09-18",
+        "years": 3.715,
+        "totalReturn": -0.0012,
+        "cagr": -0.0003,
+        "maxDrawdown": 0.5042,
+        "sharpe": 0.135,
+        "calmar": -0.001,
+        "exposure": 0.3415,
+        "avgLeverage": 0.3415,
+        "turnoverPerYear": 119.51,
+        "trades": 222,
+        "winRate": 0.3423,
+        "avgTradePct": 0.00236,
+        "profitFactor": 1.195,
+        "buyHoldReturn": 3.6291,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 17544,
+          "return": 0.5459,
+          "maxDrawdown": 0.3099,
+          "sharpe": 0.872,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-18",
+          "bars": 15001,
+          "return": -0.3539,
+          "maxDrawdown": 0.4911,
+          "sharpe": -0.974,
+          "buyHold": -0.1803
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.3146,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.3099
+          },
+          "2024": {
+            "return": 0.176,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.231
+          },
+          "2025": {
+            "return": -0.2169,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.3018
+          },
+          "2026": {
+            "return": -0.175,
+            "buyHold": -0.1255,
+            "maxDrawdown": 0.3368
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1788447600,
+          "exitTs": 1788526800,
+          "entryPx": 80534.52,
+          "exitPx": 79437.16,
+          "bars": 22,
+          "pnlPct": -0.015105519223309272
+        },
+        {
+          "side": "long",
+          "entryTs": 1788739200,
+          "exitTs": 1788796800,
+          "entryPx": 80338.98,
+          "exitPx": 78807.8,
+          "bars": 16,
+          "pnlPct": -0.020530403796513053
+        },
+        {
+          "side": "long",
+          "entryTs": 1789354800,
+          "exitTs": 1789455600,
+          "entryPx": 77568.69,
+          "exitPx": 77266.5,
+          "bars": 28,
+          "pnlPct": -0.005389929235623203
+        }
+      ]
+    },
+    {
+      "name": "momentum-20/50 (1h)",
+      "tf": "1h",
+      "rule": "momentum",
+      "params": {
+        "fast": 20,
+        "slow": 50
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 32545,
+        "from": "2023-01-01",
+        "to": "2026-09-18",
+        "years": 3.715,
+        "totalReturn": -0.2524,
+        "cagr": -0.0753,
+        "maxDrawdown": 0.6575,
+        "sharpe": -0.078,
+        "calmar": -0.115,
+        "exposure": 0.529,
+        "avgLeverage": 0.529,
+        "turnoverPerYear": 209.42,
+        "trades": 389,
+        "winRate": 0.347,
+        "avgTradePct": 0.00143,
+        "profitFactor": 1.139,
+        "buyHoldReturn": 3.6291,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 17544,
+          "return": 0.6379,
+          "maxDrawdown": 0.3704,
+          "sharpe": 0.883,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-18",
+          "bars": 15001,
+          "return": -0.5435,
+          "maxDrawdown": 0.6306,
+          "sharpe": -1.391,
+          "buyHold": -0.1803
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0.4123,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.3704
+          },
+          "2024": {
+            "return": 0.1597,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.3592
+          },
+          "2025": {
+            "return": -0.5193,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.5546
+          },
+          "2026": {
+            "return": -0.0504,
+            "buyHold": -0.1255,
+            "maxDrawdown": 0.2465
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1789182000,
+          "exitTs": 1789214400,
+          "entryPx": 77264.45,
+          "exitPx": 77341.32,
+          "bars": 9,
+          "pnlPct": -0.0005065975361241426
+        },
+        {
+          "side": "long",
+          "entryTs": 1789372800,
+          "exitTs": 1789484400,
+          "entryPx": 77841.41,
+          "exitPx": 75877.89,
+          "bars": 31,
+          "pnlPct": -0.026686783230159716
+        },
+        {
+          "side": "long",
+          "entryTs": 1789642800,
+          "exitTs": 1789689600,
+          "entryPx": 76329.88,
+          "exitPx": 76519.1,
+          "bars": 13,
+          "pnlPct": 0.0009752583129960524
+        }
+      ]
+    },
+    {
+      "name": "rsiDip-1d (RSI14<30, >200d)",
+      "tf": "1d",
+      "rule": "rsiDip",
+      "params": {
+        "rsiBars": 14,
+        "entry": 30,
+        "exit": 55,
+        "trendDays": 200
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 1356,
+        "from": "2023-01-01",
+        "to": "2026-09-17",
+        "years": 3.712,
+        "totalReturn": -0.1424,
+        "cagr": -0.0405,
+        "maxDrawdown": 0.1763,
+        "sharpe": -0.393,
+        "calmar": -0.23,
+        "exposure": 0.0162,
+        "avgLeverage": 0.0162,
+        "turnoverPerYear": 1.08,
+        "trades": 2,
+        "winRate": 0,
+        "avgTradePct": -0.0724,
+        "profitFactor": 0,
+        "buyHoldReturn": 3.6192,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 731,
+          "return": -0.0563,
+          "maxDrawdown": 0.0936,
+          "sharpe": -0.492,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-17",
+          "bars": 625,
+          "return": -0.0913,
+          "maxDrawdown": 0.145,
+          "sharpe": -0.385,
+          "buyHold": -0.182
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": 0,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0
+          },
+          "2024": {
+            "return": -0.0563,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.0936
+          },
+          "2025": {
+            "return": -0.0913,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.145
+          },
+          "2026": {
+            "return": 0,
+            "buyHold": -0.1273,
+            "maxDrawdown": 0
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1719273600,
+          "exitTs": 1720137600,
+          "entryPx": 60250,
+          "exitPx": 57030,
+          "bars": 10,
+          "pnlPct": -0.054863817427385886
+        },
+        {
+          "side": "long",
+          "entryTs": 1740528000,
+          "exitTs": 1741564800,
+          "entryPx": 88573,
+          "exitPx": 80728,
+          "bars": 12,
+          "pnlPct": -0.08993815271019379
+        }
+      ]
+    },
+    {
+      "name": "meanReversion-20 (1h)",
+      "tf": "1h",
+      "rule": "meanReversion",
+      "params": {
+        "period": 20
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 32545,
+        "from": "2023-01-01",
+        "to": "2026-09-18",
+        "years": 3.715,
+        "totalReturn": -0.8583,
+        "cagr": -0.409,
+        "maxDrawdown": 0.8623,
+        "sharpe": -1.852,
+        "calmar": -0.474,
+        "exposure": 0.2715,
+        "avgLeverage": 0.2715,
+        "turnoverPerYear": 328.39,
+        "trades": 610,
+        "winRate": 0.6213,
+        "avgTradePct": -0.00154,
+        "profitFactor": 0.754,
+        "buyHoldReturn": 3.6291,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 17544,
+          "return": -0.5589,
+          "maxDrawdown": 0.6167,
+          "sharpe": -1.441,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-18",
+          "bars": 15001,
+          "return": -0.6788,
+          "maxDrawdown": 0.6866,
+          "sharpe": -2.315,
+          "buyHold": -0.1803
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": -0.4238,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.4598
+          },
+          "2024": {
+            "return": -0.2345,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.368
+          },
+          "2025": {
+            "return": -0.4201,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.4433
+          },
+          "2026": {
+            "return": -0.4461,
+            "buyHold": -0.1255,
+            "maxDrawdown": 0.4585
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1789239600,
+          "exitTs": 1789264800,
+          "entryPx": 77130.03,
+          "exitPx": 77291.54,
+          "bars": 7,
+          "pnlPct": 0.0005908553387050652
+        },
+        {
+          "side": "long",
+          "entryTs": 1789290000,
+          "exitTs": 1789311600,
+          "entryPx": 76792.52,
+          "exitPx": 77176.49,
+          "bars": 6,
+          "pnlPct": 0.0034925962190066606
+        },
+        {
+          "side": "long",
+          "entryTs": 1789459200,
+          "exitTs": 1789552800,
+          "entryPx": 76890.64,
+          "exitPx": 75922.65,
+          "bars": 26,
+          "pnlPct": -0.014070294836926789
+        }
+      ]
+    },
+    {
+      "name": "usHours-13-21utc (1h)",
+      "tf": "1h",
+      "rule": "hours",
+      "params": {
+        "from": 13,
+        "to": 21
+      },
+      "maxLeverage": 1,
+      "metrics": {
+        "bars": 32545,
+        "from": "2023-01-01",
+        "to": "2026-09-18",
+        "years": 3.715,
+        "totalReturn": -0.9812,
+        "cagr": -0.6569,
+        "maxDrawdown": 0.9843,
+        "sharpe": -3.069,
+        "calmar": -0.667,
+        "exposure": 0.3333,
+        "avgLeverage": 0.3333,
+        "turnoverPerYear": 730,
+        "trades": 1356,
+        "winRate": 0.4447,
+        "avgTradePct": -0.00127,
+        "profitFactor": 0.805,
+        "buyHoldReturn": 3.6291,
+        "wiped": false,
+        "inSample": {
+          "from": "2023-01-01",
+          "to": "2024-12-31",
+          "bars": 17544,
+          "return": -0.8508,
+          "maxDrawdown": 0.8742,
+          "sharpe": -2.601,
+          "buyHold": 4.6492
+        },
+        "outOfSample": {
+          "from": "2025-01-01",
+          "to": "2026-09-18",
+          "bars": 15001,
+          "return": -0.8738,
+          "maxDrawdown": 0.8851,
+          "sharpe": -3.668,
+          "buyHold": -0.1803
+        },
+        "oosStart": "2025-01-01",
+        "yearly": {
+          "2023": {
+            "return": -0.5632,
+            "buyHold": 1.5564,
+            "maxDrawdown": 0.6304
+          },
+          "2024": {
+            "return": -0.6584,
+            "buyHold": 1.2098,
+            "maxDrawdown": 0.6964
+          },
+          "2025": {
+            "return": -0.7321,
+            "buyHold": -0.0627,
+            "maxDrawdown": 0.7504
+          },
+          "2026": {
+            "return": -0.5288,
+            "buyHold": -0.1255,
+            "maxDrawdown": 0.5526
+          }
+        }
+      },
+      "lastTrades": [
+        {
+          "side": "long",
+          "entryTs": 1789477200,
+          "exitTs": 1789506000,
+          "entryPx": 76925.56,
+          "exitPx": 75872.74,
+          "bars": 8,
+          "pnlPct": -0.01516568888156311
+        },
+        {
+          "side": "long",
+          "entryTs": 1789563600,
+          "exitTs": 1789592400,
+          "entryPx": 75893.78,
+          "exitPx": 76100.35,
+          "bars": 8,
+          "pnlPct": 0.0012177476863060033
+        },
+        {
+          "side": "long",
+          "entryTs": 1789650000,
+          "exitTs": 1789678800,
+          "entryPx": 76664.28,
+          "exitPx": 76499.65,
+          "bars": 8,
+          "pnlPct": -0.0036441935540256765
+        }
+      ]
     }
-  }
+  ]
 }
