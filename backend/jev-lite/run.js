@@ -32,12 +32,13 @@ function textReport(state, signal, price, traded) {
   return lines.join('\n');
 }
 
-/** One-line summary for notifications / log. */
+/** One-line summary for notifications / log: which SMAs price is above, and target % in BTC. */
 function oneLiner(state, signal, price, traded) {
-  const s = paper.summary(state, price);
-  const pos = signal.target === 0 ? 'CASH' : `LONG ${Math.round(signal.target * 100)}%`;
-  const act = traded ? `${traded.side.toUpperCase()} $${traded.usd}` : 'no trade';
-  return `BTC $${Math.round(price)} | ${pos} | ${act} | equity $${s.equity} (${s.returnPct >= 0 ? '+' : ''}${s.returnPct}%) vs hold ${s.buyHoldReturnPct >= 0 ? '+' : ''}${s.buyHoldReturnPct}%`;
+  const above = signal.smas.filter((m) => m.above).map((m) => `${m.days}d`);
+  const n = `${above.length}/${signal.smas.length}`;
+  const hits = above.length ? above.join(' ') : 'none';
+  const act = traded ? ` | ${traded.side.toUpperCase()} $${traded.usd}` : '';
+  return `BTC $${Math.round(price)} | above ${n}: ${hits} | be ${Math.round(signal.target * 100)}% in BTC${act}`;
 }
 
 /** Desktop notification, no dependencies: Windows toast / macOS / Linux notify-send. */
@@ -86,8 +87,7 @@ async function runOnce({ force = false, notifyUser = false } = {}) {
   console.log(`saved -> ${storage.LOCAL_FILE}`);
   const line = oneLiner(state, signal, price, traded);
   appendLog(line);
-  if (notifyUser)
-    notify(traded ? `jev-lite: ${traded.side.toUpperCase()}` : 'jev-lite: no trade', line);
+  if (notifyUser) notify(`jev-lite: ${Math.round(signal.target * 100)}% BTC`, line);
 }
 
 async function status() {

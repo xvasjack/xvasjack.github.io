@@ -169,9 +169,9 @@ describe('jev-lite local run.js', () => {
     expect(txt).toMatch(/buy&hold/);
     const { oneLiner } = require('../jev-lite/run');
     const line = oneLiner(st, s, 100, traded);
-    expect(line).toMatch(/LONG 50%/);
+    expect(line).toMatch(/above 1\/1: 40d/);
+    expect(line).toMatch(/be 50% in BTC/);
     expect(line).toMatch(/BUY \$/);
-    expect(line).toMatch(/vs hold/);
   });
 });
 
