@@ -1,0 +1,317 @@
+{
+  "generatedAt": "2026-09-18T10:39:26.562Z",
+  "feeBps": 10,
+  "slippageBps": 5,
+  "results": {
+    "1h": {
+      "candles": 32545,
+      "from": "2023-01-01T00:00:00.000Z",
+      "to": "2026-09-18T00:00:00.000Z",
+      "rules": {
+        "momentum": {
+          "bars": 32545,
+          "years": 3.715,
+          "totalReturn": -0.2524,
+          "cagr": -0.0753,
+          "maxDrawdown": 0.6575,
+          "sharpe": -0.078,
+          "calmar": -0.115,
+          "exposure": 0.529,
+          "trades": 389,
+          "winRate": 0.347,
+          "avgTradePct": 0.00143,
+          "profitFactor": 1.139,
+          "buyHoldReturn": 3.6291,
+          "lastTrades": [
+            {
+              "entryTs": 1789182000,
+              "exitTs": 1789214400,
+              "entryPx": 77264.45,
+              "exitPx": 77341.32,
+              "bars": 9,
+              "pnlPct": -0.0005065975361241426
+            },
+            {
+              "entryTs": 1789372800,
+              "exitTs": 1789484400,
+              "entryPx": 77841.41,
+              "exitPx": 75877.89,
+              "bars": 31,
+              "pnlPct": -0.026686783230159716
+            },
+            {
+              "entryTs": 1789642800,
+              "exitTs": 1789689600,
+              "entryPx": 76329.88,
+              "exitPx": 76519.1,
+              "bars": 13,
+              "pnlPct": 0.0009752583129960524
+            }
+          ]
+        },
+        "meanReversion": {
+          "bars": 32545,
+          "years": 3.715,
+          "totalReturn": -0.8583,
+          "cagr": -0.409,
+          "maxDrawdown": 0.8623,
+          "sharpe": -1.852,
+          "calmar": -0.474,
+          "exposure": 0.2715,
+          "trades": 610,
+          "winRate": 0.6213,
+          "avgTradePct": -0.00154,
+          "profitFactor": 0.754,
+          "buyHoldReturn": 3.6291,
+          "lastTrades": [
+            {
+              "entryTs": 1789239600,
+              "exitTs": 1789264800,
+              "entryPx": 77130.03,
+              "exitPx": 77291.54,
+              "bars": 7,
+              "pnlPct": 0.0005908553387050652
+            },
+            {
+              "entryTs": 1789290000,
+              "exitTs": 1789311600,
+              "entryPx": 76792.52,
+              "exitPx": 77176.49,
+              "bars": 6,
+              "pnlPct": 0.0034925962190066606
+            },
+            {
+              "entryTs": 1789459200,
+              "exitTs": 1789552800,
+              "entryPx": 76890.64,
+              "exitPx": 75922.65,
+              "bars": 26,
+              "pnlPct": -0.014070294836926789
+            }
+          ]
+        },
+        "breakout": {
+          "bars": 32545,
+          "years": 3.715,
+          "totalReturn": -0.0012,
+          "cagr": -0.0003,
+          "maxDrawdown": 0.5042,
+          "sharpe": 0.135,
+          "calmar": -0.001,
+          "exposure": 0.3415,
+          "trades": 222,
+          "winRate": 0.3423,
+          "avgTradePct": 0.00236,
+          "profitFactor": 1.195,
+          "buyHoldReturn": 3.6291,
+          "lastTrades": [
+            {
+              "entryTs": 1788447600,
+              "exitTs": 1788526800,
+              "entryPx": 80534.52,
+              "exitPx": 79437.16,
+              "bars": 22,
+              "pnlPct": -0.015105519223309272
+            },
+            {
+              "entryTs": 1788739200,
+              "exitTs": 1788796800,
+              "entryPx": 80338.98,
+              "exitPx": 78807.8,
+              "bars": 16,
+              "pnlPct": -0.020530403796513053
+            },
+            {
+              "entryTs": 1789354800,
+              "exitTs": 1789455600,
+              "entryPx": 77568.69,
+              "exitPx": 77266.5,
+              "bars": 28,
+              "pnlPct": -0.005389929235623203
+            }
+          ]
+        },
+        "buyAndHold": {
+          "bars": 32545,
+          "years": 3.715,
+          "totalReturn": 3.6177,
+          "cagr": 0.5095,
+          "maxDrawdown": 0.5385,
+          "sharpe": 1.121,
+          "calmar": 0.946,
+          "exposure": 1,
+          "trades": 1,
+          "winRate": 1,
+          "avgTradePct": 3.62468,
+          "profitFactor": null,
+          "buyHoldReturn": 3.6291,
+          "lastTrades": [
+            {
+              "entryTs": 1672534800,
+              "exitTs": 1789689600,
+              "entryPx": 16521,
+              "exitPx": 76519.1,
+              "bars": 32543,
+              "pnlPct": 3.624678975243582
+            }
+          ]
+        }
+      }
+    },
+    "15m": {
+      "candles": 130182,
+      "from": "2023-01-01T00:00:00.000Z",
+      "to": "2026-09-18T01:15:00.000Z",
+      "rules": {
+        "momentum": {
+          "bars": 130182,
+          "years": 3.715,
+          "totalReturn": -0.9768,
+          "cagr": -0.6371,
+          "maxDrawdown": 0.9808,
+          "sharpe": -2.914,
+          "calmar": -0.65,
+          "exposure": 0.5164,
+          "trades": 1587,
+          "winRate": 0.2924,
+          "avgTradePct": -0.00073,
+          "profitFactor": 0.866,
+          "buyHoldReturn": 3.6297,
+          "lastTrades": [
+            {
+              "entryTs": 1789361100,
+              "exitTs": 1789434900,
+              "entryPx": 77595.01,
+              "exitPx": 77807.33,
+              "bars": 82,
+              "pnlPct": 0.0012321540392865593
+            },
+            {
+              "entryTs": 1789541100,
+              "exitTs": 1789575300,
+              "entryPx": 75870.13,
+              "exitPx": 75785.85,
+              "bars": 38,
+              "pnlPct": -0.002609179330522071
+            },
+            {
+              "entryTs": 1789592400,
+              "exitTs": 1789684200,
+              "entryPx": 76100.35,
+              "exitPx": 76214.41,
+              "bars": 102,
+              "pnlPct": -0.0000034377634268167867
+            }
+          ]
+        },
+        "meanReversion": {
+          "bars": 130182,
+          "years": 3.715,
+          "totalReturn": -0.9991,
+          "cagr": -0.8509,
+          "maxDrawdown": 0.9992,
+          "sharpe": -6.721,
+          "calmar": -0.852,
+          "exposure": 0.2565,
+          "trades": 2486,
+          "winRate": 0.5792,
+          "avgTradePct": -0.0013,
+          "profitFactor": 0.617,
+          "buyHoldReturn": 3.6297,
+          "lastTrades": [
+            {
+              "entryTs": 1789567200,
+              "exitTs": 1789581600,
+              "entryPx": 75586.92,
+              "exitPx": 75688.84,
+              "bars": 16,
+              "pnlPct": -0.00015364113261917556
+            },
+            {
+              "entryTs": 1789645500,
+              "exitTs": 1789646400,
+              "entryPx": 76115.05,
+              "exitPx": 76400.03,
+              "bars": 1,
+              "pnlPct": 0.002238452907802113
+            },
+            {
+              "entryTs": 1789683300,
+              "exitTs": 1789693200,
+              "entryPx": 76310.06,
+              "exitPx": 76520,
+              "bars": 11,
+              "pnlPct": 0.0012470177588645992
+            }
+          ]
+        },
+        "breakout": {
+          "bars": 130182,
+          "years": 3.715,
+          "totalReturn": -0.8213,
+          "cagr": -0.3709,
+          "maxDrawdown": 0.8685,
+          "sharpe": -1.56,
+          "calmar": -0.427,
+          "exposure": 0.3266,
+          "trades": 939,
+          "winRate": 0.3014,
+          "avgTradePct": -0.00016,
+          "profitFactor": 0.973,
+          "buyHoldReturn": 3.6297,
+          "lastTrades": [
+            {
+              "entryTs": 1789559100,
+              "exitTs": 1789568100,
+              "entryPx": 76160.03,
+              "exitPx": 75501.17,
+              "bars": 10,
+              "pnlPct": -0.010138017999730131
+            },
+            {
+              "entryTs": 1789608600,
+              "exitTs": 1789645500,
+              "entryPx": 76558.01,
+              "exitPx": 76115.05,
+              "bars": 41,
+              "pnlPct": -0.007277260406846953
+            },
+            {
+              "entryTs": 1789647300,
+              "exitTs": 1789652700,
+              "entryPx": 76737.8,
+              "exitPx": 76079.28,
+              "bars": 6,
+              "pnlPct": -0.010068557086598928
+            }
+          ]
+        },
+        "buyAndHold": {
+          "bars": 130182,
+          "years": 3.715,
+          "totalReturn": 3.6194,
+          "cagr": 0.5097,
+          "maxDrawdown": 0.5393,
+          "sharpe": 1.121,
+          "calmar": 0.945,
+          "exposure": 1,
+          "trades": 1,
+          "winRate": 1,
+          "avgTradePct": 3.62638,
+          "profitFactor": null,
+          "buyHoldReturn": 3.6297,
+          "lastTrades": [
+            {
+              "entryTs": 1672532100,
+              "exitTs": 1789694100,
+              "entryPx": 16517,
+              "exitPx": 76528.7,
+              "bars": 130180,
+              "pnlPct": 3.6263793031422455
+            }
+          ]
+        }
+      }
+    }
+  }
+}

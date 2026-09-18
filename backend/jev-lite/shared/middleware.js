@@ -40,9 +40,9 @@ function healthCheck(serviceName) {
       memory: {
         heapUsed: `${heapUsedMB}MB`,
         heapTotal: `${heapTotalMB}MB`,
-        heapPercent: `${Math.round((heapUsedMB / heapTotalMB) * 100)}%`
+        heapPercent: `${Math.round((heapUsedMB / heapTotalMB) * 100)}%`,
       },
-      uptime: `${Math.round(process.uptime())}s`
+      uptime: `${Math.round(process.uptime())}s`,
     });
   };
 }
@@ -57,7 +57,7 @@ function errorHandler(err, _req, res, _next) {
 
   res.status(500).json({
     error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
   });
 }
 

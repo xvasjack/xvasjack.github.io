@@ -1,0 +1,11 @@
+{
+  "name": "jev-lite",
+  "version": "0.1.0",
+  "description": "BTC/USD rule backtester (momentum, meanReversion, breakout, buyAndHold)",
+  "main": "backtest.js",
+  "scripts": {
+    "backtest": "node backtest.js",
+    "build-candles": "node scripts/build-candles.js"
+  },
+  "engines": { "node": ">=18" }
+}
