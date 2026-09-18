@@ -1,6 +1,6 @@
 'use strict';
 /**
- * jev-lite trading rules.
+ * btc-v1 trading rules.
  *
  * Every rule: (candles, params) => array-like of target positions, one per
  * candle. 1 = 100% long, -1 = 100% short, 0 = flat, fractions allowed.

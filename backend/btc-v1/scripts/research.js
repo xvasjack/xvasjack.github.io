@@ -147,7 +147,7 @@ function main() {
   const h1 = loadTimeframe('1h');
   const bh = run('1d', 'buyAndHold', {});
 
-  report.push(`# jev-lite research report\n`);
+  report.push(`# btc-v1 research report\n`);
   report.push(
     `Generated ${json.generatedAt}. Data: Bitstamp BTC/USD ${bh.from} .. ${bh.to} (${d1.length} daily bars, 1d/4h resampled from 1h).`
   );

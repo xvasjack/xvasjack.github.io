@@ -75,7 +75,7 @@ function main() {
   const runs = variants.map((v) => ({ ...v, res: run(v.rule, v.params) }));
 
   const json = { generatedAt: new Date().toISOString(), sections: {} };
-  const report = [`# jev-lite long-history check\n`];
+  const report = [`# btc-v1 long-history check\n`];
   report.push(
     `Daily Bitstamp BTC/USD, rules warmed up from 2013-01-01, metrics reported 2014-01-01 .. ${new Date((last - 1) * 1000).toISOString().slice(0, 10)}. Costs 15 bps/side. Long only, no leverage.\n`
   );

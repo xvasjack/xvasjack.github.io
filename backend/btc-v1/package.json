@@ -1,5 +1,5 @@
 {
-  "name": "jev-lite",
+  "name": "btc-v1",
   "version": "0.2.0",
   "description": "BTC/USD trend-rule backtester, research and paper trader",
   "main": "server.js",

@@ -1,4 +1,4 @@
-const paper = require('../jev-lite/paper');
+const paper = require('../btc-v1/paper');
 
 const DAY = 86400;
 const T0 = 1672531200; // 2023-01-01
@@ -24,7 +24,7 @@ function mockFetch(byUrl) {
   };
 }
 
-describe('jev-lite paper: signal', () => {
+describe('btc-v1 paper: signal', () => {
   test('long in uptrend, cash in downtrend, needs 76 candles', () => {
     const s = paper.computeSignal(up);
     expect(s.target).toBe(1);
@@ -45,7 +45,7 @@ describe('jev-lite paper: signal', () => {
   });
 });
 
-describe('jev-lite paper: market data parsing', () => {
+describe('btc-v1 paper: market data parsing', () => {
   test('fetchDailyCandles drops the in-progress candle and sorts ascending', async () => {
     const now = (T0 + 3 * DAY + 3600) * 1000; // 01:00 UTC on day 3
     const ohlc = [2, 0, 1, 3].map((i) => ({
@@ -73,7 +73,7 @@ describe('jev-lite paper: market data parsing', () => {
   });
 });
 
-describe('jev-lite paper: account', () => {
+describe('btc-v1 paper: account', () => {
   const sig = (asOf, target) => ({ asOf, close: 100, target, smas: [], strategy: 's' });
   const cost = paper.COST_BPS / 10000;
 
@@ -140,9 +140,9 @@ describe('jev-lite paper: account', () => {
   });
 });
 
-describe('jev-lite paper: replay matches backtest engine', () => {
+describe('btc-v1 paper: replay matches backtest engine', () => {
   test('2025-01-01 onward within 2 percentage points', () => {
-    const { replay } = require('../jev-lite/scripts/replay-paper');
+    const { replay } = require('../btc-v1/scripts/replay-paper');
     const r = replay({ from: '2025-01-01' });
     expect(Math.abs(r.paperReturnPct - r.backtestReturnPct)).toBeLessThan(2);
     expect(Math.abs(r.paperBuyHoldPct - r.backtestBuyHoldPct)).toBeLessThan(2);
@@ -150,9 +150,9 @@ describe('jev-lite paper: replay matches backtest engine', () => {
   });
 });
 
-describe('jev-lite local run.js', () => {
+describe('btc-v1 local run.js', () => {
   test('text report lists position, SMAs, equity and buy & hold', () => {
-    const { textReport } = require('../jev-lite/run');
+    const { textReport } = require('../btc-v1/run');
     const st = paper.newState(0);
     const s = {
       asOf: T0,
@@ -167,7 +167,7 @@ describe('jev-lite local run.js', () => {
     expect(txt).toMatch(/SMA 40d/);
     expect(txt).toMatch(/trade: buy/);
     expect(txt).toMatch(/buy&hold/);
-    const { oneLiner } = require('../jev-lite/run');
+    const { oneLiner } = require('../btc-v1/run');
     const line = oneLiner(st, s, 100, traded);
     expect(line).toMatch(/above 1\/1: 40d/);
     expect(line).toMatch(/be 50% in BTC/);
@@ -175,21 +175,21 @@ describe('jev-lite local run.js', () => {
   });
 });
 
-describe('jev-lite server', () => {
+describe('btc-v1 server', () => {
   test('msUntilNextRun is within 24h and status route works without state', async () => {
-    process.env.JEV_STATE_FILE = require('path').join(
+    process.env.BTC_STATE_FILE = require('path').join(
       require('os').tmpdir(),
-      `jev-${Date.now()}.json`
+      `btc-${Date.now()}.json`
     );
-    const { app, msUntilNextRun } = require('../jev-lite/server');
+    const { app, msUntilNextRun } = require('../btc-v1/server');
     const ms = msUntilNextRun(new Date('2026-01-01T00:04:00Z'));
     expect(ms).toBe(60 * 1000);
     expect(msUntilNextRun(new Date('2026-01-01T00:06:00Z'))).toBe((24 * 60 - 1) * 60 * 1000);
     const request = require('supertest');
-    const res = await request(app).get('/api/jev-lite/status');
+    const res = await request(app).get('/api/btc-v1/status');
     expect(res.status).toBe(200);
     expect(res.body.started).toBe(false);
     const h = await request(app).get('/health');
-    expect(h.body.service).toBe('jev-lite');
+    expect(h.body.service).toBe('btc-v1');
   });
 });

@@ -47,7 +47,7 @@ function notify(title, message) {
   const q = (s) => s.replace(/'/g, "''");
   try {
     if (process.platform === 'win32') {
-      const ps = `[void][Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime];$x=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);$t=$x.GetElementsByTagName('text');$t.Item(0).AppendChild($x.CreateTextNode('${q(title)}'))|Out-Null;$t.Item(1).AppendChild($x.CreateTextNode('${q(message)}'))|Out-Null;[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('jev-lite').Show([Windows.UI.Notifications.ToastNotification]::new($x))`;
+      const ps = `[void][Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime];$x=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);$t=$x.GetElementsByTagName('text');$t.Item(0).AppendChild($x.CreateTextNode('${q(title)}'))|Out-Null;$t.Item(1).AppendChild($x.CreateTextNode('${q(message)}'))|Out-Null;[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('btc-v1').Show([Windows.UI.Notifications.ToastNotification]::new($x))`;
       execFile('powershell', ['-NoProfile', '-Command', ps], () => {});
     } else if (process.platform === 'darwin') {
       execFile(
@@ -87,7 +87,7 @@ async function runOnce({ force = false, notifyUser = false } = {}) {
   console.log(`saved -> ${storage.LOCAL_FILE}`);
   const line = oneLiner(state, signal, price, traded);
   appendLog(line);
-  if (notifyUser) notify(`jev-lite: ${Math.round(signal.target * 100)}% BTC`, line);
+  if (notifyUser) notify(`btc-v1: ${Math.round(signal.target * 100)}% BTC`, line);
 }
 
 async function status() {
@@ -117,7 +117,7 @@ function msUntil0005() {
 async function loop() {
   await runOnce({ notifyUser: true }).catch((e) => {
     console.error('run failed:', e.message);
-    notify('jev-lite: run failed', e.message);
+    notify('btc-v1: run failed', e.message);
   });
   const ms = msUntil0005();
   console.log(`next run in ${(ms / 3600000).toFixed(1)}h`);
@@ -135,7 +135,7 @@ if (require.main === module) {
         : runOnce({ force: a.includes('--force'), notifyUser: a.includes('--notify') });
   job.catch((e) => {
     console.error('failed:', e.message);
-    if (a.includes('--notify')) notify('jev-lite: run failed', e.message);
+    if (a.includes('--notify')) notify('btc-v1: run failed', e.message);
     process.exit(1);
   });
 }

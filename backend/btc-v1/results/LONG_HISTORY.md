@@ -1,4 +1,4 @@
-# jev-lite long-history check
+# btc-v1 long-history check
 
 Daily Bitstamp BTC/USD, rules warmed up from 2013-01-01, metrics reported 2014-01-01 .. 2026-09-17. Costs 15 bps/side. Long only, no leverage.
 

@@ -1,4 +1,4 @@
-# jev-lite
+# btc-v1
 
 BTC/USD rule backtester, strategy research and a daily paper trader.
 
@@ -6,14 +6,14 @@ BTC/USD rule backtester, strategy research and a daily paper trader.
 
 ```
 cd backend && npm install          # once
-cd jev-lite
+cd btc-v1
 node run.js            # fetch today's candle, compute signal, rebalance paper account, print
 node run.js status     # show account
 node run.js signal     # show signal only
 node run.js --loop     # keep running: now, then daily at 00:05 UTC
 ```
 
-State lives in `jev-lite/state/paper-state.json` (gitignored), one line per run in `jev-lite/state/log.txt`. Needs internet for Bitstamp's public API. No keys.
+State lives in `btc-v1/state/paper-state.json` (gitignored), one line per run in `btc-v1/state/log.txt`. Needs internet for Bitstamp's public API. No keys.
 
 ### Run daily automatically with a desktop notification
 
@@ -22,14 +22,14 @@ State lives in `jev-lite/state/paper-state.json` (gitignored), one line per run 
 Windows (PowerShell, edit the path). 08:10 local = 00:10 UTC in Singapore:
 
 ```
-schtasks /Create /SC DAILY /ST 08:10 /TN "jev-lite" /TR "cmd /c cd /d C:\path\to\xvasjack.github.io\backend\jev-lite && node run.js --notify >> state\task.log 2>&1"
-schtasks /Run /TN "jev-lite"     # test it now
+schtasks /Create /SC DAILY /ST 08:10 /TN "btc-v1" /TR "cmd /c cd /d C:\path\to\xvasjack.github.io\backend\btc-v1 && node run.js --notify >> state\task.log 2>&1"
+schtasks /Run /TN "btc-v1"     # test it now
 ```
 
 macOS / Linux (`crontab -e`), 10 minutes past midnight UTC:
 
 ```
-10 0 * * * cd /path/to/xvasjack.github.io/backend/jev-lite && /usr/bin/env node run.js --notify >> state/task.log 2>&1
+10 0 * * * cd /path/to/xvasjack.github.io/backend/btc-v1 && /usr/bin/env node run.js --notify >> state/task.log 2>&1
 ```
 
 If the machine is asleep at that time the run happens at the next start (`schtasks` option `/RL` not needed; the rule is idempotent per day, so running late or twice is harmless).
@@ -38,14 +38,14 @@ If the machine is asleep at that time the run happens at the next start (`schtas
 
 Strategy: ensemble of smaTrend 40/50/60/75d on daily Bitstamp candles (target position 0, 0.25, 0.5, 0.75 or 1). Once a day at 00:05 UTC it fetches completed daily candles, computes the target, rebalances a virtual $10k account at the ticker price with 15 bps/side fees, saves state, and emails a one-line summary vs buy & hold. Idempotent per daily candle; catches up on restart.
 
-| Route                      | Purpose                                                               |
-| -------------------------- | --------------------------------------------------------------------- |
-| `GET /health`              | Railway health check                                                  |
-| `GET /api/jev-lite/status` | equity, return vs buy & hold, drawdown, last signal, last trades      |
-| `GET /api/jev-lite/signal` | live signal from Bitstamp (no state change)                           |
-| `POST /api/jev-lite/run`   | run the daily job now; header `x-run-token`, body `{ "force": true }` |
+| Route                    | Purpose                                                               |
+| ------------------------ | --------------------------------------------------------------------- |
+| `GET /health`            | Railway health check                                                  |
+| `GET /api/btc-v1/status` | equity, return vs buy & hold, drawdown, last signal, last trades      |
+| `GET /api/btc-v1/signal` | live signal from Bitstamp (no state change)                           |
+| `POST /api/btc-v1/run`   | run the daily job now; header `x-run-token`, body `{ "force": true }` |
 
-Env: `SENDGRID_API_KEY`, `SENDER_EMAIL`, `JEV_EMAIL` (recipient, default sender), `JEV_RUN_TOKEN`, `JEV_RUN_HOUR_UTC` (0), `JEV_RUN_MINUTE` (5), `JEV_CATCHUP_ON_START` (1), `JEV_COST_BPS` (15), `JEV_START_CASH` (10000). State goes to Cloudflare R2 when `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` are set (Railway disk is ephemeral), else `state/paper-state.json`.
+Env: `SENDGRID_API_KEY`, `SENDER_EMAIL`, `BTC_EMAIL` (recipient, default sender), `BTC_RUN_TOKEN`, `BTC_RUN_HOUR_UTC` (0), `BTC_RUN_MINUTE` (5), `BTC_CATCHUP_ON_START` (1), `BTC_COST_BPS` (15), `BTC_START_CASH` (10000). State goes to Cloudflare R2 when `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` are set (Railway disk is ephemeral), else `state/paper-state.json`.
 
 `node scripts/replay-paper.js --from 2025-01-01` replays the paper code path over history and compares it with the backtest engine (they agree within ~1.5 points). Note: the 2023-2026 catalog numbers below start the SMAs cold in Jan 2023 (75-day warmup), so they understate the ensemble; with warmup from 2022 data it made +324% over 2023-2026 vs +359% buy & hold.
 
@@ -147,4 +147,4 @@ node --max-old-space-size=2048 scripts/build-candles.js /tmp/hist.csv.gz /tmp/la
 
 ## Tests
 
-`backend/__tests__/jev-lite.test.js` (run `npm test` from `backend/`).
+`backend/__tests__/btc-v1.test.js` (run `npm test` from `backend/`).

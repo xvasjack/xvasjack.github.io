@@ -6,8 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const LOCAL_FILE = process.env.JEV_STATE_FILE || path.join(__dirname, 'state', 'paper-state.json');
-const R2_KEY = process.env.JEV_STATE_KEY || 'jev-lite/paper-state.json';
+const LOCAL_FILE = process.env.BTC_STATE_FILE || path.join(__dirname, 'state', 'paper-state.json');
+const R2_KEY = process.env.BTC_STATE_KEY || 'btc-v1/paper-state.json';
 const R2_BUCKET = process.env.R2_BUCKET_NAME;
 
 let s3 = null;

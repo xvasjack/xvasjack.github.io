@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Paper trader for the jev-lite trend strategy (ensemble of smaTrend 40/50/60/75d).
+ * Paper trader for the btc-v1 trend strategy (ensemble of smaTrend 40/50/60/75d).
  *
  * Once a day (after the 00:00 UTC daily close): fetch daily candles from Bitstamp,
  * compute the target position (0..1), rebalance a virtual account at the current
@@ -15,8 +15,8 @@ const STRATEGY = {
   name: 'ensemble smaTrend 40/50/60/75d',
   members: [40, 50, 60, 75],
 };
-const COST_BPS = Number(process.env.JEV_COST_BPS || 15); // fee + slippage per side
-const START_CASH = Number(process.env.JEV_START_CASH || 10000);
+const COST_BPS = Number(process.env.BTC_COST_BPS || 15); // fee + slippage per side
+const START_CASH = Number(process.env.BTC_START_CASH || 10000);
 const MIN_TRADE_FRACTION = 0.01; // ignore rebalances smaller than 1% of equity
 const DAY = 86400;
 const BITSTAMP = 'https://www.bitstamp.net/api/v2';
@@ -178,7 +178,7 @@ function summary(state, price) {
 function formatReport(state, signal, price, traded) {
   const s = summary(state, price);
   const posLabel = signal.target === 0 ? 'CASH' : `LONG ${Math.round(signal.target * 100)}%`;
-  const subject = `jev-lite paper: ${posLabel} | BTC ${fmt(price, 0)} | equity ${fmt(s.equity)} (${sign(s.returnPct)}%) vs B&H ${sign(s.buyHoldReturnPct)}%`;
+  const subject = `btc-v1 paper: ${posLabel} | BTC ${fmt(price, 0)} | equity ${fmt(s.equity)} (${sign(s.returnPct)}%) vs B&H ${sign(s.buyHoldReturnPct)}%`;
   const smaRows = signal.smas
     .map(
       (m) =>
@@ -197,7 +197,7 @@ function formatReport(state, signal, price, traded) {
     )
     .join('');
   const html = `
-<h2>jev-lite paper trader</h2>
+<h2>btc-v1 paper trader</h2>
 <p>${state.strategy}. Signal as of daily close ${new Date((signal.asOf + DAY) * 1000).toISOString().slice(0, 10)} 00:00 UTC. Close ${fmt(signal.close)}. Position: <b>${posLabel}</b>.</p>
 <table border="1" cellpadding="4"><tr><th>indicator</th><th>value</th><th>price is</th></tr>${smaRows}</table>
 ${tradeLine}

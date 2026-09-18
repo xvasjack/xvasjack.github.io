@@ -1,6 +1,6 @@
 'use strict';
 /**
- * jev-lite backtester.
+ * btc-v1 backtester.
  *
  * Single asset. Position per bar in [-maxLeverage, +maxLeverage] (1 = 100% long,
  * -1 = 100% short, 0.5 = half size). Position decided at bar i close is executed

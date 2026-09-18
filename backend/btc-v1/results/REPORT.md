@@ -1,4 +1,4 @@
-# jev-lite research report
+# btc-v1 research report
 
 Generated 2026-09-18T11:24:27.005Z. Data: Bitstamp BTC/USD 2023-01-01 .. 2026-09-17 (1356 daily bars, 1d/4h resampled from 1h).
 Execution: signal at bar close, fill at next bar open. Costs per side = fee + slippage. Out-of-sample (OOS) = from 2025-01-01. IS = before that.

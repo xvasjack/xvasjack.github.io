@@ -20,7 +20,7 @@ const {
   hours,
   indicators,
   daysToBars,
-} = require('../jev-lite/rules');
+} = require('../btc-v1/rules');
 const {
   runBacktest,
   runCatalog,
@@ -29,8 +29,8 @@ const {
   resample,
   segmentMetrics,
   DATA_FILES,
-} = require('../jev-lite/backtest');
-const { CATALOG } = require('../jev-lite/strategies');
+} = require('../btc-v1/backtest');
+const { CATALOG } = require('../btc-v1/strategies');
 
 const T0 = 1672531200; // 2023-01-01 UTC
 
@@ -47,7 +47,7 @@ function mk(closes, step = 3600) {
 const daily = (closes) => mk(closes, 86400);
 const NOCOST = { feeBps: 0, slippageBps: 0 };
 
-describe('jev-lite indicators', () => {
+describe('btc-v1 indicators', () => {
   test('sma', () => {
     const s = indicators.sma([1, 2, 3, 4, 5], 3);
     expect(Number.isNaN(s[1])).toBe(true);
@@ -94,7 +94,7 @@ describe('jev-lite indicators', () => {
   });
 });
 
-describe('jev-lite rules', () => {
+describe('btc-v1 rules', () => {
   const up = mk(Array.from({ length: 200 }, (_, i) => 100 + i));
   const down = mk(Array.from({ length: 200 }, (_, i) => 300 - i));
 
@@ -209,7 +209,7 @@ describe('jev-lite rules', () => {
   });
 
   test('dipBuy enters X% below SMA and exits back at SMA or after maxHold', () => {
-    const { dipBuy } = require('../jev-lite/rules');
+    const { dipBuy } = require('../btc-v1/rules');
     const c = daily([...Array(30).fill(100), 75, 75, 101, 101]);
     const p = dipBuy(c, { days: 20, dip: 0.2 });
     expect(p[30]).toBe(1); // 75 < 0.8 * ~100
@@ -264,7 +264,7 @@ describe('jev-lite rules', () => {
   });
 });
 
-describe('jev-lite backtest engine', () => {
+describe('btc-v1 backtest engine', () => {
   test('buyAndHold with zero cost matches raw price move', () => {
     const c = mk([100, 110, 121, 133.1]);
     const { metrics, trades } = runBacktest(c, buyAndHold, NOCOST);
@@ -361,7 +361,7 @@ describe('jev-lite backtest engine', () => {
   });
 });
 
-describe('jev-lite resample', () => {
+describe('btc-v1 resample', () => {
   test('aggregates 1h into 4h with correct OHLCV and drops partial buckets', () => {
     const c = [];
     for (let i = 0; i < 10; i++) {
@@ -396,11 +396,11 @@ describe('jev-lite resample', () => {
   });
 });
 
-describe('jev-lite data files', () => {
+describe('btc-v1 data files', () => {
   test.each(Object.entries(DATA_FILES))(
     '%s candles are contiguous 2023-01-01 onward',
     (tf, file) => {
-      const p = path.join(__dirname, '..', 'jev-lite', 'data', file);
+      const p = path.join(__dirname, '..', 'btc-v1', 'data', file);
       expect(fs.existsSync(p)).toBe(true);
       const candles = loadCandles(p);
       const step = { '15m': 900, '1h': 3600, '1d-long': 86400 }[tf];
@@ -428,7 +428,7 @@ describe('jev-lite data files', () => {
   });
 });
 
-describe('jev-lite strategy catalog', () => {
+describe('btc-v1 strategy catalog', () => {
   test('every catalog entry runs and produces finite metrics', () => {
     const res = runCatalog(CATALOG, { feeBps: 10, slippageBps: 5 });
     expect(res).toHaveLength(CATALOG.length);
