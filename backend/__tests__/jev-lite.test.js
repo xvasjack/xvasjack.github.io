@@ -389,7 +389,7 @@ describe('jev-lite data files', () => {
       const candles = loadCandles(p);
       const step = { '15m': 900, '1h': 3600, '1d-long': 86400 }[tf];
       expect(candles[0].timestamp).toBe(tf === '1d-long' ? Date.UTC(2012, 0, 1) / 1000 : T0);
-      expect(candles.length).toBeGreaterThan(10000);
+      expect(candles.length).toBeGreaterThan(tf === '1d-long' ? 5000 : 10000);
       let gaps = 0;
       let badOhlc = 0;
       for (let i = 1; i < candles.length; i++) {

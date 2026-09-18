@@ -95,6 +95,7 @@ Source: https://github.com/ff137/bitstamp-btcusd-minute-data
 curl -sSL -o /tmp/hist.csv.gz https://raw.githubusercontent.com/ff137/bitstamp-btcusd-minute-data/main/data/historical/btcusd_bitstamp_1min_2012-2025.csv.gz
 curl -sSL -o /tmp/latest.csv   https://raw.githubusercontent.com/ff137/bitstamp-btcusd-minute-data/main/data/updates/btcusd_bitstamp_1min_latest.csv
 node --max-old-space-size=2048 scripts/build-candles.js /tmp/hist.csv.gz /tmp/latest.csv
+node --max-old-space-size=2048 scripts/build-candles.js /tmp/hist.csv.gz /tmp/latest.csv --from 2012-01-01 --frames 1d --suffix _2012
 ```
 
 ## Tests
