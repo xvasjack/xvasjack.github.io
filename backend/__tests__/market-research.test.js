@@ -8,9 +8,9 @@
 
 // ============ COST TRACKING ============
 const PRICING = {
-  'deepseek-chat': { input: 0.28, output: 0.42 },
-  'deepseek-reasoner': { input: 0.42, output: 1.68 },
-  'kimi-k2': { input: 0.6, output: 2.5 },
+  'gpt-4o-mini': { input: 0.15, output: 0.6 },
+  'gemini-2.5-flash': { input: 0.1, output: 0.4 },
+  'gpt-5.1': { input: 1.25, output: 10.0 },
 };
 
 function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
@@ -294,19 +294,19 @@ function validateChartData(data, _chartType) {
 // ============ TESTS ============
 
 describe('trackCost', () => {
-  test('calculates cost for deepseek-chat', () => {
-    const cost = trackCost('deepseek-chat', 1000000, 1000000);
-    expect(cost).toBeCloseTo(0.7, 2); // 0.28 + 0.42 = 0.7
+  test('calculates cost for gpt-4o-mini', () => {
+    const cost = trackCost('gpt-4o-mini', 1000000, 1000000);
+    expect(cost).toBeCloseTo(0.75, 2); // 0.15 + 0.60 = 0.75
   });
 
-  test('calculates cost for deepseek-reasoner', () => {
-    const cost = trackCost('deepseek-reasoner', 500000, 1500000);
-    expect(cost).toBeCloseTo(2.73, 2); // (0.5 * 0.42) + (1.5 * 1.68) = 0.21 + 2.52 = 2.73
+  test('calculates cost for gemini-2.5-flash', () => {
+    const cost = trackCost('gemini-2.5-flash', 500000, 1500000);
+    expect(cost).toBeCloseTo(0.65, 2); // (0.5 * 0.10) + (1.5 * 0.40) = 0.05 + 0.60 = 0.65
   });
 
-  test('calculates cost for kimi-k2', () => {
-    const cost = trackCost('kimi-k2', 2000000, 1000000);
-    expect(cost).toBeCloseTo(3.7, 2); // (2 * 0.60) + (1 * 2.50) = 1.20 + 2.50 = 3.70
+  test('calculates cost for gpt-5.1', () => {
+    const cost = trackCost('gpt-5.1', 2000000, 1000000);
+    expect(cost).toBeCloseTo(12.5, 2); // (2 * 1.25) + (1 * 10.00) = 2.50 + 10.00 = 12.50
   });
 
   test('returns 0 for unknown model', () => {
@@ -315,13 +315,13 @@ describe('trackCost', () => {
   });
 
   test('handles zero tokens', () => {
-    const cost = trackCost('deepseek-chat', 0, 0);
+    const cost = trackCost('gpt-4o-mini', 0, 0);
     expect(cost).toBe(0);
   });
 
   test('handles small token counts', () => {
-    const cost = trackCost('deepseek-chat', 1000, 1000);
-    expect(cost).toBeCloseTo(0.0007, 6); // (0.001 * 0.28) + (0.001 * 0.42)
+    const cost = trackCost('gpt-4o-mini', 1000, 1000);
+    expect(cost).toBeCloseTo(0.00075, 6); // (0.001 * 0.15) + (0.001 * 0.60)
   });
 });
 

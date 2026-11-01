@@ -1,0 +1,9 @@
+{
+  "code": "PPTX_CORRUPT",
+  "message": "ZIP central directory missing",
+  "severity": "critical",
+  "blockingSlideKeys": [
+    "ppt/slideLayouts/slideLayout1.xml",
+    "ppt/slides/slide5.xml"
+  ]
+}

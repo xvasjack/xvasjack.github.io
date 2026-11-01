@@ -29,9 +29,16 @@ describe('ai-models', () => {
       expect(MODEL_CONFIG['gemini-2.5-flash'].provider).toBe('gemini');
     });
 
-    it('has configuration for deepseek models', () => {
-      expect(MODEL_CONFIG['deepseek-chat']).toBeDefined();
-      expect(MODEL_CONFIG['deepseek-reasoner']).toBeDefined();
+    it('has configuration for gpt-4o-mini', () => {
+      expect(MODEL_CONFIG['gpt-4o-mini']).toBeDefined();
+      expect(MODEL_CONFIG['gpt-4o-mini'].provider).toBe('openai');
+    });
+
+    it('only configures supported providers', () => {
+      const allowed = ['openai', 'gemini', 'perplexity', 'anthropic'];
+      for (const config of Object.values(MODEL_CONFIG)) {
+        expect(allowed).toContain(config.provider);
+      }
     });
 
     it('has configuration for perplexity', () => {

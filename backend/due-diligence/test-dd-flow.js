@@ -16,14 +16,10 @@ const fs = require('fs');
 const path = require('path');
 const JSZip = require('jszip');
 
-// Configuration
-const API_BASE =
-  process.env.DD_API_URL || 'https://xvasjackgithubio-production-aa37.up.railway.app';
-const TEST_DOC_PATH =
-  process.env.TEST_DOC || '/mnt/c/Users/User/Downloads/Netpluz_DD_Mega_Summary.docx';
-const TEMPLATE_PATH =
-  process.env.TEMPLATE_DOC ||
-  '/mnt/c/Users/User/Downloads/260114_SunCorp_Netpluz DD Report v4 (1).docx';
+// Configuration (all from env; no defaults point at real services or files)
+const API_BASE = process.env.DD_API_URL;
+const TEST_DOC_PATH = process.env.TEST_DOC;
+const TEMPLATE_PATH = process.env.TEMPLATE_DOC;
 const TEST_EMAIL = process.env.TEST_EMAIL || 'test@example.com';
 const POLL_INTERVAL = 30000; // 30 seconds
 const MAX_POLL_TIME = 15 * 60 * 1000; // 15 minutes
@@ -512,6 +508,13 @@ function compareDocxToTemplate(generatedStyles, templateStyles, generatedText, t
 // ============ MAIN ============
 
 async function main() {
+  const missing = ['DD_API_URL', 'TEST_DOC', 'TEMPLATE_DOC'].filter((k) => !process.env[k]);
+  if (missing.length > 0) {
+    console.error(`Missing required env vars: ${missing.join(', ')}`);
+    console.error('Example: DD_API_URL=https://your-dd-service TEST_DOC=input.docx TEMPLATE_DOC=template.docx node test-dd-flow.js');
+    process.exit(2);
+  }
+
   console.log('='.repeat(60));
   console.log('DD TOOL AUTOMATED TEST (DOCX OUTPUT)');
   console.log('='.repeat(60));

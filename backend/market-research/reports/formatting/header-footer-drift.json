@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-02-18T14:49:27.137Z",
+    "generatedAt": "2026-11-01T15:20:38.556Z",
     "description": "Header/footer line drift runInfo against Escort template ground truth",
     "thresholds": {
       "infoMaxEmu": 500,
@@ -34,13 +34,85 @@
     "slideNumber": 0,
     "slideName": "slideLayout3.xml",
     "slideKey": "_layout",
-    "lineCount": 0,
-    "driftEntries": [],
-    "missingRoles": [
-      "header_top",
-      "header_bottom",
-      "footer"
+    "lineCount": 3,
+    "driftEntries": [
+      {
+        "role": "header_top",
+        "slideKey": "_layout",
+        "slideNumber": 0,
+        "slideName": "slideLayout3.xml",
+        "expected": {
+          "y": 933420,
+          "yInches": 1.0208,
+          "thickness": 22225,
+          "color": "1F497D"
+        },
+        "actual": {
+          "y": 933420,
+          "yInches": 1.0208,
+          "thickness": 57150,
+          "color": "293F55"
+        },
+        "delta": {
+          "yEmu": 0,
+          "yInches": 0,
+          "thicknessEmu": 34925
+        },
+        "severity": "info",
+        "colorMatch": false
+      },
+      {
+        "role": "header_bottom",
+        "slideKey": "_layout",
+        "slideNumber": 0,
+        "slideName": "slideLayout3.xml",
+        "expected": {
+          "y": 1003280,
+          "yInches": 1.0972,
+          "thickness": 22225,
+          "color": "1F497D"
+        },
+        "actual": {
+          "y": 1003280,
+          "yInches": 1.0972,
+          "thickness": 28575,
+          "color": "293F55"
+        },
+        "delta": {
+          "yEmu": 0,
+          "yInches": 0,
+          "thicknessEmu": 6350
+        },
+        "severity": "info",
+        "colorMatch": false
+      },
+      {
+        "role": "footer",
+        "slideKey": "_layout",
+        "slideNumber": 0,
+        "slideName": "slideLayout3.xml",
+        "expected": {
+          "y": 6616690,
+          "yInches": 7.2361,
+          "thickness": 28575,
+          "color": "SCHEME:DK2"
+        },
+        "actual": {
+          "y": 6616690,
+          "yInches": 7.2361,
+          "thickness": 28575,
+          "color": "293F55"
+        },
+        "delta": {
+          "yEmu": 0,
+          "yInches": 0,
+          "thicknessEmu": 0
+        },
+        "severity": "info",
+        "colorMatch": false
+      }
     ],
+    "missingRoles": [],
     "hasBlockingDrift": false,
     "hasWarningDrift": false
   },

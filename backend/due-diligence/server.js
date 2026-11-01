@@ -76,12 +76,6 @@ if (missingVars.length > 0) {
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
-}
-if (!process.env.KIMI_API_KEY) {
-  console.warn('KIMI_API_KEY not set - DD deep analysis will use Gemini 2.5 Pro instead');
-}
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
 }
@@ -185,7 +179,7 @@ DO NOT include a "Competition Intensity" column - the template uses only 4 colum
 
 2.2 Competitive Advantage:
 - Extract from source documents: certifications, partnerships, proprietary tech, metrics
-- Be specific with evidence (e.g., "ISO 27001 certified since 2022" not just "security certifications")
+- Be specific with evidence (e.g., "ISO 9001 certified since 2019" not just "quality certifications")
 - Only include advantages that have supporting evidence in source data
 
 2.3 Where [Company Name] Is Vulnerable:
@@ -196,7 +190,7 @@ DO NOT include a "Competition Intensity" column - the template uses only 4 colum
 - Identify gaps where company lacks presence vs market expectations
 
 Key Partners:
-- List key technology and business partners (e.g., Fortinet, Cisco, Singtel)
+- List key technology and business partners (e.g., Acme Software, Example Logistics)
 - Extract from source documents - partnerships, certifications, vendor relationships
 
 Key Clients:
@@ -212,8 +206,8 @@ IMPORTANT: Derive ALL content from source data. Do not invent market data not su
 CRITICAL FORMATTING RULE - ALL VALUES IN THOUSANDS:
 - ALL financial values MUST be displayed in thousands (divide by 1000)
 - Use header format: "SGD ('000)" for currency columns
-- Example: If source shows 35,012,841 → display as 35,013
-- Format numbers with commas: 35,013 not 35013
+- Example: If source shows 12,345,678 → display as 12,346
+- Format numbers with commas: 12,346 not 12346
 
 ANTI-SUMMARIZATION RULE (CRITICAL):
 Do NOT summarize financial line items. If source shows:
@@ -341,25 +335,25 @@ FORMAT: Two-column table with STANDARD rows
 USE THESE 7 STANDARD ROWS (customize the "Evidence to Validate" column based on THIS company's data):
 
 1. Customer analysis
-   Evidence: Revenue by customer: FY2022–FY2024 monthly revenue by service line, country and contract type. Contract register: terms, renewal dates, SLAs, termination rights, price escalation clauses.
+   Evidence: Revenue by customer for each historical year, split by product or service line and region. Key contract terms: duration, renewal and termination rights.
 
-2. Pipeline analysis
-   Evidence: CRM/pipeline export with stage, value, probability, product mix, expected close date. Historic win rates, sales cycle lengths and average deal sizes. Management interviews on pipeline quality.
+2. Sales pipeline
+   Evidence: Pipeline by stage, value and expected close date. Historical win rates and sales cycle length.
 
-3. Pricing power and price realization
-   Evidence: Price lists, discount matrix and approvals workflow; renewal uplift history and churn by uplift band. Win/loss logs, competitive benchmarks.
+3. Pricing and margins
+   Evidence: Price lists and discount policy. History of price changes and their effect on customer retention.
 
-4. Unit economics and cost-to-serve
-   Evidence: Service-line P&L with direct vendor costs and delivery staffing allocation. Operational KPIs: tickets/incidents, MTTR, SLA breaches, utilization. Customer profitability model.
+4. Unit economics and cost structure
+   Evidence: Profit and loss by business line with direct costs. Operating KPIs that drive delivery cost.
 
-5. Billing, collections and revenue-to-cash
-   Evidence: AR ageing by customer and dispute log; bad debt and credit policy. Billing cadence and payment terms. Deferred revenue / contract liabilities.
+5. Working capital and cash conversion
+   Evidence: Receivables ageing and credit policy. Billing and payment terms. Deferred revenue.
 
-6. Forecast critique and 5-year projection validation
-   Evidence: Business plan model and key assumptions; hiring plan. Segment-level pipeline coverage vs target. Sensitivity analysis on key assumptions.
+6. Forecast review
+   Evidence: Business plan and key assumptions. Sensitivity analysis on the main revenue and cost drivers.
 
-7. Partner ecosystem & vendor dependency
-   Evidence: Top vendor and partner list with contract terms, renewal dates. Partner program economics. Dependency risk assessment, vendor SLAs.
+7. Supplier and partner dependency
+   Evidence: Main suppliers and partners with contract terms and renewal dates. Concentration risk and alternatives.
 
 IMPORTANT: Use these exact 7 standard rows. Do NOT create company-specific rows - the Pre-DD Workplan follows a standard template.`,
   },
@@ -777,95 +771,6 @@ async function _callSerpAPI(query) {
   }
 }
 
-// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
-async function _callDeepSeek(prompt, maxTokens = 4000) {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    console.warn('DeepSeek API key not set, falling back to GPT-4o');
-    return null; // Caller should handle fallback
-  }
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.3,
-      }),
-      timeout: 120000,
-    });
-    const data = await response.json();
-    if (data.usage) {
-      recordTokens(
-        'deepseek-chat',
-        data.usage.prompt_tokens || 0,
-        data.usage.completion_tokens || 0
-      );
-    }
-    if (data.error) {
-      console.error('DeepSeek API error:', data.error);
-      return null;
-    }
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('DeepSeek error:', error.message);
-    return null;
-  }
-}
-
-// Kimi K2 - Best for large context DD analysis
-async function callKimi128k(prompt, maxTokens = 16000) {
-  if (!process.env.KIMI_API_KEY) {
-    console.log('[DD] KIMI_API_KEY not set, skipping Kimi');
-    return '';
-  }
-  try {
-    const response = await fetch(
-      `${process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1'}/chat/completions`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'kimi-k2-0905-preview',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: maxTokens,
-          temperature: 0.6,
-        }),
-        timeout: 300000, // 5 min timeout for large context
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[DD] Kimi HTTP error ${response.status}:`, errorText.substring(0, 200));
-      return '';
-    }
-
-    const data = await response.json();
-    if (data.usage) {
-      recordTokens('kimi-k2', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
-    }
-    if (data.error) {
-      console.error('[DD] Kimi API error:', data.error.message || data.error);
-      return '';
-    }
-
-    const result = data.choices?.[0]?.message?.content || '';
-    console.log(`[DD] Kimi K2 returned ${result.length} chars`);
-    return result;
-  } catch (error) {
-    console.error('[DD] Kimi error:', error.message);
-    return '';
-  }
-}
-
 // Summarize file content if too large (for chunking)
 async function summarizeFileContent(fileName, content, targetLength) {
   if (content.length <= targetLength) {
@@ -1035,11 +940,11 @@ const DOMAIN_MAP = {
 };
 
 const LOCAL_LANGUAGE_MAP = {
-  thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-  vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-  indonesia: { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
-  philippines: { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
-  malaysia: { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] },
+  thailand: { lang: 'Thai', examples: ['บริษัท', 'โรงงาน', 'ผู้จัดจำหน่าย'] },
+  vietnam: { lang: 'Vietnamese', examples: ['công ty', 'nhà máy', 'nhà cung cấp'] },
+  indonesia: { lang: 'Bahasa Indonesia', examples: ['perusahaan', 'pabrik', 'pemasok'] },
+  philippines: { lang: 'Tagalog', examples: ['kumpanya', 'pabrika'] },
+  malaysia: { lang: 'Bahasa Malaysia', examples: ['syarikat', 'kilang'] },
 };
 
 // ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
@@ -1706,7 +1611,7 @@ LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "multinational", "global network", offices/operations in 10+ countries
 - Revenue figures >$100M, employee count >1000
 - "Fortune 500", "Forbes Global"
-- Company name contains known MNC: Toyo Ink, Sakata, Flint, Siegwerk, Sun Chemical, DIC
+- Company name contains known MNC: Unilever, Nestle, Siemens, Samsung, Bosch, Panasonic
 - Website says "subsidiary of", "part of [X] Group", "member of [X] Group"
 - Company name ends with "Tbk" (Indonesian listed)
 
@@ -1777,7 +1682,7 @@ VALIDATION RULES:
 3. EXCLUSION CHECK:
 ${exclusionRules}
 - For "large companies" exclusion: REJECT both large multinationals AND their subsidiaries
-- Example: "DIC Indonesia", "Toyo Ink Philippines", "Sun Chemical" → REJECT (subsidiaries of large corporations)
+- Example: "Unilever Indonesia", "Nestle Philippines", "Siemens Malaysia" → REJECT (subsidiaries of large corporations)
 - Only accept truly independent SMEs and local companies
 
 4. SPAM CHECK:
@@ -2085,7 +1990,7 @@ Return JSON format:
   },
   "dataCategories": [
     {"category": "company_background", "found": true, "details": "Founding year, history available"},
-    {"category": "revenue_by_country", "found": true, "details": "SG, MY, PH breakdown available"},
+    {"category": "revenue_by_country", "found": true, "details": "Revenue split by country available"},
     {"category": "top_customers", "found": true, "details": "Top 5 customers with revenue %"},
     ...
   ],
@@ -2617,17 +2522,9 @@ OUTPUT: Structured extraction organized by data category.`;
 
   let deepAnalysis = '';
 
-  // Try Kimi 128k first (best context window for large content)
-  if (process.env.KIMI_API_KEY) {
-    console.log('[DD] Using Kimi 128k for deep analysis...');
-    deepAnalysis = await callKimi128k(analysisPrompt, 16000);
-  }
-
-  // Fallback to Gemini 2.5 Pro if Kimi unavailable
-  if (!deepAnalysis) {
-    console.log('[DD] Using Gemini 2.5 Pro for analysis...');
-    deepAnalysis = await callGemini2Pro(analysisPrompt);
-  }
+  // Gemini 2.5 Pro first (large context window for big document sets)
+  console.log('[DD] Using Gemini 2.5 Pro for analysis...');
+  deepAnalysis = await callGemini2Pro(analysisPrompt);
 
   // Final fallback to GPT-4o
   if (!deepAnalysis) {
@@ -2689,7 +2586,7 @@ Follow this EXACT structure (only include sections where data exists):
   4.1 Income Statement
   4.2 Revenue Breakdown by Country
   4.3 Revenue Breakdown by Product Type
-  4.4 Revenue Breakdown for Managed Services
+  4.4 Revenue Breakdown by Key Service Line
   4.5 Top 5 Customers Revenue Breakdown
   4.6-4.8 Balance Sheet / Cash Flow
   4.9 Pre-DD Workplan (STANDARD template rows)
@@ -2704,24 +2601,24 @@ COMPETITION SECTION (2.x):
   Service Segment | Growth (CAGR %) | Demand Driver | ${companyInfo.name || '[Company Name]'}'s Market Position
 - DO NOT include "Competition Intensity" column
 - Growth values MUST be CAGR percentages like "12-18%", "10-15%" - NOT "High/Medium/Low"
-- Include "Key Partners:" section with partner names (Fortinet, Cisco, Singtel, etc.)
+- Include "Key Partners:" section with partner names from the source documents
 - Include "Key Clients:" section with client names
 
 FINANCIAL TABLES - ALL VALUES IN THOUSANDS:
 - Use header format "SGD ('000)" for currency columns
-- Divide all values by 1000 (35,012,841 → 35,013)
+- Divide all values by 1000 (12,345,678 → 12,346)
 - Include margin % rows inline after profit lines
 - Top Customers: Show FY2023 and FY2024 side by side with 6 columns
 
 PRE-DD WORKPLAN (Section 4.9, 2-column table):
 Use these 7 STANDARD rows:
 1. Customer analysis
-2. Pipeline analysis
-3. Pricing power and price realization
-4. Unit economics and cost-to-serve
-5. Billing, collections and revenue-to-cash
-6. Forecast critique and 5-year projection validation
-7. Partner ecosystem & vendor dependency
+2. Sales pipeline
+3. Pricing and margins
+4. Unit economics and cost structure
+5. Working capital and cash conversion
+6. Forecast review
+7. Supplier and partner dependency
 
 5-YEAR PROJECTION TABLE (Section 8):
 Headers: SGD ('000) | FY2025 | FY2026 | FY2027 | FY2028 | FY2029
@@ -3100,7 +2997,7 @@ app.post('/api/due-diligence', async (req, res) => {
         <p style="font-size: 14px;"><strong>Your DD Report is attached as a Word document (DOCX).</strong></p>
         <p style="color: #666;">Open the attached file in Microsoft Word or Google Docs to view the full report.</p>
         <hr style="border: 1px solid #eee; margin: 20px 0;">
-        <p style="color: #999; font-size: 12px;">Generated by YCP Due Diligence Tool</p>
+        <p style="color: #999; font-size: 12px;">Generated by Deal Tools</p>
       </div>
     `;
 
@@ -3132,7 +3029,7 @@ app.post('/api/due-diligence', async (req, res) => {
             type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           },
         ],
-        fromName: 'YCP Due Diligence',
+        fromName: 'Deal Tools',
       });
 
       console.log(`[DD] Email sent successfully to ${email}`);
@@ -3169,7 +3066,7 @@ app.post('/api/due-diligence', async (req, res) => {
           <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px;">${escapeHtml(error.message)}</pre>
           <p>Please try again or contact support if the issue persists.</p>
         `,
-          fromName: 'YCP Due Diligence',
+          fromName: 'Deal Tools',
         });
       } catch (emailError) {
         console.error('[DD] Failed to send error email:', emailError.message);

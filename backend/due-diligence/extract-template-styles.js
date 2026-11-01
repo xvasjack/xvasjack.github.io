@@ -9,8 +9,8 @@ const JSZip = require('jszip');
 const fs = require('fs');
 const path = require('path');
 
-// Default template path
-const DEFAULT_TEMPLATE = '/mnt/c/Users/User/Downloads/260114_SunCorp_Netpluz DD Report v4 (1).docx';
+// Default template path (set DD_TEMPLATE_PATH or pass the path as an argument)
+const DEFAULT_TEMPLATE = process.env.DD_TEMPLATE_PATH;
 
 // Convert EMU (English Metric Units) to points
 // 914400 EMU = 1 inch = 72 points
@@ -329,6 +329,10 @@ async function extractTemplateStyles(templatePath) {
 
 async function main() {
   const templatePath = process.argv[2] || DEFAULT_TEMPLATE;
+  if (!templatePath) {
+    console.error('Usage: node extract-template-styles.js <path-to-template.docx>');
+    process.exit(1);
+  }
 
   // Check if template exists
   if (!fs.existsSync(templatePath)) {

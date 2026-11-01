@@ -34,32 +34,12 @@ const MODEL_CONFIG = {
     timeout: 20000,
     maxTokens: 4096,
   },
-  // DeepSeek
-  'deepseek-chat': {
-    provider: 'deepseek',
-    cost: { input: 0.28, output: 0.42 },
-    timeout: 30000,
-    maxTokens: 4096,
-  },
-  'deepseek-reasoner': {
-    provider: 'deepseek',
-    cost: { input: 0.42, output: 1.68 },
-    timeout: 120000,
-    maxTokens: 16384,
-  },
   // Perplexity
   'sonar-pro': {
     provider: 'perplexity',
     cost: { input: 3.0, output: 15.0 },
     timeout: 90000,
     maxTokens: 4096,
-  },
-  // Kimi
-  'kimi-k2': {
-    provider: 'kimi',
-    cost: { input: 0.6, output: 2.5 },
-    timeout: 30000,
-    maxTokens: 16384,
   },
 };
 

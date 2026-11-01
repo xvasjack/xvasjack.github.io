@@ -35,7 +35,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
           </svg>
         </span>
-        <span class="font-semibold text-lg">YCP Tools</span>
+        <span class="font-semibold text-lg">Deal Tools</span>
       </a>
     </div>
 
@@ -124,7 +124,7 @@
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
           <form id="validationForm">
             <div class="flex gap-2 mb-5">
-              <button type="button" class="tab-btn flex-1 py-2.5 px-4 text-sm font-medium rounded-lg border-2 border-indigo-600 bg-indigo-600 text-white" data-tab="file">Upload Speeda List</button>
+              <button type="button" class="tab-btn flex-1 py-2.5 px-4 text-sm font-medium rounded-lg border-2 border-indigo-600 bg-indigo-600 text-white" data-tab="file">Upload Company List</button>
               <button type="button" class="tab-btn flex-1 py-2.5 px-4 text-sm font-medium rounded-lg border-2 border-slate-300 bg-white text-slate-600 hover:border-slate-400" data-tab="manual">Manual Entry</button>
             </div>
 
@@ -186,7 +186,7 @@
               <p class="text-xs text-slate-400 mb-3">Each company will be checked against every criterion (PASS/FAIL).</p>
               <div id="criteriaList" class="space-y-2">
                 <div class="criteria-row flex items-center gap-2">
-                  <input type="text" class="criteria-input flex-1 px-4 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow" placeholder="e.g. Hotel (Location) based in Manila/HCMC/Hanoi">
+                  <input type="text" class="criteria-input flex-1 px-4 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow" placeholder="e.g. Logistics company based in Jakarta or Surabaya">
                   <button type="button" class="remove-criteria w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors" title="Remove">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                   </button>
@@ -228,9 +228,9 @@
 
   <script>
     const globalEmailInput = document.getElementById('globalEmail');
-    const cachedEmail = localStorage.getItem('ycpUserEmail');
+    const cachedEmail = localStorage.getItem('dealToolsEmail');
     if (cachedEmail) globalEmailInput.value = cachedEmail;
-    globalEmailInput.addEventListener('input', () => localStorage.setItem('ycpUserEmail', globalEmailInput.value));
+    globalEmailInput.addEventListener('input', () => localStorage.setItem('dealToolsEmail', globalEmailInput.value));
 
     // Tab switching
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -371,7 +371,7 @@
       const row = document.createElement('div');
       row.className = 'criteria-row flex items-center gap-2';
       row.innerHTML = `
-        <input type="text" class="criteria-input flex-1 px-4 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow" placeholder="e.g. Business focused hotel with Average Room Rate below USD 60-150">
+        <input type="text" class="criteria-input flex-1 px-4 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow" placeholder="e.g. Annual revenue below USD 50 million">
         <button type="button" class="remove-criteria w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors" title="Remove">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
@@ -468,7 +468,7 @@
       const criteria = getCriteria();
       if (criteria.length === 0) { alert('Please add at least one criterion'); return; }
 
-      const email = globalEmailInput.value || localStorage.getItem('ycpUserEmail');
+      const email = globalEmailInput.value || localStorage.getItem('dealToolsEmail');
       if (!email) { alert('Please enter your email in the sidebar'); return; }
 
       btn.disabled = true;

@@ -35,7 +35,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
           </svg>
         </span>
-        <span class="font-semibold text-lg">YCP Tools</span>
+        <span class="font-semibold text-lg">Deal Tools</span>
       </a>
     </div>
 
@@ -225,9 +225,9 @@
 
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
-    const cachedEmail = localStorage.getItem('ycpUserEmail');
+    const cachedEmail = localStorage.getItem('dealToolsEmail');
     if (cachedEmail) globalEmailInput.value = cachedEmail;
-    globalEmailInput.addEventListener('input', () => localStorage.setItem('ycpUserEmail', globalEmailInput.value));
+    globalEmailInput.addEventListener('input', () => localStorage.setItem('dealToolsEmail', globalEmailInput.value));
 
     const API_BASE = 'https://xvasjackgithubio-production-aa37.up.railway.app';
 
@@ -385,7 +385,7 @@
 
     // Submit handler
     ddSubmitBtn.addEventListener('click', async () => {
-      const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
+      const email = globalEmailInput.value.trim() || localStorage.getItem('dealToolsEmail');
       const instructions = ddInstructions.value.trim();
 
       if (selectedFiles.length === 0) { showError('Please upload at least one file'); return; }

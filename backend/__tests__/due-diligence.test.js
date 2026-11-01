@@ -177,7 +177,7 @@ LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "multinational", "global network", offices/operations in 10+ countries
 - Revenue figures >$100M, employee count >1000
 - "Fortune 500", "Forbes Global"
-- Company name contains known MNC: Toyo Ink, Sakata, Flint, Siegwerk, Sun Chemical, DIC
+- Company name contains known MNC: Unilever, Nestle, Siemens, Samsung, Bosch, Panasonic
 - Website says "subsidiary of", "part of [X] Group", "member of [X] Group"
 - Company name ends with "Tbk" (Indonesian listed)
 
@@ -900,9 +900,9 @@ describe('buildExclusionRules', () => {
 
   test('includes specific MNC names in large company rules', () => {
     const rules = buildExclusionRules('large', 'business');
-    expect(rules).toContain('Toyo Ink');
-    expect(rules).toContain('Sakata');
-    expect(rules).toContain('DIC');
+    expect(rules).toContain('Unilever');
+    expect(rules).toContain('Nestle');
+    expect(rules).toContain('Panasonic');
   });
 
   test('includes Tbk detection for Indonesian listed companies', () => {

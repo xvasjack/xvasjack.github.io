@@ -234,15 +234,10 @@ async function runTest() {
 
     console.log(`   Generated buffer: ${buffer.length} bytes`);
 
-    // Save to Downloads folder
-    const outputPath = '/mnt/c/Users/User/Downloads/test-dd-output.docx';
+    // Save locally (override with DD_TEST_OUTPUT)
+    const outputPath = process.env.DD_TEST_OUTPUT || path.join(__dirname, 'test-dd-output.docx');
     fs.writeFileSync(outputPath, buffer);
     console.log(`\n2. Saved to: ${outputPath}`);
-
-    // Also save locally for reference
-    const localPath = path.join(__dirname, 'test-dd-output.docx');
-    fs.writeFileSync(localPath, buffer);
-    console.log(`   Also saved to: ${localPath}`);
 
     console.log('\n' + '='.repeat(60));
     console.log('TEST COMPLETE - Please review the generated DOCX');

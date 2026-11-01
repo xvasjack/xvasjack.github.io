@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
@@ -70,21 +69,13 @@ const requiredEnvVars = [
   'SENDGRID_API_KEY',
   'SENDER_EMAIL',
 ];
-const _optionalEnvVars = [
-  'SERPAPI_API_KEY',
-  'DEEPSEEK_API_KEY',
-  'DEEPGRAM_API_KEY',
-  'ANTHROPIC_API_KEY',
-]; // Optional but recommended
+const _optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPGRAM_API_KEY', 'ANTHROPIC_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
-}
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
@@ -483,46 +474,6 @@ async function _callSerpAPI(query) {
   }
 }
 
-// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
-async function _callDeepSeek(prompt, maxTokens = 4000) {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    console.warn('DeepSeek API key not set, falling back to GPT-4o');
-    return null; // Caller should handle fallback
-  }
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.3,
-      }),
-      timeout: 120000,
-    });
-    const data = await response.json();
-    if (data.usage) {
-      recordTokens(
-        'deepseek-chat',
-        data.usage.prompt_tokens || 0,
-        data.usage.completion_tokens || 0
-      );
-    }
-    if (data.error) {
-      console.error('DeepSeek API error:', data.error);
-      return null;
-    }
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('DeepSeek error:', error.message);
-    return null;
-  }
-}
-
 // Detect domain/context from text for domain-aware translation
 function _detectMeetingDomain(text) {
   const domains = {
@@ -660,11 +611,11 @@ const DOMAIN_MAP = {
 };
 
 const LOCAL_LANGUAGE_MAP = {
-  thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-  vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-  indonesia: { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
-  philippines: { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
-  malaysia: { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] },
+  thailand: { lang: 'Thai', examples: ['บริษัท', 'โรงงาน', 'ผู้จัดจำหน่าย'] },
+  vietnam: { lang: 'Vietnamese', examples: ['công ty', 'nhà máy', 'nhà cung cấp'] },
+  indonesia: { lang: 'Bahasa Indonesia', examples: ['perusahaan', 'pabrik', 'pemasok'] },
+  philippines: { lang: 'Tagalog', examples: ['kumpanya', 'pabrika'] },
+  malaysia: { lang: 'Bahasa Malaysia', examples: ['syarikat', 'kilang'] },
 };
 
 // ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
@@ -1331,7 +1282,7 @@ LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "multinational", "global network", offices/operations in 10+ countries
 - Revenue figures >$100M, employee count >1000
 - "Fortune 500", "Forbes Global"
-- Company name contains known MNC: Toyo Ink, Sakata, Flint, Siegwerk, Sun Chemical, DIC
+- Company name contains known MNC: Unilever, Nestle, Siemens, Samsung, Bosch, Panasonic
 - Website says "subsidiary of", "part of [X] Group", "member of [X] Group"
 - Company name ends with "Tbk" (Indonesian listed)
 
@@ -1402,7 +1353,7 @@ VALIDATION RULES:
 3. EXCLUSION CHECK:
 ${exclusionRules}
 - For "large companies" exclusion: REJECT both large multinationals AND their subsidiaries
-- Example: "DIC Indonesia", "Toyo Ink Philippines", "Sun Chemical" → REJECT (subsidiaries of large corporations)
+- Example: "Unilever Indonesia", "Nestle Philippines", "Siemens Malaysia" → REJECT (subsidiaries of large corporations)
 - Only accept truly independent SMEs and local companies
 
 4. SPAM CHECK:
@@ -1917,7 +1868,7 @@ async function _checkBusinessRelevanceMultiAI(companies, filterCriteria) {
   return mergedResults;
 }
 
-// ============ NEW 3-PHASE FILTERING SYSTEM (DeepSeek-powered) ============
+// ============ NEW 3-PHASE FILTERING SYSTEM ============
 
 /**
  * PHASE 1: Deep Analysis
@@ -1925,7 +1876,7 @@ async function _checkBusinessRelevanceMultiAI(companies, filterCriteria) {
  */
 async function phase1DeepAnalysis(companies, targetDescription) {
   console.log('\n' + '='.repeat(60));
-  console.log('PHASE 1: DEEP ANALYSIS (DeepSeek Reasoner)');
+  console.log('PHASE 1: DEEP ANALYSIS');
   console.log('='.repeat(60));
 
   const companyList = companies
@@ -1951,7 +1902,7 @@ async function phase1DeepAnalysis(companies, targetDescription) {
 
 TARGET PEER GROUP: "${targetDescription}"
 
-COMPANY LIST (${companies.length} companies from Speeda database):
+COMPANY LIST (${companies.length} companies from the uploaded company list):
 ${companyList}
 
 TASK: Analyze this company list deeply before any filtering.
@@ -3996,7 +3947,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       // - Median row: last 4 cells dark blue
 
       const pptx = new pptxgen();
-      pptx.author = 'YCP';
+      pptx.author = 'Deal Tools';
       pptx.title = 'Trading Comparable';
 
       // Set exact slide size (16:9 widescreen)
@@ -4016,7 +3967,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
       // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
       pptx.defineSlideMaster({
-        title: 'YCP_TRADING_MASTER',
+        title: 'TRADING_MASTER',
         background: { color: 'FFFFFF' },
         objects: [
           {
@@ -4032,7 +3983,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       });
 
       // Use master slide - lines are fixed in background and cannot be moved
-      const slide = pptx.addSlide({ masterName: 'YCP_TRADING_MASTER' });
+      const slide = pptx.addSlide({ masterName: 'TRADING_MASTER' });
 
       // ===== TITLE + SUBTITLE (positioned per slideLayout1: x=0.38", y=0.05") =====
       // Title at top (font 24), subtitle below (font 16), combined text box
@@ -4316,7 +4267,7 @@ Return JSON with this exact format:
         border: solidWhiteBorder,
       };
 
-      // Data row style - sysDash horizontal borders, white solid vertical borders (from YCP template)
+      // Data row style - sysDash horizontal borders, white solid vertical borders (from the slide template)
       // Border order: [top, right, bottom, left]
       const dataStyle = {
         fill: COLORS.white,
@@ -4483,7 +4434,7 @@ Return JSON with this exact format:
         fontFace: 'Segoe UI',
         color: COLORS.black,
       });
-      slide.addText('Source: Speeda', {
+      slide.addText('Source: Company database', {
         x: 0.38,
         y: footerY + 0.36,
         w: 4,
@@ -4494,36 +4445,6 @@ Return JSON with this exact format:
       });
 
       // Footer line is now in master slide (cannot be moved)
-
-      // ===== YCP LOGO (from slideLayout1: x=0.38", y=7.30") =====
-      // Logo image stored in backend folder
-      try {
-        const logoPath = path.join(__dirname, 'ycp-logo.png');
-        const logoExists = require('fs').existsSync(logoPath);
-        if (logoExists) {
-          slide.addImage({
-            path: logoPath,
-            x: 0.38,
-            y: 7.3,
-            w: 0.47,
-            h: 0.17,
-          });
-        }
-      } catch (e) {
-        console.log('Logo not found, skipping');
-      }
-
-      // ===== FOOTER COPYRIGHT (from slideLayout1: center, y=7.26") =====
-      slide.addText('(C) YCP 2025 all rights reserved', {
-        x: 4.1,
-        y: 7.26,
-        w: 5.1,
-        h: 0.2,
-        fontSize: 8,
-        fontFace: 'Segoe UI',
-        color: COLORS.gray,
-        align: 'center',
-      });
 
       // ===== PAGE NUMBER =====
       slide.addText('1', {
@@ -4595,7 +4516,7 @@ ${validationSection}
 • PowerPoint slide - summary view for presentations<br>
 <br>
 Data as of ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}<br>
-Source: Speeda
+Source: Company database
 </p>
 `;
 
