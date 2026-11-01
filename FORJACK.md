@@ -316,7 +316,7 @@ The principle: use the cheapest model that produces acceptable quality. Simple e
 ```
 xvasjack.github.io/
 ├── *.html                     ← Frontend (GitHub Pages)
-├── css/main.css               ← Styling
+├── index.html                 ← Redirects to find-target.html (YCP Tools home)
 ├── CLAUDE.md                  ← Rules for Claude Code
 ├── CLAUDE-FAILURES.md         ← Failure log (meta-engineering)
 ├── FORJACK.md                 ← You are here
