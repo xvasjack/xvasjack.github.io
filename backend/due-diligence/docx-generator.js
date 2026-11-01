@@ -900,9 +900,6 @@ function htmlToStructuredJson(html, companyName = 'Company') {
     type: 'cover_page',
     title: 'PRE-DUE DILIGENCE REPORT',
     companyName: companyName,
-    preparedFor: 'Sun Corporation',
-    purpose:
-      'Evaluation of Minority Investment with Path to Majority / Full Acquisition (5–10 Years)',
     confidential: 'This report is confidential and prepared solely for internal discussion.',
     date: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
   });

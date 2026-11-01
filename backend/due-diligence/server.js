@@ -11,6 +11,7 @@ const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
 const { generateDocx, htmlToStructuredJson } = require('./docx-generator');
+const { requireReportToken } = require('./report-access');
 const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
@@ -188,7 +189,7 @@ DO NOT include a "Competition Intensity" column - the template uses only 4 colum
 - Only include advantages that have supporting evidence in source data
 
 2.3 Where [Company Name] Is Vulnerable:
-- Use company name in the subsection title (e.g., "Where Netpluz Is Vulnerable")
+- Use company name in the subsection title (e.g., "Where Acme Is Vulnerable")
 - Extract weaknesses/risks mentioned in source documents
 - Include: customer concentration, geographic concentration, technology dependencies
 - Note competitive threats from specific competitors if mentioned
@@ -2742,7 +2743,7 @@ OUTPUT FORMAT - STRUCTURED JSON:
 You MUST output valid JSON in this exact format:
 {
   "sections": [
-    { "type": "cover_page", "title": "PRE-DUE DILIGENCE REPORT", "companyName": "${companyInfo.name || '[Company Name]'}", "preparedFor": "Sun Corporation", "purpose": "Evaluation of Minority Investment with Path to Majority / Full Acquisition (5–10 Years)", "confidential": "This report is confidential and prepared solely for internal discussion.", "date": "${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}" },
+    { "type": "cover_page", "title": "PRE-DUE DILIGENCE REPORT", "companyName": "${companyInfo.name || '[Company Name]'}", "confidential": "This report is confidential and prepared solely for internal discussion.", "date": "${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}" },
     { "type": "heading1", "text": "1.0 Section Title" },
     { "type": "heading2", "text": "1.1 Subsection Title" },
     { "type": "paragraph", "text": "Body text content..." },
@@ -3178,9 +3179,10 @@ app.post('/api/due-diligence', async (req, res) => {
 });
 
 // ============ REPORT FETCH ENDPOINTS (for automated testing) ============
+// Closed unless DD_REPORTS_TOKEN is set; callers send it in X-Report-Token.
 
 // GET /api/reports/:id - Fetch a specific report by ID
-app.get('/api/reports/:id', (req, res) => {
+app.get('/api/reports/:id', requireReportToken, (req, res) => {
   const reportId = req.params.id;
   const report = reportStore.get(reportId);
 
@@ -3204,7 +3206,7 @@ app.get('/api/reports/:id', (req, res) => {
 });
 
 // GET /api/reports/:id/download - Download DOCX file
-app.get('/api/reports/:id/download', (req, res) => {
+app.get('/api/reports/:id/download', requireReportToken, (req, res) => {
   const reportId = req.params.id;
   const report = reportStore.get(reportId);
 
@@ -3239,7 +3241,7 @@ app.get('/api/reports/:id/download', (req, res) => {
 });
 
 // GET /api/reports - List all recent reports
-app.get('/api/reports', (req, res) => {
+app.get('/api/reports', requireReportToken, (req, res) => {
   const reports = Array.from(reportStore.entries()).map(([id, r]) => ({
     reportId: id,
     status: r.status,
