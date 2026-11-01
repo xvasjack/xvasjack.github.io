@@ -319,7 +319,7 @@ async function callGeminiResearch(topic, country, industry, pipelineSignal = nul
     throw new Error('[Gemini Research] No GEMINI_API_KEY set. Cannot proceed.');
   }
 
-  const systemPrompt = `You are a senior market research analyst at McKinsey. You have access to web search.
+  const systemPrompt = `You are a senior strategy consultant doing market research. You have access to web search.
 
 Your job is to conduct DEEP research on the given topic. Not surface-level - actually dig into:
 - Primary sources (government websites, official statistics, company filings)
@@ -333,7 +333,7 @@ For every claim, you MUST provide:
 - Source type (government data, company filing, industry report)
 - Context (why this matters, how it compares)
 
-DO NOT give generic statements like "the market is growing". Give specifics like "The ESCO market reached $2.3B in 2024, up 14% YoY, driven by mandatory energy audits under the 2023 Energy Act."`;
+DO NOT give generic statements like "the market is growing". Give specifics in this form: "The [segment] market reached $[value] in [year], up [X]% year on year, driven by [named regulation, program or event]." Only use numbers you found in sources.`;
 
   const query = `Research this topic thoroughly for ${country}'s ${industry} market:
 

@@ -39,9 +39,6 @@ if (missingVars.length > 0) {
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
-}
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
 }
@@ -1192,7 +1189,7 @@ ${context ? `CLIENT CONTEXT: ${context}` : ''}
 
 ---
 
-CRITICAL ANTI-BULLSHIT RULES:
+STRICT ACCURACY RULES:
 - Every recommendation must include: named segment with market size, growth rate with source, specific capability bridge from the client, competitive proof point
 - Do NOT recommend a segment without explaining exactly WHICH client capability transfers
 - Include exclusion criteria: what should the client NOT target and why
@@ -1349,15 +1346,15 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   console.log('[UTB] Generating slides...');
 
   const pptx = new pptxgen();
-  pptx.author = 'YCP Solidiance';
+  pptx.author = 'Deal Tools';
   pptx.title = `UTB: ${companyName}`;
   pptx.subject = 'M&A Buyer Intelligence Report';
 
-  // Set exact slide size to match YCP template (13.333" x 7.5" = 16:9 widescreen)
-  pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
-  pptx.layout = 'YCP';
+  // Set exact slide size to match the slide template (13.333" x 7.5" = 16:9 widescreen)
+  pptx.defineLayout({ name: 'WIDE_16x9', width: 13.333, height: 7.5 });
+  pptx.layout = 'WIDE_16x9';
 
-  // YCP Theme Colors (matching profile-slides template exactly)
+  // Theme colors (matching profile-slides template exactly)
   const COLORS = {
     headerLine: '293F55', // Dark navy for header/footer lines
     headerBg: '1524A9', // Dark blue for table header row
@@ -1369,9 +1366,9 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     footerText: '808080', // Gray footer text
   };
 
-  // Define master slide with fixed lines (matching YCP template)
+  // Define master slide with fixed lines (matching the slide template)
   pptx.defineSlideMaster({
-    title: 'YCP_MASTER',
+    title: 'MAIN_MASTER',
     background: { color: 'FFFFFF' },
     objects: [
       // Thick header line (y: 1.02")
@@ -1383,7 +1380,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     ],
   });
 
-  // Helper: Add slide title (YCP format - black text, left-aligned, valign bottom)
+  // Helper: Add slide title (template format - black text, left-aligned, valign bottom)
   const addSlideTitle = (slide, title) => {
     slide.addText(title, {
       x: 0.38,
@@ -1420,7 +1417,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   const maDeepDive = synthesis.ma_deep_dive || {};
 
   // ========== SLIDE 1: TITLE SLIDE ==========
-  const titleSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+  const titleSlide = pptx.addSlide({ masterName: 'MAIN_MASTER' });
 
   // Company name - centered, black, large
   titleSlide.addText(companyName, {
@@ -1463,7 +1460,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
 
   // ========== SLIDE 2: BUSINESS OVERVIEW ==========
   if (prod.product_lines && prod.product_lines.length > 0) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    const slide = pptx.addSlide({ masterName: 'MAIN_MASTER' });
 
     // Title with smaller height for subtitle space
     slide.addText('Business Overview', {
@@ -1619,7 +1616,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const valueChain = indData.value_chain || [];
     const segmentation = indData.segmentation || [];
 
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    const slide = pptx.addSlide({ masterName: 'MAIN_MASTER' });
     addSlideTitle(slide, 'Industry Landscape');
 
     // === TOP HALF: Value Chain (y=1.3 to y=3.1) ===
@@ -1811,7 +1808,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const posSegments = posData.segments || [];
     const concentrations = posData.concentrations || {};
 
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    const slide = pptx.addSlide({ masterName: 'MAIN_MASTER' });
     addSlideTitle(slide, 'Client Positioning');
 
     // === MAIN TABLE (y=1.3 to y=5.1) ===
@@ -2023,7 +2020,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   // ========== SLIDE 5: PAST M&A ==========
   const dealHistory = maDeepDive.deal_history || maDeepDive.deal_stories || [];
   if (dealHistory.length > 0) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    const slide = pptx.addSlide({ masterName: 'MAIN_MASTER' });
     addSlideTitle(slide, 'Past M&A');
 
     // Header options: all columns center aligned, not bold, font 14
@@ -2119,7 +2116,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
               .join(' | ')
           : '';
 
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    const slide = pptx.addSlide({ masterName: 'MAIN_MASTER' });
     addSlideTitle(slide, 'Expansion Strategy');
 
     // === TOP: 3 Priority Cards (y=1.6 to y=3.4) ===
@@ -2357,7 +2354,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   const revenueHistory = fin.revenue_history || [];
 
   if (revenueHistory.length >= 2) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    const slide = pptx.addSlide({ masterName: 'MAIN_MASTER' });
     addSlideTitle(slide, 'Financial Highlights');
 
     // Chart data

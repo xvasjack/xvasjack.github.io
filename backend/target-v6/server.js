@@ -36,9 +36,6 @@ if (missingVars.length > 0) {
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
-}
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
 }
@@ -368,11 +365,11 @@ const _DOMAIN_MAP = {
 };
 
 const _LOCAL_LANGUAGE_MAP = {
-  thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-  vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-  indonesia: { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
-  philippines: { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
-  malaysia: { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] },
+  thailand: { lang: 'Thai', examples: ['บริษัท', 'โรงงาน', 'ผู้จัดจำหน่าย'] },
+  vietnam: { lang: 'Vietnamese', examples: ['công ty', 'nhà máy', 'nhà cung cấp'] },
+  indonesia: { lang: 'Bahasa Indonesia', examples: ['perusahaan', 'pabrik', 'pemasok'] },
+  philippines: { lang: 'Tagalog', examples: ['kumpanya', 'pabrika'] },
+  malaysia: { lang: 'Bahasa Malaysia', examples: ['syarikat', 'kilang'] },
 };
 
 // ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
@@ -780,7 +777,7 @@ LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "multinational", "global network", offices/operations in 10+ countries
 - Revenue figures >$100M, employee count >1000
 - "Fortune 500", "Forbes Global"
-- Company name contains known MNC: Toyo Ink, Sakata, Flint, Siegwerk, Sun Chemical, DIC
+- Company name contains known MNC: Unilever, Nestle, Siemens, Samsung, Bosch, Panasonic
 - Website says "subsidiary of", "part of [X] Group", "member of [X] Group"
 - Company name ends with "Tbk" (Indonesian listed)
 
@@ -851,7 +848,7 @@ VALIDATION RULES:
 3. EXCLUSION CHECK:
 ${exclusionRules}
 - For "large companies" exclusion: REJECT both large multinationals AND their subsidiaries
-- Example: "DIC Indonesia", "Toyo Ink Philippines", "Sun Chemical" → REJECT (subsidiaries of large corporations)
+- Example: "Unilever Indonesia", "Nestle Philippines", "Siemens Malaysia" → REJECT (subsidiaries of large corporations)
 - Only accept truly independent SMEs and local companies
 
 4. SPAM CHECK:
@@ -1412,12 +1409,12 @@ RULES:
 - Generate 3-5 alternative phrasings/synonyms that mean the SAME specific thing
 - Include common industry terminology variations
 - Include abbreviations if applicable
-- Do NOT broaden the scope (e.g., don't suggest "printing ink" for "gravure ink" - stay specific)
+- Do NOT broaden the scope (e.g., don't suggest "industrial valves" for "butterfly valves" - stay specific)
 - Focus on how different people might describe this EXACT business
 
 Examples:
-- "gravure ink manufacturer" → "rotogravure ink producer", "gravure printing ink maker", "intaglio ink manufacturer"
-- "flexure ink" → "flexographic ink", "flexo ink", "flexible packaging ink"
+- "butterfly valve manufacturer" → "butterfly valve producer", "wafer valve maker", "quarter-turn valve manufacturer"
+- "PCB assembly" → "printed circuit board assembly", "PCBA", "SMT assembly"
 - "CNC machining" → "computer numerical control machining", "precision CNC", "CNC manufacturing"
 
 Return ONLY a JSON array of strings, nothing else.
@@ -1457,7 +1454,7 @@ EXCLUDE: ${exclusion}
 Generate a search plan with:
 
 1. "english_variations": Array of 5-8 alternative English terms/phrases for this business type. Think about:
-   - Industry-specific terminology (e.g., "flexure" = "flexographic", "flexo")
+   - Industry-specific terminology (e.g., "PCBA" = "printed circuit board assembly", "SMT")
    - Technical vs common terms
    - Full names vs abbreviations
    - How manufacturers vs buyers might describe it

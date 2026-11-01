@@ -74,9 +74,6 @@ if (missingVars.length > 0) {
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
-}
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
 }
@@ -490,41 +487,6 @@ async function _callSerpAPI(query) {
   }
 }
 
-// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
-async function _callDeepSeek(prompt, maxTokens = 4000) {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    console.warn('DeepSeek API key not set, falling back to GPT-4o');
-    return null; // Caller should handle fallback
-  }
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.3,
-      }),
-      timeout: 120000,
-    });
-    const data = await response.json();
-    if (data.usage) {
-      recordTokens('deepseek-chat', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
-    }
-    if (data.error) {
-      console.error('DeepSeek API error:', data.error);
-      return null;
-    }
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('DeepSeek error:', error.message);
-    return null;
-  }
-}
 // ============ SEARCH CONFIGURATION ============
 
 const CITY_MAP = {
@@ -622,11 +584,11 @@ const DOMAIN_MAP = {
 };
 
 const LOCAL_LANGUAGE_MAP = {
-  thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-  vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-  indonesia: { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
-  philippines: { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
-  malaysia: { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] },
+  thailand: { lang: 'Thai', examples: ['บริษัท', 'โรงงาน', 'ผู้จัดจำหน่าย'] },
+  vietnam: { lang: 'Vietnamese', examples: ['công ty', 'nhà máy', 'nhà cung cấp'] },
+  indonesia: { lang: 'Bahasa Indonesia', examples: ['perusahaan', 'pabrik', 'pemasok'] },
+  philippines: { lang: 'Tagalog', examples: ['kumpanya', 'pabrika'] },
+  malaysia: { lang: 'Bahasa Malaysia', examples: ['syarikat', 'kilang'] },
 };
 
 // ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
@@ -1289,7 +1251,7 @@ LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "multinational", "global network", offices/operations in 10+ countries
 - Revenue figures >$100M, employee count >1000
 - "Fortune 500", "Forbes Global"
-- Company name contains known MNC: Toyo Ink, Sakata, Flint, Siegwerk, Sun Chemical, DIC
+- Company name contains known MNC: Unilever, Nestle, Siemens, Samsung, Bosch, Panasonic
 - Website says "subsidiary of", "part of [X] Group", "member of [X] Group"
 - Company name ends with "Tbk" (Indonesian listed)
 
@@ -1360,7 +1322,7 @@ VALIDATION RULES:
 3. EXCLUSION CHECK:
 ${exclusionRules}
 - For "large companies" exclusion: REJECT both large multinationals AND their subsidiaries
-- Example: "DIC Indonesia", "Toyo Ink Philippines", "Sun Chemical" → REJECT (subsidiaries of large corporations)
+- Example: "Unilever Indonesia", "Nestle Philippines", "Siemens Malaysia" → REJECT (subsidiaries of large corporations)
 - Only accept truly independent SMEs and local companies
 
 4. SPAM CHECK:
@@ -1825,12 +1787,12 @@ async function generateFinancialChartPPTX(financialDataArray) {
     console.log(`Processing ${dataArray.length} company/companies`);
 
     const pptx = new pptxgen();
-    pptx.author = 'YCP';
+    pptx.author = 'Deal Tools';
     pptx.title = 'Financial Charts';
     pptx.subject = 'Financial Performance';
 
-    pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
-    pptx.layout = 'YCP';
+    pptx.defineLayout({ name: 'WIDE_16x9', width: 13.333, height: 7.5 });
+    pptx.layout = 'WIDE_16x9';
 
     const COLORS = {
       headerLine: '293F55',
@@ -1844,7 +1806,7 @@ async function generateFinancialChartPPTX(financialDataArray) {
 
     // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
     pptx.defineSlideMaster({
-      title: 'YCP_FINANCIAL_MASTER',
+      title: 'FINANCIAL_MASTER',
       background: { color: 'FFFFFF' },
       objects: [
         {
@@ -1863,18 +1825,7 @@ async function generateFinancialChartPPTX(financialDataArray) {
       if (!financialData) continue;
 
       // Use master slide - lines are fixed in background and cannot be moved
-      const slide = pptx.addSlide({ masterName: 'YCP_FINANCIAL_MASTER' });
-
-      slide.addText('(C) YCP 2025 all rights reserved', {
-        x: 4.1,
-        y: 7.26,
-        w: 5.1,
-        h: 0.2,
-        fontSize: 8,
-        fontFace: 'Segoe UI',
-        color: COLORS.footerText,
-        align: 'center',
-      });
+      const slide = pptx.addSlide({ masterName: 'FINANCIAL_MASTER' });
 
       // Title
       const companyName = financialData.company_name || 'Financial Performance';

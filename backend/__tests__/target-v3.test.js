@@ -83,7 +83,7 @@ LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "multinational", "global network", offices/operations in 10+ countries
 - Revenue figures >$100M, employee count >1000
 - "Fortune 500", "Forbes Global"
-- Company name contains known MNC: Toyo Ink, Sakata, Flint, Siegwerk, Sun Chemical, DIC
+- Company name contains known MNC: Unilever, Nestle, Siemens, Samsung, Bosch, Panasonic
 - Website says "subsidiary of", "part of [X] Group", "member of [X] Group"
 - Company name ends with "Tbk" (Indonesian listed)
 
@@ -430,9 +430,9 @@ function strategy13_PublicationsPerplexity(business, country, exclusion) {
 
 function strategy14_LocalLanguageOpenAISearch(business, country, _exclusion) {
   const LOCAL_LANGUAGE_MAP = {
-    thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-    vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-    malaysia: { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] },
+    thailand: { lang: 'Thai', examples: ['บริษัท', 'โรงงาน', 'ผู้จัดจำหน่าย'] },
+    vietnam: { lang: 'Vietnamese', examples: ['công ty', 'nhà máy', 'nhà cung cấp'] },
+    malaysia: { lang: 'Bahasa Malaysia', examples: ['syarikat', 'kilang'] },
   };
 
   const countries = country.split(',').map((c) => c.trim());
@@ -666,9 +666,9 @@ describe('buildExclusionRules', () => {
 
   test('includes known MNC names in large company rules', () => {
     const rules = buildExclusionRules('exclude large', 'ink');
-    expect(rules).toContain('Toyo Ink');
-    expect(rules).toContain('Sakata');
-    expect(rules).toContain('Sun Chemical');
+    expect(rules).toContain('Unilever');
+    expect(rules).toContain('Nestle');
+    expect(rules).toContain('Siemens');
   });
 });
 

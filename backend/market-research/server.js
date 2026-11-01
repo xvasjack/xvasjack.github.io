@@ -457,7 +457,8 @@ ${JSON.stringify(synthesis, null, 2)}`;
 
 function buildPptCheckExpectations(scope) {
   const expectations = {
-    minFileSize: 120 * 1024,
+    // Decks carry no embedded images, so a complete 12+ slide deck is roughly 60-200 KB.
+    minFileSize: 50 * 1024,
     minSlides: 12,
     minCharts: 1,
     minTables: 3,
@@ -627,7 +628,7 @@ function pickOwnerStage(stageIssues, fallbackStage = '5a') {
   return best;
 }
 
-const MCKINSEY_SLIDE_GUIDE = `
+const SLIDE_QUALITY_GUIDE = `
 Use these slide-quality rules:
 1) One clear message per slide.
 2) Title should state the answer, not just topic.
@@ -852,8 +853,8 @@ async function reviewDeckBeforeDeliveryWithGeminiFlash({
   };
 
   const systemPrompt = `You are a final deck reviewer for one-country market research.
-Use McKinsey-style slide quality standards.
-Decide if the deck is ready to send to a client team.
+Use strategy-consulting slide quality standards.
+Decide if the deck is ready to deliver.
 Return ONLY valid JSON.`;
 
   // Build locked-decisions history from prior rounds to reinforce anti-flip-flop.
@@ -902,10 +903,10 @@ Rules:
 5) Output one JSON object only.
 ${inputGuidance}
 7) If this is attempt 2+, focus ONLY on issues that were NOT already addressed in prior rounds. Do not re-raise issues that were already fixed.
-8) Issues that have been raised and attempted multiple times should be accepted as-is. Perfectionism should not block delivery.
+8) Issues that have been raised and attempted multiple times should be accepted as-is. Repeated minor issues should not block delivery.
 ${lockedSection}
-McKinsey-style guide:
-${MCKINSEY_SLIDE_GUIDE}
+Slide quality guide:
+${SLIDE_QUALITY_GUIDE}
 
 Return JSON schema:
 {
@@ -3166,7 +3167,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
         });
       }
 
-      // Stage 9a (public stage 8a): McKinsey-style final deck review loop (max 3 rounds).
+      // Stage 9a (public stage 8a): final deck review loop (max 3 rounds).
       currentPublicStage = '8a';
       await emitHook(stageHooks, 'onStageStart', '8a', { maxRounds: 3 });
       // Reviewer gives comments, synthesis is revised, deck is rebuilt, then reviewed again.
@@ -3480,14 +3481,14 @@ async function runMarketResearch(userPrompt, email, options = {}) {
                 ...new Set([...(roundEntry.lockedDecisions || []), ...revision.lockedDecisions]),
               ].slice(0, 25);
             }
-            roundEntry.appliedBy = 'mckinsey-review-edit';
+            roundEntry.appliedBy = 'final-review-edit';
             applied = true;
             recordFixAttempt({
               sourceStage: '9a',
               ownerStage: '5a',
               attempt,
               success: true,
-              note: 'applied mckinsey reviewer comments to synthesis',
+              note: 'applied final reviewer comments to synthesis',
             });
           }
         } catch (applyErr) {
@@ -3543,7 +3544,7 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           retries: MAX_FINAL_DECK_REVIEW_RETRIES,
           attempts: finalDeckReviewRounds,
           latestPptStructureCheck: buildPptStructureSummary(latestPptStructureCheck),
-          reviewMode: 'mckinsey-style',
+          reviewMode: 'final-review',
           convergenceTracking: {
             issueOccurrences: Object.keys(issueOccurrenceCount).length,
             acceptedAfterThreshold: Object.values(issueOccurrenceCount).filter(

@@ -1,2 +1,0 @@
-"""Speeda Director Bot package."""
-

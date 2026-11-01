@@ -70,7 +70,7 @@ describe('sparse and noisy input handling', () => {
     const synthesis = {
       _metadata: { timestamp: Date.now() },
       randomGarbage: [1, 2, 3],
-      executiveSummary: ['Valid content about Schneider Electric Corp with $180M revenue.'],
+      executiveSummary: ['Valid content about Fabrikam Electric Corp with $180M revenue.'],
       depth: {
         dealEconomics: {
           typicalDealSize: { min: '$1M', max: '$8M' },
@@ -127,7 +127,7 @@ describe('verbose low-signal text detection', () => {
   });
 
   test('passes for specific analytical text without filler', () => {
-    const text = `ENGIE Corp entered Thailand in 2018 via JV with B.Grimm, focusing on industrial parks near Bangkok. They won 12 contracts averaging $2M each, however their provincial network coverage remains limited because B.Grimm concentrates on the Eastern Seaboard. This means competitors with regional partnerships capture 40% of industrial demand outside Bangkok. Manufacturing wages rose 8% annually from 2021-2024, consequently factory operators seek 15-20% energy cost reductions.`;
+    const text = `CONTOSO Corp entered Thailand in 2018 via JV with A.Datum, focusing on industrial parks near Bangkok. They won 12 contracts averaging $2M each, however their provincial network coverage remains limited because A.Datum concentrates on the Eastern Seaboard. This means competitors with regional partnerships capture 40% of industrial demand outside Bangkok. Manufacturing wages rose 8% annually from 2021-2024, consequently factory operators seek 15-20% energy cost reductions.`;
 
     const result = antiShallow(text, 'energy services');
     expect(result.pass).toBe(true);
@@ -142,7 +142,7 @@ describe('verbose low-signal text detection', () => {
   });
 
   test('scores specific actionable text high on decision usefulness', () => {
-    const text = `Thailand's industrial energy efficiency market reached $320M in 2024, growing at 14% CAGR since 2020. ENGIE Corp and Schneider Electric dominate with 35% combined market share. We recommend targeting mid-tier factories (500-2000 employees) because their energy spend averages $500K annually. The regulatory push from DEDE's ISO 50001 mandate by Q3 2026 creates compliance-driven urgency. This means early movers capture 60% of first-wave contracts, resulting in a $45M serviceable market.`;
+    const text = `Thailand's industrial energy efficiency market reached $320M in 2024, growing at 14% CAGR since 2020. CONTOSO Corp and Fabrikam Electric dominate with 35% combined market share. We recommend targeting mid-tier factories (500-2000 employees) because their energy spend averages $500K annually. The regulatory push from DEDE's ISO 50001 mandate by Q3 2026 creates compliance-driven urgency. This means early movers capture 60% of first-wave contracts, resulting in a $45M serviceable market.`;
 
     const result = scoreDecisionUsefulness(text);
     expect(result.score).toBeGreaterThan(40);
@@ -298,20 +298,20 @@ describe('parsePartnerAssessment', () => {
   test('parses complete partner assessment', () => {
     const assessment = {
       candidates: [
-        { name: 'B.Grimm Power', strengths: 'Strong industrial park network', fitScore: 85 },
-        { name: 'Bangchak Corp', strengths: 'Renewable energy expertise', fitScore: 72 },
+        { name: 'A.Datum Power', strengths: 'Strong industrial park network', fitScore: 85 },
+        { name: 'Tailspin Corp', strengths: 'Renewable energy expertise', fitScore: 72 },
       ],
       selectionCriteria: ['Market coverage', 'Financial stability', 'Regulatory relationships'],
       model: 'Joint venture with 60/40 split',
       dueDiligence: 'Both candidates have clean financials and no regulatory issues',
-      keyInsight: 'B.Grimm is the strongest fit due to complementary capabilities',
+      keyInsight: 'A.Datum is the strongest fit due to complementary capabilities',
     };
 
     const result = parsePartnerAssessment(assessment);
     expect(result.valid).toBe(true);
     expect(result.confidence).toBeGreaterThanOrEqual(75);
     expect(result.fields.partners).toHaveLength(2);
-    expect(result.fields.partners[0].name).toBe('B.Grimm Power');
+    expect(result.fields.partners[0].name).toBe('A.Datum Power');
     expect(result.fields.selectionCriteria).toHaveLength(3);
     expect(result.fields.keyInsight).toBeDefined();
   });
@@ -347,7 +347,7 @@ describe('checkStoryFlow', () => {
   test('returns high score for consistent synthesis', () => {
     const synthesis = {
       executiveSummary:
-        'Thailand energy market is $500M with 14% CAGR. ENGIE Corp leads with 18% market share.',
+        'Thailand energy market is $500M with 14% CAGR. CONTOSO Corp leads with 18% market share.',
       marketOpportunityAssessment: {
         totalAddressableMarket:
           'Market size is $500M growing at 14% CAGR driven by policy mandates.',
@@ -355,7 +355,7 @@ describe('checkStoryFlow', () => {
       },
       competitivePositioning: {
         keyPlayers: [
-          { name: 'ENGIE Corp', description: '18% market share, entered via JV with B.Grimm' },
+          { name: 'CONTOSO Corp', description: '18% market share, entered via JV with A.Datum' },
         ],
       },
     };
@@ -484,7 +484,7 @@ describe('detectConsultantFiller', () => {
   });
 
   test('passes clean analytical text', () => {
-    const text = `ENGIE entered Thailand via joint venture with B.Grimm in 2018. Their 12 active contracts average $2M each, covering industrial parks near Bangkok. Revenue grew 15% in 2024 to reach $36M.`;
+    const text = `CONTOSO entered Thailand via joint venture with A.Datum in 2018. Their 12 active contracts average $2M each, covering industrial parks near Bangkok. Revenue grew 15% in 2024 to reach $36M.`;
 
     const result = detectConsultantFiller(text);
     expect(result.hasFiller).toBe(false);
@@ -501,7 +501,7 @@ describe('detectConsultantFiller', () => {
   });
 
   test('detects filler even mixed with real content', () => {
-    const text = `The solar market grew 20% in 2024. We need to leverage synergies across the ecosystem play. Revenue reached $180M driven by policy mandates. Our holistic approach uses cutting-edge technology to unlock value and empower stakeholders through transformative solutions. ENGIE holds 18% market share.`;
+    const text = `The solar market grew 20% in 2024. We need to leverage synergies across the ecosystem play. Revenue reached $180M driven by policy mandates. Our holistic approach uses cutting-edge technology to unlock value and empower stakeholders through transformative solutions. CONTOSO holds 18% market share.`;
 
     const result = detectConsultantFiller(text);
     expect(result.hasFiller).toBe(true);
@@ -534,7 +534,7 @@ describe('getRemediationHints', () => {
 
   test('returns hints for entity not found', () => {
     const issues = [
-      'Entity "ENGIE Corp" mentioned in executiveSummary but not found in competitivePositioning',
+      'Entity "CONTOSO Corp" mentioned in executiveSummary but not found in competitivePositioning',
     ];
     const hints = getRemediationHints(issues);
     expect(hints).toHaveLength(1);
@@ -595,7 +595,7 @@ describe('explainScore', () => {
       score: 30,
       issues: [
         'Market size mismatch: executiveSummary vs marketOpportunityAssessment',
-        'Entity "ENGIE" mentioned in executiveSummary but not found in competitivePositioning',
+        'Entity "CONTOSO" mentioned in executiveSummary but not found in competitivePositioning',
       ],
       linkedPairs: [
         {
@@ -608,7 +608,7 @@ describe('explainScore', () => {
           sectionA: 'executiveSummary',
           sectionB: 'competitivePositioning',
           type: 'entity-name',
-          entity: 'ENGIE',
+          entity: 'CONTOSO',
           found: false,
         },
       ],
@@ -644,25 +644,25 @@ describe('runDecisionGate', () => {
   test('passes synthesis meeting minimum score', () => {
     const synthesis = {
       executiveSummary: [
-        'Thailand energy services market reached $320M in 2024, growing at 14% CAGR. ENGIE Corp and Schneider Electric dominate with 35% share. We recommend targeting mid-tier factories because energy costs are rising 8% annually, which means $500K average annual savings. By Q2 2026, regulatory mandates create urgency, therefore early movers capture first-wave contracts resulting in $45M serviceable market.',
+        'Thailand energy services market reached $320M in 2024, growing at 14% CAGR. CONTOSO Corp and Fabrikam Electric dominate with 35% share. We recommend targeting mid-tier factories because energy costs are rising 8% annually, which means $500K average annual savings. By Q2 2026, regulatory mandates create urgency, therefore early movers capture first-wave contracts resulting in $45M serviceable market.',
       ],
       marketOpportunityAssessment: {
         totalAddressableMarket:
-          '1200 factories x $500K avg spend = $90M TAM. Growing at 14% CAGR driven by ISO 50001 mandate. This means compliance-driven demand accelerates. Schneider Electric revenue in Thailand grew to $180M. We should prioritize the Eastern Seaboard because of industrial park concentration.',
+          '1200 factories x $500K avg spend = $90M TAM. Growing at 14% CAGR driven by ISO 50001 mandate. This means compliance-driven demand accelerates. Fabrikam Electric revenue in Thailand grew to $180M. We should prioritize the Eastern Seaboard because of industrial park concentration.',
       },
       competitivePositioning: {
         keyPlayers: [
           {
-            name: 'ENGIE Corp',
+            name: 'CONTOSO Corp',
             description:
-              '$2.3B global, 18% Thai market share. Entered 2015 via JV with B.Grimm Power Ltd. 12 contracts at $2M average. However provincial coverage limited, therefore regional players can capture 40% of demand outside Bangkok.',
+              '$2.3B global, 18% Thai market share. Entered 2015 via JV with A.Datum Power Ltd. 12 contracts at $2M average. However provincial coverage limited, therefore regional players can capture 40% of demand outside Bangkok.',
           },
         ],
       },
       keyInsights: [
         {
           title: 'Cost pressure',
-          data: '8% annual wage growth drives efficiency demand, resulting in 15-20% cost reduction targets. Schneider Electric should focus on mid-tier segment because ROI is clearest there.',
+          data: '8% annual wage growth drives efficiency demand, resulting in 15-20% cost reduction targets. Fabrikam Electric should focus on mid-tier segment because ROI is clearest there.',
         },
       ],
     };
@@ -701,7 +701,7 @@ describe('runDecisionGate', () => {
       executiveSummary: 'Short.',
       marketOpportunityAssessment: {
         totalAddressableMarket:
-          'Market is $500M growing at 14% CAGR. ENGIE Corp holds 18% share. We recommend targeting factories because costs rose 8%. This means $45M opportunity by Q2 2026, resulting in strong demand.',
+          'Market is $500M growing at 14% CAGR. CONTOSO Corp holds 18% share. We recommend targeting factories because costs rose 8%. This means $45M opportunity by Q2 2026, resulting in strong demand.',
       },
     };
 
@@ -840,7 +840,7 @@ describe('extractTimelines', () => {
 
 describe('extractEntityNames', () => {
   test('extracts company names with suffixes', () => {
-    const names = extractEntityNames('ENGIE Corp entered via JV with B.Grimm Power Ltd.');
+    const names = extractEntityNames('CONTOSO Corp entered via JV with A.Datum Power Ltd.');
     expect(names.length).toBeGreaterThanOrEqual(1);
   });
 

@@ -174,7 +174,7 @@
         "marketInsight": "Japanese professional services firms hold 18% of the industrial advisory market, leveraging deep manufacturing sector relationships built over three decades of presence",
         "players": [
           {
-            "name": "Nomura Research Institute",
+            "name": "Bayside Research Institute",
             "presence": "Since 1992, 4 offices across major cities",
             "description": "Leading management and IT consulting firm with USD 3.8 billion regional revenue. Controls 22% of financial services consulting through integrated technology and strategy solutions. Annual growth of 12% driven by digital transformation projects across banking and insurance sectors. Employs 850 consultants locally with plans to expand to 1,200 by 2026.",
             "entryYear": "1992",
@@ -182,7 +182,7 @@
             "strategicAssessment": "Strong technology-strategy integration gives competitive moat in financial services; premium pricing limits mid-market penetration"
           },
           {
-            "name": "NTT Data Services",
+            "name": "Pinecrest Data Services",
             "presence": "Since 2005, 3 delivery centers",
             "description": "Enterprise IT services and digital transformation specialist with USD 2.1 billion revenue in the region. Focuses on cloud migration, cybersecurity, and AI-driven analytics for government and large enterprise clients. Revenue grew 19% in 2024 driven by smart government contracts worth USD 450 million.",
             "entryYear": "2005",
@@ -196,7 +196,7 @@
         "concentration": "Top 5 local firms hold 38% of domestic professional services market",
         "players": [
           {
-            "name": "PriceSmart Consulting Group",
+            "name": "Keystone Consulting Group",
             "type": "Listed company (SET)",
             "revenue": "5.2B",
             "marketShare": "12%",
@@ -218,7 +218,7 @@
         "competitiveInsight": "Big Four firms and global strategy houses dominate the premium segment, collectively holding 45% of engagements above USD 500,000",
         "players": [
           {
-            "name": "Deloitte Southeast Asia",
+            "name": "Ashford Advisory Southeast Asia",
             "origin": "Global (US HQ)",
             "mode": "Member firm network",
             "entryYear": "1968",
@@ -227,7 +227,7 @@
             "strategicAssessment": "Unmatched brand recognition and client base; faces margin pressure from local competitors in routine compliance work"
           },
           {
-            "name": "Roland Berger Asia Pacific",
+            "name": "Brightwater Strategy Asia Pacific",
             "origin": "Germany",
             "mode": "Wholly-owned subsidiary",
             "entryYear": "2001",
@@ -239,7 +239,7 @@
       },
       "caseStudy": {
         "slideTitle": "Test Country - Market Entry Case Study",
-        "company": "Accenture Southeast Asia",
+        "company": "Crestline Consulting Southeast Asia",
         "entryYear": "1995",
         "entryMode": "Organic growth from initial liaison office to full subsidiary",
         "investment": "USD 350 million cumulative investment over 25 years",
@@ -257,15 +257,15 @@
         "recentDeals": [
           {
             "year": "2024",
-            "buyer": "Bain Capital Private Equity",
-            "target": "TechServ Holdings",
+            "buyer": "Stonebridge Capital Private Equity",
+            "target": "Meridian IT Holdings",
             "value": "USD 850 million",
             "rationale": "Acquire local IT services platform with 2,000+ enterprise clients and 65% recurring revenue"
           },
           {
             "year": "2023",
-            "buyer": "Marsh McLennan",
-            "target": "AsiaRisk Consulting",
+            "buyer": "Halcyon Risk Partners",
+            "target": "Coastal Risk Consulting",
             "value": "USD 320 million",
             "rationale": "Expand risk and insurance advisory capabilities across ASEAN from acquired local platform"
           }
@@ -290,10 +290,10 @@
       },
       "partnerAssessment": {
         "slideTitle": "Test Country - Partner Assessment",
-        "recommendedPartner": "PriceSmart Consulting Group",
+        "recommendedPartner": "Keystone Consulting Group",
         "partners": [
           {
-            "name": "PriceSmart Consulting Group",
+            "name": "Keystone Consulting Group",
             "type": "Listed professional services firm",
             "revenue": "5.2B",
             "partnershipFit": 5,
@@ -490,7 +490,7 @@
         "slideTitle": "Test Country - Lessons from Market",
         "failures": [
           {
-            "company": "StrategyHouse International (UK)",
+            "company": "Fairview Strategy International (UK)",
             "year": "2019",
             "reason": "Attempted greenfield entry without local partner; failed to win government contracts due to lack of local relationships and government vendor registration",
             "lesson": "Government sector (40% of premium consulting market) requires established local partner with existing framework agreements"
@@ -502,7 +502,7 @@
           "Starting with implementation services builds trust before expanding to higher-margin strategy advisory"
         ]
       },
-      "recommendation": "Proceed with conditional market entry via Joint Venture with PriceSmart Consulting Group, targeting initial focus on manufacturing digital transformation and government Smart Services Program."
+      "recommendation": "Proceed with conditional market entry via Joint Venture with Keystone Consulting Group, targeting initial focus on manufacturing digital transformation and government Smart Services Program."
     }
   },
   "scope": {

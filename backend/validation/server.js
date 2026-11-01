@@ -940,7 +940,7 @@ app.post('/api/validation', async (req, res) => {
     if (companyList.length === 0) {
       await sendEmail(
         Email,
-        'Speeda List Validation - No Companies',
+        'Company List Validation - No Companies',
         '<p>No valid company names were found in your input.</p>'
       );
       return;
@@ -1040,7 +1040,7 @@ app.post('/api/validation', async (req, res) => {
 
     // Simple email body
     const emailBody = `
-      <h2>Speeda List Validation Complete</h2>
+      <h2>Company List Validation Complete</h2>
       <p><strong>Target Business:</strong> ${TargetBusiness}</p>
       <p><strong>Countries:</strong> ${countryList.join(', ')}</p>
       <p><strong>Results:</strong> ${inScopeCount} in-scope out of ${results.length} companies</p>
@@ -1050,7 +1050,7 @@ app.post('/api/validation', async (req, res) => {
 
     await sendEmail(
       Email,
-      `Speeda List Validation: ${inScopeCount}/${results.length} in-scope for "${TargetBusiness}"`,
+      `Company List Validation: ${inScopeCount}/${results.length} in-scope for "${TargetBusiness}"`,
       emailBody,
       {
         content: excelBase64,
@@ -1074,7 +1074,7 @@ app.post('/api/validation', async (req, res) => {
     console.error('Validation error:', error);
     await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
-      await sendEmail(Email, `Speeda List Validation - Error`, `<p>Error: ${error.message}</p>`);
+      await sendEmail(Email, `Company List Validation - Error`, `<p>Error: ${error.message}</p>`);
     } catch (e) {
       console.error('Failed to send error email:', e);
     }

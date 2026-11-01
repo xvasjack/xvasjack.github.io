@@ -1,9 +1,18 @@
+/**
+ * Optional template clone post-process.
+ *
+ * Copies slide XML from a template deck that the caller supplies and moves the
+ * generated text into it. The default deck build does not use this step; it only
+ * runs when a caller passes `enabled: true` and an explicit `templatePath`.
+ */
 const fs = require('fs');
 const path = require('path');
 const JSZip = require('jszip');
 const { fitTokensToTemplateSlots } = require('./context-fit-agent');
 
 const BOOLEAN_FALSE_RE = /^(0|false|no|off)$/i;
+// Copyright notices such as "(C) Company 2026" or "© Company".
+const COPYRIGHT_NOTICE_RE = /^(?:\(c\)|©)\s*\S/i;
 
 function decodeXmlText(text) {
   return String(text || '')
@@ -33,9 +42,7 @@ function isLockedTemplateText(text) {
   const t = normalizeToken(text);
   // Empty text runs are writable slots in many template slides.
   if (!t) return false;
-  if (/^\(c\)\s*ycp/i.test(t)) return true;
-  if (/^shizuoka\s+gas\s+company$/i.test(t)) return true;
-  if (/^project\s+escort\s*[–-]\s*phase\s*1$/i.test(t)) return true;
+  if (COPYRIGHT_NOTICE_RE.test(t)) return true;
   if (/^table\s+of\s+contents$/i.test(t)) return true;
   if (/^[0-9]+$/.test(t)) return true;
   return false;
@@ -44,7 +51,7 @@ function isLockedTemplateText(text) {
 function shouldSkipGeneratedToken(text) {
   const t = normalizeToken(text);
   if (!t) return true;
-  if (/^\(c\)\s*ycp/i.test(t)) return true;
+  if (COPYRIGHT_NOTICE_RE.test(t)) return true;
   if (/^table\s+of\s+contents$/i.test(t)) return true;
   if (/^[0-9]+$/.test(t)) return true;
   return false;
@@ -266,12 +273,16 @@ async function copyMissingTemplateReferencedParts(templateZip, generatedZip, { m
 }
 
 async function applyTemplateClonePostprocess(generatedBuffer, {
-  templatePath,
+  templatePath = null,
   maxSlides = 34,
   slideTemplateMap = [],
-  enabled = true,
+  enabled = false,
 } = {}) {
-  if (!enabled || BOOLEAN_FALSE_RE.test(String(process.env.TEMPLATE_CLONE_MODE || 'true'))) {
+  if (
+    !enabled ||
+    !templatePath ||
+    BOOLEAN_FALSE_RE.test(String(process.env.TEMPLATE_CLONE_MODE || 'true'))
+  ) {
     return {
       buffer: generatedBuffer,
       changed: false,
@@ -291,7 +302,7 @@ async function applyTemplateClonePostprocess(generatedBuffer, {
     };
   }
 
-  const resolvedTemplate = path.resolve(templatePath || path.join(__dirname, '..', '..', '251219_Escort_Phase 1 Market Selection_V3.pptx'));
+  const resolvedTemplate = path.resolve(templatePath);
   if (!fs.existsSync(resolvedTemplate)) {
     throw new Error(`Template clone mode failed: template file not found at ${resolvedTemplate}`);
   }

@@ -27,7 +27,7 @@ The phase tracker runs the market research pipeline in discrete stages, persisti
 ### Start a new run
 
 ```bash
-npm run phase:run -- --run-id vn-es-001 --country Vietnam --industry "Energy Services" --through 2
+npm run phase:run -- --run-id id-cc-001 --country Indonesia --industry "Cold-Chain Logistics" --through 2
 ```
 
 `--country` and `--industry` are required for new runs. `--through` sets the last stage to execute (inclusive).
@@ -35,7 +35,7 @@ npm run phase:run -- --run-id vn-es-001 --country Vietnam --industry "Energy Ser
 ### Resume a run
 
 ```bash
-npm run phase:run -- --run-id vn-es-001 --through 2a
+npm run phase:run -- --run-id id-cc-001 --through 2a
 ```
 
 Automatically resumes from the next pending stage. No `--country`/`--industry` needed for existing runs.
@@ -43,14 +43,14 @@ Automatically resumes from the next pending stage. No `--country`/`--industry` n
 ### Run to completion
 
 ```bash
-npm run phase:run -- --run-id vn-es-001 --through 9
+npm run phase:run -- --run-id id-cc-001 --through 9
 ```
 
 ### Check run status
 
 ```bash
-npm run phase:status -- --run-id vn-es-001
-npm run phase:status -- --run-id vn-es-001 --json
+npm run phase:status -- --run-id id-cc-001
+npm run phase:status -- --run-id id-cc-001 --json
 ```
 
 Shows completed/failed/pending stages, gate results, durations.
@@ -66,9 +66,9 @@ npm run phase:list -- --limit 50 --json
 ### Inspect artifact paths
 
 ```bash
-npm run phase:paths -- --run-id vn-es-001
-npm run phase:paths -- --run-id vn-es-001 --stage 2a
-npm run phase:paths -- --run-id vn-es-001 --json
+npm run phase:paths -- --run-id id-cc-001
+npm run phase:paths -- --run-id id-cc-001 --stage 2a
+npm run phase:paths -- --run-id id-cc-001 --json
 ```
 
 ### Run tests

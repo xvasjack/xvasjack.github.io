@@ -1,4 +1,5 @@
 require('dotenv').config();
+const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -10,6 +11,7 @@ const { securityHeaders, rateLimiter, sanitizePath } = require('./shared/securit
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
+const { requireAccessToken } = require('./access-guard');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -36,9 +38,6 @@ if (missingVars.length > 0) {
 }
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
-}
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
@@ -350,7 +349,7 @@ wss.on('connection', (ws, _req) => {
 
   trackingContext.run(sessionTracker, () => {
   let deepgramConnection = null;
-  const sessionId = Date.now().toString();
+  const sessionId = crypto.randomUUID();
   const audioChunks = [];
   let fullTranscript = '';
   let detectedLanguage = 'en';
@@ -859,8 +858,11 @@ wss.on('connection', (ws, _req) => {
   }); // end trackingContext.run
 });
 
+// Routes below return transcripts or recordings. They are closed unless
+// TRANSCRIPTION_ACCESS_TOKEN is set; callers send it in X-Access-Token.
+
 // Endpoint to get session data (for generating reports after recording)
-app.get('/api/transcription-session/:sessionId', (req, res) => {
+app.get('/api/transcription-session/:sessionId', requireAccessToken, (req, res) => {
   const session = activeSessions.get(req.params.sessionId);
   if (!session) {
     return res.status(404).json({ error: 'Session not found or expired' });
@@ -874,7 +876,7 @@ app.get('/api/transcription-session/:sessionId', (req, res) => {
 });
 
 // Endpoint to get audio from session (base64)
-app.get('/api/transcription-session/:sessionId/audio', (req, res) => {
+app.get('/api/transcription-session/:sessionId/audio', requireAccessToken, (req, res) => {
   const session = activeSessions.get(req.params.sessionId);
   if (!session) {
     return res.status(404).json({ error: 'Session not found or expired' });
@@ -892,7 +894,7 @@ app.get('/api/transcription-session/:sessionId/audio', (req, res) => {
 });
 
 // Download recording from R2
-app.get('/api/recording/:r2Key(*)', async (req, res) => {
+app.get('/api/recording/:r2Key(*)', requireAccessToken, async (req, res) => {
   const r2Key = sanitizePath(req.params.r2Key);
 
   if (!r2Key) {
@@ -920,7 +922,7 @@ app.get('/api/recording/:r2Key(*)', async (req, res) => {
 });
 
 // List recordings for a session (checks both memory and R2)
-app.get('/api/recording-status/:sessionId', async (req, res) => {
+app.get('/api/recording-status/:sessionId', requireAccessToken, async (req, res) => {
   const sessionId = req.params.sessionId;
   const session = activeSessions.get(sessionId);
 

@@ -1,0 +1,12 @@
+# Generated at runtime or by tests/scripts — not source files
+reports/
+preflight-reports/
+release-reports/
+test-output.pptx
+vietnam-output.pptx
+check-issues.json
+stress-report.md
+stress-lab-report.md
+stress-test-report.md
+fixtures/wave2b/.baselines/
+fixtures/wave2b/.structural-baselines/

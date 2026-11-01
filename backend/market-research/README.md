@@ -1,81 +1,39 @@
-# Market Research Tool (Plain English)
+# Market Research Deck Generator
 
-## What this project does
+Express service that turns one request (country + industry + optional client context)
+into a single-country market research PowerPoint deck and emails it to the requester.
 
-You send one request with:
-- country (single-country mode)
-- industry
-- client context
+Example request: "Cold-chain logistics market entry in Indonesia for a European investor".
 
-The system returns:
-- a market research PPT deck
-- runInfo about what happened during the run
+## Pipeline
 
-## Main goal
+1. Read request — `server.js`, `research-framework.js`
+2. Research the target country with web-grounded AI calls — `research-engine.js`, `research-agents.js`
+3. Combine the research into one storyline — `research-engine.js`
+4. Check content depth and story flow — `content-gates.js`, `content-quality-check.js`, `story-flow-check.js`
+5. Build slides from template geometry — `deck-builder-single.js`, `ppt-utils.js`, `template-patterns.json`
+6. Check that the PPTX opens cleanly — `deck-file-check.js`, `pptx-fileSafety-pipeline.js`
+7. Deliver by email and store run info — `server.js`
 
-The most important thing is:
-1. deep content
-2. useful insights
-3. clear strategy story
+`template-patterns.json` holds slide geometry, fonts and colours only. It holds no slide text.
 
-Formatting is still important, but secondary.
+## Commands
 
-## The 7-step flow
+- Run locally: `npm run dev`
+- Tests (from `backend/`): `npx jest market-research`
+- Release checks: `npm run preflight:release`, `npm run smoke:readiness`
+- Print the system map: `npm run explain:system`
+- Stage-by-stage runs: `npm run phase:run -- --help`
 
-1. Read request  
-File: `server.js`
+## API
 
-2. Research the target country  
-File: `research-engine.js`
+- `POST /api/market-research` — start a run (result is emailed)
+- `GET /api/runInfo` — details of the latest run
+- `GET /api/latest-ppt` — download the latest deck
+- `GET /api/system-map` — machine-readable flow map
 
-3. Build one strategy story  
-File: `research-engine.js`
-
-4. Check content quality  
-Files: `content-gates.js`, `content-quality-check.js`
-
-5. Build slides  
-Files: `deck-builder-single.js`, `deck-builder.js`, `ppt-utils.js`
-
-6. Check PPT file safety  
-File: `deck-file-check.js`
-
-7. Deliver result + store runInfo  
-File: `server.js`
-
-## Important terms (simple)
-
-- Content check: score for depth and clarity
-- Content size check: warns if content is huge (default does not cut text)
-- File safety: checks if PPT file can open cleanly
-- Style match: how visually close to template the deck is
-
-## Key files you should know first
-
-- `server.js`: API entrypoint and stage flow
-- `research-engine.js`: research and result-combining engine
-- `deck-builder-single.js`: actual slide building logic
-- `content-gates.js`: content readiness checks
-- `deck-file-check.js`: final PPT safety checks
-- `system-map.js`: plain-English map of system
-
-## Useful commands
-
-- Run API locally: `npm run dev`
-- Preflight check: `npm run preflight:release`
-- Smoke check: `npm run smoke:readiness`
-- Print plain system map: `npm run explain:system`
-
-## API endpoints
-
-- `POST /api/market-research`: main run
-- `GET /api/runInfo`: latest run runInfo
-- `GET /api/latest-ppt`: latest PPT download
-- `GET /api/system-map`: plain-English flow map
-
-## Where to read next
+## More docs
 
 - `docs/logic-flow.md`
 - `docs/file-map.md`
-- `docs/plain-english-map.md`
-- `PLAIN_LANGUAGE_RULES.md`
+- `docs/PHASE_TRACKER_QUICKSTART.md`

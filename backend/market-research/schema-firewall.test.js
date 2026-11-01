@@ -61,9 +61,9 @@ function makeValidMultiCountrySynthesis() {
         slideTitle: 'Vietnam - Japanese Companies',
         subtitle: 'Strong presence',
         players: [
-          { name: 'JERA', website: 'https://jera.co.jp', description: 'Major Japanese energy company with $30B revenue and 15% market share in Vietnamese LNG imports since 2019.' },
-          { name: 'Mitsui', website: 'https://mitsui.com', description: 'Trading giant with energy portfolio worth $5B in Southeast Asia operations.' },
-          { name: 'TEPCO', website: 'https://tepco.co.jp', description: 'Largest Japanese utility expanding into Vietnam via JV partnerships since 2020.' },
+          { name: 'TREY', website: 'https://trey.example', description: 'Major Japanese energy company with $30B revenue and 15% market share in Vietnamese LNG imports since 2019.' },
+          { name: 'Wingtip', website: 'https://wingtip.example', description: 'Trading giant with energy portfolio worth $5B in Southeast Asia operations.' },
+          { name: 'COHO', website: 'https://coho.example', description: 'Largest Japanese utility expanding into Vietnam via JV partnerships since 2020.' },
         ],
         marketInsight: 'Japanese firms dominate LNG segment',
         dataType: 'company_comparison',
@@ -72,9 +72,9 @@ function makeValidMultiCountrySynthesis() {
         slideTitle: 'Vietnam - Local Players',
         subtitle: 'State-dominated',
         players: [
-          { name: 'PetroVietnam', website: 'https://pvn.vn', description: 'State-owned oil and gas monopoly with $15B revenue controlling 85% of upstream production and all refining capacity.' },
-          { name: 'EVN', website: 'https://evn.com.vn', description: 'National electricity utility managing 95% of grid capacity with plans to invest $10B by 2025.' },
-          { name: 'PV Gas', website: 'https://pvgas.com.vn', description: 'Gas distribution subsidiary with $3B revenue and 70% market share in domestic gas transport.' },
+          { name: 'Northwind Petroleum', website: 'https://northwind-petroleum.example', description: 'State-owned oil and gas monopoly with $15B revenue controlling 85% of upstream production and all refining capacity.' },
+          { name: 'NPU', website: 'https://npu.example', description: 'National electricity utility managing 95% of grid capacity with plans to invest $10B by 2025.' },
+          { name: 'NWP Gas', website: 'https://nwp-gas.example', description: 'Gas distribution subsidiary with $3B revenue and 70% market share in domestic gas transport.' },
         ],
         concentration: 'High SOE concentration',
         dataType: 'company_comparison',
@@ -83,9 +83,9 @@ function makeValidMultiCountrySynthesis() {
         slideTitle: 'Vietnam - Foreign Companies',
         subtitle: 'Growing presence',
         players: [
-          { name: 'ExxonMobil', website: 'https://exxonmobil.com', description: 'US major with Blue Whale gas project worth $10B, entered Vietnam in 2009 via exploration licenses.' },
-          { name: 'TotalEnergies', website: 'https://totalenergies.com', description: 'French supermajor with $2B invested across offshore blocks and renewable energy projects since 2015.' },
-          { name: 'Shell', website: 'https://shell.com', description: 'Dutch-British major focused on LNG trading and downstream retail operations in Vietnam since 2010.' },
+          { name: 'Humongous Oil', website: 'https://humongous-oil.example', description: 'US major with offshore gas project worth $10B, entered Vietnam in 2009 via exploration licenses.' },
+          { name: 'VanArsdel Energies', website: 'https://vanarsdel-energies.example', description: 'French supermajor with $2B invested across offshore blocks and renewable energy projects since 2015.' },
+          { name: 'Southridge', website: 'https://southridge.example', description: 'Dutch-British major focused on LNG trading and downstream retail operations in Vietnam since 2010.' },
         ],
         competitiveInsight: 'Western majors focus on upstream',
         dataType: 'company_comparison',
@@ -93,7 +93,7 @@ function makeValidMultiCountrySynthesis() {
     },
     depth: {
       dealEconomics: { slideTitle: 'Vietnam - Deal Economics', typicalDealSize: { min: '$5M', max: '$50M', average: '$20M' } },
-      partnerAssessment: { slideTitle: 'Vietnam - Partner Assessment', partners: [{ name: 'PVN', type: 'SOE', partnershipFit: 4 }] },
+      partnerAssessment: { slideTitle: 'Vietnam - Partner Assessment', partners: [{ name: 'NWP', type: 'SOE', partnershipFit: 4 }] },
       entryStrategy: { slideTitle: 'Vietnam - Entry Strategy', options: [{ mode: 'JV', timeline: '12 months', investment: '$10M' }] },
       implementation: {
         slideTitle: 'Vietnam - Roadmap',
@@ -110,15 +110,15 @@ function makeValidMultiCountrySynthesis() {
     },
     summary: {
       timingIntelligence: { triggers: [{ trigger: 'PDP8 execution', impact: 'Procurement wave', action: 'Enter before Q3 2026' }] },
-      lessonsLearned: { failures: [{ company: 'ENGIE', year: '2018', reason: 'Wrong partner', lesson: 'Choose SOE partner' }] },
+      lessonsLearned: { failures: [{ company: 'CONTOSO', year: '2018', reason: 'Wrong partner', lesson: 'Choose SOE partner' }] },
       opportunities: [{ opportunity: 'ESCO market', size: '$90M', timing: '2026', action: 'Enter via JV' }],
       obstacles: [{ obstacle: 'Bureaucracy', severity: 'High', mitigation: 'Local partner' }],
       ratings: { attractiveness: 7, attractivenessRationale: 'Large growing market', feasibility: 6, feasibilityRationale: 'Complex regulations' },
       keyInsights: [
-        { title: 'Gas supply crunch creates ESCO demand', data: 'Erawan output fell 30% in 2024', pattern: 'Structural supply gap', implication: 'Should position as cost management solution', timing: 'Q1 2026' },
+        { title: 'Gas supply crunch creates ESCO demand', data: 'Offshore field output fell 30% in 2024', pattern: 'Structural supply gap', implication: 'Should position as cost management solution', timing: 'Q1 2026' },
         { title: 'Labor costs drive energy efficiency', data: 'Wages rose 8% annually 2021-2024', pattern: 'Aging workforce inflation', implication: 'Target CFOs with ROI messaging', timing: 'Q2 2026' },
       ],
-      recommendation: 'Enter via JV with PVN subsidiary',
+      recommendation: 'Enter via JV with NWP subsidiary',
       goNoGo: { criteria: [{ criterion: 'Market size', met: true, evidence: '$500M TAM' }], overallVerdict: 'GO' },
     },
   };
@@ -134,7 +134,7 @@ function makeValidSingleCountrySynthesis() {
       'Thailand energy services market reached $320M in 2024 growing at 14% CAGR. (Refer: Chapter 2)',
       'Regulatory reforms under Energy Conservation Act 2022 mandate audits for large facilities. (Refer: Chapter 1)',
       'Market demand driven by aging infrastructure and rising labor costs. (Refer: Chapter 2)',
-      'Recommended entry via JV with B.Grimm targeting industrial zones. (Refer: Chapter 3)',
+      'Recommended entry via JV with A.Datum targeting industrial zones. (Refer: Chapter 3)',
     ],
     marketOpportunityAssessment: {
       totalAddressableMarket: '1200 factories x $500K avg spend x 15% savings = $90M TAM',
@@ -144,12 +144,12 @@ function makeValidSingleCountrySynthesis() {
     },
     competitivePositioning: {
       keyPlayers: [
-        { name: 'ENGIE', website: 'https://engie.com', strengths: 'Global brand', weaknesses: 'Limited regional presence', threat: 'Could block JV partners', description: 'French energy services major with $2B APAC revenue and 12% market share in Thai industrial ESCO contracts since 2018 JV with B.Grimm.' },
-        { name: 'Schneider Electric', website: 'https://schneider-electric.com', strengths: 'Tech platform', weaknesses: 'Premium pricing', threat: 'Technology lock-in', description: 'Global EMS leader with $35B revenue entering Thai ESCO market via digital solutions targeting manufacturing sector since 2020.' },
-        { name: 'Daikin', website: 'https://daikin.com', strengths: 'HVAC dominance', weaknesses: 'Narrow scope', threat: 'Could expand services', description: 'Japanese HVAC leader with 40% Thai market share generating $800M regional revenue through direct and dealer channels since 1990.' },
+        { name: 'CONTOSO', website: 'https://contoso.example', strengths: 'Global brand', weaknesses: 'Limited regional presence', threat: 'Could block JV partners', description: 'French energy services major with $2B APAC revenue and 12% market share in Thai industrial ESCO contracts since 2018 JV with A.Datum.' },
+        { name: 'Fabrikam Electric', website: 'https://fabrikam-electric.example', strengths: 'Tech platform', weaknesses: 'Premium pricing', threat: 'Technology lock-in', description: 'Global EMS leader with $35B revenue entering Thai ESCO market via digital solutions targeting manufacturing sector since 2020.' },
+        { name: 'Alpine Climate', website: 'https://alpine-climate.example', strengths: 'HVAC dominance', weaknesses: 'Narrow scope', threat: 'Could expand services', description: 'Japanese HVAC leader with 40% Thai market share generating $800M regional revenue through direct and dealer channels since 1990.' },
       ],
       whiteSpaces: ['Provincial industrial zones underserved', 'Combined heat-power efficiency'],
-      potentialPartners: [{ name: 'B.Grimm', website: 'https://bgrimm.com', rationale: 'Strong government relationships and industrial park network' }],
+      potentialPartners: [{ name: 'A.Datum', website: 'https://adatum.example', rationale: 'Strong government relationships and industrial park network' }],
     },
     keyInsights: [
       { title: 'Labor cost pressure makes energy savings an HR priority', data: 'Manufacturing wages rose 8% annually 2021-2024 while productivity gained only 2%.', pattern: 'Aging workforce drives wage inflation without productivity gains.', implication: 'Position energy efficiency as cost management targeting CFOs.', timing: 'Move by Q2 2026 before budget cycles lock.' },
@@ -225,12 +225,12 @@ describe('Schema Firewall', () => {
   // ====== 6. Coerce: canonical key takes precedence over legacy ======
   test('coerce drops legacy key when canonical already exists', () => {
     const synthesis = {
-      competitors: { japanesePlayers: { players: [{ name: 'JERA' }] } },
+      competitors: { japanesePlayers: { players: [{ name: 'TREY' }] } },
       competitorsAnalysis: { japanesePlayers: { players: [{ name: 'Old' }] } },
     };
     const ledger = createActionLedger();
     const result = coerce(synthesis, ledger);
-    expect(result.competitors.japanesePlayers.players[0].name).toBe('JERA');
+    expect(result.competitors.japanesePlayers.players[0].name).toBe('TREY');
     expect(result.competitorsAnalysis).toBeUndefined();
     expect(ledger.getEntries().some((e) => e.action === 'dropped')).toBe(true);
   });
@@ -239,14 +239,14 @@ describe('Schema Firewall', () => {
   test('coerce wraps bare competitor array in players object', () => {
     const synthesis = {
       competitors: {
-        japanesePlayers: [{ name: 'JERA' }, { name: 'Mitsui' }],
-        localMajor: { players: [{ name: 'PVN' }] },
+        japanesePlayers: [{ name: 'TREY' }, { name: 'Wingtip' }],
+        localMajor: { players: [{ name: 'NWP' }] },
       },
     };
     const ledger = createActionLedger();
     const result = coerce(synthesis, ledger);
     expect(result.competitors.japanesePlayers.players).toHaveLength(2);
-    expect(result.competitors.japanesePlayers.players[0].name).toBe('JERA');
+    expect(result.competitors.japanesePlayers.players[0].name).toBe('TREY');
     expect(ledger.getEntries().some((e) => e.details?.includes('Wrapped bare array'))).toBe(true);
   });
 

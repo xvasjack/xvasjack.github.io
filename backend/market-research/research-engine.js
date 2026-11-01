@@ -2412,17 +2412,17 @@ WRITING STYLE (MANDATORY — match this EXACTLY):
 - Frame EVERY finding in terms of CLIENT IMPLICATIONS: "This enables foreign entrants to..." not "The law states..."
 - Use CONDITIONAL language where appropriate: "may become more streamlined", "will depend on implementation", "remains to be seen"
 - NEVER make absolute claims without evidence. Hedge uncertain points.
-- Cite specific law names with numbers inline: "Petroleum Law No. 12/2022/QH15" not "the petroleum law"
+- Cite specific law names with numbers inline: "[Law name] No. [number]/[year]" not "the sector law"
 - Every slide title subtitle should be a THESIS STATEMENT — the key takeaway, not a description. Example:
-  GOOD: "Vietnam is selectively opening competition, with recent reforms prioritizing private-sector participation in demand-side efficiency"
-  BAD: "Overview of Vietnam's regulatory environment"
+  GOOD: "Recent licensing reforms open the sector to foreign operators, but local-partner rules still shape the entry route"
+  BAD: "Overview of the country's regulatory environment"
 - Use strategic vocabulary: "structurally attractive", "underpinned by", "selectively positioned", "scalable commercial models"
 - Connect data points causally: "X happened because Y, which means Z for the client"
 - NEVER write generic filler like "the market is growing" — always attach numbers, timelines, and implications
 `;
 
 // ============ TEMPLATE NARRATIVE PATTERN ============
-// Extracted from the Escort template's actual slide structure — the PATTERN, not content.
+// Standard narrative structure for a market-entry deck — the PATTERN, not content.
 // Used by buildStoryPlan() to guide narrative arc for ANY industry/country.
 
 const TEMPLATE_NARRATIVE_PATTERN = {
@@ -2435,23 +2435,23 @@ const TEMPLATE_NARRATIVE_PATTERN = {
       eachSlide:
         'Thesis title stating client implication, NOT topic description. 3-5 specific laws/regulations with year+enforcement. Transition table: pre-reform → key change → resulting landscape.',
       example:
-        '1.1 The Foundational Acts: Defining Control & Competition — Vietnam is selectively opening competition, with recent reforms prioritizing private-sector participation',
+        '1.1 Foundational Acts: Who Controls the Sector — Licensing reforms open the sector to private operators, while permits still favor incumbents',
     },
     market: {
       count: 6,
-      flow: 'total supply (macro context) → demand by sector (where the money is) → generation mix (infrastructure) → subsector deep-dive → pricing (unit economics) → services market (client actual market)',
+      flow: 'total market (macro context) → demand by segment (where the money is) → capacity and infrastructure → subsector deep-dive → pricing (unit economics) → services market (client actual market)',
       eachSlide:
         'Chart with historical + projected data. 2-3 bullet insights connecting data to client opportunity. Source citations with specific report names.',
       example:
-        '2.3 Electricity & Power Generation — Rapid capacity expansion underpinned by coal-to-gas transition creates $4.2B services opportunity',
+        '2.3 Capacity & Infrastructure — Warehouse capacity growth lags export demand, creating a $[X]M services opportunity',
     },
     competitors: {
       count: 5,
-      flow: 'Japanese/similar peers (what others like client did) → local majors (who to partner with) → foreign players (who to compete with) → case study (what worked) → M&A (what is available)',
+      flow: 'peer investors (what others like the client did) → local majors (who to partner with) → foreign players (who to compete with) → case study (what worked) → M&A (what is available)',
       eachSlide:
         'Company profiles: name, website, revenue, market share, entry year, entry mode, local partner. Strategic assessment per company. 45-60 word descriptions.',
       example:
-        '3.1 Japanese Energy Companies — JERA and Tokyo Gas have established footholds through JVs, creating both partnership templates and competitive pressure',
+        '3.1 Peer Investors — Two peer investors have established footholds through JVs, creating both partnership templates and competitive pressure',
     },
     depth: {
       count: 5,
@@ -2492,7 +2492,7 @@ async function buildStoryPlan(researchData, country, industry, scope) {
     };
   }
 
-  const storyPrompt = `You are a SENIOR PARTNER at McKinsey planning the narrative strategy for a ${scope.industry} market entry presentation for ${country}.
+  const storyPrompt = `You are a senior strategy consultant planning the narrative strategy for a ${scope.industry} market entry presentation for ${country}.
 
 This is the most important step. The story you plan HERE determines whether the final deck reads like a strategic advisory document or a Wikipedia dump. Think deeply.
 
@@ -2685,7 +2685,7 @@ Return JSON:
 {
   "foundationalActs": {
     "slideTitle": "${country} - ${industry} Foundational Acts",
-    "subtitle": "THESIS STATEMENT: 1-2 sentences (100-180 chars) explaining the KEY TAKEAWAY for the client. Example: '${country} is selectively opening competition, with recent reforms prioritizing private-sector participation in demand-side efficiency'",
+    "subtitle": "THESIS STATEMENT: 1-2 sentences (100-180 chars) explaining the KEY TAKEAWAY for the client. Example: 'Recent licensing reforms open ${industry} in ${country} to foreign operators, but local-partner rules still shape the entry route'",
     "acts": [
       {"name": "Official Act Name", "year": "YYYY", "requirements": "20-35 words per cell with specific regulatory citations and article numbers", "penalties": "20-35 words per cell with specific monetary values, imprisonment terms, or administrative actions", "enforcement": "20-35 words on enforcement reality: agency name, capacity, actual compliance rates"}
     ],
@@ -3232,7 +3232,7 @@ Return ONLY valid JSON.`;
   const prompt1 = `${commonIntro}
 
 Return JSON with ONLY the japanesePlayers section.
-IMPORTANT: Return exactly 3 Japanese companies. Include subsidiaries, JV partners, trading companies (sogo shosha), and any Japanese firm with energy/industrial operations in ${country}.
+IMPORTANT: Return exactly 3 Japanese companies. Include subsidiaries, JV partners, trading companies (sogo shosha), and any Japanese firm with ${industry} or related operations in ${country}.
 
 {
   "japanesePlayers": {
@@ -5467,7 +5467,7 @@ async function finalReviewSynthesis(countryAnalysis, country, industry) {
     [policyPreview, marketPreview, competitorsPreview, summaryPreview, depthPreview].join('\n')
   );
 
-  const reviewPrompt = `You are a senior partner at McKinsey doing a FINAL quality review of a market entry report for ${industry} in ${country} before it goes to the client CEO.
+  const reviewPrompt = `You are a senior strategy consultant doing a FINAL quality review of a market entry report for ${industry} in ${country} before it is delivered.
 Current year: ${CURRENT_YEAR}. Do NOT endorse or require future-dated facts beyond ${CURRENT_YEAR}.
 
 This is NOT a research review — the research is done. This is a PRESENTATION review. You are checking whether the assembled slides tell a coherent, credible story.
@@ -5522,7 +5522,7 @@ Return JSON:
     }
   ],
   "strengths": ["what's working well — max 3"],
-  "narrativeAssessment": "2-sentence assessment of whether this reads like a McKinsey deck or a Wikipedia dump",
+  "narrativeAssessment": "2-sentence assessment of whether this reads like a strategy consulting deck or a Wikipedia dump",
   "sectionFixes": {
     "policy": "specific instruction to improve policy section, or null if good",
     "market": "specific instruction to improve market section, or null if good",
@@ -7021,12 +7021,12 @@ async function synthesizeSingleCountry(countryAnalysis, scope) {
   console.log('\n=== STAGE 3: SINGLE COUNTRY DEEP DIVE ===');
   console.log(`Generating deep analysis for ${countryAnalysis.country}...`);
 
-  const systemPrompt = `You are a senior partner at McKinsey writing a market entry briefing. Your reader is a CEO - intelligent, time-poor, and needs to make a $10M+ decision based on your analysis.
+  const systemPrompt = `You are a senior strategy consultant writing a market entry briefing. Your reader is a CEO - intelligent, time-poor, and needs to make a $10M+ decision based on your analysis.
 
 === WRITING STYLE ===
-Write like a top-tier strategy partner: professional, direct, analytical. No fluff, no jargon padding.
+Write like a senior strategy consultant: professional, direct, analytical. No fluff, no jargon padding.
 
-GOOD: "PDP8 accelerates gas-to-power procurement, but tender qualification rules still privilege incumbents with local execution track records."
+GOOD: "New licensing rules speed up cold-storage permits, but tender qualification rules still favor incumbents with local warehouse networks."
 BAD (too simple): "The market is growing so we should enter now."
 BAD (too jargon): "Regulatory tailwinds create optionality vectors across the entry architecture."
 
@@ -7035,29 +7035,29 @@ BAD (too jargon): "Regulatory tailwinds create optionality vectors across the en
 - Every sentence should either present a fact, explain why it matters, or recommend an action.
 
 === DEPTH REQUIREMENTS (THIS IS CRITICAL) ===
-Surface-level analysis is WORTHLESS. The CEO can Google basic facts. You must provide:
+Surface-level analysis adds no value. The CEO can search basic facts. You must provide:
 
 1. DATA TRIANGULATION: Cross-reference multiple sources. If one source says market size is $500M and another says $300M, explain the discrepancy and which is more reliable.
 
 2. CAUSAL CHAINS: Don't just state facts - explain the mechanism.
-   - SHALLOW: "Energy prices are rising"
-   - DEEP: "Energy prices rose 18% in 2024 because domestic gas fields are depleting (PTTEP's Erawan output fell 30%), forcing more expensive LNG imports. This creates predictable, structural demand for efficiency services."
+   - SHALLOW: "Storage costs are rising"
+   - DEEP: "Cold-storage rents rose 18% in 2024 because new capacity lagged seafood export growth (export volumes rose 25%), pushing processors to book space a year ahead. This creates predictable, structural demand for third-party cold-chain services."
 
 3. NON-OBVIOUS CONNECTIONS: The value is in connecting dots others miss.
    - OBVIOUS: "Aging population is a challenge"
-   - INSIGHT: "Aging population (median age 40.5, rising 0.4/year) means factories face 3-5% annual wage inflation, making energy cost reduction an HR problem, not just an engineering one. Pitch to CFOs, not plant managers."
+   - INSIGHT: "Aging population (median age 40, rising 0.4/year) means warehouses face 3-5% annual wage inflation, making automation an HR problem, not just an engineering one. Pitch to CFOs, not site managers."
 
 4. COMPETITIVE INTELLIGENCE THAT MATTERS: Not just "who competes" but "how they win and where they fail."
-   - WEAK: "ENGIE is a foreign competitor"
-   - STRONG: "ENGIE entered in 2018 via JV with B.Grimm, focused on industrial parks. They've won 12 contracts averaging $2M but struggle outside Bangkok due to B.Grimm's limited regional presence - an opening for partners with provincial networks."
+   - WEAK: "Contoso Logistics is a foreign competitor"
+   - STRONG: "Contoso Logistics (fictional example) entered in 2018 via a JV with Fabrikam Holdings, focused on port-side warehouses. It has won 12 contracts averaging $2M but struggles outside the capital because its partner has limited regional presence - an opening for partners with provincial networks."
 
 5. REGULATORY NUANCE: Not just "what's required" but "what's enforced vs. ignored."
-   - SURFACE: "Energy audits are mandatory for large factories"
-   - DEPTH: "The 2022 Energy Conservation Act mandates audits for factories >2MW, but DEDE has only 23 auditors for 4,200 qualifying facilities - enforcement is complaint-driven. Smart players build relationships with DEDE to get early warning of crackdown sectors."
+   - SURFACE: "Temperature logging is mandatory for food warehouses"
+   - DEPTH: "Food safety rules require continuous temperature logging for cold stores above 1,000 m2, but the inspection agency has only 23 inspectors for 4,200 qualifying sites - enforcement is complaint-driven. Operators with certified monitoring can turn compliance into a selling point as enforcement tightens."
 
 6. TIMING INTELLIGENCE: Why NOW, not 2 years ago or 2 years from now?
    - WEAK: "The market is growing"
-   - STRONG: "Three factors converge in 2026: (1) PDP8 execution milestones accelerate procurement, (2) domestic gas decline tightens supply, (3) major LNG-linked projects move into execution windows. First movers secure preferred local partners before bidding intensity rises."
+   - STRONG: "Three factors converge in 2026: (1) new food safety rules take effect, (2) export volumes outgrow existing cold storage, (3) two large distribution parks open near the main port. First movers secure preferred local partners before bidding intensity rises."
 
 === STORY FLOW ===
 Each slide must answer the reader's mental question and create the next one:
@@ -7106,17 +7106,17 @@ Return JSON with:
 
 {
   "executiveSummary": [
-    "4 analytical paragraphs, 3-4 sentences each (50-80 words per paragraph). Write like a senior McKinsey partner — strategic, analytical, forward-looking. NOT bullet points — full flowing paragraphs. Each paragraph MUST end with a cross-reference like '(Refer: Chapter 1)'. Use conditional language ('may', 'remains to be seen', 'will depend on') for uncertain points. Frame everything in terms of client opportunity/risk, not just facts.",
-    "Paragraph 1: MARKET OPPORTUNITY OVERVIEW — Quantify the prize with specific numbers: market size, growth rate, foreign player share, TAM calculation. End with '(Refer: Chapter 2)'. Example: 'Vietnam's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. (Refer: Chapter 2)'",
+    "4 analytical paragraphs, 3-4 sentences each (50-80 words per paragraph). Write like a senior strategy consultant — strategic, analytical, forward-looking. NOT bullet points — full flowing paragraphs. Each paragraph MUST end with a cross-reference like '(Refer: Chapter 1)'. Use conditional language ('may', 'remains to be seen', 'will depend on') for uncertain points. Frame everything in terms of client opportunity/risk, not just facts.",
+    "Paragraph 1: MARKET OPPORTUNITY OVERVIEW — Quantify the prize with specific numbers: market size, growth rate, foreign player share, TAM calculation. End with '(Refer: Chapter 2)'. Example: 'The [country] [industry] market reached $[X]M in [year], growing at [Y]% CAGR since [year]. (Refer: Chapter 2)'",
     "Paragraph 2: REGULATORY LANDSCAPE & TRAJECTORY — Current regulatory state, key policy shifts, where regulation is heading. Reference specific law names, enforcement realities. End with '(Refer: Chapter 1)'",
     "Paragraph 3: MARKET DEMAND & GROWTH PROJECTIONS — Demand drivers with evidence, growth projections with sources, sector-specific opportunities. End with '(Refer: Chapter 2)'",
     "Paragraph 4: COMPETITIVE POSITIONING & RECOMMENDED ENTRY PATH — Competitive gaps, recommended entry mode, specific partner/target names, timeline. End with '(Refer: Chapter 3)'"
   ],
 
   "marketOpportunityAssessment": {
-    "totalAddressableMarket": "$ value with calculation logic (e.g., '1,200 factories × avg $500K energy spend × 15% savings potential = $90M TAM')",
+    "totalAddressableMarket": "$ value with calculation logic (e.g., '1,200 food processors × avg $75K annual cold-storage spend = $90M TAM')",
     "serviceableMarket": "$ value with realistic penetration assumptions and WHY those assumptions",
-    "growthTrajectory": "CAGR with SPECIFIC drivers - not 'growing demand' but 'mandatory ISO 50001 compliance by 2026 for exporters (40% of manufacturing)'",
+    "growthTrajectory": "CAGR with SPECIFIC drivers - not 'growing demand' but 'mandatory temperature-logging compliance by 2026 for food exporters (40% of processors)'",
     "timingConsiderations": "Why NOW is the right time - regulatory triggers, competitive gaps, market readiness signals"
   },
 
@@ -7137,16 +7137,16 @@ Return JSON with:
 
   "keyInsights": [
     {
-      "title": "Max 10 words. The non-obvious conclusion. Example: 'Labor cost pressure makes energy savings an HR priority'",
-      "data": "The specific evidence with AT LEAST ONE NUMBER and a TIMEFRAME. Example: 'Manufacturing wages rose 8% annually 2021-2024 while productivity gained only 2%. Average factory worker age is 45, up from 38 in 2014.'",
-      "pattern": "The causal mechanism (SO WHAT). Example: 'Aging workforce drives wage inflation without productivity gains. Factories facing 5-6% annual cost increases have exhausted labor optimization - energy is the next lever.'",
-      "implication": "The strategic response (NOW WHAT) with ACTION VERB and TIMING. Example: 'Position energy efficiency as cost management, not sustainability. Target CFOs with ROI messaging in Q1-Q2 2026 before budget cycles lock. The urgency is financial, not environmental.'",
+      "title": "Max 10 words. The non-obvious conclusion. Example: 'Labor cost pressure makes warehouse automation an HR priority'",
+      "data": "The specific evidence with AT LEAST ONE NUMBER and a TIMEFRAME. Example: 'Warehouse wages rose 8% annually 2021-2024 while productivity gained only 2%. Average warehouse worker age is 45, up from 38 in 2014.'",
+      "pattern": "The causal mechanism (SO WHAT). Example: 'Aging workforce drives wage inflation without productivity gains. Operators facing 5-6% annual cost increases have exhausted labor optimization - automation is the next lever.'",
+      "implication": "The strategic response (NOW WHAT) with ACTION VERB and TIMING. Example: 'Position automation as cost management, not modernization. Target CFOs with ROI messaging in Q1-Q2 2026 before budget cycles lock. The urgency is financial, not technical.'",
       "timing": "REQUIRED. When to act and why. Example: 'Move by Q2 2026 — new compliance obligations begin in 2027 while current incentive windows close in late 2027. 18-month window for de-risked setup.'"
     },
     "Provide 3-5 insights. Each must reveal something that requires connecting multiple data points.",
     "COMPLETE CHAIN REQUIRED: data (with number + year) → pattern (causal link) → implication (action verb: 'should prioritize', 'recommend', 'target') → timing (specific deadline or window)",
     "TEST: If someone could find this insight on the first page of Google results, it's too obvious.",
-    "GOOD: 'Southern Vietnam grid congestion blocks new power additions in key industrial zones, creating captive demand for on-site efficiency and reliability services. Recommend targeting high-load export manufacturers in the next budget cycle before grid reinforcement reduces urgency.'"
+    "GOOD: 'Congestion at the main export port slows reefer container turnaround, creating captive demand for near-port cold storage. Recommend targeting high-volume seafood exporters in the next budget cycle before the planned port expansion reduces urgency.'"
   ],
 
   "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"]
@@ -7158,7 +7158,7 @@ CRITICAL QUALITY STANDARDS:
 3. SPECIFICITY. Every number needs a year. Every company needs context. Every regulation needs an enforcement reality check.
 4. COMPETITIVE EDGE. The reader should learn something they couldn't find in an hour of desk research.
 5. ACTIONABLE CONCLUSIONS. End each section with what the reader should DO with this information.
-6. PROFESSIONAL PROSE. Write like a senior McKinsey strategy team - clear, precise, analytical. Use technical terms where they add precision, but always explain significance.
+6. PROFESSIONAL PROSE. Write like a senior strategy consulting team - clear, precise, analytical. Use technical terms where they add precision, but always explain significance.
 7. COMPANY DESCRIPTIONS: Every company in keyPlayers and potentialPartners MUST have a "description" field with 45-60 words. Include revenue, growth rate, market share, key services, geographic coverage, and competitive advantages. NEVER write generic one-liners like "X is a company that provides Y" — include specific metrics and strategic context.
 8. WEBSITE URLs: Every company MUST have a "website" field with the company's actual corporate website URL.
 
@@ -7194,7 +7194,7 @@ STOP. Before you return the JSON, run this checklist:
    - keyInsights "implication" field → MAX 50 words
    - If ANY field exceeds limits → REWRITE shorter while keeping numbers/specifics
 
-Do NOT skip this check. If you catch yourself returning JSON without checking word counts and number counts, you're shipping shallow work.`;
+Do NOT skip this check. JSON returned without checking word counts and number counts will be too shallow.`;
 
   const synthesis = await synthesizeWithFallback(prompt, {
     maxTokens: 16384,

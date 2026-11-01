@@ -150,7 +150,7 @@ async function policyResearchAgent(country, industry, _clientContext, pipelineSi
 
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., the official plan or law title with its number) and link to the original source URL.
 
 As a regulatory affairs specialist, research ${framework.name} for ${country}'s ${industry} market:
 
@@ -352,7 +352,7 @@ async function marketResearchAgent(country, industry, _clientContext, pipelineSi
 
         const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., the official plan or law title with its number) and link to the original source URL.
 
 CRITICAL - NAMED PROJECT DATA:
 For each energy source, list SPECIFIC named projects:
@@ -523,7 +523,7 @@ async function competitorResearchAgent(country, industry, _clientContext, pipeli
       const isJapanese = topicKey === 'competitors_japanese';
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., the official plan or law title with its number) and link to the original source URL.
 
 As a competitive intelligence analyst, research ${framework.name} for ${country}'s ${industry} market:
 
@@ -533,7 +533,7 @@ ${(framework.queries || []).map((q) => '- ' + q.replace('{country}', country)).j
 ${
   isJapanese
     ? `SPECIAL FOCUS - JAPANESE COMPANIES:
-- Tokyo Gas, Osaka Gas, JERA, Mitsubishi, Mitsui, Marubeni, Sumitomo, Itochu presence
+- Presence of Japanese trading houses (sogo shosha), utilities and industrial groups active in ${industry}
 - Entry mode (JV, subsidiary, partnership, M&A)
 - Specific projects with contract values in USD
 - Year of entry and current status (active/exited/expanding)
@@ -571,7 +571,7 @@ Your response MUST include a JSON block. Use this format:
   ],
   "japanesePlayers": [
     {
-      "company": "Tokyo Gas/Osaka Gas/JERA/etc",
+      "company": "Company Name",
       "website": "https://company.co.jp",
       "entryMode": "JV/Subsidiary/Partnership",
       "year": "2020",
@@ -711,7 +711,7 @@ async function contextResearchAgent(country, industry, clientContext, pipelineSi
 
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., the official plan or law title with its number) and link to the original source URL.
 
 As a strategy consultant advising a ${clientContext}, research ${framework.name} for ${country}'s ${industry} market:
 
@@ -892,7 +892,7 @@ AFTER your analysis, provide a JSON block with structured data:
 
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., the official plan or law title with its number) and link to the original source URL.
 
 As a senior M&A advisor helping a ${clientContext} enter ${country}'s ${industry} market, research ${framework.name}:
 
@@ -1113,7 +1113,7 @@ AFTER your analysis, provide a JSON block with structured data:
 
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., the official plan or law title with its number) and link to the original source URL.
 
 As a competitive intelligence analyst helping a ${clientContext} evaluate ${country}'s ${industry} market, research ${framework.name}:
 
@@ -1256,7 +1256,7 @@ async function universalResearchAgent(
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 Never use future-dated facts beyond ${currentYear}. If a source discusses a future target, present it as a target and include the official source and publication date.
 
-For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., the official plan or law title with its number) and link to the original source URL.
 
 As a senior consultant advising a ${clientContext} on a ${projectType} project, research ${topic.name} for ${country}'s ${industry} market:
 

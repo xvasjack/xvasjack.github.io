@@ -35,9 +35,6 @@ if (missingVars.length > 0) {
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
-}
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
 }
@@ -534,7 +531,7 @@ LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "multinational", "global network", offices/operations in 10+ countries
 - Revenue figures >$100M, employee count >1000
 - "Fortune 500", "Forbes Global"
-- Company name contains known MNC: Toyo Ink, Sakata, Flint, Siegwerk, Sun Chemical, DIC
+- Company name contains known MNC: Unilever, Nestle, Siemens, Samsung, Bosch, Panasonic
 - Website says "subsidiary of", "part of [X] Group", "member of [X] Group"
 - Company name ends with "Tbk" (Indonesian listed)
 
@@ -605,7 +602,7 @@ VALIDATION RULES:
 3. EXCLUSION CHECK:
 ${exclusionRules}
 - For "large companies" exclusion: REJECT both large multinationals AND their subsidiaries
-- Example: "DIC Indonesia", "Toyo Ink Philippines", "Sun Chemical" → REJECT (subsidiaries of large corporations)
+- Example: "Unilever Indonesia", "Nestle Philippines", "Siemens Malaysia" → REJECT (subsidiaries of large corporations)
 - Only accept truly independent SMEs and local companies
 
 4. SPAM CHECK:
@@ -1018,12 +1015,12 @@ RULES:
 - Generate 3-5 alternative phrasings/synonyms that mean the SAME specific thing
 - Include common industry terminology variations
 - Include abbreviations if applicable
-- Do NOT broaden the scope (e.g., don't suggest "printing ink" for "gravure ink" - stay specific)
+- Do NOT broaden the scope (e.g., don't suggest "industrial valves" for "butterfly valves" - stay specific)
 - Focus on how different people might describe this EXACT business
 
 Examples:
-- "gravure ink manufacturer" → "rotogravure ink producer", "gravure printing ink maker", "intaglio ink manufacturer"
-- "flexure ink" → "flexographic ink", "flexo ink", "flexible packaging ink"
+- "butterfly valve manufacturer" → "butterfly valve producer", "wafer valve maker", "quarter-turn valve manufacturer"
+- "PCB assembly" → "printed circuit board assembly", "PCBA", "SMT assembly"
 - "CNC machining" → "computer numerical control machining", "precision CNC", "CNC manufacturing"
 
 Return ONLY a JSON array of strings, nothing else.

@@ -16,23 +16,23 @@ const { checkStoryFlow } = require('./story-flow-check');
 describe('checkContentReadiness', () => {
   const highQualitySynthesis = {
     executiveSummary: [
-      "Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. ENGIE Corp and Schneider Electric dominate with combined 35% market share. We recommend targeting mid-tier industrial factories because their energy spend averages $500K annually, which means significant savings potential of 15-20%. The regulatory push from DEDE creates urgency for compliance-driven demand. By Q2 2026, ISO 50001 mandates will force 1,200 factories to upgrade, therefore early movers capture first-wave contracts resulting in a $45M serviceable market. However, local competitors like B.Grimm Power Ltd have established relationships that create a barrier to entry.",
+      "Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. CONTOSO Corp and Fabrikam Electric dominate with combined 35% market share. We recommend targeting mid-tier industrial factories because their energy spend averages $500K annually, which means significant savings potential of 15-20%. The regulatory push from DEDE creates urgency for compliance-driven demand. By Q2 2026, ISO 50001 mandates will force 1,200 factories to upgrade, therefore early movers capture first-wave contracts resulting in a $45M serviceable market. However, local competitors like A.Datum Power Ltd have established relationships that create a barrier to entry.",
     ],
     marketOpportunityAssessment: {
       totalAddressableMarket:
-        'Market is $90M calculated from 1,200 factories at $500K average spend with 15% savings potential. Schneider Electric Corp revenue in Thailand grew to $180M in 2024. We should prioritize the Eastern Seaboard because industrial park concentration provides 60% of total demand. This means geographic focus reduces go-to-market cost by 40%. ENGIE Corp entered in 2015 via JV, resulting in rapid market share gains. By Q3 2026, regulatory compliance creates $30M in new addressable demand, therefore timing is critical.',
+        'Market is $90M calculated from 1,200 factories at $500K average spend with 15% savings potential. Fabrikam Electric Corp revenue in Thailand grew to $180M in 2024. We should prioritize the Eastern Seaboard because industrial park concentration provides 60% of total demand. This means geographic focus reduces go-to-market cost by 40%. CONTOSO Corp entered in 2015 via JV, resulting in rapid market share gains. By Q3 2026, regulatory compliance creates $30M in new addressable demand, therefore timing is critical.',
       growthTrajectory:
-        '14% CAGR driven by ISO 50001 mandate affecting 1,200+ factories. This represents a strong growth opportunity because compliance deadlines are non-negotiable. Schneider Electric projects 18% annual growth through 2028.',
+        '14% CAGR driven by ISO 50001 mandate affecting 1,200+ factories. This represents a strong growth opportunity because compliance deadlines are non-negotiable. Fabrikam Electric projects 18% annual growth through 2028.',
     },
     competitivePositioning: {
       keyPlayers: [
         {
-          name: 'ENGIE Corp',
+          name: 'CONTOSO Corp',
           description:
-            '$2.3B global revenue, 18% Thai market share. Entered Thailand in 2015 via JV with B.Grimm Power Ltd. Focus on industrial parks, 12 active contracts averaging $2M each. However, their provincial network coverage remains limited because B.Grimm concentrates on Eastern Seaboard, therefore competitors with regional partnerships can capture 40% of demand outside Bangkok.',
+            '$2.3B global revenue, 18% Thai market share. Entered Thailand in 2015 via JV with A.Datum Power Ltd. Focus on industrial parks, 12 active contracts averaging $2M each. However, their provincial network coverage remains limited because A.Datum concentrates on Eastern Seaboard, therefore competitors with regional partnerships can capture 40% of demand outside Bangkok.',
         },
         {
-          name: 'Schneider Electric Corp',
+          name: 'Fabrikam Electric Corp',
           description:
             '$36B global, 17% Thai market share. Revenue grew 15% in 2024 to $180M. Strong in building automation but weaker in heavy industrial. Recommend targeting their underserved mid-tier segment because they focus on enterprise accounts.',
         },
@@ -40,7 +40,7 @@ describe('checkContentReadiness', () => {
     },
     regulatoryPathway: {
       overview:
-        'DEDE mandates ISO 50001 compliance by Q3 2026 for all factories over 1,000 employees. This means 1,200 factories must implement energy management systems, resulting in $90M compliance-driven market. By Q4 2026, penalties of $50K per violation take effect, consequently urgency increases. Schneider Electric Corp and ENGIE Corp have lobbied for extended timelines, however DEDE rejected extensions.',
+        'DEDE mandates ISO 50001 compliance by Q3 2026 for all factories over 1,000 employees. This means 1,200 factories must implement energy management systems, resulting in $90M compliance-driven market. By Q4 2026, penalties of $50K per violation take effect, consequently urgency increases. Fabrikam Electric Corp and CONTOSO Corp have lobbied for extended timelines, however DEDE rejected extensions.',
     },
     keyInsights: [
       {
@@ -136,15 +136,15 @@ describe('checkContentReadiness', () => {
   test('contradictory payload fails with contradiction reasons', () => {
     const contradictorySynthesis = {
       executiveSummary: [
-        "Thailand's energy services market is growing rapidly at 25% CAGR with strong demand. ENGIE Corp leads with 18% share. Market reached $320M in 2024. We recommend targeting mid-tier factories because costs are rising, which means savings potential. By Q2 2026 mandates create urgency, therefore early movers win.",
+        "Thailand's energy services market is growing rapidly at 25% CAGR with strong demand. CONTOSO Corp leads with 18% share. Market reached $320M in 2024. We recommend targeting mid-tier factories because costs are rising, which means savings potential. By Q2 2026 mandates create urgency, therefore early movers win.",
       ],
       marketOpportunityAssessment: {
         growthTrajectory:
-          'Market grew 14% in 2024. Schneider Electric Corp expanded operations. This means demand is increasing, resulting in $90M TAM. We should target Eastern Seaboard because of concentration.',
+          'Market grew 14% in 2024. Fabrikam Electric Corp expanded operations. This means demand is increasing, resulting in $90M TAM. We should target Eastern Seaboard because of concentration.',
       },
       competitivePositioning: {
         analysis:
-          'The energy services market is declining sharply due to oversupply and stagnant demand. ENGIE Corp lost 5% market share as weak demand forced price cuts. Investment is falling rapidly.',
+          'The energy services market is declining sharply due to oversupply and stagnant demand. CONTOSO Corp lost 5% market share as weak demand forced price cuts. Investment is falling rapidly.',
       },
       keyInsights: [
         {
@@ -194,7 +194,7 @@ describe('checkContentReadiness', () => {
   test('respects custom threshold', () => {
     const synthesis = {
       executiveSummary: [
-        'Market reached $100M with 10% growth. ENGIE Corp leads. We recommend targeting factories because costs rose, resulting in savings. By Q2 2026 mandates create urgency.',
+        'Market reached $100M with 10% growth. CONTOSO Corp leads. We recommend targeting factories because costs rose, resulting in savings. By Q2 2026 mandates create urgency.',
       ],
     };
 
@@ -213,10 +213,10 @@ describe('checkContentReadiness', () => {
   test('integrates coherence checker when provided', () => {
     const synthesis = {
       executiveSummary:
-        'Market is $500M growing at 14% CAGR. ENGIE Corp holds 18% share. We recommend targeting factories because costs are rising, which means savings. Schneider Electric Corp expanded to $180M.',
+        'Market is $500M growing at 14% CAGR. CONTOSO Corp holds 18% share. We recommend targeting factories because costs are rising, which means savings. Fabrikam Electric Corp expanded to $180M.',
       marketOpportunityAssessment: {
         totalAddressableMarket:
-          'TAM is $50M. This represents a niche because only 120 factories qualify. ENGIE Corp entered in 2015 via JV. We should focus on Eastern Seaboard, resulting in geographic advantage.',
+          'TAM is $50M. This represents a niche because only 120 factories qualify. CONTOSO Corp entered in 2015 via JV. We should focus on Eastern Seaboard, resulting in geographic advantage.',
       },
     };
 
@@ -313,7 +313,7 @@ describe('detectShallowContent', () => {
 
   test('passes for content-rich analytical text', () => {
     const text =
-      'ENGIE Corp entered Thailand in 2018 via JV with B.Grimm, focusing on industrial parks near Bangkok. They won 12 contracts averaging $2M each. Revenue grew 15% in 2024 to reach $36M. Schneider Electric holds 17% market share with $180M revenue. Manufacturing wages rose 8% annually from 2021-2024. The regulatory push from DEDE mandates ISO 50001 compliance by Q3 2026 for all factories over 1,000 employees.';
+      'CONTOSO Corp entered Thailand in 2018 via JV with A.Datum, focusing on industrial parks near Bangkok. They won 12 contracts averaging $2M each. Revenue grew 15% in 2024 to reach $36M. Fabrikam Electric holds 17% market share with $180M revenue. Manufacturing wages rose 8% annually from 2021-2024. The regulatory push from DEDE mandates ISO 50001 compliance by Q3 2026 for all factories over 1,000 employees.';
     const result = detectShallowContent(text);
     expect(result.isShallow).toBe(false);
     expect(result.density).toBeGreaterThan(1);
@@ -332,12 +332,12 @@ describe('deterministic scoring', () => {
   test('same input always produces same section scores', () => {
     const synthesis = {
       executiveSummary: [
-        'Market reached $320M in 2024 at 14% CAGR. ENGIE Corp and Schneider Electric dominate. We recommend targeting factories because costs rise 8% annually, resulting in demand for efficiency.',
+        'Market reached $320M in 2024 at 14% CAGR. CONTOSO Corp and Fabrikam Electric dominate. We recommend targeting factories because costs rise 8% annually, resulting in demand for efficiency.',
       ],
       competitivePositioning: {
         keyPlayers: [
           {
-            name: 'ENGIE Corp',
+            name: 'CONTOSO Corp',
             description:
               '$2.3B revenue, 18% share. Entered 2015 via JV. 12 contracts at $2M average. However provincial coverage limited.',
           },
@@ -365,23 +365,23 @@ describe('rubric dimensions', () => {
   // Strong fixture — should score high on all 4 dimensions
   const strongFixture = {
     executiveSummary: [
-      "Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020 according to DEDE annual report. ENGIE Corp and Schneider Electric Corp dominate with combined 35% market share. We recommend targeting mid-tier industrial factories because their energy spend averages $500K annually, which means significant savings potential of 15-20%. The regulatory push from DEDE creates urgency for compliance-driven demand. By Q2 2026, ISO 50001 mandates will force 1,200 factories to upgrade, therefore early movers capture first-wave contracts resulting in a $45M serviceable market. However, local competitors like B.Grimm Power Ltd have established relationships that create a barrier to entry, so consider partnering with a provincial utility as a contingency.",
+      "Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020 according to DEDE annual report. CONTOSO Corp and Fabrikam Electric Corp dominate with combined 35% market share. We recommend targeting mid-tier industrial factories because their energy spend averages $500K annually, which means significant savings potential of 15-20%. The regulatory push from DEDE creates urgency for compliance-driven demand. By Q2 2026, ISO 50001 mandates will force 1,200 factories to upgrade, therefore early movers capture first-wave contracts resulting in a $45M serviceable market. However, local competitors like A.Datum Power Ltd have established relationships that create a barrier to entry, so consider partnering with a provincial utility as a contingency.",
     ],
     marketOpportunityAssessment: {
       totalAddressableMarket:
-        'Market is $90M calculated from 1,200 factories at $500K average spend with 15% savings potential. Data from World Bank energy survey. Schneider Electric Corp revenue in Thailand grew to $180M in 2024. We should prioritize the Eastern Seaboard because industrial park concentration provides 60% of total demand. This means geographic focus reduces go-to-market cost by 40%. ENGIE Corp entered in 2015 via JV, resulting in rapid market share gains. By Q3 2026, regulatory compliance creates $30M in new addressable demand, therefore timing is critical. However, if mandates are delayed, consider targeting voluntary early adopters as fallback.',
+        'Market is $90M calculated from 1,200 factories at $500K average spend with 15% savings potential. Data from World Bank energy survey. Fabrikam Electric Corp revenue in Thailand grew to $180M in 2024. We should prioritize the Eastern Seaboard because industrial park concentration provides 60% of total demand. This means geographic focus reduces go-to-market cost by 40%. CONTOSO Corp entered in 2015 via JV, resulting in rapid market share gains. By Q3 2026, regulatory compliance creates $30M in new addressable demand, therefore timing is critical. However, if mandates are delayed, consider targeting voluntary early adopters as fallback.',
       growthTrajectory:
-        '14% CAGR driven by ISO 50001 mandate affecting 1,200+ factories according to DEDE compliance registry. This represents a strong growth opportunity because compliance deadlines are non-negotiable. Schneider Electric Corp projects 18% annual growth through 2028.',
+        '14% CAGR driven by ISO 50001 mandate affecting 1,200+ factories according to DEDE compliance registry. This represents a strong growth opportunity because compliance deadlines are non-negotiable. Fabrikam Electric Corp projects 18% annual growth through 2028.',
     },
     competitivePositioning: {
       keyPlayers: [
         {
-          name: 'ENGIE Corp',
+          name: 'CONTOSO Corp',
           description:
-            '$2.3B global revenue, 18% Thai market share based on DEDE registration data. Entered Thailand in 2015 via JV with B.Grimm Power Ltd. Focus on industrial parks, 12 active contracts averaging $2M each. However, their provincial network coverage remains limited because B.Grimm concentrates on Eastern Seaboard, therefore competitors with regional partnerships can capture 40% of demand outside Bangkok. We recommend targeting their underserved provincial segment by Q3 2026.',
+            '$2.3B global revenue, 18% Thai market share based on DEDE registration data. Entered Thailand in 2015 via JV with A.Datum Power Ltd. Focus on industrial parks, 12 active contracts averaging $2M each. However, their provincial network coverage remains limited because A.Datum concentrates on Eastern Seaboard, therefore competitors with regional partnerships can capture 40% of demand outside Bangkok. We recommend targeting their underserved provincial segment by Q3 2026.',
         },
         {
-          name: 'Schneider Electric Corp',
+          name: 'Fabrikam Electric Corp',
           description:
             '$36B global, 17% Thai market share sourced from company annual report. Revenue grew 15% in 2024 to $180M. Strong in building automation but weaker in heavy industrial. Recommend targeting their underserved mid-tier segment because they focus on enterprise accounts. By Q2 2026, prioritize factories with 500-1000 employees.',
         },
@@ -389,7 +389,7 @@ describe('rubric dimensions', () => {
     },
     regulatoryPathway: {
       overview:
-        'DEDE mandates ISO 50001 compliance by Q3 2026 for all factories over 1,000 employees according to Ministry gazette No. 142/2025. This means 1,200 factories must implement energy management systems, resulting in $90M compliance-driven market. By Q4 2026, penalties of $50K per violation take effect, consequently urgency increases. Schneider Electric Corp and ENGIE Corp have lobbied for extended timelines, however DEDE rejected extensions. Source: DEDE policy directive.',
+        'DEDE mandates ISO 50001 compliance by Q3 2026 for all factories over 1,000 employees according to Ministry gazette No. 142/2025. This means 1,200 factories must implement energy management systems, resulting in $90M compliance-driven market. By Q4 2026, penalties of $50K per violation take effect, consequently urgency increases. Fabrikam Electric Corp and CONTOSO Corp have lobbied for extended timelines, however DEDE rejected extensions. Source: DEDE policy directive.',
     },
     keyInsights: [
       {
@@ -530,7 +530,7 @@ describe('rubric dimensions', () => {
 describe('scoreEvidenceGrounding', () => {
   test('scores high for text with sources, data, entities, quantified claims', () => {
     const text =
-      'According to DEDE annual report, ENGIE Corp generated $2.3B in revenue. Market grew 14% CAGR driven by ISO 50001 mandate. Schneider Electric Corp achieved 15% growth resulting in $180M Thai revenue. Data from World Bank energy survey confirms industrial energy costs rose 12% in 2024.';
+      'According to DEDE annual report, CONTOSO Corp generated $2.3B in revenue. Market grew 14% CAGR driven by ISO 50001 mandate. Fabrikam Electric Corp achieved 15% growth resulting in $180M Thai revenue. Data from World Bank energy survey confirms industrial energy costs rose 12% in 2024.';
     const result = scoreEvidenceGrounding(text);
     expect(result.score).toBeGreaterThan(50);
     expect(result.factors.sourceAttributions).toBeGreaterThan(0);
@@ -669,14 +669,17 @@ describe('scoreStorylineCoherence', () => {
   test('scores high when exec summary themes are echoed in other sections', () => {
     const synthesis = {
       executiveSummary:
-        'Thailand energy services market reached $320M at 14% CAGR in 2024. ENGIE Corp holds 18% share with $2.3B global revenue. We recommend targeting mid-tier factories because their energy spend averages $500K annually, which means significant savings potential.',
+        'Thailand energy services market reached $320M at 14% CAGR in 2024. CONTOSO Corp holds 18% share with $2.3B global revenue. We recommend targeting mid-tier factories because their energy spend averages $500K annually, which means significant savings potential.',
       marketOpportunityAssessment: {
         totalAddressableMarket:
           '$320M market with 14% growth driven by ISO 50001 compliance mandate.',
       },
       competitivePositioning: {
         keyPlayers: [
-          { name: 'ENGIE Corp', description: '18% market share leader with $2.3B global revenue.' },
+          {
+            name: 'CONTOSO Corp',
+            description: '18% market share leader with $2.3B global revenue.',
+          },
         ],
       },
       keyInsights: [
@@ -694,7 +697,7 @@ describe('scoreStorylineCoherence', () => {
   test('scores low when exec summary is disconnected from other sections', () => {
     const synthesis = {
       executiveSummary:
-        'Market reached $500M with ENGIE Corp holding 18% share. We recommend targeting factories.',
+        'Market reached $500M with CONTOSO Corp holding 18% share. We recommend targeting factories.',
       marketOpportunityAssessment: {
         totalAddressableMarket: 'Healthcare is a $2T global industry with diverse segments.',
       },
@@ -730,18 +733,18 @@ describe('major coherence failure', () => {
     // Use the strong fixture from the rubric tests
     const synthesis = {
       executiveSummary: [
-        'Market reached $320M at 14% CAGR. ENGIE Corp holds 18% share. We recommend targeting factories because costs are rising, resulting in demand. By Q2 2026 mandates create urgency, therefore early movers win.',
+        'Market reached $320M at 14% CAGR. CONTOSO Corp holds 18% share. We recommend targeting factories because costs are rising, resulting in demand. By Q2 2026 mandates create urgency, therefore early movers win.',
       ],
       marketOpportunityAssessment: {
         totalAddressableMarket:
-          'Market is $90M. Schneider Electric Corp revenue grew to $180M. We should prioritize Eastern Seaboard because concentration provides 60% demand, resulting in cost savings. By Q3 2026 compliance creates $30M demand.',
+          'Market is $90M. Fabrikam Electric Corp revenue grew to $180M. We should prioritize Eastern Seaboard because concentration provides 60% demand, resulting in cost savings. By Q3 2026 compliance creates $30M demand.',
       },
       competitivePositioning: {
         keyPlayers: [
           {
-            name: 'ENGIE Corp',
+            name: 'CONTOSO Corp',
             description:
-              '$2.3B revenue, 18% Thai share. Entered 2015 via JV. However provincial coverage limited because B.Grimm concentrates on Eastern Seaboard.',
+              '$2.3B revenue, 18% Thai share. Entered 2015 via JV. However provincial coverage limited because A.Datum concentrates on Eastern Seaboard.',
           },
         ],
       },
@@ -772,7 +775,7 @@ describe('readiness report structure', () => {
   test('output includes all required fields', () => {
     const synthesis = {
       executiveSummary:
-        'Market reached $100M. ENGIE Corp leads. We recommend targeting factories because costs rose, resulting in savings.',
+        'Market reached $100M. CONTOSO Corp leads. We recommend targeting factories because costs rose, resulting in savings.',
       keyInsights: [
         {
           title: 'Test',

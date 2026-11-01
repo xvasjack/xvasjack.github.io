@@ -9,10 +9,10 @@
  * 2) How well does the stage work? (score + grade)
  *
  * Usage:
- *   node scripts/stage-check.js --stage=2 --prompt="Energy Services in Vietnam"
- *   node scripts/stage-check.js --stage=2a --prompt="Energy Services in Vietnam"
- *   node scripts/stage-check.js --through=2a --prompt="Energy Services in Vietnam"
- *   node scripts/stage-check.js --stage=2 --country=Vietnam --industry="Energy Services"
+ *   node scripts/stage-check.js --stage=2 --prompt="Cold-Chain Logistics in Indonesia"
+ *   node scripts/stage-check.js --stage=2a --prompt="Cold-Chain Logistics in Indonesia"
+ *   node scripts/stage-check.js --through=2a --prompt="Cold-Chain Logistics in Indonesia"
+ *   node scripts/stage-check.js --stage=2 --country=Indonesia --industry="Cold-Chain Logistics"
  */
 
 require('dotenv').config();
@@ -624,13 +624,15 @@ async function main() {
     console.log('Stage check (simple)');
     console.log('');
     console.log('Usage:');
-    console.log('  npm run stage:check -- --stage=2 --prompt="Energy Services in Vietnam"');
-    console.log('  npm run stage:check -- --stage=2a --prompt="Energy Services in Vietnam"');
-    console.log('  npm run stage:check -- --stage=3 --prompt="Energy Services in Vietnam"');
-    console.log('  npm run stage:check -- --stage=3a --prompt="Energy Services in Vietnam"');
-    console.log('  npm run stage:check -- --through=3a --prompt="Energy Services in Vietnam"');
+    console.log('  npm run stage:check -- --stage=2 --prompt="Cold-Chain Logistics in Indonesia"');
+    console.log('  npm run stage:check -- --stage=2a --prompt="Cold-Chain Logistics in Indonesia"');
+    console.log('  npm run stage:check -- --stage=3 --prompt="Cold-Chain Logistics in Indonesia"');
+    console.log('  npm run stage:check -- --stage=3a --prompt="Cold-Chain Logistics in Indonesia"');
     console.log(
-      '  npm run stage:check -- --stage=2 --country=Vietnam --industry="Energy Services"'
+      '  npm run stage:check -- --through=3a --prompt="Cold-Chain Logistics in Indonesia"'
+    );
+    console.log(
+      '  npm run stage:check -- --stage=2 --country=Indonesia --industry="Cold-Chain Logistics"'
     );
     console.log('');
     console.log('Flags:');

@@ -22,7 +22,7 @@ This backend is split into 10 independent services. Each deploys separately on R
 ### 1. Create Railway Project
 - Go to [Railway Dashboard](https://railway.app/dashboard)
 - Click "New Project" → "Deploy from GitHub repo"
-- Select `xvasjack/xvasjack.github.io`
+- Select this repository
 
 ### 2. Configure Root Directory
 - Go to Settings → General
@@ -41,13 +41,14 @@ SENDER_EMAIL=your-email
 Optional (depending on service):
 ```
 ANTHROPIC_API_KEY=your-key
-DEEPSEEK_API_KEY=your-key
 DEEPGRAM_API_KEY=your-key
 SERPAPI_API_KEY=your-key
 R2_ACCOUNT_ID=your-id
 R2_ACCESS_KEY_ID=your-key
 R2_SECRET_ACCESS_KEY=your-secret
 R2_BUCKET_NAME=your-bucket
+DD_REPORTS_TOKEN=long-random-string            # due-diligence: enables /api/reports (send as X-Report-Token)
+TRANSCRIPTION_ACCESS_TOKEN=long-random-string  # transcription: enables transcript/recording routes (send as X-Access-Token)
 ```
 
 ### 4. Deploy

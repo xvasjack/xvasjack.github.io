@@ -33,7 +33,7 @@ You need these 3 things:
 ### 2.2 Deploy
 - Click "New Project"
 - Click "Deploy from GitHub repo"
-- Select your `xvasjack.github.io` repo
+- Select this repository
 - Railway will ask which folder - select `backend`
 
 ### 2.3 Add Environment Variables
@@ -58,7 +58,7 @@ Edit `find-target.html` and change line 183:
 
 FROM:
 ```
-action="https://xvasjack.app.n8n.cloud/form/..."
+action="https://your-previous-form-endpoint/..."
 ```
 
 TO:

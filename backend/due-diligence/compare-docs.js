@@ -94,11 +94,16 @@ async function extractStructure(path, label) {
   });
 }
 
+// Usage: node compare-docs.js <template.docx> <generated.docx>
+// Paths can also come from DD_TEMPLATE_PATH and DD_GENERATED_PATH.
 async function main() {
-  await extractStructure(
-    '/mnt/c/Users/User/Downloads/260114_SunCorp_Netpluz DD Report v4 (1).docx',
-    'TEMPLATE'
-  );
-  await extractStructure('/tmp/dd-test-output-dd_1768666502475_e132sfxd7.docx', 'GENERATED');
+  const templatePath = process.argv[2] || process.env.DD_TEMPLATE_PATH;
+  const generatedPath = process.argv[3] || process.env.DD_GENERATED_PATH;
+  if (!templatePath || !generatedPath) {
+    console.error('Usage: node compare-docs.js <template.docx> <generated.docx>');
+    process.exit(1);
+  }
+  await extractStructure(templatePath, 'TEMPLATE');
+  await extractStructure(generatedPath, 'GENERATED');
 }
 main();

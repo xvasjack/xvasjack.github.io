@@ -79,9 +79,9 @@ function runContentDepthCollapseTests() {
   const richSynthesis = {
     isSingleCountry: true,
     executiveSummary: [
-      'The Vietnamese energy services market represents a $4.2 billion total addressable market growing at 12.3% CAGR through 2028, driven by government commitments under Resolution 55-NQ/TW and the revised Power Development Plan VIII (PDP8). Vietnam Electric (EVN) controls 62% of generation capacity but faces mounting pressure to diversify supply sources, creating opportunities for foreign ESCOs and independent power producers. The entry window should be pursued because regulatory reform is accelerating faster than competitor response, therefore early movers will capture disproportionate share.',
-      'Competitive intensity is moderate. Japanese players (JERA, Marubeni, Sumitomo Corp) have established JV positions in LNG and renewables but have not penetrated the ESCO segment. Local players like Tran Phu Electric and Pha Lai Thermal Power dominate brownfield maintenance but lack technology for smart-grid and demand-response services. Foreign entrants Schneider Electric (entered 2018, $120M Vietnam revenue) and Siemens Energy (entered 2020, growing 28% YoY) demonstrate that technology-led differentiation can capture 8-15% segment share within 3 years. We recommend targeting the ESCO segment because it has the widest capability gap.',
-      'The recommended strategy is a phased JV entry with a local EPC partner (shortlist: LILAMA, PCC1, or Power Engineering Consulting JSC), targeting industrial ESCO contracts in the Ho Chi Minh City and Binh Duong industrial corridor. Initial investment of $2.5-4M over 18 months, with break-even projected at month 30 based on a pipeline of 12-15 industrial energy audit contracts valued at $150-400K each. Key risk: regulatory uncertainty around the direct PPA mechanism could delay revenue by 6-9 months if the Ministry of Industry and Trade (MOIT) extends the pilot timeline. We should pursue this because the risk-adjusted IRR remains 18-25% even under conservative scenarios.',
+      'The Vietnamese energy services market represents a $4.2 billion total addressable market growing at 12.3% CAGR through 2028, driven by government commitments under Resolution 55-NQ/TW and the revised Power Development Plan VIII (PDP8). the national utility (NPU) controls 62% of generation capacity but faces mounting pressure to diversify supply sources, creating opportunities for foreign ESCOs and independent power producers. The entry window should be pursued because regulatory reform is accelerating faster than competitor response, therefore early movers will capture disproportionate share.',
+      'Competitive intensity is moderate. Japanese players (TREY, Proseware, Woodgrove Corp) have established JV positions in LNG and renewables but have not penetrated the ESCO segment. Local players like Lotus Cable Electric and Delta Thermal Power dominate brownfield maintenance but lack technology for smart-grid and demand-response services. Foreign entrants Fabrikam Electric (entered 2018, $120M Vietnam revenue) and Litware Energy (entered 2020, growing 28% YoY) demonstrate that technology-led differentiation can capture 8-15% segment share within 3 years. We recommend targeting the ESCO segment because it has the widest capability gap.',
+      'The recommended strategy is a phased JV entry with a local EPC partner (shortlist: LAMNA, Relecloud, or Riverbend Engineering Consulting JSC), targeting industrial ESCO contracts in the Ho Chi Minh City and Binh Duong industrial corridor. Initial investment of $2.5-4M over 18 months, with break-even projected at month 30 based on a pipeline of 12-15 industrial energy audit contracts valued at $150-400K each. Key risk: regulatory uncertainty around the direct PPA mechanism could delay revenue by 6-9 months if the Ministry of Industry and Trade (MOIT) extends the pilot timeline. We should pursue this because the risk-adjusted IRR remains 18-25% even under conservative scenarios.',
     ],
     marketOpportunityAssessment: {
       totalAddressableMarket: '$4.2 billion by 2028',
@@ -94,27 +94,27 @@ function runContentDepthCollapseTests() {
     },
     regulatoryPathway: {
       overview:
-        'Vietnam regulatory framework for energy services is governed by PDP8 (Power Development Plan VIII) approved in 2024, targeting 30% renewable energy by 2030. MOIT Decision 23/2024 launches a direct PPA pilot in 2025 covering 15 industrial zones. Key regulatory bodies: MOIT (licensing), EVN (grid access), ERAV (tariff setting). Foreign ESCO licensing requires JV with local entity holding minimum 51% equity, though CPTPP provisions may allow 100% foreign ownership by 2027. Therefore companies should establish JV now and plan for conversion to wholly-owned subsidiary. Tax incentives include 4-year corporate income tax holiday for renewable energy projects and 50% import duty exemption for energy-efficient equipment.',
+        'Vietnam regulatory framework for energy services is governed by PDP8 (Power Development Plan VIII) approved in 2024, targeting 30% renewable energy by 2030. MOIT Decision 23/2024 launches a direct PPA pilot in 2025 covering 15 industrial zones. Key regulatory bodies: MOIT (licensing), NPU (grid access), ERAV (tariff setting). Foreign ESCO licensing requires JV with local entity holding minimum 51% equity, though CPTPP provisions may allow 100% foreign ownership by 2027. Therefore companies should establish JV now and plan for conversion to wholly-owned subsidiary. Tax incentives include 4-year corporate income tax holiday for renewable energy projects and 50% import duty exemption for energy-efficient equipment.',
     },
     competitivePositioning: {
       keyPlayers: [
         {
-          name: 'Schneider Electric Vietnam',
+          name: 'Fabrikam Electric Vietnam',
           description:
             'Entered Vietnam in 2018 through acquisition of local distributor. Revenue $120M (2024), 28% YoY growth. Dominates building management and industrial automation ESCO. Strength: global brand, 450+ local staff, certified training center in HCMC. Weakness: premium pricing limits penetration in cost-sensitive SME segment. Market share: 12% of industrial ESCO.',
         },
         {
-          name: 'Siemens Energy Vietnam',
+          name: 'Litware Energy Vietnam',
           description:
-            'Established 2020, rapid expansion through LNG turbine supply and grid modernization contracts with EVN. Revenue $85M (2024), 32% growth. Won $45M Nhon Trach 3&4 combined cycle gas turbine contract. Strength: technology edge in gas-to-power. Weakness: limited local engineering talent, relies on Singapore hub. Market share: 8% of generation services.',
+            'Established 2020, rapid expansion through LNG turbine supply and grid modernization contracts with NPU. Revenue $85M (2024), 32% growth. Won $45M Riverside 3&4 combined cycle gas turbine contract. Strength: technology edge in gas-to-power. Weakness: limited local engineering talent, relies on Singapore hub. Market share: 8% of generation services.',
         },
         {
-          name: 'JERA Co Inc',
+          name: 'TREY Co Inc',
           description:
-            'Japanese power giant (50% TEPCO, 50% Chubu Electric) entered Vietnam 2019 via JV with PetroVietnam for 1.5 GW LNG-to-power project in Son My. Revenue from Vietnam ops est. $200M by 2026. Strength: deep LNG supply chain, aligned with Japan-Vietnam energy cooperation MOU. Weakness: focused on large-scale generation, no ESCO capability. Market share: 15% of LNG generation segment.',
+            'Japanese power giant (50% COHO, 50% Lucerne Electric) entered Vietnam 2019 via JV with Northwind Petroleum for 1.5 GW LNG-to-power project in Son My. Revenue from Vietnam ops est. $200M by 2026. Strength: deep LNG supply chain, aligned with Japan-Vietnam energy cooperation MOU. Weakness: focused on large-scale generation, no ESCO capability. Market share: 15% of LNG generation segment.',
         },
         {
-          name: 'Tran Phu Electric JSC',
+          name: 'Lotus Cable Electric JSC',
           description:
             'Leading domestic electrical equipment and installation company, established 1962. Revenue $95M (2024), stable 5% growth. Core in cable manufacturing and transformer supply. Strength: 60+ year brand recognition, nationwide distribution, strong government relationships. Weakness: legacy technology, no smart-grid or IoT capability. Market share: 22% of electrical equipment distribution.',
         },
@@ -123,7 +123,7 @@ function runContentDepthCollapseTests() {
     keyInsights: [
       {
         title: 'Direct PPA Pilot Opens Corporate Procurement',
-        data: 'The Ministry of Industry and Trade (MOIT) Decision 23/2024 launches a 2-year direct PPA pilot in 2025 covering 15 industrial zones. Initial quota: 1,000 MW. Early participants include Samsung Vietnam, Intel, and Foxconn facilities seeking RE100 compliance.',
+        data: 'The Ministry of Industry and Trade (MOIT) Decision 23/2024 launches a 2-year direct PPA pilot in 2025 covering 15 industrial zones. Initial quota: 1,000 MW. Early participants include large electronics plants seeking RE100 compliance.',
         pattern:
           'Multinational manufacturers drive demand — their RE100 commitments create captive demand for ESCO services that local providers cannot fulfill due to lack of international certification (ISO 50001, IPMVP).',
         implication:
@@ -134,9 +134,9 @@ function runContentDepthCollapseTests() {
         title: 'JETP Funding Pipeline Creates $15.5B Investment Wave',
         data: 'The Just Energy Transition Partnership (JETP) committed $15.5 billion in public and private financing through 2028. First disbursement tranche of $2.5B expected H1 2025, contingent on Vietnam publishing its Resource Mobilization Plan (RMP).',
         pattern:
-          'JETP funding flows through state-owned EVN and then to private sector via competitive tenders. This creates a procurement pipeline of 200+ contracts for grid modernization, smart metering, and demand-response infrastructure.',
+          'JETP funding flows through state-owned NPU and then to private sector via competitive tenders. This creates a procurement pipeline of 200+ contracts for grid modernization, smart metering, and demand-response infrastructure.',
         implication:
-          'Position as Tier-2 subcontractor to EVN-approved EPC firms (LILAMA, PCC1) to access JETP-funded projects without direct government contracting risk. Target: 3-5 subcontracts in grid modernization segment worth $5-15M each.',
+          'Position as Tier-2 subcontractor to NPU-approved EPC firms (LAMNA, Relecloud) to access JETP-funded projects without direct government contracting risk. Target: 3-5 subcontracts in grid modernization segment worth $5-15M each.',
         timing: 'H1 2025 first disbursement, Q3 2025 first competitive tenders',
       },
       {
@@ -160,7 +160,7 @@ function runContentDepthCollapseTests() {
       },
       partnerAssessment: {
         overview:
-          'Three shortlisted JV partners evaluated with quantified scoring: LILAMA Corp (score: 82/100, revenue $320M, 2400 employees, established 1960) has strong EPC capability and government relationships, therefore we recommend them as primary partner candidate. PCC1 Group (score: 76/100, revenue $180M, growing 15% annually) is fast-growing and open to foreign technology, but concentrated in Northern Vietnam. Power Engineering Consulting JSC (PECC, score: 71/100, revenue $45M) has deep regulatory knowledge and EVN connections. We should pursue LILAMA for the initial JV because their southern Vietnam presence aligns with our target market geography.',
+          'Three shortlisted JV partners evaluated with quantified scoring: LAMNA Corp (score: 82/100, revenue $320M, 2400 employees, established 1960) has strong EPC capability and government relationships, therefore we recommend them as primary partner candidate. Relecloud Group (score: 76/100, revenue $180M, growing 15% annually) is fast-growing and open to foreign technology, but concentrated in Northern Vietnam. Riverbend Engineering Consulting JSC (RECC, score: 71/100, revenue $45M) has deep regulatory knowledge and NPU connections. We should pursue LAMNA for the initial JV because their southern Vietnam presence aligns with our target market geography.',
       },
     },
     implementation: {
@@ -269,9 +269,9 @@ function runContentDepthCollapseTests() {
       researchData[topic] = {
         content:
           `The ${topic} analysis for Vietnam energy services shows significant growth in 2024-2028. ` +
-          `Schneider Electric Corp and Siemens Energy Group have established strong positions. ` +
+          `Fabrikam Electric Corp and Litware Energy Group have established strong positions. ` +
           `Market size reached $4.2 billion with 12.3% CAGR. The regulatory framework under PDP8 ` +
-          `provides favorable conditions for foreign ESCOs. Key metrics include 62% EVN market share, ` +
+          `provides favorable conditions for foreign ESCOs. Key metrics include 62% NPU market share, ` +
           `$15.5 billion JETP pipeline, and 150+ registered ESCOs. Investment requirements range from ` +
           `$2.5-4M for phased entry over 18 months. ` +
           'A'.repeat(300), // Ensure >300 chars
@@ -292,7 +292,7 @@ function runContentDepthCollapseTests() {
         type: 'section',
         title: 'Executive Summary',
         content:
-          'The Vietnamese energy services market represents a $4.2 billion TAM growing at 12.3% CAGR through 2028. Schneider Electric and Siemens Energy have established strong positions with $120M and $85M revenue respectively.',
+          'The Vietnamese energy services market represents a $4.2 billion TAM growing at 12.3% CAGR through 2028. Fabrikam Electric and Litware Energy have established strong positions with $120M and $85M revenue respectively.',
       },
       {
         key: 'marketOverview',
@@ -306,7 +306,7 @@ function runContentDepthCollapseTests() {
         type: 'section',
         title: 'Competitive Landscape',
         content:
-          'Schneider Electric Vietnam: revenue $120M (2024), 28% YoY growth, 12% market share. Siemens Energy: $85M revenue, 32% growth. JERA: $200M projected by 2026.',
+          'Fabrikam Electric Vietnam: revenue $120M (2024), 28% YoY growth, 12% market share. Litware Energy: $85M revenue, 32% growth. TREY: $200M projected by 2026.',
       },
       {
         key: 'regulatoryFramework',
@@ -351,18 +351,18 @@ function runWeakStoryFlowTests() {
     // Synthesis with completely unrelated content across sections.
     const disconnectedSynthesis = {
       executiveSummary:
-        'The automotive industry in Germany grew by 5% in 2024. BMW Corp and Volkswagen Group dominate with $150 billion combined revenue. The market size is $350 billion.',
+        'The automotive industry in Germany grew by 5% in 2024. Adventure Works Corp and Wide World Group dominate with $150 billion combined revenue. The market size is $350 billion.',
       marketOpportunityAssessment:
-        'Vietnam fishing industry TAM is $2.1 billion. Shrimp exports reached $4 billion in 2023. Aquaculture Corp Ltd and Pacific Seafood Group are key players.',
+        'Vietnam fishing industry TAM is $2.1 billion. Shrimp exports reached $4 billion in 2023. Aquaculture Corp Ltd and Bluefin Seafood Group are key players.',
       competitivePositioning:
-        'SolarEdge Technologies Inc has 25% market share in residential solar inverters in Australia. Their revenue reached $890 million with 15% CAGR growth annually.',
+        'Sunward Technologies Inc has 25% market share in residential solar inverters in Australia. Their revenue reached $890 million with 15% CAGR growth annually.',
       keyInsights:
-        'The Brazilian fintech sector saw 200% user growth. NuBank Corp reported 80 million customers. Mercado Pago Group processes $45 billion in annual transactions.',
+        'The Brazilian fintech sector saw 200% user growth. Lakeview Bank Corp reported 80 million customers. Paywave Group processes $45 billion in annual transactions.',
       depth: {
         dealEconomics:
-          'Typical deal size in Canadian mining is $50 million. Barrick Gold Corp and Teck Resources Group have $25 billion combined market cap. The market size is $80 billion.',
+          'Typical deal size in Canadian mining is $50 million. Granite Gold Corp and Summit Resources Group have $25 billion combined market cap. The market size is $80 billion.',
         entryStrategy:
-          'Entry into the Japanese convenience store market requires $5 million initial investment. Seven-Eleven Japan Corp has 21,000 locations. The market size is $120 billion.',
+          'Entry into the Japanese convenience store market requires $5 million initial investment. QuickMart Japan Corp has 21,000 locations. The market size is $120 billion.',
       },
     };
 
@@ -404,7 +404,7 @@ function runWeakStoryFlowTests() {
       executiveSummary:
         'The total addressable market size for energy services in Vietnam is $4.2 billion, with growth of 12% CAGR through 2028.',
       marketOpportunityAssessment:
-        'The market is growing with strong fundamentals. Schneider Electric Corp is a key player.',
+        'The market is growing with strong fundamentals. Fabrikam Electric Corp is a key player.',
       competitivePositioning:
         'Three key players dominate. The total addressable market size is $45 billion according to industry reports.',
       depth: {
@@ -444,16 +444,16 @@ function runWeakStoryFlowTests() {
   test('Well-connected synthesis gets high coherence score', () => {
     const coherentSynthesis = {
       executiveSummary:
-        'The Vietnam energy services market size is $4.2 billion growing at 12% CAGR. Schneider Electric Corp leads with $120M revenue and 12% market share. Entry timeline is 18 months.',
+        'The Vietnam energy services market size is $4.2 billion growing at 12% CAGR. Fabrikam Electric Corp leads with $120M revenue and 12% market share. Entry timeline is 18 months.',
       marketOpportunityAssessment:
-        'Total addressable market size of $4.2 billion with 12% CAGR growth. Industrial ESCO segment $680M. Schneider Electric Corp dominates.',
+        'Total addressable market size of $4.2 billion with 12% CAGR growth. Industrial ESCO segment $680M. Fabrikam Electric Corp dominates.',
       competitivePositioning:
-        'Schneider Electric Corp: $120M revenue, 12% market share. Siemens Energy Corp: $85M revenue. JERA Co Inc: $200M projected.',
+        'Fabrikam Electric Corp: $120M revenue, 12% market share. Litware Energy Corp: $85M revenue. TREY Co Inc: $200M projected.',
       keyInsights:
-        'Market size of $4.2 billion with 12% CAGR. Schneider Electric Corp and Siemens Energy Corp are established. Entry window: 18 months.',
+        'Market size of $4.2 billion with 12% CAGR. Fabrikam Electric Corp and Litware Energy Corp are established. Entry window: 18 months.',
       depth: {
         dealEconomics:
-          'The overall market size is $4.2 billion. Average deal size $150-400K. Market growing at 12% CAGR through 2028. Schneider Electric Corp benchmarks at $120M.',
+          'The overall market size is $4.2 billion. Average deal size $150-400K. Market growing at 12% CAGR through 2028. Fabrikam Electric Corp benchmarks at $120M.',
         entryStrategy:
           'Phased entry over 18 months. Target market size: $4.2 billion growing at 12% CAGR.',
       },
@@ -481,7 +481,7 @@ function runInsightTruncationTests() {
     // 500-word insight (typical production length).
     const longInsight =
       'The Vietnamese energy services market represents a significant opportunity for foreign ESCOs. ' +
-      'Schneider Electric entered in 2018 through acquisition of a local distributor and achieved ' +
+      'Fabrikam Electric entered in 2018 through acquisition of a local distributor and achieved ' +
       '$120 million in revenue by 2024, demonstrating 28% year-over-year growth. Their success validates ' +
       'the market entry thesis: technology-led differentiation commands premium pricing in a market where ' +
       'local competitors lack international certifications. Of 150 registered ESCOs in Vietnam, only 12 hold ' +
@@ -495,8 +495,8 @@ function runInsightTruncationTests() {
       'Despite these risks, the risk-adjusted IRR remains attractive at 18-25% based on conservative tariff ' +
       'assumptions of $0.08-0.12 per kWh for industrial consumers. The competitive moat from international ' +
       'certification and MNC relationships provides sustainable pricing power that local competitors cannot ' +
-      'replicate within the forecast period. Strategic partners LILAMA and PCC1 offer complementary EPC ' +
-      'capabilities that reduce execution risk and provide access to EVN-funded project pipelines.';
+      'replicate within the forecast period. Strategic partners LAMNA and Relecloud offer complementary EPC ' +
+      'capabilities that reduce execution risk and provide access to NPU-funded project pipelines.';
 
     const result = safeCell(longInsight);
     assert(
@@ -538,7 +538,7 @@ function runInsightTruncationTests() {
     // The safeCell function internally remaps small maxLen values to larger caps.
     // maxLen=80 should be remapped to 300 (see code: if rounded <= 80, effectiveLimit = 300)
     const insightText =
-      'Schneider Electric Vietnam entered the market in 2018 through acquisition and achieved $120M revenue by 2024 with 28% YoY growth. They hold 12% market share in industrial ESCO segment.';
+      'Fabrikam Electric Vietnam entered the market in 2018 through acquisition and achieved $120M revenue by 2024 with 28% YoY growth. They hold 12% market share in industrial ESCO segment.';
     const result = safeCell(insightText, 80);
     assert(
       result.length > 80,
@@ -561,8 +561,8 @@ function runInsightTruncationTests() {
     // Simulate blocks with 500+ char content fields — these should pass the gate.
     const longContent =
       'Detailed market analysis showing $4.2B TAM with 12.3% CAGR growth through 2028. ' +
-      'Key players include Schneider Electric ($120M revenue, 28% YoY growth, 12% market share), ' +
-      'Siemens Energy ($85M revenue, 32% growth), and JERA ($200M projected by 2026). ' +
+      'Key players include Fabrikam Electric ($120M revenue, 28% YoY growth, 12% market share), ' +
+      'Litware Energy ($85M revenue, 32% growth), and TREY ($200M projected by 2026). ' +
       'The industrial ESCO segment represents $680M addressable market growing at 18.5% CAGR. ' +
       'Top 3 industrial zones (VSIP Binh Duong, Amata Bien Hoa, Tan Thuan) account for 42% of demand. ' +
       'Regulatory support through PDP8 and JETP funding of $15.5 billion creates favorable conditions.';
@@ -669,7 +669,7 @@ function runReviewLoopStagnationTests() {
   });
 
   test('Final deck review loop caps at MAX_FINAL_DECK_REVIEW_RETRIES=5', () => {
-    // Simulate the McKinsey-style final deck review from server.js lines 2753-2938.
+    // Simulate the final deck review from server.js lines 2753-2938.
     const MAX_FINAL_DECK_REVIEW_RETRIES = 5;
     const finalDeckReviewRounds = [];
     const identicalIssue = 'Competitive landscape slide lacks specific revenue figures';

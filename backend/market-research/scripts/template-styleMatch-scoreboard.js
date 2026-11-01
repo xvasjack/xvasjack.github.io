@@ -35,7 +35,7 @@ const { compile, BLOCK_TEMPLATE_PATTERN_MAP, BLOCK_TEMPLATE_SLIDE_MAP } = requir
 );
 
 // ---------------------------------------------------------------------------
-// EMU conversion helpers (mirrored from extract-template-complete.js)
+// EMU conversion helpers
 // ---------------------------------------------------------------------------
 const EMU_PER_INCH = 914400;
 const EMU_PER_PT = 12700;

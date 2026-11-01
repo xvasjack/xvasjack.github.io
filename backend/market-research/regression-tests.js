@@ -264,15 +264,16 @@ async function ensureSparseSlideDiscipline(pptxPath) {
 
 function runTemplateCloneUnitChecks() {
   assert.strictEqual(cloneTest.isLockedTemplateText('Table of Contents'), true);
-  assert.strictEqual(cloneTest.isLockedTemplateText('Source: YCP Analysis'), false);
+  assert.strictEqual(cloneTest.isLockedTemplateText('(C) Example Co 2026'), true);
+  assert.strictEqual(cloneTest.isLockedTemplateText('Source: Desk research'), false);
   assert.strictEqual(cloneTest.shouldSkipGeneratedToken('Table of Contents'), true);
-  assert.strictEqual(cloneTest.shouldSkipGeneratedToken('Source: YCP Analysis'), false);
+  assert.strictEqual(cloneTest.shouldSkipGeneratedToken('Source: Desk research'), false);
   assert.strictEqual(cloneTest.shouldSkipGeneratedToken('Thailand | Recommendations'), false);
 
-  const sourceTokenXml = '<p:sld><a:t>Source: YCP Analysis</a:t><a:t>Thailand</a:t></p:sld>';
+  const sourceTokenXml = '<p:sld><a:t>Source: Desk research</a:t><a:t>Thailand</a:t></p:sld>';
   const extracted = cloneTest.extractTextTokens(sourceTokenXml);
   assert(
-    extracted.some((t) => /source:\s*ycp analysis/i.test(t)),
+    extracted.some((t) => /source:\s*desk research/i.test(t)),
     'Generated source token should remain available for clone replacement'
   );
   assert(

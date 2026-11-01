@@ -47,18 +47,12 @@ const MODEL_COSTS = {
   'gemini-2.5-flash-lite': { input: 0.0001, output: 0.0004 },
   'gemini-2.5-pro': { input: 0.00125, output: 0.005 },
   'gemini-3-flash': { input: 0.00015, output: 0.0006 },
+  'gemini-2.0-flash': { input: 0.0001, output: 0.0004 },
   // Anthropic
   'claude-3-opus': { input: 0.015, output: 0.075 },
   'claude-3-sonnet': { input: 0.003, output: 0.015 },
   'claude-sonnet-4': { input: 0.003, output: 0.015 },
   'claude-3-haiku': { input: 0.00025, output: 0.00125 },
-  // DeepSeek
-  deepseek: { input: 0.00014, output: 0.00028 },
-  'deepseek-chat': { input: 0.00028, output: 0.00042 },
-  'deepseek-reasoner': { input: 0.00042, output: 0.00168 },
-  // Kimi
-  'kimi-k2': { input: 0.0006, output: 0.0025 },
-  'gemini-2.0-flash': { input: 0.0001, output: 0.0004 },
 };
 
 // Cache access token

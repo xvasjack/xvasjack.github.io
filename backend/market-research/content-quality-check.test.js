@@ -217,18 +217,18 @@ describe('getDecisionScore', () => {
   test('scores high-quality synthesis above threshold', () => {
     const synthesis = {
       executiveSummary: [
-        "Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. ENGIE Corp and Schneider Electric dominate with combined 35% market share. We recommend targeting mid-tier industrial factories because their energy spend averages $500K annually, which means significant savings potential. The regulatory push from DEDE creates urgency for compliance-driven demand.",
+        "Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. CONTOSO Corp and Fabrikam Electric dominate with combined 35% market share. We recommend targeting mid-tier industrial factories because their energy spend averages $500K annually, which means significant savings potential. The regulatory push from DEDE creates urgency for compliance-driven demand.",
       ],
       marketOpportunityAssessment: {
         totalAddressableMarket:
-          '$90M calculated from 1,200 factories at $500K average spend with 15% savings potential. This represents a significant opportunity because industrial energy costs are rising 8% annually, resulting in increased demand for efficiency services. Schneider Electric entered in 2018 and should prioritize expanding beyond Bangkok.',
+          '$90M calculated from 1,200 factories at $500K average spend with 15% savings potential. This represents a significant opportunity because industrial energy costs are rising 8% annually, resulting in increased demand for efficiency services. Fabrikam Electric entered in 2018 and should prioritize expanding beyond Bangkok.',
       },
       competitivePositioning: {
         keyPlayers: [
           {
-            name: 'ENGIE Corp',
+            name: 'CONTOSO Corp',
             description:
-              '$2.3B revenue, 18% market share, entered Thailand in 2015 via JV with B.Grimm Power Ltd. Focus on industrial parks, 12 active contracts averaging $2M each. Therefore their weakness is limited provincial network coverage.',
+              '$2.3B revenue, 18% market share, entered Thailand in 2015 via JV with A.Datum Power Ltd. Focus on industrial parks, 12 active contracts averaging $2M each. Therefore their weakness is limited provincial network coverage.',
           },
         ],
       },
@@ -303,7 +303,7 @@ describe('antiShallow', () => {
   });
 
   test('passes for high-quality analytical text', () => {
-    const text = `ENGIE Corp entered Thailand in 2018 via JV with B.Grimm, focusing on industrial parks near Bangkok. They've won 12 contracts averaging $2M each, however their provincial network coverage remains limited because B.Grimm's operations concentrate in the Eastern Seaboard. This means competitors with regional partnerships can capture the 40% of industrial demand outside Bangkok. Therefore, a joint venture with a provincial utility would provide geographic coverage that ENGIE currently lacks. Manufacturing wages rose 8% annually from 2021-2024, consequently factory operators seek 15-20% energy cost reductions. Schneider Electric's revenue in Thailand grew to $180M in 2024.`;
+    const text = `CONTOSO Corp entered Thailand in 2018 via JV with A.Datum, focusing on industrial parks near Bangkok. They've won 12 contracts averaging $2M each, however their provincial network coverage remains limited because A.Datum's operations concentrate in the Eastern Seaboard. This means competitors with regional partnerships can capture the 40% of industrial demand outside Bangkok. Therefore, a joint venture with a provincial utility would provide geographic coverage that CONTOSO currently lacks. Manufacturing wages rose 8% annually from 2021-2024, consequently factory operators seek 15-20% energy cost reductions. Fabrikam Electric's revenue in Thailand grew to $180M in 2024.`;
 
     const result = antiShallow(text, 'energy services');
     expect(result.pass).toBe(true);
@@ -341,7 +341,7 @@ describe('analyze', () => {
   test('returns comprehensive report for good synthesis', () => {
     const synthesis = {
       executiveSummary: [
-        "Thailand's energy services market reached $320M in 2024, growing at 14% CAGR. ENGIE Corp and Schneider Electric dominate. We recommend targeting mid-tier industrial factories because energy costs are rising, which means significant savings potential. The DEDE regulatory push should create urgency.",
+        "Thailand's energy services market reached $320M in 2024, growing at 14% CAGR. CONTOSO Corp and Fabrikam Electric dominate. We recommend targeting mid-tier industrial factories because energy costs are rising, which means significant savings potential. The DEDE regulatory push should create urgency.",
       ],
       marketOpportunityAssessment: {
         totalAddressableMarket: '1200 factories x $500K = $90M TAM',
@@ -349,7 +349,9 @@ describe('analyze', () => {
         growthTrajectory: '14% CAGR driven by ISO 50001 mandate',
       },
       competitivePositioning: {
-        keyPlayers: [{ name: 'ENGIE Corp', description: 'Major player with $2.3B global revenue' }],
+        keyPlayers: [
+          { name: 'CONTOSO Corp', description: 'Major player with $2.3B global revenue' },
+        ],
         whiteSpaces: ['Provincial coverage gap outside Bangkok'],
       },
       keyInsights: [
@@ -439,7 +441,7 @@ describe('sparse and noisy payload handling', () => {
       _metadata: { generatedAt: '2026-01-01' },
       randomField: [1, 2, 3],
       executiveSummary: [
-        'Valid paragraph with Schneider Electric Corp reaching $180M revenue in 2024, growing at 12% annually. This represents a compelling opportunity because industrial demand is rising.',
+        'Valid paragraph with Fabrikam Electric Corp reaching $180M revenue in 2024, growing at 12% annually. This represents a compelling opportunity because industrial demand is rising.',
       ],
       depth: {
         dealEconomics: {

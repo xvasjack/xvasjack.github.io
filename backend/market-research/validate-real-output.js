@@ -25,7 +25,8 @@ function getRealExpectations(country = 'Vietnam', industry = 'Energy Services') 
   return {
     minSlides: 20,
     maxSlides: 40,
-    minFileSize: 200 * 1024,
+    // Text-only decks (no embedded images): a full 20+ slide deck is roughly 100-200 KB.
+    minFileSize: 80 * 1024,
     maxFileSize: 30 * 1024 * 1024,
     minCharts: 2,
     minTables: 20,

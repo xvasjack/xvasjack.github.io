@@ -143,7 +143,7 @@
         "marketInsight": "Japanese firms dominate with 42% market share in industrial robotics leveraging decades of automotive supply chain relationships",
         "players": [
           {
-            "name": "Fanuc Corporation",
+            "name": "Kinetica Robotics Corporation",
             "presence": "Since 1985, 6 service centers",
             "description": "Global robotics leader with dominant position in automotive manufacturing automation. USD 5.2 billion global revenue with 15% derived from Test Country operations. Controls 28% of local industrial robot market through OEM partnerships and direct sales. Installed base of 12,000+ robots across 450 factories. Growth of 18% in 2024 driven by EV manufacturing demand.",
             "entryYear": "1985",
@@ -152,7 +152,7 @@
             "marketDeepen_2": "additional competitor data from research round 2"
           },
           {
-            "name": "Yaskawa Electric",
+            "name": "Ridgeway Motion Electric",
             "presence": "Since 1990, 3 offices",
             "description": "Servo motor and motion control specialist with growing robotics division. USD 3.8 billion global revenue. Expanding rapidly into welding automation for EV battery manufacturing with 22% growth in Test Country. Key contracts with major EV OEMs for battery module assembly lines worth USD 180 million in 2024.",
             "entryYear": "1990",
@@ -170,7 +170,7 @@
             "type": "Private company",
             "revenue": "850M",
             "marketShare": "8%",
-            "description": "Largest local automation system integrator with 600 engineers. Revenue grew 35% in 2024 to USD 850 million driven by smart factory projects for Japanese automotive OEMs. Won USD 120 million contract for complete factory automation of new EV plant. Strong in MES implementation and PLC programming with certified Siemens and Rockwell partnerships.",
+            "description": "Largest local automation system integrator with 600 engineers. Revenue grew 35% in 2024 to USD 850 million driven by smart factory projects for Japanese automotive OEMs. Won USD 120 million contract for complete factory automation of new EV plant. Strong in MES implementation and PLC programming with certified Litware and Ironwood partnerships.",
             "strategicAssessment": "Best local integration capability; acquisition candidate for global automation firms"
           }
         ]
@@ -180,7 +180,7 @@
         "competitiveInsight": "European firms lead in process automation and Industry 4.0 platforms",
         "players": [
           {
-            "name": "Siemens Digital Industries",
+            "name": "Litware Digital Industries",
             "origin": "Germany",
             "mode": "Wholly-owned subsidiary",
             "entryYear": "1978",
@@ -189,7 +189,7 @@
             "strategicAssessment": "End-to-end digitalization capability is unique competitive advantage; premium pricing limits SME adoption"
           },
           {
-            "name": "ABB Robotics",
+            "name": "Nordhavn Robotics",
             "origin": "Switzerland",
             "mode": "Subsidiary with local manufacturing",
             "entryYear": "1988",
@@ -201,7 +201,7 @@
       },
       "caseStudy": {
         "slideTitle": "Test Country - Market Entry Case Study",
-        "company": "Universal Robots (Denmark)",
+        "company": "Cobotic Works (Denmark)",
         "entryYear": 2015,
         "entryMode": "Distribution partnership followed by direct subsidiary in 2018",
         "investment": "USD 25M total over 8 years",
@@ -219,14 +219,14 @@
         "recentDeals": [
           {
             "year": "2024",
-            "buyer": "Rockwell Automation",
+            "buyer": "Ironwood Automation",
             "target": "SmartFab Systems",
             "value": "USD 280M",
             "rationale": "Acquire local MES and smart factory platform with 150+ enterprise deployments"
           },
           {
             "year": 2023,
-            "buyer": "Schneider Electric",
+            "buyer": "Fabrikam Electric",
             "target": "GreenControl Asia",
             "value": 150000000,
             "rationale": "Expand industrial IoT and energy management automation capabilities in ASEAN"
@@ -431,7 +431,7 @@
         ],
         "successFactors": [
           "After-sales service capability must precede volume sales in automation",
-          "OEM partnerships (Siemens, Rockwell certified) provide credibility shortcut",
+          "OEM partnerships (Litware, Ironwood certified) provide credibility shortcut",
           "Government registration opens access to subsidized project pipeline"
         ]
       },

@@ -1051,7 +1051,7 @@ function addCalloutBox(slide, title, content, options = {}) {
 }
 
 // Helper: add insights panel to chart slides (right side of chart)
-// Displays key insights as bullet points next to charts for YCP-quality output
+// Displays key insights as bullet points next to charts
 function addInsightsPanel(slide, insights = [], options = {}) {
   if (!insights || insights.length === 0) return;
 
@@ -1253,7 +1253,7 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
 }
 
 // ============ CHART GENERATION ============
-// Chart palette from Escort template extraction (chartPalette.extended)
+// Chart palette from template-patterns.json (chartPalette.extended)
 const TP_CHART = templatePatterns.chartPalette || {};
 const chartSeries = templatePatterns.style?.colors?.chartSeries || [];
 const extendedPalette = TP_CHART.extended || [
@@ -1730,7 +1730,7 @@ function addPieChart(slide, title, data, options = {}) {
 async function buildStoryNarrative(countryAnalysis, scope) {
   console.log('\n  [STORY ARCHITECT] Building narrative from research...');
 
-  const systemPrompt = `You are a senior partner at McKinsey preparing a board presentation. Your job is to transform raw research into a compelling narrative that drives a decision.
+  const systemPrompt = `You are a senior strategy consultant preparing a board presentation. Your job is to transform raw research into a compelling narrative that drives a decision.
 
 === STORYTELLING PRINCIPLES ===
 1. LEAD WITH THE VERDICT: Executives want the answer first, then the reasoning.
@@ -1741,16 +1741,16 @@ async function buildStoryNarrative(countryAnalysis, scope) {
 
 === ASSERTIVE SLIDE TITLES (CRITICAL) ===
 Generate conclusion-driven titles that tell the story, NOT descriptive labels.
-BAD (descriptive): "Thailand - Market Size", "Vietnam - Energy Policy"
-GOOD (assertive): "$50 billion total market, $5 billion addressable for client", "Electricity liberalization creates 18-month JV window"
+BAD (descriptive): "Indonesia - Market Size", "Indonesia - Logistics Policy"
+GOOD (assertive): "$50 billion total market, $5 billion addressable for client", "Licensing reform creates 18-month JV window"
 Each title should be a conclusion the reader can act on, not a topic they need to read about.
 
 === INSIGHT QUALITY ===
-BAD (information): "Thailand requires 50% local content for energy services"
+BAD (information): "[Country] requires 50% local content for [industry] contracts"
 GOOD (insight): "The 50% local content rule means you can't compete on cost alone—local partnerships aren't optional, they're your competitive moat"
 
-BAD (list): "Key players include Schlumberger, Halliburton, Baker Hughes"
-GOOD (insight): "The Big 3 dominate offshore, but none have cracked the industrial efficiency market—a $200M segment growing 15% annually"
+BAD (list): "Key players include Contoso Logistics, Fabrikam Freight, Northwind Cold Chain"
+GOOD (insight): "The top 3 dominate port-side storage, but none serve inland distribution—a $200M segment growing 15% annually"
 
 === SLIDE TYPES TO USE ===
 1. VERDICT: Go/No-Go with conditions (always first after title)
@@ -1965,17 +1965,17 @@ function _rectArea(r) {
   return Math.max(0, r.w) * Math.max(0, r.h);
 }
 
-function _getTextHint(el) {
-  const paragraphs = el?.textBody?.paragraphs;
-  if (!Array.isArray(paragraphs)) return '';
-  const parts = [];
-  for (const p of paragraphs) {
-    const runs = Array.isArray(p?.runs) ? p.runs : [];
-    for (const run of runs) {
-      if (run?.textHint) parts.push(String(run.textHint));
-    }
-  }
-  return parts.join(' ').trim();
+// Text signals stored per template element: textLength (characters of placeholder
+// text in the template shape) and isSourceNote (shape holds a source/note line).
+// The template file keeps no slide text, only these two signals.
+function _getTextSignals(el) {
+  const textBody = el?.textBody;
+  if (!textBody || typeof textBody !== 'object') return { length: 0, isSourceNote: false };
+  const length = Number(textBody.textLength);
+  return {
+    length: Number.isFinite(length) && length > 0 ? length : 0,
+    isSourceNote: textBody.isSourceNote === true,
+  };
 }
 
 function _computeBounds(rects, fallbackRect, sourceYLimit) {
@@ -2027,25 +2027,24 @@ function getTemplateSlideLayout(slideNumber) {
   const title = titleShape ? _rectFromPos(titleShape.position) : { ...TEMPLATE.title };
 
   const sourceShape = shapes
-    .map((s) => ({ s, hint: _getTextHint(s).toLowerCase() }))
+    .map((s) => ({ s, text: _getTextSignals(s) }))
     .filter(
-      ({ s, hint }) =>
-        s.position.y >= 6.2 &&
-        (hint.includes('source') || hint.includes('note') || /^textbox/i.test(String(s.name || '')))
+      ({ s, text }) =>
+        s.position.y >= 6.2 && (text.isSourceNote || /^textbox/i.test(String(s.name || '')))
     )
     .sort((a, b) => a.s.position.y - b.s.position.y)[0]?.s;
   const source = sourceShape ? _rectFromPos(sourceShape.position) : { ...TEMPLATE.sourceBar };
 
   const callouts = shapes
-    .map((s) => ({ s, hint: _getTextHint(s) }))
-    .filter(({ s, hint }) => {
+    .map((s) => ({ s, text: _getTextSignals(s) }))
+    .filter(({ s, text }) => {
       const nm = String(s.name || '').toLowerCase();
       return (
         s.position.y > 1.2 &&
         s.position.y < 6.6 &&
         s.position.w > 0.8 &&
         s.position.h > 0.25 &&
-        hint.length > 2 &&
+        text.length > 2 &&
         (nm.includes('speech bubble') ||
           nm.includes('autoshape') ||
           nm.includes('rectangle') ||
@@ -2066,15 +2065,15 @@ function getTemplateSlideLayout(slideNumber) {
     const largeShapes = shapes
       .map((s) => ({
         rect: _rectFromPos(s.position),
-        hint: _getTextHint(s),
+        textLength: _getTextSignals(s).length,
         name: String(s.name || ''),
       }))
-      .filter(({ rect, hint, name }) => {
+      .filter(({ rect, textLength, name }) => {
         const lname = name.toLowerCase();
         if (/^title/i.test(name)) return false;
         if (lname.includes('columnheader')) return false;
         if (rect.y < 1.2 || rect.y > 6.6) return false;
-        return rect.w > 2.0 && rect.h > 0.3 && hint.length > 2;
+        return rect.w > 2.0 && rect.h > 0.3 && textLength > 2;
       })
       .map((x) => x.rect);
     contentCandidates.push(...largeShapes);
@@ -2611,7 +2610,7 @@ function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
 // ============ TOC SLIDE ============
 // Creates a Table of Contents slide with highlighted active section
 function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, countryName) {
-  const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
+  const slide = pptx.addSlide({ masterName: 'MAIN' });
 
   // Fix 6: TOC title font size from JSON (default 18, not TITLE_FONT_SIZE which is 20)
   const tocTitleSize = templatePatterns.style?.toc?.fontSize || 18;
@@ -2699,7 +2698,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
 // ============ OPPORTUNITIES & BARRIERS SLIDE ============
 // Creates a 2-column table slide with opportunities on left, barriers on right
 function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
-  const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
+  const slide = pptx.addSlide({ masterName: 'MAIN' });
   slide.addText('Opportunities & Barriers', {
     x: TEMPLATE.title.x,
     y: TEMPLATE.title.y,

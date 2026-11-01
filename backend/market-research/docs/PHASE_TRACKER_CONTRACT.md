@@ -42,9 +42,9 @@ The `--through` flag stops execution after the specified stage (inclusive).
 ```json
 {
   "id":            "run-m1abc-1f2e3d4a",
-  "industry":      "Energy Services",
-  "country":       "Vietnam",
-  "clientContext":  "Client is expanding APAC operations",
+  "industry":      "Cold-Chain Logistics",
+  "country":       "Indonesia",
+  "clientContext":  "European investor evaluating market entry",
   "targetStage":   "3",
   "status":        "running",
   "createdAt":     "2026-02-19T12:00:00.000Z",
@@ -120,11 +120,11 @@ reports/phase-runs/<runId>/stages/<stage>/attempt-<n>/
 
 ```bash
 node scripts/phase-run.js \
-  --country=Vietnam \
-  --industry="Energy Services" \
+  --country=Indonesia \
+  --industry="Cold-Chain Logistics" \
   --through=3 \
   --run-id=run-custom-123 \
-  --client-context="APAC expansion" \
+  --client-context="European investor" \
   --strict-template=true \
   --attempts-per-stage=1
 ```
