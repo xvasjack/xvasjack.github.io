@@ -4,3 +4,6 @@ node_modules/
 coverage/
 preflight-reports/
 market-research/reports/latest/
+
+# Test run artifacts
+market-research/reports/phase-runs/
