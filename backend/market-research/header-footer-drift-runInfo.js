@@ -6,7 +6,7 @@
  * Precise per-slide runInfo for header and footer line geometry drift.
  * Scans every slide in a generated PPTX for line shapes whose Y-position
  * corresponds to header-top, header-bottom, or footer lines, then computes
- * delta from the Escort template ground truth.
+ * delta from the template ground truth.
  *
  * Does NOT modify the PPTX — runInfo only.
  *
@@ -356,7 +356,7 @@ async function scanDrift(pptxBuffer, options = {}) {
   const report = {
     _meta: {
       generatedAt: new Date().toISOString(),
-      description: 'Header/footer line drift runInfo against Escort template ground truth',
+      description: 'Header/footer line drift runInfo against template ground truth',
       thresholds: {
         infoMaxEmu: DRIFT_THRESHOLD_INFO,
         warningMaxEmu: DRIFT_THRESHOLD_WARNING,

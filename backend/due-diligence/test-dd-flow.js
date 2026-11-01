@@ -511,7 +511,9 @@ async function main() {
   const missing = ['DD_API_URL', 'TEST_DOC', 'TEMPLATE_DOC'].filter((k) => !process.env[k]);
   if (missing.length > 0) {
     console.error(`Missing required env vars: ${missing.join(', ')}`);
-    console.error('Example: DD_API_URL=https://your-dd-service TEST_DOC=input.docx TEMPLATE_DOC=template.docx node test-dd-flow.js');
+    console.error(
+      'Example: DD_API_URL=https://your-dd-service TEST_DOC=input.docx TEMPLATE_DOC=template.docx node test-dd-flow.js'
+    );
     process.exit(2);
   }
 

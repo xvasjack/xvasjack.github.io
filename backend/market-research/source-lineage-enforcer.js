@@ -41,8 +41,8 @@ const PLACEHOLDER_PATTERNS = [
 
 // Template static exemptions — these are not analytical claims
 const TEMPLATE_STATIC_EXEMPTIONS = [
-  /^source:\s*ycp\s+(?:analysis|solidiance|axtria)/i,
-  /^ycp\s+(?:analysis|solidiance|axtria)/i,
+  /^source:\s*desk\s+research/i,
+  /^desk\s+research/i,
   /^(?:confidential|proprietary|client\s+data)/i,
 ];
 

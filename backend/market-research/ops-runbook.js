@@ -41,8 +41,8 @@ const ERROR_PATTERNS = [
     rootCause: 'Template coverage or geometry alignment regression.',
     fix: [
       'Check pptMetrics for templateCoverage, nonTemplatePatternCount, geometryIssueCount.',
-      'Compare template-patterns.json against the base PPTX template.',
-      'Run: node build-template-patterns.js to regenerate patterns.',
+      'Compare generated slide geometry against template-patterns.json.',
+      'Run: node template-contract-compiler.js --doctor to check the template contract.',
     ],
   },
   {
@@ -106,7 +106,7 @@ const ERROR_PATTERNS = [
     fix: [
       'Run: node -e "require(\'./deck-file-check\').readPPTX(require(\'fs\').readFileSync(\'output.pptx\')).then(({zip}) => require(\'./deck-file-check\').scanPackageConsistency(zip).then(r => console.log(JSON.stringify(r, null, 2))))"',
       'Check for duplicate relationship IDs or slide IDs.',
-      'Review template-fill.js if slide cloning is involved.',
+      'Review deck-file-check.js normalization steps for the failing part.',
     ],
   },
   {
@@ -278,8 +278,8 @@ const COMMANDS = {
       desc: 'Repair a PPTX file',
     },
     {
-      cmd: 'node build-template-patterns.js',
-      desc: 'Rebuild template patterns from base PPTX',
+      cmd: 'node template-contract-compiler.js --doctor',
+      desc: 'Check the template contract (template-patterns.json)',
     },
   ],
   'Local Development': [
@@ -454,7 +454,7 @@ const ERROR_CODE_RUNBOOKS = {
       { action: 'Run fileSafety pipeline on the output buffer', command: 'node -e "require(\'./pptx-fileSafety-pipeline\').runFileSafetyPipeline(require(\'fs\').readFileSync(\'output.pptx\')).then(r => console.log(JSON.stringify(r, null, 2)))"' },
       { action: 'Check for duplicate slide IDs or broken refs', command: 'node -e "require(\'./deck-file-check\').validatePPTX(require(\'fs\').readFileSync(\'output.pptx\')).then(r => console.log(JSON.stringify(r, null, 2)))"' },
       { action: 'Run repair', command: 'node repair-pptx.js output.pptx' },
-      { action: 'If repair fails, check template clone postprocess', command: 'grep -n "cloneSlide\\|duplicateSlide" deck-builder-single.js' },
+      { action: 'If repair fails, check package consistency', command: 'node -e "require(\'./deck-file-check\').readPPTX(require(\'fs\').readFileSync(\'output.pptx\')).then(({zip}) => require(\'./deck-file-check\').scanPackageConsistency(zip).then(r => console.log(JSON.stringify(r, null, 2))))"' },
     ],
   },
   PPT_RENDERING_QUALITY: {
@@ -464,7 +464,7 @@ const ERROR_CODE_RUNBOOKS = {
     steps: [
       { action: 'Check PPT metrics for build failures', command: 'curl -s http://localhost:3010/api/runInfo | jq .ppt' },
       { action: 'Review template pattern coverage', command: 'node -e "console.log(JSON.stringify(require(\'./template-contract-compiler\').compile(), null, 2))"' },
-      { action: 'Regenerate template patterns', command: 'node build-template-patterns.js' },
+      { action: 'Check the template contract', command: 'node template-contract-compiler.js --doctor' },
     ],
   },
   QUALITY_GATE_FAILED: {
@@ -824,7 +824,7 @@ function recommendActions(runInfo) {
       actions.push({
         issue: `Low template coverage: ${runInfo.ppt.templateCoverage}%`,
         severity: 'medium',
-        command: 'node build-template-patterns.js',
+        command: 'node template-contract-compiler.js --doctor',
       });
     }
     if (runInfo.ppt.slideRenderFailureCount > 0) {

@@ -96,20 +96,7 @@ function removeRedundantTrailingShortform(label) {
     .join('')
     .toLowerCase();
 
-  const knownShortforms = new Set([
-    'ros',
-    'cos',
-    'pbs',
-    'hts',
-    'eor',
-    'hr',
-    'it',
-    'hq',
-    'gdp',
-    'ess',
-    'rpo',
-    'clq',
-  ]);
+  const knownShortforms = new Set(['eor', 'hr', 'it', 'hq', 'gdp', 'ess', 'rpo']);
   if (initials && (initials === shortform || knownShortforms.has(shortform))) {
     return main;
   }
@@ -149,10 +136,6 @@ function normalizeLabel(label) {
     hr: 'HR',
     it: 'IT',
     eor: 'Employer of Record',
-    ros: 'Recruitment Outsourcing Solution',
-    cos: 'Comprehensive Outsourcing Solution',
-    pbs: 'Payroll and Banking Solution',
-    hts: 'Hostel and Transportation Solution',
   };
   if (serviceLabelExpansions[compactLabel]) {
     return serviceLabelExpansions[compactLabel];
@@ -1779,7 +1762,7 @@ function stripCompanySuffix(name) {
 }
 
 // Clean PT/CV prefixes from company names within a text string
-// Handles lists like "PT. Nara Summit, PT. Liebherr" -> "Nara Summit, Liebherr"
+// Handles lists like "PT. Acme, PT. Contoh" -> "Acme, Contoh"
 function cleanCompanyPrefixesInText(text) {
   if (!text || typeof text !== 'string') return text;
   // Remove PT./PT prefix followed by space and company name
@@ -1831,8 +1814,6 @@ function fixAcronymCasing(text) {
     'AIS',
     'TRUE',
     'DTAC', // Companies
-    'KJ',
-    'IOI',
     'IBM',
     'HP',
     'AMD',
@@ -1864,7 +1845,6 @@ function fixAcronymCasing(text) {
     'EOR',
     'ESS',
     'RPO',
-    'CLQ',
     'ENI',
     'BP',
     'EDF',
@@ -1872,15 +1852,10 @@ function fixAcronymCasing(text) {
     'EON',
     'LME',
     'TRC',
-    'YCP',
     'BFSI',
     'ITES',
-    'JTKSM',
-    'FWCS',
-    'KDN',
     'UV',
     'OPV',
-    'PBS',
     'PE',
     'SGS',
     'NC',
@@ -1920,7 +1895,7 @@ function fixAcronymCasing(text) {
 
   result = result.replace(/\bL\s*&\s*T\b/gi, 'L&T');
 
-  // Dotted shortforms should be uppercase (example: r.o.s -> R.O.S).
+  // Dotted shortforms should be uppercase (example: a.b.c -> A.B.C).
   result = result.replace(/\b([a-z])(?:\.[a-z]){1,6}\.?\b/gi, (match) => match.toUpperCase());
 
   for (const acronym of allCapsAcronyms) {
@@ -1947,18 +1922,7 @@ function fixAcronymCasing(text) {
   });
 
   // Keep acronym prefixes uppercase inside merged words (example: Hrcare -> HRCare).
-  const acronymPrefixes = [
-    'HR',
-    'EOR',
-    'RPO',
-    'ESS',
-    'CLQ',
-    'BFSI',
-    'ITES',
-    'JTKSM',
-    'FWCS',
-    'KJ',
-  ];
+  const acronymPrefixes = ['HR', 'EOR', 'RPO', 'ESS', 'BFSI', 'ITES'];
   for (const prefix of acronymPrefixes) {
     const regex = new RegExp(`\\b(${prefix})([A-Za-z]{2,})\\b`, 'gi');
     result = result.replace(regex, (match, _p, suffix) => {
@@ -3033,21 +2997,13 @@ const requiredEnvVars = [
   'SENDGRID_API_KEY',
   'SENDER_EMAIL',
 ];
-const optionalEnvVars = [
-  'SERPAPI_API_KEY',
-  'DEEPSEEK_API_KEY',
-  'DEEPGRAM_API_KEY',
-  'ANTHROPIC_API_KEY',
-]; // Optional but recommended
+const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPGRAM_API_KEY', 'ANTHROPIC_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
-}
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
@@ -3196,7 +3152,7 @@ async function markImportantContent(fullContent, website) {
 - Number of customers, partners, distributors
 - Years of experience, projects completed
 - Export percentages, countries served
-- Any counter/statistic displays (e.g., "880 Colour Matching", "60 Customers")
+- Any counter/statistic displays (e.g., "500 Products", "60 Customers")
 
 ### 3. BUSINESS RELATIONSHIPS
 - Partner companies (especially Japanese, international)
@@ -3864,46 +3820,6 @@ async function callSerpAPI(query) {
   } catch (error) {
     console.error('SerpAPI error:', error.message);
     return '';
-  }
-}
-
-// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
-async function callDeepSeek(prompt, maxTokens = 4000) {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    console.warn('DeepSeek API key not set, falling back to GPT-4o');
-    return null; // Caller should handle fallback
-  }
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.3,
-      }),
-      timeout: 120000,
-    });
-    const data = await response.json();
-    if (data.usage) {
-      recordTokens(
-        'deepseek-chat',
-        data.usage.prompt_tokens || 0,
-        data.usage.completion_tokens || 0
-      );
-    }
-    if (data.error) {
-      console.error('DeepSeek API error:', data.error);
-      return null;
-    }
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('DeepSeek error:', error.message);
-    return null;
   }
 }
 
@@ -5640,7 +5556,7 @@ async function fetchImageAsBase64(url) {
   }
 }
 
-// Generate PPTX using PptxGenJS - matching YCP template
+// Generate PPTX using PptxGenJS - matching the slide template
 // inaccessibleWebsites: websites that couldn't be scraped (appear on summary slide only, no individual profiles)
 async function generatePPTX(
   companies,
@@ -5657,15 +5573,15 @@ async function generatePPTX(
     }
 
     const pptx = new pptxgen();
-    pptx.author = 'YCP';
+    pptx.author = 'Deal Tools';
     pptx.title = 'Company Profile Slides';
     pptx.subject = 'Company Profiles';
 
     // Set exact slide size to match template (13.333" x 7.5" = 16:9 widescreen)
-    pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
-    pptx.layout = 'YCP';
+    pptx.defineLayout({ name: 'WIDE_16x9', width: 13.333, height: 7.5 });
+    pptx.layout = 'WIDE_16x9';
 
-    // YCP Theme Colors (from template)
+    // Theme colors (from template)
     const COLORS = {
       headerLine: '293F55', // Dark navy for header/footer lines
       accent3: '011AB7', // Dark blue - label column background
@@ -5679,7 +5595,7 @@ async function generatePPTX(
     // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
     // Lines are part of the master template background, not individual shapes
     pptx.defineSlideMaster({
-      title: 'YCP_MASTER',
+      title: 'MAIN_MASTER',
       background: { color: 'FFFFFF' },
       objects: [
         // Real Title placeholder (for PPT outline/side indexing)
@@ -5853,7 +5769,7 @@ async function generatePPTX(
           );
         }
 
-        // Template colors (from analysis of YCP Target List Slide Template)
+        // Template colors (from analysis of the target list slide template)
         const TL_COLORS = {
           headerBg: '1524A9',
           countryBg: '011AB7',
@@ -5869,7 +5785,7 @@ async function generatePPTX(
         segmentChunks.forEach((segmentChunk, chunkIdx) => {
           const chunkSegments = segmentChunk.labels;
           const chunkOriginalIndices = segmentChunk.originalIndices;
-          const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+          const targetSlide = pptx.addSlide({ masterName: 'MAIN_MASTER' });
 
           targetSlide.addText(formattedTitle, {
             x: 0.38,
@@ -6180,7 +6096,7 @@ async function generatePPTX(
         // NOTE: Business Overview slide removed - user requested single profile slide only
 
         // Use master slide - lines are fixed in background and cannot be moved
-        const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+        const slide = pptx.addSlide({ masterName: 'MAIN_MASTER' });
 
         // ===== TITLE + MESSAGE in real title placeholder =====
         const titleText = fixAcronymCasing(company.title || company.company_name || 'Company Profile');
@@ -10307,7 +10223,7 @@ function uniqueRelationshipNames(names) {
 }
 
 // Extract relationship names from already-verified key metrics text
-// Example: "6 suppliers including Hikvision, Dahua, ZKTeco"
+// Example: "5 suppliers including Bosch, Honeywell, Axis"
 function extractRelationshipsFromMetrics(keyMetrics) {
   const extracted = { customers: [], suppliers: [], principals: [], brands: [] };
   if (!Array.isArray(keyMetrics) || keyMetrics.length === 0) return extracted;
@@ -14070,7 +13986,7 @@ OUTPUT JSON:
 3. footnote: Two parts:
    - Notes (optional): If unusual shortforms used, write full-form like "SKU (Stock Keeping Unit)". Separate multiple with comma.
    - Currency: ${currencyExchange || 'Leave empty if no matching currency'} exactly. Do not invent, modify, or override this text.
-   Separate notes and currency with semicolon. Always end with new line: "出典: 会社ウェブサイト、SPEEDA"
+   Separate notes and currency with semicolon. Always end with new line: "出典: 会社ウェブサイト"
 
 4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
 
@@ -14126,9 +14042,9 @@ async function extractKeyMetrics(scrapedContent, previousData) {
 
 CRITICAL - VISIBLE STATISTICS FIRST:
 Before anything else, scan the ENTIRE page for ANY prominently displayed numbers/statistics:
-- Look for large numbers displayed on the homepage (e.g., "880", "300+", "60", "12")
+- Look for large numbers displayed on the homepage (e.g., "500", "300+", "60", "12")
 - These are often shown in counter/stat sections with labels below them
-- Common patterns: "60 Customers", "880 Colour Matching", "300+ Employees", "12 New Projects"
+- Common patterns: "60 Customers", "500 Products", "300+ Employees", "12 New Projects"
 - TRANSLATE any non-English labels to English (e.g., "Kota Distribusi" = "Distribution Cities", "Project Baru" = "New Projects")
 - Include ALL visible statistics with their labels in the "Key Metrics" field
 
@@ -14170,15 +14086,15 @@ OPERATIONS & SCALE:
 - Number of SKUs/products
 
 GEOGRAPHIC REACH (CRITICAL - CAPTURE ALL DISTRIBUTION INFO):
-- Export countries (list ALL countries mentioned: Thailand, Sri Lanka, Pakistan, Bangladesh, UAE, etc.)
+- Export countries (list ALL countries mentioned: Thailand, Vietnam, India, UAE, etc.)
 - Distribution network (distributors, agents, dealers - include country names)
 - Markets served (if domestic only, write "Nationwide" instead of listing regions)
 - CRITICAL: If website mentions "agents and distributors across [countries]" or "network in [countries]" - LIST ALL COUNTRIES!
-- Example: "agents and distributors across Thailand, Sri Lanka, Pakistan, Bangladesh, UAE, Papua New Guinea, Vietnam, Poland, East Malaysia" → capture ALL 9 countries
+- Example: "agents and distributors across Thailand, Vietnam, Indonesia, Philippines, India, UAE, Australia, Poland, Kenya" → capture ALL 9 countries
 - This is CRITICAL M&A info showing international expansion - never skip it!
 
 INDUSTRIES SERVED:
-- List the industries/applications the company serves (e.g., "Gravure Printing, Screen Printing, Footwear, Leather, Rubber")
+- List the industries/applications the company serves (e.g., "Packaging, Automotive, Construction, Electronics")
 - Look for "Industries We Serve", "Applications", "Markets" sections
 
 QUALITY & COMPLIANCE:
@@ -14195,13 +14111,13 @@ OUTPUT JSON - CRITICAL: INCLUDE SOURCE QUOTES FOR VERIFICATION:
     },
     {
       "label": "Key Suppliers",
-      "value": "6 suppliers including Hikvision, Dahua, Paradox, ZKTeco, Ruijie",
-      "source_quotes": ["Our partners include Hikvision, Dahua, Paradox, ZKTeco, and Ruijie"]
+      "value": "5 suppliers including Bosch, Honeywell, Axis, HID, Genetec",
+      "source_quotes": ["Our partners include Bosch, Honeywell, Axis, HID, and Genetec"]
     },
     {
       "label": "Export Countries",
-      "value": "Thailand, Sri Lanka, Bangladesh, UAE, Vietnam",
-      "source_quotes": ["we export to Thailand, Sri Lanka, Bangladesh, UAE, and Vietnam"]
+      "value": "Thailand, Vietnam, India, UAE, Australia",
+      "source_quotes": ["we export to Thailand, Vietnam, India, UAE, and Australia"]
     },
     {
       "label": "Certification",
@@ -14222,11 +14138,11 @@ SOURCE QUOTE RULES (ANTI-HALLUCINATION):
 
 MERGE DUPLICATIVE INFORMATION:
 When you find BOTH a count AND specific names for the same category, MERGE them into ONE coherent entry:
-- BAD: {"label": "Number of Suppliers", "value": "6"} AND {"label": "Key Suppliers", "value": "Hikvision, Dahua, Paradox"}
-- GOOD: {"label": "Key Suppliers", "value": "6 suppliers including Hikvision, Dahua, Paradox, ZKTeco, Ruijie"}
+- BAD: {"label": "Number of Suppliers", "value": "5"} AND {"label": "Key Suppliers", "value": "Bosch, Honeywell, Axis"}
+- GOOD: {"label": "Key Suppliers", "value": "5 suppliers including Bosch, Honeywell, Axis, HID, Genetec"}
 
-- BAD: {"label": "Number of Customers", "value": "250,000"} AND {"label": "Key Customers", "value": "Installers, Dealers, Integrators"}
-- GOOD: {"label": "Key Customers", "value": "Over 250,000 installations including Installers, Dealers, System Integrators"}
+- BAD: {"label": "Number of Customers", "value": "10,000"} AND {"label": "Key Customers", "value": "Installers, Dealers, Integrators"}
+- GOOD: {"label": "Key Customers", "value": "Over 10,000 installations including Installers, Dealers, System Integrators"}
 
 - BAD: {"label": "Number of Employees", "value": "100+"} in metrics array
 - GOOD: Include employee count in "Key Metrics" bullet point
@@ -14234,20 +14150,20 @@ When you find BOTH a count AND specific names for the same category, MERGE them 
 SEGMENTATION REQUIREMENT:
 For metrics with MANY items (e.g., Customers, Suppliers), segment them by category using POINT FORM:
 Example for Customers:
-{"label": "Key Customers", "value": "- Banking: Bank Mandiri, BNI, Bank Mestika\\n- Energy: Pertamina, Medco Energy\\n- Manufacturing: Kalbe, Sinarmas"}
+{"label": "Key Customers", "value": "- Banking: Acme Bank, Example Bank\\n- Energy: Sample Energy, Demo Power\\n- Manufacturing: Alpha Industries, Beta Foods"}
 
 Example for Suppliers:
-{"label": "Key Suppliers", "value": "- CCTV: Hikvision, Dahua, Axis\\n- Access Control: HID, ZKTeco\\n- Video Management: Milestone, Genetec"}
+{"label": "Key Suppliers", "value": "- CCTV: Bosch, Axis\\n- Access Control: HID, Honeywell\\n- Video Management: Milestone, Genetec"}
 
 IMPORTANT: Always use "- " prefix for each segment line to create point form for easier reading.
 
 CRITICAL - CUSTOMER/SUPPLIER NAMES ONLY:
 - For Key Customers and Key Suppliers, extract ONLY the company/brand NAMES
 - NEVER include information ABOUT the customer/supplier (their size, employees, visitors, revenue, etc.)
-- BAD: "Bank Mandiri: 12,000 employees, 7,000 visitors daily" ← This describes Bank Mandiri, NOT relevant!
-- GOOD: "Bank Mandiri" ← Just the name
-- BAD: "Pertamina (state-owned oil company)" ← No descriptions
-- GOOD: "Pertamina" ← Just the name
+- BAD: "Acme Bank: 12,000 employees, 7,000 visitors daily" ← This describes Acme Bank, NOT relevant!
+- GOOD: "Acme Bank" ← Just the name
+- BAD: "Sample Energy (state-owned oil company)" ← No descriptions
+- GOOD: "Sample Energy" ← Just the name
 - The customer/supplier's own business details are IRRELEVANT - we only need their names to show who the target company serves
 
 RULES:
@@ -14267,8 +14183,8 @@ RULES:
 - COMPANY NAME CLEANING (CRITICAL):
   - Remove ALL company suffixes: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH, Tbk
   - Remove ALL company prefixes: PT, PT., CV, CV. (Indonesian prefixes - MUST remove!)
-  - BAD: "PT. Nara Summit Industry", "PT Liebherr Indonesia Perkasa"
-  - GOOD: "Nara Summit Industry", "Liebherr Indonesia Perkasa"
+  - BAD: "PT. Acme Industri", "PT Contoh Abadi Perkasa"
+  - GOOD: "Acme Industri", "Contoh Abadi Perkasa"
   - This applies to ALL customer, supplier, and partner names
 - Extract as many metrics as found (8-15 ideally)
 - For metrics with multiple items, use "- " bullet points separated by "\\n"
@@ -14309,7 +14225,7 @@ RULES:
 - KEEP when verified: "Key Partnerships", "Principal Partners", "Insurance Partner", "Export Countries"
 - For "Core Services": include only when it adds information not already shown in Service Offerings
 - For "Principal Brands": include only concrete brand names; skip generic values like "Portfolios", "Various", "Multiple"
-- Never use short labels like "r.o.s", "c.o.s", "pbs", "hts" - always write full labels
+- Never use unexplained short labels or dotted abbreviations (e.g., "a.b.c") - always write full labels
 - Return ONLY valid JSON`,
           },
           {
@@ -14476,9 +14392,9 @@ CRITICAL RULES FOR INDUSTRIAL B2B TABLE:
   - BAD: "Inks for printing industry" (obvious and useless)
   - GOOD: "UV-curable inks for flexible packaging, metallized films" (specific applications)
 - DO NOT include model numbers, serial numbers, or product codes in descriptions:
-  - BAD: "CCTV cameras including CT-IP-AB40-1.3M, CT-HD-DX30A-720" (unreadable codes)
+  - BAD: "CCTV cameras including XC-100A, XC-200B" (unreadable codes)
   - GOOD: "Indoor and outdoor IP cameras with video analytics and night vision"
-  - BAD: "Fingerprint devices BXFP-6100, BXFP-5301" (meaningless to reader)
+  - BAD: "Fingerprint devices FP-1000, FP-2000" (meaningless to reader)
   - GOOD: "Biometric attendance and access control terminals"
 - If you can't be more specific than "X for Y applications", look deeper in the website content
 
@@ -15446,7 +15362,7 @@ REMOVE any metric containing:
 - For technical abbreviations NOT common knowledge, include full form inline
 - Example: "PU (Polyurethane)", "EVA (Ethylene Vinyl Acetate)", "ABS (Acrylonitrile Butadiene Styrene)"
 - Common abbreviations DON'T need explanation: ISO, FDA, GMP, B2B, B2C, HQ, USD, sqm, kg
-- Abbreviation validation rule: only treat 2-6 ALL-CAPS letters as abbreviations (example: "EOR", "RPO", "CLQ")
+- Abbreviation validation rule: only treat 2-6 ALL-CAPS letters as abbreviations (example: "EOR", "RPO", "OEM")
 
 ### 6. CHECK FOR REDUNDANCY
 - If "Factory Established" has same year as "Est. Year", REMOVE "Factory Established" metric
@@ -15989,7 +15905,7 @@ async function processSingleWebsite(website, index, total) {
       regexCoveredTypes.add('course');
     }
     if (regexMetrics.unit_count) {
-      // Use unit_text for context (e.g., "150+ Vivotek CCTV units" not just "150+ Units")
+      // Use unit_text for context (e.g., "150+ CCTV units" not just "150+ Units")
       const unitLabel = regexMetrics.unit_text
         ? translateUnitsToEnglish(regexMetrics.unit_text)
         : String(regexMetrics.unit_count) + '+ Units';

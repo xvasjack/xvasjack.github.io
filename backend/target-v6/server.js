@@ -36,9 +36,6 @@ if (missingVars.length > 0) {
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
-}
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
 }
@@ -1412,12 +1409,12 @@ RULES:
 - Generate 3-5 alternative phrasings/synonyms that mean the SAME specific thing
 - Include common industry terminology variations
 - Include abbreviations if applicable
-- Do NOT broaden the scope (e.g., don't suggest "printing ink" for "gravure ink" - stay specific)
+- Do NOT broaden the scope (e.g., don't suggest "industrial valves" for "butterfly valves" - stay specific)
 - Focus on how different people might describe this EXACT business
 
 Examples:
-- "gravure ink manufacturer" → "rotogravure ink producer", "gravure printing ink maker", "intaglio ink manufacturer"
-- "flexure ink" → "flexographic ink", "flexo ink", "flexible packaging ink"
+- "butterfly valve manufacturer" → "butterfly valve producer", "wafer valve maker", "quarter-turn valve manufacturer"
+- "PCB assembly" → "printed circuit board assembly", "PCBA", "SMT assembly"
 - "CNC machining" → "computer numerical control machining", "precision CNC", "CNC manufacturing"
 
 Return ONLY a JSON array of strings, nothing else.
@@ -1457,7 +1454,7 @@ EXCLUDE: ${exclusion}
 Generate a search plan with:
 
 1. "english_variations": Array of 5-8 alternative English terms/phrases for this business type. Think about:
-   - Industry-specific terminology (e.g., "flexure" = "flexographic", "flexo")
+   - Industry-specific terminology (e.g., "PCBA" = "printed circuit board assembly", "SMT")
    - Technical vs common terms
    - Full names vs abbreviations
    - How manufacturers vs buyers might describe it

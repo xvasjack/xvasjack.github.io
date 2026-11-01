@@ -313,10 +313,10 @@ describe('isPlaceholderSource', () => {
 // ---------------------------------------------------------------------------
 
 describe('isTemplateStaticExemption', () => {
-  test('exempts YCP Analysis', () => {
-    expect(isTemplateStaticExemption('Source: YCP Analysis')).toBe(true);
-    expect(isTemplateStaticExemption('YCP Solidiance')).toBe(true);
-    expect(isTemplateStaticExemption('YCP Axtria')).toBe(true);
+  test('exempts the default desk research source line', () => {
+    expect(isTemplateStaticExemption('Source: Desk research')).toBe(true);
+    expect(isTemplateStaticExemption('Desk research')).toBe(true);
+    expect(isTemplateStaticExemption('Confidential')).toBe(true);
   });
 
   test('does NOT exempt analytical claims', () => {
@@ -527,7 +527,7 @@ describe('rejectOrphanedClaims', () => {
         type: 'numeric',
         section: 'market',
         field: 'overview',
-        context: 'Source: YCP Analysis $500M',
+        context: 'Source: Desk research $500M',
       },
     ];
     const result = rejectOrphanedClaims(orphans, { strict: true });

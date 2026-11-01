@@ -1,21 +1,10 @@
-const fs = require('fs');
 const path = require('path');
 const pptxgen = require('pptxgenjs');
 const JSZip = require('jszip');
 
-// Template images extracted from Escort template
-const COVER_BG_B64 = fs
-  .readFileSync(path.join(__dirname, 'assets/cover-bg.png'))
-  .toString('base64');
-const DIVIDER_BG_B64 = fs
-  .readFileSync(path.join(__dirname, 'assets/divider-bg.png'))
-  .toString('base64');
-const LOGO_DARK_B64 = fs
-  .readFileSync(path.join(__dirname, 'assets/logo-dark.png'))
-  .toString('base64');
-const LOGO_WHITE_B64 = fs
-  .readFileSync(path.join(__dirname, 'assets/logo-white.png'))
-  .toString('base64');
+// Plain background colours for the cover and section divider slides.
+const COVER_BG_COLOR = 'E8F2FE';
+const DIVIDER_BG_COLOR = '0F2760';
 
 const {
   truncate,
@@ -77,7 +66,6 @@ const {
   reconcileContentTypesAndPackage,
 } = require('./deck-file-check');
 const { normalizeThemeToTemplate } = require('./theme-normalizer');
-const { applyTemplateClonePostprocess } = require('./template-fill');
 const {
   isTransientKey,
   sanitizeTransientKeys,
@@ -87,7 +75,6 @@ const {
 const {
   TABLE_TEMPLATE_CONTEXTS: _TABLE_TEMPLATE_CONTEXTS,
   CHART_TEMPLATE_CONTEXTS: _CHART_TEMPLATE_CONTEXTS,
-  SECTION_DIVIDER_TEMPLATE_SLIDES: _SECTION_DIVIDER_TEMPLATE_SLIDES,
 } = require('./template-contract-compiler');
 const {
   scanDrift: scanHeaderFooterDrift,
@@ -905,7 +892,7 @@ async function auditGeneratedPptFormatting(pptxBuffer, { strictMode = false } = 
     expectedLineWidthsEmu.sort((a, b) => a - b);
 
     // Collect line widths from ALL slide layouts AND slide masters.
-    // The Escort template carries header/footer connector lines in slideLayout1
+    // The template carries header/footer connector lines in slideLayout1
     // and slide masters, NOT in slideLayout3. Searching only slideLayout3 was
     // the root cause of the false-positive line_width_signature_mismatch warning.
     const allLineWidths = new Set();
@@ -1077,7 +1064,7 @@ async function auditGeneratedPptFormatting(pptxBuffer, { strictMode = false } = 
     const longTextRuns = [];
     const longTableCells = [];
     const LONG_TEXT_RUN_WARNING_LEN = 900;
-    // Calibrated against Escort template baseline where valid table cells can exceed 500 chars.
+    // Calibrated against the template baseline where valid table cells can exceed 500 chars.
     const LONG_TABLE_CELL_WARNING_LEN = 620;
 
     for (const name of slideXmlEntries) {
@@ -1410,11 +1397,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   const pptx = new pptxgen();
 
-  // Set exact slide size to match YCP template (13.3333" x 7.5" = 12192000 x 6858000 EMU)
-  pptx.defineLayout({ name: 'YCP', width: 13.3333, height: 7.5 });
-  pptx.layout = 'YCP';
+  // Set exact slide size to match the template (13.3333" x 7.5" = 12192000 x 6858000 EMU)
+  pptx.defineLayout({ name: 'DECK_16x9', width: 13.3333, height: 7.5 });
+  pptx.layout = 'DECK_16x9';
 
-  // YCP Theme Colors (from Escort template extraction — template-patterns.json)
+  // Theme colors (from template-patterns.json)
   const tpColors = templatePatterns.style?.colors || {};
   const COLORS = {
     headerLine: tpColors.dk2 || '1F497D',
@@ -1445,17 +1432,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     objects: [],
   });
 
-  // "Main" for content slides — white background with double header lines (from Escort template)
+  // "Main" for content slides — white background with double header lines
   const tpPos = templatePatterns.pptxPositions || {};
   const hlTop = tpPos.headerLineTop || { x: 0, y: 1.0208, w: 13.3333, h: 0 };
   const hlBot = tpPos.headerLineBottom || { x: 0, y: 1.0972, w: 13.3333, h: 0 };
   const flPos = tpPos.footerLine || { x: 0, y: 7.2361, w: 13.3333, h: 0 };
-  // Footer elements from template extraction
+  // Footer elements from template-patterns.json
   const tpFooter = templatePatterns.style?.footer || {};
-  const crPos = tpFooter.copyrightPos || { x: 4.11, y: 7.26, w: 5.12, h: 0.24, fontSize: 8 };
-  const crText = tpFooter.copyrightText || '(C) YCP 2026';
   pptx.defineSlideMaster({
-    title: 'YCP_MAIN',
+    title: 'MAIN',
     background: { color: COLORS.white },
     objects: [
       {
@@ -1476,7 +1461,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           line: { color: hlBot.color || '293F55', width: hlBot.thickness || 2.25 },
         },
       },
-      // Footer line (thin separator above copyright)
+      // Footer line (thin separator above the slide footer)
       {
         line: {
           x: flPos.x,
@@ -1486,62 +1471,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           line: { color: flPos.color || '293F55', width: flPos.thickness || 2.25 },
         },
       },
-      // Copyright text
-      {
-        text: {
-          text: crText,
-          options: {
-            x: crPos.x,
-            y: crPos.y,
-            w: crPos.w,
-            h: crPos.h,
-            fontSize: crPos.fontSize || 8,
-            fontFace: 'Segoe UI',
-            color: COLORS.footerText,
-            align: 'center',
-          },
-        },
-      },
-      {
-        image: {
-          data: `image/png;base64,${LOGO_DARK_B64}`,
-          x: 0.38,
-          y: 7.3,
-          w: 0.47,
-          h: 0.17,
-        },
-      },
     ],
   });
 
-  // Legacy alias — keep for any remaining references
+  // Legacy alias — keeps the slide layout order stable
   pptx.defineSlideMaster({
-    title: 'YCP_MASTER',
+    title: 'MAIN_LEGACY',
     background: { color: COLORS.white },
     objects: [],
   });
 
   pptx.defineSlideMaster({
     title: 'DIVIDER_NAVY',
-    background: { data: `image/png;base64,${DIVIDER_BG_B64}` },
-    objects: [
-      {
-        image: {
-          data: `image/png;base64,${LOGO_WHITE_B64}`,
-          x: 0.6322,
-          y: 0.5847,
-          w: 2.4367,
-          h: 0.8692,
-        },
-      },
-    ],
+    background: { color: DIVIDER_BG_COLOR },
+    objects: [],
   });
 
-  pptx.author = 'YCP Market Research';
+  pptx.author = 'Deal Tools';
   pptx.title = `${(synthesis || {}).country} - ${scope.industry} Market Analysis`;
   pptx.subject = scope.projectType;
 
-  // Set default font to Segoe UI (YCP standard)
+  // Set default font to Segoe UI (template standard)
   pptx.theme = { headFontFace: 'Segoe UI', bodyFontFace: 'Segoe UI' };
   const FONT = 'Segoe UI';
 
@@ -1652,9 +1602,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     tableRecoveries: [],
     tableFallbacks: [],
   };
-  const templateCloneSlideMap = [];
-  // Canonical source: template-contract-compiler.js
-  const SECTION_DIVIDER_TEMPLATE_SLIDES = _SECTION_DIVIDER_TEMPLATE_SLIDES;
   const activeTemplateContext = { blockKey: null, slideNumber: null, layout: null };
   const layoutFidelityStats = {
     checks: 0,
@@ -1961,7 +1908,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return ensureString(text).trim();
   }
 
-  // Standard slide layout — positions from Escort template extraction
+  // Standard slide layout — positions from template-patterns.json
   const tpTitle = tpPos.title || { x: 0.3758, y: 0.0488, w: 12.5862, h: 0.9097 };
   const tpContent = tpPos.contentArea || { x: 0.3758, y: 1.5, w: 12.5862, h: 5.0 };
   const tpSource = tpPos.sourceBar || { x: 0.3758, y: 6.6944, w: 12.5862, h: 0.25 };
@@ -2027,19 +1974,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Helper: apply alternating row fill for readability (skip header row at idx 0)
   function applyAlternateRowFill(_rows) {
-    // No-op: Escort template uses no alternate row shading
-  }
-
-  function registerTemplateCloneSlide(templateSlideNumber, blockKey = null) {
-    const generatedSlideNumber = Number(Array.isArray(pptx.slides) ? pptx.slides.length : NaN);
-    const templateSlide = Number(templateSlideNumber);
-    if (!Number.isFinite(generatedSlideNumber) || generatedSlideNumber <= 0) return;
-    if (!Number.isFinite(templateSlide) || templateSlide <= 0) return;
-    templateCloneSlideMap.push({
-      generatedSlideNumber,
-      templateSlideNumber: templateSlide,
-      blockKey: blockKey ? ensureString(blockKey) : null,
-    });
+    // No-op: the template uses no alternate row shading
   }
 
   // Helper: clamp shape height so bottom doesn't exceed CONTENT_BOTTOM
@@ -2050,8 +1985,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Options: { sources: [{url, title}], dataQuality: 'high'|'medium'|'low'|'estimated' }
   function addSlideWithTitle(title, subtitle = '', options = {}) {
-    // Use YCP_MAIN master (has header line built in)
-    const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
+    // Use MAIN master (has header line built in)
+    const slide = pptx.addSlide({ masterName: 'MAIN' });
     const activeLayout = options.templateLayout || activeTemplateContext.layout || null;
     const titleRect = getActiveLayoutRect('title', tpTitle);
     const sourceRect = getActiveLayoutRect('source', tpSource);
@@ -2067,7 +2002,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       !(compactTitleBox && titleLen > 110);
 
     // Title shape (position + font from template extraction)
-    // Escort template uses title (20pt) + subtitle thesis (16pt) in same shape, separated by line break
+    // The template uses title (20pt) + subtitle thesis (16pt) in same shape, separated by line break
     if (shouldRenderSubtitle) {
       slide.addText(
         [
@@ -2124,7 +2059,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: titleRect.h,
       });
     }
-    // Header line is provided by YCP_MAIN master — no manual line needed
+    // Header line is provided by MAIN master — no manual line needed
 
     // Merge data quality indicator + source citations into ONE shape to prevent overlap
     const hasDataQuality = options.dataQuality === 'estimated' || options.dataQuality === 'low';
@@ -2185,7 +2120,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     } else if (!hasDataQuality) {
       // Default source when none provided
       footerParts.push({
-        text: 'Source: YCP Analysis',
+        text: 'Source: Desk research',
         options: { fontSize: FOOTNOTE_FONT_PT, fontFace: FONT, color: COLORS.muted },
       });
     }
@@ -4772,7 +4707,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       dataQuality: block.dataQuality,
       templateLayout,
     });
-    registerTemplateCloneSlide(block._templateSlide, block.key);
     if (block._templatePattern) {
       console.log(
         `  [PPT TEMPLATE] ${block.key} -> ${block._templatePattern}${block._templateSlide ? ` (slide ${block._templateSlide})` : ''} [${block._templateSource || 'auto'}]`
@@ -6581,7 +6515,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return blocks.some((b) => blockHasRenderableData(b));
   }
 
-  // Section names for TOC slides (Policy first, then Market — matches Escort template)
+  // Section names for TOC slides (Policy first, then Market)
   const SECTION_NAMES = [
     'Policy & Regulatory',
     'Market Overview',
@@ -6658,14 +6592,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   function generateSection(sectionName, sectionNumber, totalSections, sectionData) {
     // Section divider slide with navy background
-    const dividerBefore = pptx.slides.length;
     addSectionDivider(pptx, sectionName, sectionNumber, totalSections, 'DIVIDER_NAVY');
-    if (pptx.slides.length > dividerBefore) {
-      registerTemplateCloneSlide(
-        SECTION_DIVIDER_TEMPLATE_SLIDES[sectionNumber] || 30,
-        `sectionDivider:${sectionName}`
-      );
-    }
 
     // Detect _synthesisError sentinel — synthesis completely failed for this section
     if (sectionData && sectionData._synthesisError) {
@@ -6804,7 +6731,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // ============ MAIN FLOW ============
 
-  // Section definitions — Policy first, Market second (matches Escort template)
+  // Section definitions — Policy first, Market second
   const sectionDefs = [
     { name: 'Policy & Regulatory', data: policy },
     { name: 'Market Overview', data: market },
@@ -6831,11 +6758,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // ===== SLIDE 1: COVER (uses NO_BAR master) =====
   const titleSlide = pptx.addSlide({ masterName: 'NO_BAR' });
-  titleSlide.background = { data: `image/png;base64,${COVER_BG_B64}` };
+  titleSlide.background = { color: COVER_BG_COLOR };
   // Use client/project name if available, otherwise country
   const coverTitle = scope.clientName || ensureString(country, 'UNKNOWN').toUpperCase();
   const coverSubtitle = scope.projectName
-    ? `${scope.projectName} - ${scope.industry} Market Selection`
+    ? `${scope.projectName} - ${scope.industry} Market Assessment`
     : `${scope.industry} - Market Overview & Analysis`;
   const coverPattern = templatePatterns.patterns?.cover?.elements || {};
   const compPos = coverPattern.companyName || { x: 0.46, y: 1.63, w: 9.35, h: 2.83 };
@@ -6860,15 +6787,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fontFace: FONT,
     fit: 'shrink',
   });
-  // Cover logo
-  const coverLogo = coverPattern.logo || {};
-  titleSlide.addImage({
-    data: `image/png;base64,${LOGO_DARK_B64}`,
-    x: coverLogo.x || 0.45,
-    y: coverLogo.y || 0.32,
-    w: coverLogo.w || 1.14,
-    h: coverLogo.h || 0.4,
-  });
   // Date element (position from template)
   const coverDate = coverPattern.date || {};
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
@@ -6880,14 +6798,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     color: COLORS.secondary,
     fontFace: FONT,
   });
-  registerTemplateCloneSlide(1, 'cover');
 
   // ===== SLIDE 2: TABLE OF CONTENTS (no section highlighted) =====
   addTocSlide(pptx, -1, SECTION_NAMES, COLORS, FONT, country);
-  registerTemplateCloneSlide(2, 'toc');
 
   // ===== SLIDE 3: EXECUTIVE SUMMARY =====
-  const execSlide = pptx.addSlide({ masterName: 'YCP_MAIN' });
+  const execSlide = pptx.addSlide({ masterName: 'MAIN' });
   execSlide.addText('Executive Summary', {
     x: TITLE_X,
     y: tpTitle.y,
@@ -6988,7 +6904,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       valign: 'top',
     });
   }
-  registerTemplateCloneSlide(3, 'executiveSummary');
 
   // ===== SLIDE 4: OPPORTUNITIES & BARRIERS (after Exec Summary, matches template) =====
   const oppData = {
@@ -7000,11 +6915,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     (Array.isArray(oppData.opportunities) && oppData.opportunities.length > 0) ||
     (Array.isArray(oppData.obstacles) && oppData.obstacles.length > 0)
   ) {
-    const oppSlideCountBefore = pptx.slides.length;
     addOpportunitiesBarriersSlide(pptx, oppData, FONT);
-    if (pptx.slides.length > oppSlideCountBefore) {
-      registerTemplateCloneSlide(4, 'opportunitiesBarriers');
-    }
   }
 
   // ===== GENERATE ALL SECTIONS =====
@@ -7031,7 +6942,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             dataQuality: getDataQualityForCategory('policy_'),
           }
         );
-        registerTemplateCloneSlide(6, 'regulatorySummaryTransition');
         const regRows = normalizeRegulatorySummaryRows(regData);
         if (regRows.length > 0) {
           // Always build with the template's horizontal flow geometry for policy consistency.
@@ -7081,7 +6991,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // ===== APPENDIX: FINAL SUMMARY SLIDE (Section 6) =====
   addTocSlide(pptx, 5, SECTION_NAMES, COLORS, FONT, country); // Highlight "Appendix"
-  registerTemplateCloneSlide(30, 'appendixToc');
   const finalSlide = addSlideWithTitle(
     `${country} - Research Summary`,
     `Analysis completed ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
@@ -7284,26 +7193,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
-
-  const templateCloneResult = await applyTemplateClonePostprocess(pptxBuffer, {
-    templatePath: path.join(
-      __dirname,
-      '..',
-      '..',
-      '251219_Escort_Phase 1 Market Selection_V3.pptx'
-    ),
-    maxSlides: 34,
-    slideTemplateMap: templateCloneSlideMap,
-    enabled: true,
-  });
-  pptxBuffer = templateCloneResult.buffer;
-  if (templateCloneResult.changed) {
-    console.log(
-      `[PPT TEMPLATE] Clone mode applied: mappedPairs=${templateCloneResult.stats.mappedPairs || 0}, slides=${templateCloneResult.stats.clonedSlides}, fallbackSlides=${templateCloneResult.stats.fallbackSlides || 0}, textReplacements=${templateCloneResult.stats.textReplacements}, droppedTokens=${templateCloneResult.stats.droppedTokens}, chartRelPatched=${templateCloneResult.stats.chartRelPatched}, copiedSupportParts=${templateCloneResult.stats.copiedSupportParts}, copiedReferencedParts=${templateCloneResult.stats.copiedReferencedParts || 0}, contextFit(ai=${templateCloneResult.stats.contextFitAISlides || 0},rule=${templateCloneResult.stats.contextFitHeuristicSlides || 0},none=${templateCloneResult.stats.contextFitNoneSlides || 0})`
-    );
-  } else {
-    console.warn('[PPT TEMPLATE] Clone mode not applied (no slide clones performed)');
-  }
 
   pptxBuffer = await normalizeThemeToTemplate(pptxBuffer, {
     colors: {
@@ -7536,8 +7425,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fallbackTemplateMappingKeys: fallbackTemplateMappings
       .map((entry) => `${entry.key}:${entry.source || 'fallback'}`)
       .slice(0, 30),
-    templateCloneApplied: templateCloneResult.changed,
-    templateCloneStats: templateCloneResult.stats,
   };
   console.log(
     `[PPT TEMPLATE] Coverage: ${templateCoverage}% (${templateBackedCount}/${templateTotal}) template-backed block mappings`

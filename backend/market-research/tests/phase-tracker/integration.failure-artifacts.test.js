@@ -298,7 +298,7 @@ describe('phase-tracker: failure artifacts and recovery', () => {
           delta: 16,
         },
       ],
-      templateSource: '251219_Escort_Phase 1 Market Selection_V3.pptx',
+      templateSource: 'sample-template.pptx',
     };
 
     // Write error artifact with template details
@@ -337,7 +337,7 @@ describe('phase-tracker: failure artifacts and recovery', () => {
     expect(parsed.blockingSlideKeys).toHaveLength(3);
     expect(parsed.issues).toHaveLength(3);
     expect(parsed.issues[0].code).toBe('line_width_signature_mismatch');
-    expect(parsed.templateSource).toContain('Escort');
+    expect(parsed.templateSource).toContain('sample-template');
 
     // Operator can query gate events
     const gateEvents = getEvents(runId, { stage: '8', type: 'gate', dbPath });

@@ -2,7 +2,7 @@
  * Regression tests for line_width_signature_mismatch fix.
  *
  * Root cause: auditGeneratedPptFormatting() only searched slideLayout3.xml
- * for line widths. The Escort template's slideLayout3 has NO line geometry —
+ * for line widths. The template's slideLayout3 has NO line geometry —
  * the header/footer lines live in slideLayout1 and slide masters.
  * This caused a perpetual false-positive warning.
  *
@@ -120,7 +120,7 @@ async function buildTestPptx({
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
-// Template-like XML with connector lines at the correct Escort widths
+// Template-like XML with connector lines at the correct template widths
 function makeLayoutWithLines(widths = EXPECTED_LINE_WIDTHS) {
   const lineElements = widths
     .map(
@@ -174,7 +174,7 @@ function makeEmptyLayout() {
 // ---------------------------------------------------------------------------
 describe('line_width_signature_mismatch', () => {
   test('no warning when correct widths are in slideLayout1 (not slideLayout3)', async () => {
-    // Reproduces the exact Escort template scenario: lines in layout1, empty layout3.
+    // Reproduces the template scenario: lines in layout1, empty layout3.
     const buffer = await buildTestPptx({
       slideLayouts: {
         'slideLayout1.xml': makeLayoutWithLines(EXPECTED_LINE_WIDTHS),

@@ -349,8 +349,8 @@ Return a JSON object with these fields:
 - industry: string (the industry/sector being researched)
 - targetMarkets: string[] (single item list with exactly one country to analyze)
 - clientContext: string (any context about the client making the request)
-- clientName: string (the client company name if mentioned, e.g. "Shizuoka Gas Company")
-- projectName: string (the project name if mentioned, e.g. "Project Escort")
+- clientName: string (the client company name if mentioned, e.g. "Acme Energy")
+- projectName: string (the project name if mentioned, e.g. "Project Alpha")
 - focusAreas: string[] (specific aspects to emphasize)
 
 If the user gives multiple countries, pick the first one they mentioned.
@@ -1053,7 +1053,7 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} new laws pending legislation 2025 2026`,
             `{country} ${industry} new regulatory requirements implementation schedule`,
             `{country} ${industry} standards harmonization international`,
-            `{country} ${industry} enforcement trends crackdown compliance`,
+            `{country} ${industry} enforcement trends penalties compliance`,
           ],
         },
       ],
