@@ -238,13 +238,18 @@ async function submitToDD(content, fileName) {
   return data.reportId;
 }
 
+// Report routes need the token the server has in DD_REPORTS_TOKEN.
+const REPORT_HEADERS = { 'X-Report-Token': process.env.DD_REPORTS_TOKEN || '' };
+
 async function pollForReport(reportId) {
   console.log(`\n[TEST] Polling for report ${reportId}...`);
 
   const startTime = Date.now();
 
   while (Date.now() - startTime < MAX_POLL_TIME) {
-    const response = await fetch(`${API_BASE}/api/reports/${reportId}`);
+    const response = await fetch(`${API_BASE}/api/reports/${reportId}`, {
+      headers: REPORT_HEADERS,
+    });
     const data = await response.json();
 
     console.log(
@@ -271,7 +276,9 @@ async function pollForReport(reportId) {
 async function downloadDocx(reportId) {
   console.log(`\n[TEST] Downloading DOCX for report ${reportId}...`);
 
-  const response = await fetch(`${API_BASE}/api/reports/${reportId}/download`);
+  const response = await fetch(`${API_BASE}/api/reports/${reportId}/download`, {
+    headers: REPORT_HEADERS,
+  });
 
   if (!response.ok) {
     const error = await response.json();

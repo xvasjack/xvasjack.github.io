@@ -280,7 +280,7 @@ Reference templates per service in `template_comparison.SERVICE_REFERENCE_PPTX`:
 - target-search → `YCP Target List Slide Template.pptx`
 - trading-comps → `trading comps slide ref.pptx`
 
-**2026-11-01: all YCP reference and client decks were deleted from the repo (public repo, confidentiality), in #509 and #510.** This includes the four files above, `251219_Escort_Phase 1 Market Selection_V3.pptx`, and `backend/market-research/test-output.pptx` + `vietnam-output.pptx`. Template comparison, `validate-real-output.js`, and the market-research template clone step (`deck-builder-single.js` → `template-fill.js`, which throws if the Escort deck is missing) need local copies. Keep them outside the repo. Do not commit client or YCP decks again.
+**2026-11-01: reference decks are no longer stored in this repo.** Keep local copies outside the repo. Template comparison, `validate-real-output.js` and the market-research template clone step (`deck-builder-single.js` → `template-fill.js`, which throws if the template deck is missing) need them. Do not commit decks to this repo.
 
 ### Template Reference File
 
