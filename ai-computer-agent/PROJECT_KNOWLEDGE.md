@@ -280,6 +280,8 @@ Reference templates per service in `template_comparison.SERVICE_REFERENCE_PPTX`:
 - target-search → `YCP Target List Slide Template.pptx`
 - trading-comps → `trading comps slide ref.pptx`
 
+**2026-11-01: all YCP reference and client decks were deleted from the repo (public repo, confidentiality), in #509 and #510.** This includes the four files above, `251219_Escort_Phase 1 Market Selection_V3.pptx`, and `backend/market-research/test-output.pptx` + `vietnam-output.pptx`. Template comparison, `validate-real-output.js`, and the market-research template clone step (`deck-builder-single.js` → `template-fill.js`, which throws if the Escort deck is missing) need local copies. Keep them outside the repo. Do not commit client or YCP decks again.
+
 ### Template Reference File
 
 `vm/template_reference.md` — MBB-quality content standards per service. Loaded by `feedback_loop_runner._load_template_reference()` and appended to every fix prompt so Claude Code knows expected content depth. Sections: Market Research, Profile Slides, Target Search, Due Diligence Report.
@@ -459,7 +461,7 @@ xvasjack.github.io/
 │   ├── financial-chart/
 │   ├── transcription/
 │   └── shared/                # Shared utilities
-├── *.pptx                     # Template files for comparison
+├── *.pptx                     # Template decks removed 2026-11-01 (see section 5)
 └── *.html                     # Frontend pages (GitHub Pages)
 ```
 
