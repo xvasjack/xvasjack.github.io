@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node --expose-gc --max-old-space-size=450 server.js",
     "dev": "node --expose-gc server.js",
-    "test": "jest",
+    "test": "jest && npm run test:node",
+    "test:node": "node --test market-research/phase-tracker/phase-tracker.test.js market-research/tests/phase-tracker/runner.test.js && node market-research/critical-failure-regression.test.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "eslint .",
