@@ -30,14 +30,14 @@ Use two test layers:
 Run this:
 
 ```bash
-npm run stage:check -- --stage=2 --prompt="Energy Services market entry in Vietnam"
+npm run stage:check -- --stage=2 --prompt="Cold-chain logistics market entry in Indonesia for a European investor"
 ```
 
 Stage 3 and 3a live outputs:
 
 ```bash
-npm run stage:check -- --stage=3 --prompt="Energy Services market entry in Vietnam"
-npm run stage:check -- --stage=3a --prompt="Energy Services market entry in Vietnam"
+npm run stage:check -- --stage=3 --prompt="Cold-chain logistics market entry in Indonesia for a European investor"
+npm run stage:check -- --stage=3a --prompt="Cold-chain logistics market entry in Indonesia for a European investor"
 ```
 
 You get full Stage 2 output files in `reports/latest/`:
@@ -84,7 +84,7 @@ npm run dev
 curl -sS -X POST "http://localhost:3000/api/market-research" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt":"Generate market entry research for Energy Services in Vietnam in one deck.",
+    "prompt":"Generate market entry research for cold-chain logistics in Indonesia for a European investor in one deck.",
     "email":"your-email@example.com"
   }'
 ```

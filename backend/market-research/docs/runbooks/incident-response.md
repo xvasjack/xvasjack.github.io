@@ -5,17 +5,17 @@
 ### PPT_STRUCTURAL_VALIDATION (Critical)
 **Symptom:** Generated PPTX file is malformed, opens with repair prompt.
 **Steps:**
-1. Run file safety check: `node -e "require('./pptx-file safety-pipeline').runIntegrityPipeline(require('fs').readFileSync('output.pptx')).then(r => console.log(JSON.stringify(r, null, 2)))"`
+1. Run file safety check: `node -e "require('./pptx-fileSafety-pipeline').runPipeline(require('fs').readFileSync('output.pptx')).then(r => console.log(JSON.stringify(r, null, 2)))"`
 2. Check for duplicate slide IDs or broken relationship refs
 3. Run repair: `node repair-pptx.js output.pptx`
-4. If repair fails, check template clone post-processing in `deck-builder-single.js`
+4. If repair fails, check package normalization in `deck-file-check.js`
 
 ### PPT_BUILDING_QUALITY (High)
 **Symptom:** Too many slide blocks failed to build. templateCoverage < 95%.
 **Steps:**
 1. Check PPT metrics: `curl -s http://localhost:3010/api/runInfo | jq .ppt`
 2. Review template-patterns.json for missing patterns
-3. Regenerate: `node build-template-patterns.js`
+3. Check the template contract: `node template-contract-compiler.js --doctor`
 
 ### QUALITY_CHECK_FAILED (High)
 **Symptom:** Research output did not meet readiness thresholds.

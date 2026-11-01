@@ -192,7 +192,7 @@ const market = {
     keyInsight:
       'Domestic gas production declining 5% annually; LNG imports surging to fill 35% of demand by 2025',
     pipelineNetwork:
-      '4,200 km transmission network operated by PTT; capacity constraints in southern corridor',
+      '4,200 km transmission network operated by the national gas company; capacity constraints in southern corridor',
     chartData: {
       categories: ['2019', '2020', '2021', '2022', '2023'],
       series: [
@@ -278,7 +278,7 @@ const competitors = {
       'Japanese firms hold 22% of industrial ESCO market through long-term relationships with Japanese manufacturers in Thailand',
     players: [
       {
-        name: 'Daikin Industries Thailand',
+        name: 'Alpine Climate Thailand',
         presence: 'Since 1990, 3 facilities',
         description:
           'Leading HVAC and energy management provider with THB 12.5B revenue in Thailand. Controls 28% of commercial HVAC market through integrated building management solutions targeting Japanese auto and electronics manufacturers. Annual growth of 8% driven by factory modernization projects across Eastern Seaboard industrial estates.',
@@ -288,17 +288,17 @@ const competitors = {
           'Strong position in Japanese OEM segment but limited penetration in Thai-owned industrial facilities; partnership opportunity for local market access',
       },
       {
-        name: 'Hitachi Energy Thailand',
+        name: 'Kestrel Grid Thailand',
         presence: 'Since 2001, 2 offices',
         description:
-          'Grid modernization and industrial energy management specialist with THB 4.2B Thai revenue. Focuses on power quality and distribution solutions for heavy industry. Revenue grew 15% in 2023 driven by EV manufacturing plant energy systems for Toyota and Honda Thailand operations.',
+          'Grid modernization and industrial energy management specialist with THB 4.2B Thai revenue. Focuses on power quality and distribution solutions for heavy industry. Revenue grew 15% in 2023 driven by EV manufacturing plant energy systems for the Thai operations of two automakers.',
         entryYear: '2001',
         revenue: 'THB 4.2B',
         strategicAssessment:
           'Technology leader in grid-scale solutions but premium pricing limits SME market access; acquisition target for broader market coverage',
       },
       {
-        name: 'Panasonic Energy Solutions',
+        name: 'Bellows Energy Solutions',
         presence: 'Since 1988, regional hub',
         description:
           'Diversified energy solutions including solar PV, battery storage, and building management systems with THB 3.8B revenue. Serves both commercial buildings and industrial facilities with integrated IoT-based energy monitoring platforms generating recurring service revenue of THB 450M annually.',
@@ -313,7 +313,7 @@ const competitors = {
     concentration: 'Top 5 local players hold 45% of domestic ESCO market',
     players: [
       {
-        name: 'Absolute Clean Energy (ACE)',
+        name: 'Orchid Clean Energy (OCE)',
         type: 'Listed energy company',
         revenue: 'THB 8.2B',
         marketShare: '15%',
@@ -323,7 +323,7 @@ const competitors = {
           'Market leader with government relationships but limited technical depth in complex industrial processes; JV partner candidate for technology transfer',
       },
       {
-        name: 'Energy Absolute PCL',
+        name: 'Monsoon Renewables PCL',
         type: 'Listed renewable energy',
         revenue: 'THB 15.1B',
         marketShare: '8%',
@@ -333,7 +333,7 @@ const competitors = {
           'Financial strength and existing energy customer base create cross-sell opportunities; ESCO division still nascent with limited technical team',
       },
       {
-        name: 'Gunkul Engineering',
+        name: 'Teakwood Engineering',
         type: 'Engineering contractor',
         revenue: 'THB 6.8B',
         marketShare: '10%',
@@ -350,48 +350,48 @@ const competitors = {
       'European players dominate technical consulting while Korean and Chinese firms compete on price in equipment-led projects',
     players: [
       {
-        name: 'Schneider Electric Thailand',
+        name: 'Fabrikam Electric Thailand',
         origin: 'France',
         mode: 'Wholly-owned subsidiary',
         entryYear: '1998',
         revenue: 'THB 9.8B',
         description:
-          'Market leader in building management and industrial automation with THB 9.8B Thailand revenue. EcoStruxure platform deployed in 500+ buildings. Recent focus on data center energy optimization as cloud demand surges with 45% revenue growth in this segment during 2022-2023.',
+          'Market leader in building management and industrial automation with THB 9.8B Thailand revenue. Building management platform deployed in 500+ buildings. Recent focus on data center energy optimization as cloud demand surges with 45% revenue growth in this segment during 2022-2023.',
         strategicAssessment:
           'Dominant technology position but high-cost structure limits addressable market; partnership model preferred over direct competition',
       },
       {
-        name: 'Siemens Energy Thailand',
+        name: 'Litware Energy Thailand',
         origin: 'Germany',
         mode: 'Joint venture with local partner',
         entryYear: '2005',
         revenue: 'THB 5.5B',
         description:
-          'Gas turbine services and grid solutions specialist with growing ESCO division. THB 5.5B revenue with 18% growth in digital energy services. MindSphere IoT platform gaining traction in petrochemical sector with 12 major deployments at Map Ta Phut industrial estate.',
+          'Gas turbine services and grid solutions specialist with growing ESCO division. THB 5.5B revenue with 18% growth in digital energy services. Industrial IoT platform gaining traction in petrochemical sector with 12 major deployments at Map Ta Phut industrial estate.',
         strategicAssessment:
           'Strong in heavy industry and petrochemicals; limited presence in commercial building segment creates complementary partnership potential',
       },
       {
-        name: 'Samsung C&T Energy Division',
+        name: 'Olympia Energy Division',
         origin: 'South Korea',
         mode: 'Branch office',
         entryYear: '2015',
         revenue: 'THB 2.1B',
         description:
-          'Aggressive expansion in smart building and renewable energy project development. THB 2.1B Thailand revenue growing 28% annually. Leverages Samsung Electronics ecosystem for IoT and building automation integration. Won 3 major government smart city contracts in 2023 totaling THB 850M.',
+          'Aggressive expansion in smart building and renewable energy project development. THB 2.1B Thailand revenue growing 28% annually. Leverages the electronics ecosystem of its parent group for IoT and building automation integration. Won 3 major government smart city contracts in 2023 totaling THB 850M.',
         strategicAssessment:
           'Fast-growing with technology integration advantages; price-competitive but limited local engineering team constrains project delivery capacity',
       },
     ],
   },
   caseStudy: {
-    slideTitle: 'Thailand - Market Entry Case Study: Veolia',
-    company: 'Veolia Environment Thailand',
+    slideTitle: 'Thailand - Market Entry Case Study: Consolidated Utilities',
+    company: 'Consolidated Utilities Thailand',
     entryYear: '2010',
     entryMode: 'Acquisition of local water/energy utility',
     investment: 'USD 180M total (USD 120M acquisition + USD 60M expansion)',
     outcome:
-      'Achieved profitability by Year 3 with THB 4.2B revenue by 2023. Successfully expanded from water treatment into industrial energy management, winning 15 major ESCO contracts. Key success factor was retaining local management team and leveraging Veolia global technology platform for differentiated offerings.',
+      'Achieved profitability by Year 3 with THB 4.2B revenue by 2023. Successfully expanded from water treatment into industrial energy management, winning 15 major ESCO contracts. Key success factor was retaining local management team and leveraging its global technology platform for differentiated offerings.',
     applicability:
       'Demonstrates acquisition-led entry can accelerate market access; local talent retention critical for relationship-driven Thai market',
     keyLessons: [
@@ -407,21 +407,21 @@ const competitors = {
     recentDeals: [
       {
         year: '2023',
-        buyer: 'BCPG PCL',
-        target: 'Thai Solar Energy',
+        buyer: 'Sunrise Green PCL',
+        target: 'Sunfield Solar',
         value: 'THB 2.8B',
         rationale: 'Vertical integration into ESCO services',
       },
       {
         year: '2022',
-        buyer: 'Gulf Energy',
+        buyer: 'Seaview Energy',
         target: 'Energy Pro (ESCO)',
         value: 'THB 1.5B',
         rationale: 'Expand downstream energy management',
       },
       {
         year: '2023',
-        buyer: 'Ratch Group',
+        buyer: 'Harborline Group',
         target: 'Smart Grid Solutions',
         value: 'THB 950M',
         rationale: 'Grid modernization capabilities',
@@ -475,20 +475,20 @@ const depth = {
   partnerAssessment: {
     slideTitle: 'Thailand - Partner Assessment',
     recommendedPartner:
-      'Bangchak Green Energy (BGE) — best combination of market access and cultural fit',
+      'Tailspin Green Energy (TGE) — best combination of market access and cultural fit',
     partners: [
       {
-        name: 'Bangchak Green Energy',
+        name: 'Tailspin Green Energy',
         type: 'Listed ESCO',
         revenue: 'THB 9.1B',
         partnershipFit: 4,
         acquisitionFit: 3,
         estimatedValuation: 'THB 14-18B (listed)',
         description:
-          'Bangchak subsidiary focused on clean energy solutions with 250+ commercial ESCO projects and strong BOI relationships. Listed on SET with THB 9.1B revenue. Culture fit is high due to existing Japanese partnerships. Broad renewables portfolio creates clear synergy with foreign technology partner.',
+          'Tailspin subsidiary focused on clean energy solutions with 250+ commercial ESCO projects and strong BOI relationships. Listed on SET with THB 9.1B revenue. Culture fit is high due to existing foreign partnerships. Broad renewables portfolio creates clear synergy with foreign technology partner.',
       },
       {
-        name: 'WHA Utilities & Power',
+        name: 'Eastgate Utilities & Power',
         type: 'Industrial utilities provider',
         revenue: 'THB 7.5B',
         partnershipFit: 3,
@@ -628,13 +628,13 @@ const depth = {
   targetSegments: {
     slideTitle: 'Thailand - Target Customer Segments',
     goToMarketApproach:
-      'Land-and-expand strategy starting with Japanese manufacturers, then broadening to Thai industrial and commercial',
+      'Land-and-expand strategy starting with foreign-owned manufacturers, then broadening to Thai industrial and commercial',
     segments: [
       {
-        name: 'Japanese Manufacturers',
+        name: 'Foreign-Owned Manufacturers',
         size: 'THB 2.8B addressable',
         marketIntensity: 'High',
-        decisionMaker: 'Japan HQ + local plant manager',
+        decisionMaker: 'Regional HQ + local plant manager',
         priority: 5,
       },
       {
@@ -661,19 +661,19 @@ const depth = {
     ],
     topTargets: [
       {
-        company: 'Toyota Motor Thailand',
+        company: 'Northgate Motor Thailand',
         industry: 'Automotive',
         annualSpend: 'THB 1.2B annually',
         location: 'Gateway City Industrial Estate, Chachoengsao',
       },
       {
-        company: 'SCG Chemicals',
+        company: 'Tasman Chemicals',
         industry: 'Petrochemical',
         annualSpend: 'THB 3.5B annually',
         location: 'Map Ta Phut Industrial Estate, Rayong',
       },
       {
-        company: 'Central Group',
+        company: 'Margie Retail Group',
         industry: 'Retail/Commercial',
         annualSpend: 'THB 800M annually',
         location: 'Bangkok metropolitan area (45 properties)',
@@ -747,12 +747,12 @@ const summaryData = {
     },
     {
       title:
-        'Japanese manufacturing exodus from China redirecting THB 200B+ industrial investment to Thailand',
-      data: 'Japan External Trade Organization reports 35% of Japanese manufacturers considering Thailand for production relocation, with THB 200B in committed investments through 2027.',
+        'Manufacturing relocation from China redirecting THB 200B+ industrial investment to Thailand',
+      data: 'A trade association survey reports 35% of foreign manufacturers considering Thailand for production relocation, with THB 200B in committed investments through 2027.',
       pattern:
-        'Supply chain diversification from China creates captive demand — Japanese manufacturers prefer Japanese or Japanese-affiliated energy service providers for new facility construction.',
+        'Supply chain diversification from China creates captive demand — relocating manufacturers prefer energy service providers they already use in their home markets for new facility construction.',
       implication:
-        'Leverage Japan HQ relationships to secure facility energy management contracts during factory design phase, before local competitors can engage.',
+        'Leverage existing headquarters relationships with relocating manufacturers to secure facility energy management contracts during factory design phase, before local competitors can engage.',
       // NO timing — tests graceful handling of missing field
     },
   ],
@@ -786,7 +786,7 @@ const summaryData = {
         criterion: 'Competitive Positioning Achievable',
         met: true,
         evidence:
-          'Technology gap in industrial ESCO segment; Japanese manufacturing base creates captive demand',
+          'Technology gap in industrial ESCO segment; foreign manufacturing base creates captive demand',
       },
       {
         criterion: 'Local Partner Available',
@@ -809,7 +809,7 @@ const summaryData = {
   timingIntelligence: {
     slideTitle: 'Thailand - Why Now?',
     windowOfOpportunity:
-      'Critical 18-month window (Q2 2025 - Q4 2026): Carbon tax legislation in draft, smart city Phase 1 RFPs issuing, and Japanese FDI surge creates once-in-decade convergence of demand drivers.',
+      'Critical 18-month window (Q2 2025 - Q4 2026): Carbon tax legislation in draft, smart city Phase 1 RFPs issuing, and manufacturing FDI surge creates once-in-decade convergence of demand drivers.',
     triggers: [
       {
         trigger: 'Carbon Tax Legislation',
@@ -825,11 +825,11 @@ const summaryData = {
           'Complete DEDE ESCO registration and secure at least 2 government reference projects before Q3 2025',
       },
       {
-        trigger: 'Japanese FDI Wave',
+        trigger: 'Manufacturing FDI Wave',
         impact:
           'THB 200B in manufacturing investment requiring factory energy systems through 2027',
         action:
-          'Activate Japan HQ channel partnerships and assign dedicated Japan-desk team by Q1 2025',
+          'Activate headquarters channel partnerships and assign a dedicated key-account team by Q1 2025',
       },
       {
         trigger: 'ASEAN Carbon Market Launch',
@@ -877,7 +877,7 @@ const summaryData = {
     ],
   },
   recommendation:
-    'Proceed with conditional market entry via Joint Venture with Absolute Clean Energy (ACE). Prioritize DEDE ESCO registration, BOI promotion application, and 3 pilot projects in Japanese manufacturing segment. Total Phase 1 investment of USD 5-8M with expected breakeven at 30-36 months.',
+    'Proceed with conditional market entry via Joint Venture with Orchid Clean Energy (OCE). Prioritize DEDE ESCO registration, BOI promotion application, and 3 pilot projects in foreign-owned manufacturing segment. Total Phase 1 investment of USD 5-8M with expected breakeven at 30-36 months.',
 };
 
 // ============ ASSEMBLE & GENERATE ============
@@ -895,7 +895,7 @@ const synthesis = {
   isSingleCountry: true,
   country: 'Thailand',
   executiveSummary:
-    'Thailand presents a compelling market entry opportunity for Energy Services, driven by rising industrial energy costs, government mandates for building retrofits, and a critical 18-month window created by carbon tax legislation and Japanese FDI surge. The ESCO market is valued at THB 8.5B (2023) growing 15% annually, with projected THB 12B+ by 2027. A Joint Venture with Absolute Clean Energy (ACE) is recommended as the optimal entry strategy, balancing speed-to-market with risk management. Key success factors include securing DEDE ESCO registration, obtaining BOI promotion for tax incentives, and establishing pilot projects with Japanese manufacturers in the Eastern Seaboard industrial estates. Total Phase 1 investment of USD 5-8M with expected breakeven at 30-36 months and IRR of 18-22%. The regulatory environment is favorable with established BOI framework, though bureaucratic delays and political transitions warrant monitoring.',
+    'Thailand presents a compelling market entry opportunity for Energy Services, driven by rising industrial energy costs, government mandates for building retrofits, and a critical 18-month window created by carbon tax legislation and manufacturing FDI surge. The ESCO market is valued at THB 8.5B (2023) growing 15% annually, with projected THB 12B+ by 2027. A Joint Venture with Orchid Clean Energy (OCE) is recommended as the optimal entry strategy, balancing speed-to-market with risk management. Key success factors include securing DEDE ESCO registration, obtaining BOI promotion for tax incentives, and establishing pilot projects with foreign-owned manufacturers in the Eastern Seaboard industrial estates. Total Phase 1 investment of USD 5-8M with expected breakeven at 30-36 months and IRR of 18-22%. The regulatory environment is favorable with established BOI framework, though bureaucratic delays and political transitions warrant monitoring.',
 };
 
 const scope = {

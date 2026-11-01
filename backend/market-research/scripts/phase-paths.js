@@ -21,8 +21,8 @@ Optional:
   --help       Show this help message
 
 Examples:
-  npm run phase:paths -- --run-id vn-es-001
-  npm run phase:paths -- --run-id vn-es-001 --stage 2a`;
+  npm run phase:paths -- --run-id id-cc-001
+  npm run phase:paths -- --run-id id-cc-001 --stage 2a`;
 
 function listFiles(dir) {
   if (!fs.existsSync(dir)) return [];

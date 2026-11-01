@@ -7095,7 +7095,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     FONT
   );
 
-  // Phase 2e: Enforce empty slide ratio — reject garbage decks
+  // Phase 2e: Enforce empty slide ratio — reject mostly empty decks
   const allSlides = pptx.slides || [];
   const contentSlides = allSlides.slice(3); // Skip cover, TOC, exec summary
   if (contentSlides.length > 0) {

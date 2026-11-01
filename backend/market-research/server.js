@@ -457,7 +457,8 @@ ${JSON.stringify(synthesis, null, 2)}`;
 
 function buildPptCheckExpectations(scope) {
   const expectations = {
-    minFileSize: 120 * 1024,
+    // Decks carry no embedded images, so a complete 12+ slide deck is roughly 60-200 KB.
+    minFileSize: 50 * 1024,
     minSlides: 12,
     minCharts: 1,
     minTables: 3,

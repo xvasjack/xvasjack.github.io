@@ -121,12 +121,12 @@ function phaseRunHelp() {
   return `Usage: npm run phase:run -- --run-id <ID> --through <STAGE> [options]
 
 Required:
-  --run-id              Unique run identifier (e.g. vn-es-001)
+  --run-id              Unique run identifier (e.g. id-cc-001)
   --through             Run through this stage (inclusive). Valid: ${STAGE_ORDER.join(', ')}
 
 Required for NEW runs:
-  --country             Target country (e.g. "Vietnam")
-  --industry            Target industry (e.g. "Energy Services")
+  --country             Target country (e.g. "Indonesia")
+  --industry            Target industry (e.g. "Cold-Chain Logistics")
 
 Optional:
   --client-context      Freeform client context string
@@ -136,9 +136,9 @@ Optional:
   --help                Show this help message
 
 Examples:
-  npm run phase:run -- --run-id vn-es-001 --country Vietnam --industry "Energy Services" --through 2
-  npm run phase:run -- --run-id vn-es-001 --through 2a
-  npm run phase:run -- --run-id vn-es-001 --through 9`;
+  npm run phase:run -- --run-id id-cc-001 --country Indonesia --industry "Cold-Chain Logistics" --through 2
+  npm run phase:run -- --run-id id-cc-001 --through 2a
+  npm run phase:run -- --run-id id-cc-001 --through 9`;
 }
 
 module.exports = {

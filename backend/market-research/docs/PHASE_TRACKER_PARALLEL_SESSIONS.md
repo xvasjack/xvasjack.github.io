@@ -15,10 +15,10 @@ Run multiple market-research jobs simultaneously. Each gets its own `runId`, its
 ### Start two runs simultaneously
 
 ```bash
-# Terminal 1: energy research in Norway
+# Terminal 1: cold-chain logistics in Indonesia
 node scripts/phase-run.js \
-  --country="Norway" \
-  --industry="energy services" \
+  --country="Indonesia" \
+  --industry="cold-chain logistics" \
   --through=5 &
 
 # Terminal 2: healthcare in Japan
@@ -36,9 +36,9 @@ wait
 ```bash
 # Assign meaningful IDs
 node scripts/phase-run.js \
-  --run-id="run-energy-norway-20260219" \
-  --country="Norway" \
-  --industry="energy services" \
+  --run-id="run-coldchain-indonesia-20260219" \
+  --country="Indonesia" \
+  --industry="cold-chain logistics" \
   --through=3
 
 node scripts/phase-run.js \
@@ -117,7 +117,7 @@ Each run has its own directory tree. No cross-contamination.
 ```
 reports/phase-runs/
   phase-tracker.sqlite
-  run-energy-norway-20260219/
+  run-coldchain-indonesia-20260219/
     stages/
       2/attempt-1/output.json
       2a/attempt-1/output.json
@@ -134,7 +134,7 @@ reports/phase-runs/
 ```bash
 # Diff stage 3 synthesis between two runs
 diff \
-  reports/phase-runs/run-energy-norway-20260219/stages/3/attempt-1/output.json \
+  reports/phase-runs/run-coldchain-indonesia-20260219/stages/3/attempt-1/output.json \
   reports/phase-runs/run-healthcare-japan-20260219/stages/3/attempt-1/output.json
 ```
 

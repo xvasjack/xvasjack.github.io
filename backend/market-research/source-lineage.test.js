@@ -74,8 +74,8 @@ function makeMultiCountrySynthesis(overrides = {}) {
       japanesePlayers: {
         players: [
           {
-            name: 'JERA',
-            website: 'https://jera.co.jp',
+            name: 'TREY',
+            website: 'https://trey.example',
             description: 'Major Japanese energy company with $30B revenue',
           },
         ],
@@ -83,8 +83,8 @@ function makeMultiCountrySynthesis(overrides = {}) {
       localMajor: {
         players: [
           {
-            name: 'PetroVietnam',
-            website: 'https://pvn.vn',
+            name: 'Northwind Petroleum',
+            website: 'https://northwind-petroleum.example',
             description: 'State-owned with $15B revenue controlling 85% of upstream',
           },
         ],
@@ -126,7 +126,7 @@ function makeSingleCountrySynthesis(overrides = {}) {
     isSingleCountry: true,
     executiveSummary: [
       'Thailand energy market valued at $800M with 10% CAGR growth.',
-      'EGAT dominates with 45% market share in power generation.',
+      'STATEGEN dominates with 45% market share in power generation.',
     ],
     marketOpportunityAssessment: {
       totalAddressableMarket: '$800M',
@@ -136,8 +136,8 @@ function makeSingleCountrySynthesis(overrides = {}) {
     },
     competitivePositioning: {
       keyPlayers: [
-        { name: 'EGAT', strengths: '45% market share', weaknesses: 'Government controlled' },
-        { name: 'Gulf Energy', strengths: '$5B revenue', weaknesses: 'High debt' },
+        { name: 'STATEGEN', strengths: '45% market share', weaknesses: 'Government controlled' },
+        { name: 'Seaview Energy', strengths: '$5B revenue', weaknesses: 'High debt' },
       ],
       whiteSpaces: ['Battery storage', 'Smart grid'],
       potentialPartners: [],
@@ -179,7 +179,7 @@ function makeSynthesisNoSources() {
     },
     competitors: {
       japanesePlayers: { players: [] },
-      localMajor: { players: [{ name: 'Pertamina', description: '$40B revenue' }] },
+      localMajor: { players: [{ name: 'Archipelago Oil', description: '$40B revenue' }] },
       foreignPlayers: { players: [] },
     },
     summary: {

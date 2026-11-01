@@ -37,7 +37,7 @@ try {
 const mockData = {
   country: 'Vietnam',
   industry: 'Energy Services',
-  client: 'Shizuoka Gas',
+  client: 'Acme Energy',
   projectName: 'Vietnam Energy Services Entry Strategy',
   policy: {
     acts: [
@@ -118,22 +118,22 @@ const mockData = {
   competitors: {
     japanesePlayers: [
       {
-        name: 'Osaka Gas',
+        name: 'Japan Gas Alpha',
         type: 'Japanese utility',
         revenue: '$12B+',
         marketShare: 'Early mover in LNG and C&I decarbonization pilots',
         description: 'JV-led entry, strong partner model, visible project execution capability.',
       },
       {
-        name: 'JERA',
+        name: 'TREY',
         type: 'Japanese power/LNG',
         revenue: '$20B+',
         marketShare: 'Large-scale generation and fuel strategy footprint',
         description: 'Scale advantage in project finance and procurement discipline.',
       },
       {
-        name: 'Tokyo Gas',
-        type: 'Japanese gas utility',
+        name: 'Japan Trading Beta',
+        type: 'Japanese trading house',
         revenue: '$15B+',
         marketShare: 'Selective LNG and infrastructure partnerships',
         description: 'Technically strong, focused market selection approach.',
@@ -141,21 +141,21 @@ const mockData = {
     ],
     localMajor: [
       {
-        name: 'PetroVietnam (PVN)',
+        name: 'Northwind Petroleum (NWP)',
         type: 'State-owned',
         revenue: '$25B',
         marketShare: 'Dominant upstream and gas chain influence',
         description: 'Critical relationship stakeholder for gas-linked entry models.',
       },
       {
-        name: 'EVN',
+        name: 'NPU',
         type: 'State utility',
         revenue: '$15B',
         marketShare: 'Grid and power market control',
         description: 'Sets practical constraints on capacity absorption and dispatch.',
       },
       {
-        name: 'PV Power',
+        name: 'NWP Power',
         type: 'SOE affiliate',
         revenue: '$2B',
         marketShare: 'Meaningful gas-fired generation role',
@@ -164,14 +164,14 @@ const mockData = {
     ],
     foreignPlayers: [
       {
-        name: 'TotalEnergies',
+        name: 'VanArsdel Energies',
         type: 'International major',
         revenue: '$200B+',
         marketShare: 'Selective clean-energy projects and partnerships',
         description: 'Global capital strength but selective local execution footprint.',
       },
       {
-        name: 'Shell',
+        name: 'Southridge',
         type: 'International major',
         revenue: '$250B+',
         marketShare: 'LNG and downstream optionality',
@@ -180,7 +180,7 @@ const mockData = {
     ],
     caseStudies: [
       {
-        company: 'Osaka Gas',
+        company: 'Japan Gas Alpha',
         year: '2021',
         mode: 'JV + distributed energy projects',
         outcome: 'Scaled to multiple industrial sites with long-term contracts',
@@ -229,7 +229,7 @@ const mockData = {
     opportunities: [
       'Industrial demand growth remains high, creating persistent efficiency and fuel-switch demand.',
       'PDP8 creates a multi-year capacity and transition investment window.',
-      'Japanese manufacturers in Vietnam have direct decarbonization mandates from HQ.',
+      'Foreign-invested manufacturers in Vietnam have direct decarbonization mandates from HQ.',
       'LNG and C&I service models still have whitespace for disciplined entrants.',
     ],
     obstacles: [
@@ -317,7 +317,7 @@ function buildCountryAnalysis(data) {
         keyDrivers: [
           'Industrial load growth and efficiency requirements.',
           'Policy-backed transition activity and fuel-switch economics.',
-          'Japanese FDI customer demand for measurable decarbonization outcomes.',
+          'FDI customer demand for measurable decarbonization outcomes.',
         ],
       },
       supplyAndDemandDynamics: {
@@ -391,7 +391,7 @@ function buildCountryAnalysis(data) {
           })),
         successFactors: [
           'Use partner-led access to shorten commercial and regulatory cycle time.',
-          'Anchor early pipeline with Japanese FDI accounts requiring decarbonization support.',
+          'Anchor early pipeline with FDI accounts requiring decarbonization support.',
           'Design contracts around measurable savings and delivery reliability.',
         ],
         warningSignsToWatch: [
@@ -490,10 +490,10 @@ function buildCountryAnalysis(data) {
       targetSegments: {
         slideTitle: `${data.country} - Target Segments`,
         goToMarketApproach:
-          'Start with Japanese FDI-heavy industrial clusters, then expand to broader C&I accounts.',
+          'Start with FDI-heavy industrial clusters, then expand to broader C&I accounts.',
         segments: [
           {
-            segment: 'Japanese manufacturing FDI',
+            segment: 'Foreign manufacturing FDI',
             size: 'High-value anchor segment',
             rationale: 'Strong decarbonization mandate and HQ alignment',
           },
@@ -526,7 +526,7 @@ function buildCountryAnalysis(data) {
         },
         {
           title: 'Where to win',
-          data: 'Japanese FDI and energy-intensive C&I provide the best near-term conversion path.',
+          data: 'FDI and energy-intensive C&I provide the best near-term conversion path.',
           pattern:
             'Accounts with HQ decarbonization pressure make faster decisions on efficiency solutions.',
           implication: 'Build first-wave pipeline around these segments before broad expansion.',
@@ -604,7 +604,7 @@ function buildCountryAnalysis(data) {
         ],
       },
       recommendation:
-        'Proceed with phased JV-led entry. Start with Japanese FDI industrial pilots, prove measurable savings, then scale into broader C&I segments.',
+        'Proceed with phased JV-led entry. Start with FDI industrial pilots, prove measurable savings, then scale into broader C&I segments.',
     },
   };
 }
@@ -621,7 +621,7 @@ function buildSynthesis(data) {
       'Decision: proceed with phased entry and strict go/no-go gates at each scale step.',
     ],
     recommendation:
-      'GO with phased JV-led entry, anchored by early pilot wins in Japanese FDI-heavy industrial clusters.',
+      'GO with phased JV-led entry, anchored by early pilot wins in FDI-heavy industrial clusters.',
   };
 }
 

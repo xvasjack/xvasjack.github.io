@@ -40,7 +40,7 @@ Single-country deck entrypoint (calls `deck-builder-single.js`).
 Low-level helpers for shapes/charts/tables/layout.
 
 - `template-fill.js`
-Template clone + text replacement post-processing.
+Optional template clone post-process. Not used by the default build.
 
 ## File safety and check
 
@@ -74,6 +74,3 @@ Machine-readable and API-readable flow map.
 
 - `docs/logic-flow.md`
 Step-by-step flow map.
-
-- `docs/plain-english-map.md`
-Jargon-to-plain-English translation table.
